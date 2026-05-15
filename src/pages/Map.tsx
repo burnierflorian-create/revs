@@ -84,6 +84,16 @@ export default function Map() {
 
     mapRef.current = map
 
+    // DEBUG 1 : taille réelle du conteneur juste après l'init
+    console.log(
+      '[Map] container après init — offsetWidth:',
+      containerRef.current.offsetWidth,
+      'offsetHeight:',
+      containerRef.current.offsetHeight,
+      '| position calculée:',
+      getComputedStyle(containerRef.current).position,
+    )
+
     const markers: mapboxgl.Marker[] = []
 
     map.on('error', (e) => {
@@ -97,6 +107,18 @@ export default function Map() {
       // Le conteneur peut n'être dimensionné qu'après le 1er layout :
       // on force un resize pour éviter un canvas 0×0 (écran noir).
       map.resize()
+
+      const c = map.getCanvas()
+      console.log(
+        '[Map] load — canvas:',
+        c.width,
+        'x',
+        c.height,
+        '| container:',
+        containerRef.current?.offsetWidth,
+        'x',
+        containerRef.current?.offsetHeight,
+      )
 
       for (const pin of TEST_PINS) {
         const popup = new mapboxgl.Popup({
@@ -126,7 +148,11 @@ export default function Map() {
 
   return (
     <div className="fixed inset-0">
-      <div ref={containerRef} className="absolute inset-0 bg-bg" />
+      {/* DEBUG: hauteur explicite inline (bat le CSS .mapboxgl-map) + fond rouge temporaire */}
+      <div
+        ref={containerRef}
+        style={{ width: '100%', height: '100vh', backgroundColor: '#ff0000' }}
+      />
 
       {/* Barre de filtre */}
       <div className="absolute left-0 right-0 top-0 z-10 px-4 pt-[max(1rem,env(safe-area-inset-top))]">
