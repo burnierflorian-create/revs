@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import mapboxgl from 'mapbox-gl'
 import 'mapbox-gl/dist/mapbox-gl.css'
-import { LocateFixed } from 'lucide-react'
+import { Car, LocateFixed } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import {
   categoryLabel,
@@ -82,6 +82,7 @@ export default function MapPage() {
   const [error, setError] = useState<string | null>(null)
   const [activeFilter, setActiveFilter] = useState<string>('Tous')
   const [toast, setToast] = useState<string | null>(null)
+  const [visibleCount, setVisibleCount] = useState(0)
 
   function flyToUser() {
     if (!mapRef.current || !navigator.geolocation) return
@@ -159,6 +160,7 @@ export default function MapPage() {
       for (const spot of allSpots.values()) {
         if (matches(spot)) addMarker(spot)
       }
+      setVisibleCount(markers.size)
     }
     renderRef.current = render
 
@@ -191,7 +193,10 @@ export default function MapPage() {
           const spot = payload.new as Spot
           if (!spot?.id) return
           allSpots.set(spot.id, spot)
-          if (matches(spot)) addMarker(spot)
+          if (matches(spot)) {
+            addMarker(spot)
+            setVisibleCount(markers.size)
+          }
         },
       )
       .subscribe()
@@ -226,6 +231,18 @@ export default function MapPage() {
       {toast && (
         <div className="absolute left-1/2 top-[max(1rem,env(safe-area-inset-top))] z-20 -translate-x-1/2 rounded-full bg-accent px-5 py-2.5 text-sm font-medium shadow-lg">
           {toast}
+        </div>
+      )}
+
+      {activeFilter !== 'Tous' && visibleCount === 0 && !error && (
+        <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center px-8 text-center">
+          <Car size={48} color="#444444" strokeWidth={1.5} />
+          <p className="mt-4 text-base font-medium text-white">
+            Aucun spot en {activeFilter}
+          </p>
+          <p className="mt-1 text-sm text-[#888888]">
+            Soyez le premier à spotter !
+          </p>
         </div>
       )}
 

@@ -8,6 +8,7 @@ import NewSpot from './pages/NewSpot'
 import Events from './pages/Events'
 import NewEvent from './pages/NewEvent'
 import Profile from './pages/Profile'
+import UpdatePrompt from './components/UpdatePrompt'
 
 export default function App() {
   const { session, loading } = useAuth()
@@ -21,22 +22,25 @@ export default function App() {
   }
 
   return (
-    <Routes>
-      <Route
-        path="/auth"
-        element={session ? <Navigate to="/" replace /> : <Auth />}
-      />
-      <Route
-        element={session ? <MainLayout /> : <Navigate to="/auth" replace />}
-      >
-        <Route path="/" element={<MapPage />} />
-        <Route path="/feed" element={<Feed />} />
-        <Route path="/new-spot" element={<NewSpot />} />
-        <Route path="/events" element={<Events />} />
-        <Route path="/new-event" element={<NewEvent />} />
-        <Route path="/profile" element={<Profile />} />
-      </Route>
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+    <>
+      <UpdatePrompt />
+      <Routes>
+        <Route
+          path="/auth"
+          element={session ? <Navigate to="/" replace /> : <Auth />}
+        />
+        <Route
+          element={session ? <MainLayout /> : <Navigate to="/auth" replace />}
+        >
+          <Route path="/" element={<MapPage />} />
+          <Route path="/feed" element={<Feed />} />
+          <Route path="/new-spot" element={<NewSpot />} />
+          <Route path="/events" element={<Events />} />
+          <Route path="/new-event" element={<NewEvent />} />
+          <Route path="/profile" element={<Profile />} />
+        </Route>
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </>
   )
 }
