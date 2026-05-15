@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, Camera, ImageIcon, Loader2, MapPin } from 'lucide-react'
+import { ArrowLeft, Camera, Loader2, MapPin } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import {
   CATEGORIES,
@@ -37,7 +37,6 @@ function getPosition(): Promise<GeolocationPosition> {
 export default function NewSpot() {
   const navigate = useNavigate()
   const cameraRef = useRef<HTMLInputElement>(null)
-  const galleryRef = useRef<HTMLInputElement>(null)
 
   const [step, setStep] = useState<Step>(1)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
@@ -125,12 +124,13 @@ export default function NewSpot() {
       const pos = await getPosition()
 
       setPubStatus('Authentification…')
-      const { data: userData } = await supabase.auth.getUser()
-      const userId = userData.user?.id
-      if (!userId) throw new Error('Session expirée')
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (!user) throw new Error('Non authentifié')
 
       setPubStatus('Envoi de la photo…')
-      const path = `${userId}/${Date.now()}.jpg`
+      const path = `${user.id}/${Date.now()}.jpg`
       const { error: upErr } = await supabase.storage
         .from('spots')
         .upload(path, image.blob, { contentType: 'image/jpeg' })
@@ -141,7 +141,7 @@ export default function NewSpot() {
       setPubStatus('Publication…')
       const yearNum = parseInt(year, 10)
       const { error: insErr } = await supabase.from('spots').insert({
-        user_id: userId,
+        user_id: user.id,
         brand: brand.trim(),
         model: model.trim(),
         year: Number.isFinite(yearNum) ? yearNum : null,
@@ -215,13 +215,6 @@ export default function NewSpot() {
             onChange={onPick}
             className="hidden"
           />
-          <input
-            ref={galleryRef}
-            type="file"
-            accept="image/*"
-            onChange={onPick}
-            className="hidden"
-          />
 
           {previewUrl ? (
             <div className="space-y-5">
@@ -232,10 +225,10 @@ export default function NewSpot() {
               />
               <div className="flex gap-3">
                 <button
-                  onClick={() => galleryRef.current?.click()}
+                  onClick={() => cameraRef.current?.click()}
                   className="flex-1 rounded-full border border-white/15 py-3 text-sm text-fg/70 hover:text-fg transition-colors"
                 >
-                  Changer
+                  Reprendre
                 </button>
                 <button
                   onClick={analyze}
@@ -254,13 +247,6 @@ export default function NewSpot() {
               >
                 <Camera className="h-6 w-6" />
                 Prendre une photo
-              </button>
-              <button
-                onClick={() => galleryRef.current?.click()}
-                className="flex w-full items-center justify-center gap-3 rounded-2xl border border-white/15 py-6 text-fg/80 hover:text-fg transition-colors"
-              >
-                <ImageIcon className="h-6 w-6" />
-                Importer depuis la galerie
               </button>
               {pubError && (
                 <p className="text-sm text-accent">{pubError}</p>
