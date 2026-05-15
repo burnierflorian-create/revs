@@ -66,3 +66,39 @@ create policy "users upload own spot photos"
     bucket_id = 'spots'
     and (storage.foldername(name))[1] = auth.uid()::text
   );
+
+-- 5. Events ------------------------------------------------------------------
+create table if not exists public.events (
+  id           uuid primary key default gen_random_uuid(),
+  organizer_id uuid not null references auth.users (id) on delete cascade,
+  title        text not null,
+  type         text not null,
+  starts_at    timestamptz not null,
+  location     text not null,
+  description  text,
+  created_at   timestamptz not null default now()
+);
+
+create index if not exists events_starts_at_idx on public.events (starts_at asc);
+
+alter table public.events enable row level security;
+
+create policy "events are readable by authenticated users"
+  on public.events for select
+  to authenticated
+  using (true);
+
+create policy "users insert their own events"
+  on public.events for insert
+  to authenticated
+  with check (auth.uid() = organizer_id);
+
+create policy "users modify their own events"
+  on public.events for update
+  to authenticated
+  using (auth.uid() = organizer_id);
+
+create policy "users delete their own events"
+  on public.events for delete
+  to authenticated
+  using (auth.uid() = organizer_id);

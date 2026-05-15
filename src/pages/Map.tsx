@@ -16,6 +16,14 @@ const DEFAULT_ZOOM = 13
 
 const FILTERS = ['Tous', 'Supercars', 'Classics', 'JDM'] as const
 
+// null = pas de filtre ; sinon valeur de spots.category à matcher.
+const FILTER_CATEGORY: Record<string, string | null> = {
+  Tous: null,
+  Supercars: 'supercar',
+  Classics: 'classic',
+  JDM: 'JDM',
+}
+
 const CAR_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><path d="M9 17h6"/><circle cx="17" cy="17" r="2"/></svg>`
 
 function createSpotMarkerEl(spot: Spot): HTMLDivElement {
@@ -68,6 +76,9 @@ export default function MapPage() {
   const markersRef = useRef<globalThis.Map<string, mapboxgl.Marker>>(
     new globalThis.Map(),
   )
+  const allSpotsRef = useRef<globalThis.Map<string, Spot>>(new globalThis.Map())
+  const filterRef = useRef<string>('Tous')
+  const renderRef = useRef<(() => void) | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [activeFilter, setActiveFilter] = useState<string>('Tous')
   const [toast, setToast] = useState<string | null>(null)
@@ -123,8 +134,14 @@ export default function MapPage() {
     }
     mapRef.current = map
     const markers = markersRef.current
+    const allSpots = allSpotsRef.current
 
-    function addSpot(spot: Spot) {
+    function matches(spot: Spot): boolean {
+      const cat = FILTER_CATEGORY[filterRef.current]
+      return cat == null || spot.category === cat
+    }
+
+    function addMarker(spot: Spot) {
       if (!spot?.id || markers.has(spot.id)) return
       const popup = new mapboxgl.Popup({ offset: 28, closeButton: true }).setHTML(
         popupHtml(spot),
@@ -135,6 +152,15 @@ export default function MapPage() {
         .addTo(map)
       markers.set(spot.id, marker)
     }
+
+    function render() {
+      for (const m of markers.values()) m.remove()
+      markers.clear()
+      for (const spot of allSpots.values()) {
+        if (matches(spot)) addMarker(spot)
+      }
+    }
+    renderRef.current = render
 
     map.on('error', (e) => {
       const msg = e.error?.message ?? ''
@@ -152,7 +178,8 @@ export default function MapPage() {
         .select('*')
         .order('created_at', { ascending: false })
         .limit(100)
-      for (const spot of (data ?? []) as Spot[]) addSpot(spot)
+      for (const spot of (data ?? []) as Spot[]) allSpots.set(spot.id, spot)
+      render()
     })
 
     const channel = supabase
@@ -160,7 +187,12 @@ export default function MapPage() {
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'spots' },
-        (payload) => addSpot(payload.new as Spot),
+        (payload) => {
+          const spot = payload.new as Spot
+          if (!spot?.id) return
+          allSpots.set(spot.id, spot)
+          if (matches(spot)) addMarker(spot)
+        },
       )
       .subscribe()
 
@@ -168,10 +200,18 @@ export default function MapPage() {
       supabase.removeChannel(channel)
       for (const m of markers.values()) m.remove()
       markers.clear()
+      allSpots.clear()
+      renderRef.current = null
       map.remove()
       mapRef.current = null
     }
   }, [])
+
+  // Changement de filtre : on régénère les markers depuis le cache local.
+  useEffect(() => {
+    filterRef.current = activeFilter
+    renderRef.current?.()
+  }, [activeFilter])
 
   return (
     <div className="fixed inset-0">

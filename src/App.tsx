@@ -6,6 +6,7 @@ import MapPage from './pages/Map'
 import Feed from './pages/Feed'
 import NewSpot from './pages/NewSpot'
 import Events from './pages/Events'
+import NewEvent from './pages/NewEvent'
 import Profile from './pages/Profile'
 
 export default function App() {
@@ -30,8 +31,9 @@ export default function App() {
       >
         <Route path="/" element={<MapPage />} />
         <Route path="/feed" element={<Feed />} />
-        <Route path="/new" element={<NewSpot />} />
+        <Route path="/new-spot" element={<NewSpot />} />
         <Route path="/events" element={<Events />} />
+        <Route path="/new-event" element={<NewEvent />} />
         <Route path="/profile" element={<Profile />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

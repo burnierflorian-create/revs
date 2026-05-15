@@ -61,6 +61,12 @@ export function timeAgo(iso: string): string {
   return `il y a ${days} j`
 }
 
+export function spotterName(email: string | null | undefined): string {
+  if (!email) return 'Anonyme'
+  const handle = email.split('@')[0]
+  return handle || 'Anonyme'
+}
+
 export function escapeHtml(s: string): string {
   return s
     .replace(/&/g, '&amp;')

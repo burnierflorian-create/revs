@@ -1,4 +1,4 @@
-import { NavLink, Outlet } from 'react-router-dom'
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { Map as MapIcon, Newspaper, Plus, Calendar, User } from 'lucide-react'
 
 const tabClass = ({ isActive }: { isActive: boolean }) =>
@@ -7,6 +7,12 @@ const tabClass = ({ isActive }: { isActive: boolean }) =>
   }`
 
 export default function MainLayout() {
+  const navigate = useNavigate()
+  const { pathname } = useLocation()
+  const onEvents = pathname === '/events' || pathname === '/new-event'
+  const newTarget = onEvents ? '/new-event' : '/new-spot'
+  const newActive = pathname === '/new-spot' || pathname === '/new-event'
+
   return (
     <div className="min-h-screen flex flex-col bg-bg text-fg">
       <main className="flex-1 pb-28">
@@ -25,21 +31,19 @@ export default function MainLayout() {
             <span>Feed</span>
           </NavLink>
 
-          <NavLink
-            to="/new"
+          <button
+            onClick={() => navigate(newTarget)}
             className="flex items-center justify-center -mt-8"
-            aria-label="Nouveau spot"
+            aria-label={onEvents ? 'Nouvel événement' : 'Nouveau spot'}
           >
-            {({ isActive }) => (
-              <div
-                className={`w-16 h-16 rounded-full bg-accent flex items-center justify-center shadow-lg shadow-accent/40 transition-transform ${
-                  isActive ? 'scale-95' : ''
-                }`}
-              >
-                <Plus className="w-8 h-8 text-fg" strokeWidth={2.5} />
-              </div>
-            )}
-          </NavLink>
+            <div
+              className={`w-16 h-16 rounded-full bg-accent flex items-center justify-center shadow-lg shadow-accent/40 transition-transform ${
+                newActive ? 'scale-95' : ''
+              }`}
+            >
+              <Plus className="w-8 h-8 text-fg" strokeWidth={2.5} />
+            </div>
+          </button>
 
           <NavLink to="/events" className={tabClass}>
             <Calendar className="w-5 h-5" />
