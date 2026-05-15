@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './hooks/useAuth'
 import MainLayout from './layouts/MainLayout'
 import Auth from './pages/Auth'
+import Home from './pages/Home'
 import MapPage from './pages/Map'
 import Feed from './pages/Feed'
 import NewSpot from './pages/NewSpot'
@@ -32,7 +33,8 @@ export default function App() {
         <Route
           element={session ? <MainLayout /> : <Navigate to="/auth" replace />}
         >
-          <Route path="/" element={<MapPage />} />
+          <Route path="/" element={<Home />} />
+          <Route path="/map" element={<MapPage />} />
           <Route path="/feed" element={<Feed />} />
           <Route path="/new-spot" element={<NewSpot />} />
           <Route path="/events" element={<Events />} />

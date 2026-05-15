@@ -1,5 +1,5 @@
-import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { Map as MapIcon, Newspaper, Plus, Calendar, User } from 'lucide-react'
+import { NavLink, Outlet } from 'react-router-dom'
+import { Map as MapIcon, Newspaper, Home, Calendar, User } from 'lucide-react'
 
 const tabClass = ({ isActive }: { isActive: boolean }) =>
   `flex flex-col items-center justify-center gap-1 h-full text-[10px] tracking-wide transition-colors ${
@@ -7,12 +7,6 @@ const tabClass = ({ isActive }: { isActive: boolean }) =>
   }`
 
 export default function MainLayout() {
-  const navigate = useNavigate()
-  const { pathname } = useLocation()
-  const onEvents = pathname === '/events' || pathname === '/new-event'
-  const newTarget = onEvents ? '/new-event' : '/new-spot'
-  const newActive = pathname === '/new-spot' || pathname === '/new-event'
-
   return (
     <div className="min-h-screen flex flex-col bg-bg text-fg">
       <main className="flex-1 pb-28">
@@ -21,7 +15,7 @@ export default function MainLayout() {
 
       <nav className="fixed bottom-0 left-0 right-0 bg-bg/95 backdrop-blur border-t border-white/5">
         <div className="grid grid-cols-5 items-end h-20 max-w-md mx-auto px-2">
-          <NavLink to="/" end className={tabClass}>
+          <NavLink to="/map" className={tabClass}>
             <MapIcon className="w-5 h-5" />
             <span>Carte</span>
           </NavLink>
@@ -31,19 +25,10 @@ export default function MainLayout() {
             <span>Feed</span>
           </NavLink>
 
-          <button
-            onClick={() => navigate(newTarget)}
-            className="flex items-center justify-center -mt-8"
-            aria-label={onEvents ? 'Nouvel événement' : 'Nouveau spot'}
-          >
-            <div
-              className={`w-16 h-16 rounded-full bg-accent flex items-center justify-center shadow-lg shadow-accent/40 transition-transform ${
-                newActive ? 'scale-95' : ''
-              }`}
-            >
-              <Plus className="w-8 h-8 text-fg" strokeWidth={2.5} />
-            </div>
-          </button>
+          <NavLink to="/" end className={tabClass}>
+            <Home className="w-5 h-5" />
+            <span>Accueil</span>
+          </NavLink>
 
           <NavLink to="/events" className={tabClass}>
             <Calendar className="w-5 h-5" />

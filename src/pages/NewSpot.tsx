@@ -154,7 +154,7 @@ export default function NewSpot() {
       })
       if (insErr) throw insErr
 
-      navigate('/', { state: { toast: 'Spot publié ! 🔥' } })
+      navigate('/map', { state: { toast: 'Spot publié ! 🔥' } })
     } catch (err) {
       const msg =
         (err as { code?: number })?.code === 1
