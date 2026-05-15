@@ -60,6 +60,7 @@ export default function Map() {
     if (!containerRef.current || mapRef.current) return
 
     const token = import.meta.env.VITE_MAPBOX_TOKEN as string | undefined
+    console.log('[Map] VITE_MAPBOX_TOKEN au montage:', token)
     if (!token) {
       setError('Token Mapbox manquant (VITE_MAPBOX_TOKEN).')
       return
@@ -93,6 +94,10 @@ export default function Map() {
     })
 
     map.on('load', () => {
+      // Le conteneur peut n'être dimensionné qu'après le 1er layout :
+      // on force un resize pour éviter un canvas 0×0 (écran noir).
+      map.resize()
+
       for (const pin of TEST_PINS) {
         const popup = new mapboxgl.Popup({
           offset: 24,
@@ -120,10 +125,7 @@ export default function Map() {
   }, [])
 
   return (
-    <div
-      className="fixed inset-x-0 top-0"
-      style={{ bottom: 'calc(5rem + env(safe-area-inset-bottom))' }}
-    >
+    <div className="fixed inset-0">
       <div ref={containerRef} className="absolute inset-0 bg-bg" />
 
       {/* Barre de filtre */}
@@ -149,7 +151,7 @@ export default function Map() {
       <button
         onClick={flyToUser}
         aria-label="Me localiser"
-        className="absolute bottom-6 right-4 z-10 flex h-12 w-12 items-center justify-center rounded-full bg-accent shadow-lg shadow-accent/40 transition-transform active:scale-95"
+        className="absolute bottom-24 right-4 z-10 flex h-12 w-12 items-center justify-center rounded-full bg-accent shadow-lg shadow-accent/40 transition-transform active:scale-95"
       >
         <LocateFixed className="h-5 w-5 text-fg" />
       </button>
