@@ -1,43 +1,76 @@
 import { useEffect, useRef, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import mapboxgl from 'mapbox-gl'
 import 'mapbox-gl/dist/mapbox-gl.css'
 import { LocateFixed } from 'lucide-react'
+import { supabase } from '../lib/supabase'
+import {
+  categoryLabel,
+  escapeHtml,
+  timeAgo,
+  type Spot,
+} from '../lib/spots'
 
 const PARIS: [number, number] = [2.3522, 48.8566]
 const DEFAULT_ZOOM = 13
 
 const FILTERS = ['Tous', 'Supercars', 'Classics', 'JDM'] as const
 
-type TestPin = {
-  name: string
-  date: string
-  lng: number
-  lat: number
-}
+const CAR_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><path d="M9 17h6"/><circle cx="17" cy="17" r="2"/></svg>`
 
-const TEST_PINS: TestPin[] = [
-  { name: 'Ferrari 488 GTB', date: '12 mai 2026', lng: 2.3522, lat: 48.8566 },
-  { name: 'Lamborghini Huracán', date: '10 mai 2026', lng: 2.3651, lat: 48.8602 },
-  { name: 'Porsche 911 GT3', date: '8 mai 2026', lng: 2.3402, lat: 48.8531 },
-  { name: 'Nissan Skyline GT-R R34', date: '5 mai 2026', lng: 2.3699, lat: 48.8501 },
-  { name: 'Mercedes 300SL Gullwing', date: '1 mai 2026', lng: 2.3301, lat: 48.8623 },
-]
-
-const CAR_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><path d="M9 17h6"/><circle cx="17" cy="17" r="2"/></svg>`
-
-function createMarkerEl(): HTMLDivElement {
+function createSpotMarkerEl(spot: Spot): HTMLDivElement {
   const el = document.createElement('div')
-  el.className =
-    'flex items-center justify-center w-9 h-9 rounded-full bg-accent shadow-lg shadow-accent/40 ring-2 ring-black/30 cursor-pointer'
-  el.innerHTML = CAR_SVG
+  el.style.width = '52px'
+  el.style.height = '52px'
+  el.style.borderRadius = '9999px'
+  el.style.border = '2px solid #D40000'
+  el.style.overflow = 'hidden'
+  el.style.cursor = 'pointer'
+  el.style.boxShadow = '0 4px 12px rgba(0,0,0,0.5)'
+  if (spot.photo_url) {
+    el.style.backgroundImage = `url("${spot.photo_url.replace(/"/g, '%22')}")`
+    el.style.backgroundSize = 'cover'
+    el.style.backgroundPosition = 'center'
+  } else {
+    el.style.background = '#D40000'
+    el.style.display = 'flex'
+    el.style.alignItems = 'center'
+    el.style.justifyContent = 'center'
+    el.innerHTML = CAR_SVG
+  }
   return el
 }
 
-export default function Map() {
+function popupHtml(spot: Spot): string {
+  const title = `${escapeHtml(spot.brand)} ${escapeHtml(spot.model)}`.trim()
+  const sub = [spot.color, spot.year].filter(Boolean).join(' · ')
+  const photo = spot.photo_url
+    ? `<img src="${escapeHtml(spot.photo_url)}" alt="" style="width:80px;height:80px;border-radius:12px;object-fit:cover;flex:none" />`
+    : ''
+  return `
+    <div style="display:flex;gap:12px;align-items:center;max-width:240px">
+      ${photo}
+      <div style="min-width:0">
+        <div style="font-weight:600;font-size:14px">${title || 'Spot'}</div>
+        ${sub ? `<div style="font-size:12px;opacity:.6;margin-top:2px">${escapeHtml(sub)}</div>` : ''}
+        <div style="font-size:11px;opacity:.45;margin-top:4px">${escapeHtml(timeAgo(spot.created_at))}</div>
+        <div style="display:inline-block;margin-top:6px;font-size:10px;padding:2px 8px;border-radius:9999px;background:rgba(212,0,0,.2);color:#fff">${escapeHtml(categoryLabel(spot.category))}</div>
+      </div>
+    </div>`
+}
+
+export default function MapPage() {
+  const navigate = useNavigate()
+  const location = useLocation()
+
   const containerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<mapboxgl.Map | null>(null)
+  const markersRef = useRef<globalThis.Map<string, mapboxgl.Marker>>(
+    new globalThis.Map(),
+  )
   const [error, setError] = useState<string | null>(null)
   const [activeFilter, setActiveFilter] = useState<string>('Tous')
+  const [toast, setToast] = useState<string | null>(null)
 
   function flyToUser() {
     if (!mapRef.current || !navigator.geolocation) return
@@ -49,12 +82,21 @@ export default function Map() {
           essential: true,
         })
       },
-      () => {
-        /* refus / indisponible : on reste sur la vue courante */
-      },
+      () => {},
       { enableHighAccuracy: true, timeout: 8000 },
     )
   }
+
+  // Toast après publication (passé via react-router state).
+  useEffect(() => {
+    const s = location.state as { toast?: string } | null
+    if (s?.toast) {
+      setToast(s.toast)
+      navigate(location.pathname, { replace: true, state: null })
+      const t = setTimeout(() => setToast(null), 3000)
+      return () => clearTimeout(t)
+    }
+  }, [location, navigate])
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return
@@ -64,7 +106,6 @@ export default function Map() {
       setError('Token Mapbox manquant (VITE_MAPBOX_TOKEN).')
       return
     }
-
     mapboxgl.accessToken = token
 
     let map: mapboxgl.Map
@@ -80,10 +121,20 @@ export default function Map() {
       setError('Impossible d’initialiser la carte.')
       return
     }
-
     mapRef.current = map
+    const markers = markersRef.current
 
-    const markers: mapboxgl.Marker[] = []
+    function addSpot(spot: Spot) {
+      if (!spot?.id || markers.has(spot.id)) return
+      const popup = new mapboxgl.Popup({ offset: 28, closeButton: true }).setHTML(
+        popupHtml(spot),
+      )
+      const marker = new mapboxgl.Marker({ element: createSpotMarkerEl(spot) })
+        .setLngLat([spot.lng, spot.lat])
+        .setPopup(popup)
+        .addTo(map)
+      markers.set(spot.id, marker)
+    }
 
     map.on('error', (e) => {
       const msg = e.error?.message ?? ''
@@ -92,32 +143,31 @@ export default function Map() {
       }
     })
 
-    map.on('load', () => {
-      // Le conteneur peut n'être dimensionné qu'après le 1er layout :
-      // on force un resize pour éviter un canvas 0×0 (écran noir).
+    map.on('load', async () => {
       map.resize()
-
-      for (const pin of TEST_PINS) {
-        const popup = new mapboxgl.Popup({
-          offset: 24,
-          closeButton: true,
-        }).setHTML(
-          `<div class="font-medium text-sm">${pin.name}</div><div class="text-xs opacity-60 mt-0.5">${pin.date}</div>`,
-        )
-
-        const marker = new mapboxgl.Marker({ element: createMarkerEl() })
-          .setLngLat([pin.lng, pin.lat])
-          .setPopup(popup)
-          .addTo(map)
-
-        markers.push(marker)
-      }
-
       flyToUser()
+
+      const { data } = await supabase
+        .from('spots')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(100)
+      for (const spot of (data ?? []) as Spot[]) addSpot(spot)
     })
 
+    const channel = supabase
+      .channel('public:spots')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'spots' },
+        (payload) => addSpot(payload.new as Spot),
+      )
+      .subscribe()
+
     return () => {
-      for (const m of markers) m.remove()
+      supabase.removeChannel(channel)
+      for (const m of markers.values()) m.remove()
+      markers.clear()
       map.remove()
       mapRef.current = null
     }
@@ -133,17 +183,21 @@ export default function Map() {
         style={{ width: '100%', height: '100vh', backgroundColor: '#0A0A0A' }}
       />
 
+      {toast && (
+        <div className="absolute left-1/2 top-[max(1rem,env(safe-area-inset-top))] z-20 -translate-x-1/2 rounded-full bg-accent px-5 py-2.5 text-sm font-medium shadow-lg">
+          {toast}
+        </div>
+      )}
+
       {/* Barre de filtre */}
-      <div className="absolute left-0 right-0 top-0 z-10 px-4 pt-[max(1rem,env(safe-area-inset-top))]">
+      <div className="absolute left-0 right-0 top-0 z-10 px-4 pt-[max(4rem,calc(env(safe-area-inset-top)+3rem))]">
         <div className="mx-auto flex max-w-md gap-1 rounded-full bg-black/60 p-1 backdrop-blur">
           {FILTERS.map((f) => (
             <button
               key={f}
               onClick={() => setActiveFilter(f)}
               className={`flex-1 rounded-full py-2 text-xs font-medium transition-colors ${
-                activeFilter === f
-                  ? 'bg-accent text-fg'
-                  : 'text-fg/50 hover:text-fg'
+                activeFilter === f ? 'bg-accent text-fg' : 'text-fg/50 hover:text-fg'
               }`}
             >
               {f}
@@ -161,7 +215,6 @@ export default function Map() {
         <LocateFixed className="h-5 w-5 text-fg" />
       </button>
 
-      {/* Erreur */}
       {error && (
         <div className="absolute inset-0 z-20 flex items-center justify-center bg-bg px-8">
           <div className="max-w-xs text-center">
