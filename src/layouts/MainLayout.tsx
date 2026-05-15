@@ -1,5 +1,7 @@
 import { NavLink, Outlet } from 'react-router-dom'
 import { Map as MapIcon, Newspaper, Home, Calendar, User } from 'lucide-react'
+import UpdateNotification from '../components/UpdateNotification'
+import InstallBanner from '../components/InstallBanner'
 
 const tabClass = ({ isActive }: { isActive: boolean }) =>
   `flex flex-col items-center justify-center gap-1 h-full text-[10px] tracking-wide transition-colors ${
@@ -9,11 +11,14 @@ const tabClass = ({ isActive }: { isActive: boolean }) =>
 export default function MainLayout() {
   return (
     <div className="min-h-screen flex flex-col bg-bg text-fg">
-      <main className="flex-1 pb-28">
+      <main className="app-main flex-1">
         <Outlet />
       </main>
 
-      <nav className="fixed bottom-0 left-0 right-0 bg-bg/95 backdrop-blur border-t border-white/5">
+      <UpdateNotification />
+      <InstallBanner />
+
+      <nav className="app-nav fixed bottom-0 left-0 right-0 bg-bg/95 backdrop-blur border-t border-white/5">
         <div className="grid grid-cols-5 items-end h-20 max-w-md mx-auto px-2">
           <NavLink to="/map" className={tabClass}>
             <MapIcon className="w-5 h-5" />
@@ -40,7 +45,6 @@ export default function MainLayout() {
             <span>Profil</span>
           </NavLink>
         </div>
-        <div style={{ height: 'env(safe-area-inset-bottom)' }} />
       </nav>
     </div>
   )

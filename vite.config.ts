@@ -6,22 +6,31 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: 'prompt',
+      registerType: 'autoUpdate',
+      injectRegister: 'auto',
       includeAssets: ['favicon.svg'],
       workbox: {
         // mapbox-gl pushes the main bundle past the 2 MiB default
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
-        cleanupOutdatedCaches: true,
+        skipWaiting: true,
         clientsClaim: true,
-        // Toujours retenter le réseau d'abord pour la navigation : une
-        // nouvelle version est servie dès qu'elle est en ligne.
+        cleanupOutdatedCaches: true,
+        navigateFallback: 'index.html',
         runtimeCaching: [
           {
-            urlPattern: ({ request }) => request.mode === 'navigate',
+            urlPattern: /^https:\/\/api\.mapbox\.com\//,
             handler: 'NetworkFirst',
             options: {
-              cacheName: 'pages',
-              networkTimeoutSeconds: 3,
+              cacheName: 'mapbox-cache',
+              expiration: { maxEntries: 50, maxAgeSeconds: 3600 },
+            },
+          },
+          {
+            urlPattern: /^https:\/\/.*\.supabase\.co\//,
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'supabase-cache',
+              expiration: { maxAgeSeconds: 60 },
             },
           },
         ],
@@ -29,13 +38,33 @@ export default defineConfig({
       manifest: {
         name: 'revs',
         short_name: 'revs',
-        description: 'revs',
-        theme_color: '#0A0A0A',
+        description: 'Spotte les supercars autour de toi',
+        theme_color: '#D40000',
         background_color: '#0A0A0A',
         display: 'standalone',
         orientation: 'portrait',
         start_url: '/',
-        icons: [],
+        scope: '/',
+        icons: [
+          {
+            src: '/icons/icon-192x192.png',
+            sizes: '192x192',
+            type: 'image/png',
+            purpose: 'any',
+          },
+          {
+            src: '/icons/icon-512x512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'any',
+          },
+          {
+            src: '/icons/icon-512x512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'maskable',
+          },
+        ],
       },
     }),
   ],

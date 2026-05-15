@@ -9,7 +9,6 @@ import NewSpot from './pages/NewSpot'
 import Events from './pages/Events'
 import NewEvent from './pages/NewEvent'
 import Profile from './pages/Profile'
-import UpdatePrompt from './components/UpdatePrompt'
 
 export default function App() {
   const { session, loading } = useAuth()
@@ -24,7 +23,6 @@ export default function App() {
 
   return (
     <>
-      <UpdatePrompt />
       <Routes>
         <Route
           path="/auth"
