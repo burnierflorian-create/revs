@@ -91,7 +91,7 @@ export default function NewSpot() {
     const ctrl = new AbortController()
     const timer = setTimeout(() => ctrl.abort(), 15000)
     try {
-      const res = await fetch('/.netlify/functions/identify-car', {
+      const res = await fetch('/api/identify-car', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

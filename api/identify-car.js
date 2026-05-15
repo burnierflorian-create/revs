@@ -72,32 +72,33 @@ const SCHEMA = {
   additionalProperties: false,
 }
 
-function json(body, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { 'Content-Type': 'application/json', ...CORS },
-  })
+function sendJson(res, body, status = 200) {
+  for (const [k, v] of Object.entries(CORS)) res.setHeader(k, v)
+  res.status(status).json(body)
 }
 
-export default async function handler(req) {
+export default async function handler(req, res) {
   if (req.method === 'OPTIONS') {
-    return new Response(null, { status: 204, headers: CORS })
+    for (const [k, v] of Object.entries(CORS)) res.setHeader(k, v)
+    res.status(204).end()
+    return
   }
   if (req.method !== 'POST') {
-    return json(EMPTY, 405)
+    return sendJson(res, EMPTY, 405)
   }
   if (!process.env.ANTHROPIC_API_KEY) {
-    return json(EMPTY, 500)
+    return sendJson(res, EMPTY, 500)
   }
 
   let imageBase64
   let mimeType
   try {
-    const body = await req.json()
+    const body =
+      typeof req.body === 'string' ? JSON.parse(req.body) : req.body || {}
     imageBase64 = body.imageBase64
     mimeType = body.mimeType
   } catch {
-    return json(EMPTY, 400)
+    return sendJson(res, EMPTY, 400)
   }
 
   if (
@@ -105,7 +106,7 @@ export default async function handler(req) {
     !imageBase64 ||
     !ALLOWED_MIME.has(mimeType)
   ) {
-    return json(EMPTY, 400)
+    return sendJson(res, EMPTY, 400)
   }
 
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
@@ -140,15 +141,15 @@ export default async function handler(req) {
     })
 
     if (response.stop_reason === 'refusal') {
-      return json(EMPTY)
+      return sendJson(res, EMPTY)
     }
 
     const textBlock = response.content.find((b) => b.type === 'text')
-    if (!textBlock) return json(EMPTY)
+    if (!textBlock) return sendJson(res, EMPTY)
 
     const parsed = JSON.parse(textBlock.text)
-    return json({ ...EMPTY, ...parsed })
+    return sendJson(res, { ...EMPTY, ...parsed })
   } catch {
-    return json(EMPTY)
+    return sendJson(res, EMPTY)
   }
 }
