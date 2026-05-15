@@ -60,7 +60,6 @@ export default function Map() {
     if (!containerRef.current || mapRef.current) return
 
     const token = import.meta.env.VITE_MAPBOX_TOKEN as string | undefined
-    console.log('[Map] VITE_MAPBOX_TOKEN au montage:', token)
     if (!token) {
       setError('Token Mapbox manquant (VITE_MAPBOX_TOKEN).')
       return
@@ -84,16 +83,6 @@ export default function Map() {
 
     mapRef.current = map
 
-    // DEBUG 1 : taille réelle du conteneur juste après l'init
-    console.log(
-      '[Map] container après init — offsetWidth:',
-      containerRef.current.offsetWidth,
-      'offsetHeight:',
-      containerRef.current.offsetHeight,
-      '| position calculée:',
-      getComputedStyle(containerRef.current).position,
-    )
-
     const markers: mapboxgl.Marker[] = []
 
     map.on('error', (e) => {
@@ -107,18 +96,6 @@ export default function Map() {
       // Le conteneur peut n'être dimensionné qu'après le 1er layout :
       // on force un resize pour éviter un canvas 0×0 (écran noir).
       map.resize()
-
-      const c = map.getCanvas()
-      console.log(
-        '[Map] load — canvas:',
-        c.width,
-        'x',
-        c.height,
-        '| container:',
-        containerRef.current?.offsetWidth,
-        'x',
-        containerRef.current?.offsetHeight,
-      )
 
       for (const pin of TEST_PINS) {
         const popup = new mapboxgl.Popup({
@@ -148,10 +125,12 @@ export default function Map() {
 
   return (
     <div className="fixed inset-0">
-      {/* DEBUG: hauteur explicite inline (bat le CSS .mapboxgl-map) + fond rouge temporaire */}
+      {/* Hauteur explicite inline : bat la règle .mapboxgl-map { position: relative }
+          de mapbox-gl, qui sinon écrase un positionnement par classe et fait
+          s'effondrer le conteneur à 0 (carte noire). */}
       <div
         ref={containerRef}
-        style={{ width: '100%', height: '100vh', backgroundColor: '#ff0000' }}
+        style={{ width: '100%', height: '100vh', backgroundColor: '#0A0A0A' }}
       />
 
       {/* Barre de filtre */}
