@@ -255,14 +255,6 @@ export default function Home() {
           </div>
         </section>
       </div>
-
-      {/* Bouton flottant — page Accueil uniquement */}
-      <button
-        onClick={() => navigate('/new-spot')}
-        className="fixed bottom-24 right-4 z-20 rounded-full bg-accent px-5 py-3 text-sm font-medium text-fg shadow-lg shadow-accent/40 active:scale-95"
-      >
-        📷 Spotter
-      </button>
     </div>
   )
 }

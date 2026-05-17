@@ -2,6 +2,7 @@ import { NavLink, Outlet } from 'react-router-dom'
 import { Map as MapIcon, Newspaper, Home, Calendar, User } from 'lucide-react'
 import UpdateNotification from '../components/UpdateNotification'
 import InstallBanner from '../components/InstallBanner'
+import SpotFab from '../components/SpotFab'
 
 const tabClass = ({ isActive }: { isActive: boolean }) =>
   `flex flex-col items-center justify-center gap-1 h-full text-[10px] tracking-wide transition-colors ${
@@ -15,6 +16,7 @@ export default function MainLayout() {
         <Outlet />
       </main>
 
+      <SpotFab />
       <UpdateNotification />
       <InstallBanner />
 

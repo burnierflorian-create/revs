@@ -239,7 +239,7 @@ export default function NewSpot() {
   }
 
   return (
-    <div className="min-h-screen bg-bg text-fg px-6 pt-[max(1rem,env(safe-area-inset-top))]">
+    <div className="min-h-screen animate-slide-up bg-bg text-fg px-6 pt-[max(1rem,env(safe-area-inset-top))]">
       {/* Header : retour + progression */}
       <div className="flex items-center gap-4 py-4">
         <button
