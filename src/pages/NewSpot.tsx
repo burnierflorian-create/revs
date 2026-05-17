@@ -11,6 +11,7 @@ import {
   type PhotoMeta,
   type SpotCategory,
 } from '../lib/spots'
+import { takePendingPhoto } from '../lib/pendingPhoto'
 import { Skeleton } from '../components/Skeleton'
 
 type Step = 1 | 2 | 3 | 4
@@ -84,10 +85,7 @@ export default function NewSpot() {
     setStep(1)
   }
 
-  async function onPick(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    e.target.value = ''
-    if (!file) return
+  async function loadFile(file: File) {
     if (previewUrl) URL.revokeObjectURL(previewUrl)
     setRejection(null)
     setPubError(null)
@@ -103,6 +101,21 @@ export default function NewSpot() {
       setPubError('Impossible de lire cette image.')
     }
   }
+
+  async function onPick(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    await loadFile(file)
+  }
+
+  // Photo captured straight from the FAB camera: load it and skip the
+  // "Prendre une photo" screen.
+  useEffect(() => {
+    const f = takePendingPhoto()
+    if (f) loadFile(f)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   function applyResult(r: IdentifyResult) {
     setResult(r)

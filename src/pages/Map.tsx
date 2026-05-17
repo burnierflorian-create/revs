@@ -87,15 +87,11 @@ export default function MapPage() {
   const [visibleCount, setVisibleCount] = useState(0)
   const [mapReady, setMapReady] = useState(false)
 
-  // Called directly from the button's onClick (and on map load) so the
-  // getCurrentPosition call stays inside the user gesture — iOS Safari /
-  // iOS PWA require that to surface the permission prompt and to recentre.
-  function flyToUser() {
+  function locate() {
     if (!navigator.geolocation) {
       setGeoError('Géolocalisation non disponible sur cet appareil.')
       return
     }
-    if (!mapRef.current) return
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         setGeoError(null)
@@ -108,13 +104,41 @@ export default function MapPage() {
       (err) => {
         setGeoError(
           err.code === err.PERMISSION_DENIED
-            ? 'Localisation refusée. Autorise-la dans les réglages pour te recentrer.'
+            ? 'Autorise la localisation dans Réglages → Safari → Localisation'
             : 'Position indisponible pour le moment, réessaie.',
         )
-        setTimeout(() => setGeoError(null), 5000)
+        setTimeout(() => setGeoError(null), 6000)
       },
-      { enableHighAccuracy: false, timeout: 10000, maximumAge: 30000 },
+      // maximumAge:0 forces a fresh fix — iOS PWA can otherwise hand back
+      // a stale/empty cached position and appear to do nothing.
+      { enableHighAccuracy: false, timeout: 15000, maximumAge: 0 },
     )
+  }
+
+  // On iOS, getCurrentPosition fails silently when permission isn't
+  // already granted. Check Permissions API first (when available): if
+  // denied, tell the user exactly where to enable it; otherwise locate.
+  function flyToUser() {
+    if (!mapRef.current) return
+    const perms = navigator.permissions
+    if (!perms?.query) {
+      // Older iOS has no Permissions API — go straight to geolocation.
+      locate()
+      return
+    }
+    perms
+      .query({ name: 'geolocation' as PermissionName })
+      .then((status) => {
+        if (status.state === 'denied') {
+          setGeoError(
+            'Autorise la localisation dans Réglages → Safari → Localisation',
+          )
+          setTimeout(() => setGeoError(null), 6000)
+          return
+        }
+        locate()
+      })
+      .catch(() => locate())
   }
 
   // Toast après publication (passé via react-router state).
