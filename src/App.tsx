@@ -11,6 +11,7 @@ import NewEvent from './pages/NewEvent'
 import Profile from './pages/Profile'
 import Premium from './pages/Premium'
 import SpotDetail from './pages/SpotDetail'
+import News from './pages/News'
 import Onboarding from './components/Onboarding'
 
 export default function App() {
@@ -39,6 +40,7 @@ export default function App() {
           <Route path="/feed" element={<Feed />} />
           <Route path="/spot/:id" element={<SpotDetail />} />
           <Route path="/new-spot" element={<NewSpot />} />
+          <Route path="/actu" element={<News />} />
           <Route path="/events" element={<Events />} />
           <Route path="/new-event" element={<NewEvent />} />
           <Route path="/profile" element={<Profile />} />

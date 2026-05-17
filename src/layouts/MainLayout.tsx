@@ -1,5 +1,12 @@
 import { NavLink, Outlet } from 'react-router-dom'
-import { Map as MapIcon, Newspaper, Home, Calendar, User } from 'lucide-react'
+import {
+  Map as MapIcon,
+  Newspaper,
+  Home,
+  Rss,
+  Calendar,
+  User,
+} from 'lucide-react'
 import UpdateNotification from '../components/UpdateNotification'
 import InstallBanner from '../components/InstallBanner'
 import SpotFab from '../components/SpotFab'
@@ -21,7 +28,7 @@ export default function MainLayout() {
       <InstallBanner />
 
       <nav className="app-nav fixed bottom-0 left-0 right-0 bg-bg/95 backdrop-blur border-t border-white/5">
-        <div className="grid grid-cols-5 items-end h-20 max-w-md mx-auto px-2">
+        <div className="grid grid-cols-6 items-end h-20 max-w-md mx-auto px-1">
           <NavLink to="/map" className={tabClass}>
             <MapIcon className="w-5 h-5" />
             <span>Carte</span>
@@ -37,9 +44,14 @@ export default function MainLayout() {
             <span>Accueil</span>
           </NavLink>
 
+          <NavLink to="/actu" className={tabClass}>
+            <Rss className="w-5 h-5" />
+            <span>Actu</span>
+          </NavLink>
+
           <NavLink to="/events" className={tabClass}>
             <Calendar className="w-5 h-5" />
-            <span>Événements</span>
+            <span>Events</span>
           </NavLink>
 
           <NavLink to="/profile" className={tabClass}>

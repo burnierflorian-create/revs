@@ -162,3 +162,27 @@ create policy "users remove their own like"
   using (auth.uid() = user_id);
 
 alter publication supabase_realtime add table public.spot_likes;
+
+-- 8. News (filled by the Vercel cron via the service-role key) ---------------
+create table if not exists public.news (
+  id           uuid primary key default gen_random_uuid(),
+  title        text not null,
+  summary      text,
+  source       text,
+  category     text not null default 'Auto',
+  url          text not null unique,
+  image_url    text,
+  published_at timestamptz,
+  created_at   timestamptz not null default now()
+);
+
+create index if not exists news_published_at_idx on public.news (published_at desc);
+
+alter table public.news enable row level security;
+
+-- Readable by the app (authenticated). Inserts are done only by the cron
+-- with the service-role key, which bypasses RLS — no write policy needed.
+create policy "news readable by authenticated users"
+  on public.news for select
+  to authenticated
+  using (true);
