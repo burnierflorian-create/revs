@@ -71,6 +71,21 @@ const FETCH_HEADERS = {
   Accept: 'application/rss+xml, application/xml, text/xml, */*',
 }
 
+// Per-feed hard timeout — a single hanging/slow feed must never stall
+// the whole run into a function timeout.
+const FEED_TIMEOUT_MS = 8000
+async function fetchWithTimeout(url: string): Promise<Response | null> {
+  const ctrl = new AbortController()
+  const t = setTimeout(() => ctrl.abort(), FEED_TIMEOUT_MS)
+  try {
+    return await fetch(url, { headers: FETCH_HEADERS, signal: ctrl.signal })
+  } catch {
+    return null
+  } finally {
+    clearTimeout(t)
+  }
+}
+
 const PER_FEED = 3
 const MAX_TOTAL = 15
 // Articles older than 48h are dropped before they ever reach Claude.
@@ -444,8 +459,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     FEEDS.map(async (feed): Promise<Candidate[]> => {
       perFeed[feed.source] = 0
       try {
-        const resp = await fetch(feed.url, { headers: FETCH_HEADERS })
-        if (!resp.ok) return []
+        const resp = await fetchWithTimeout(feed.url)
+        if (!resp || !resp.ok) return []
         const xml = await resp.text()
         const parsed = parser.parse(xml)
         const channel = parsed?.rss?.channel ?? parsed?.feed
