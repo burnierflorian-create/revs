@@ -5,19 +5,12 @@ import 'mapbox-gl/dist/mapbox-gl.css'
 import { Car, LocateFixed } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { SkeletonMap } from '../components/Skeleton'
-import {
-  categoryLabel,
-  escapeHtml,
-  timeAgo,
-  type Spot,
-} from '../lib/spots'
+import { escapeHtml, type Spot } from '../lib/spots'
 
 const PARIS: [number, number] = [2.3522, 48.8566]
 const DEFAULT_ZOOM = 13
 
 const FILTERS = ['Tous', 'Supercars', 'Classics', 'JDM'] as const
-
-// null = pas de filtre ; sinon valeur de spots.category à matcher.
 const FILTER_CATEGORY: Record<string, string | null> = {
   Tous: null,
   Supercars: 'supercar',
@@ -25,45 +18,78 @@ const FILTER_CATEGORY: Record<string, string | null> = {
   JDM: 'JDM',
 }
 
-const CAR_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><path d="M9 17h6"/><circle cx="17" cy="17" r="2"/></svg>`
+const CAR_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><path d="M9 17h6"/><circle cx="17" cy="17" r="2"/></svg>`
 
-function createSpotMarkerEl(spot: Spot): HTMLDivElement {
-  const el = document.createElement('div')
-  el.style.width = '52px'
-  el.style.height = '52px'
-  el.style.borderRadius = '9999px'
-  el.style.border = '2px solid #E63946'
-  el.style.overflow = 'hidden'
-  el.style.cursor = 'pointer'
-  el.style.boxShadow = '0 4px 12px rgba(0,0,0,0.5)'
-  if (spot.photo_url) {
-    el.style.backgroundImage = `url("${spot.photo_url.replace(/"/g, '%22')}")`
-    el.style.backgroundSize = 'cover'
-    el.style.backgroundPosition = 'center'
-  } else {
-    el.style.background = '#E63946'
-    el.style.display = 'flex'
-    el.style.alignItems = 'center'
-    el.style.justifyContent = 'center'
-    el.innerHTML = CAR_SVG
-  }
-  return el
+type SpotProps = {
+  id: string
+  brand: string
+  model: string
+  photo_url: string | null
+  spotter: string
 }
 
-function popupHtml(spot: Spot): string {
-  const title = `${escapeHtml(spot.brand)} ${escapeHtml(spot.model)}`.trim()
-  const sub = [spot.color, spot.year].filter(Boolean).join(' · ')
-  const photo = spot.photo_url
-    ? `<img src="${escapeHtml(spot.photo_url)}" alt="" style="width:80px;height:80px;border-radius:12px;object-fit:cover;flex:none" />`
+// Outer element is positioned by Mapbox (it owns the transform); the
+// inner element carries the visual + the tap scale so we never clobber
+// Mapbox's positioning transform.
+function spotMarkerEl(p: SpotProps): HTMLDivElement {
+  const outer = document.createElement('div')
+  outer.style.cursor = 'pointer'
+  const inner = document.createElement('div')
+  inner.style.width = '40px'
+  inner.style.height = '40px'
+  inner.style.borderRadius = '9999px'
+  inner.style.border = '2px solid #E63946'
+  inner.style.overflow = 'hidden'
+  inner.style.boxShadow = '0 3px 10px rgba(0,0,0,0.55)'
+  inner.style.transition = 'transform .15s ease'
+  if (p.photo_url) {
+    inner.style.backgroundImage = `url("${p.photo_url.replace(/"/g, '%22')}")`
+    inner.style.backgroundSize = 'cover'
+    inner.style.backgroundPosition = 'center'
+  } else {
+    inner.style.background = '#E63946'
+    inner.style.display = 'flex'
+    inner.style.alignItems = 'center'
+    inner.style.justifyContent = 'center'
+    inner.innerHTML = CAR_SVG
+  }
+  outer.appendChild(inner)
+  return outer
+}
+
+function clusterMarkerEl(count: number): HTMLDivElement {
+  const outer = document.createElement('div')
+  outer.style.cursor = 'pointer'
+  const size = count < 10 ? 38 : count < 50 ? 46 : 56
+  const inner = document.createElement('div')
+  inner.style.width = `${size}px`
+  inner.style.height = `${size}px`
+  inner.style.borderRadius = '9999px'
+  inner.style.background = '#E63946'
+  inner.style.border = '2px solid rgba(255,255,255,0.85)'
+  inner.style.boxShadow = '0 3px 12px rgba(0,0,0,0.55)'
+  inner.style.display = 'flex'
+  inner.style.alignItems = 'center'
+  inner.style.justifyContent = 'center'
+  inner.style.color = '#fff'
+  inner.style.fontWeight = '700'
+  inner.style.fontSize = '14px'
+  inner.textContent = String(count)
+  outer.appendChild(inner)
+  return outer
+}
+
+function popupHtml(p: SpotProps): string {
+  const title = `${escapeHtml(p.brand)} ${escapeHtml(p.model)}`.trim()
+  const photo = p.photo_url
+    ? `<img src="${escapeHtml(p.photo_url)}" alt="" style="width:72px;height:72px;border-radius:12px;object-fit:cover;flex:none" />`
     : ''
   return `
     <div style="display:flex;gap:12px;align-items:center;max-width:240px">
       ${photo}
       <div style="min-width:0">
-        <div style="font-weight:600;font-size:14px">${title || 'Spot'}</div>
-        ${sub ? `<div style="font-size:12px;opacity:.6;margin-top:2px">${escapeHtml(sub)}</div>` : ''}
-        <div style="font-size:11px;opacity:.45;margin-top:4px">${escapeHtml(timeAgo(spot.created_at))}</div>
-        <div style="display:inline-block;margin-top:6px;font-size:10px;padding:2px 8px;border-radius:9999px;background:rgba(230,57,70,.2);color:#F5F5F0">${escapeHtml(categoryLabel(spot.category))}</div>
+        <div style="font-weight:700;font-size:14px">${title || 'Spot'}</div>
+        <div style="font-size:12px;opacity:.6;margin-top:3px">par ${escapeHtml(p.spotter)}</div>
       </div>
     </div>`
 }
@@ -75,15 +101,10 @@ type RawLayer = {
   'source-layer'?: string
 }
 
-// Sports-car-at-night theming, applied over navigation-night-v1.
-// Layer IDs differ per Mapbox style, so we drive everything off the
-// vector source-layer (water/landuse/road/building) — robust and never
-// fatal (every op is guarded).
+// Snapchat-night theme on top of streets-v12 + 3D terrain.
 function applyRevsTheme(map: mapboxgl.Map) {
   try {
     const layers = (map.getStyle()?.layers ?? []) as unknown as RawLayer[]
-    let roadSource: string | undefined
-    let roadSourceLayer: string | undefined
     let buildingSource: string | undefined
     let buildingSourceLayer: string | undefined
     let firstSymbolId: string | undefined
@@ -92,16 +113,17 @@ function applyRevsTheme(map: mapboxgl.Map) {
       const sl = l['source-layer']
       if (l.type === 'symbol' && !firstSymbolId) firstSymbolId = l.id
       try {
-        if (l.type === 'fill' && sl === 'water') {
-          map.setPaintProperty(l.id, 'fill-color', '#0a0a1a')
+        if (l.type === 'background') {
+          map.setPaintProperty(l.id, 'background-color', '#1a1a2e')
+        } else if (l.type === 'fill' && sl === 'water') {
+          map.setPaintProperty(l.id, 'fill-color', '#162447')
         } else if (l.type === 'fill' && (sl === 'landuse' || sl === 'park')) {
-          map.setPaintProperty(l.id, 'fill-color', '#0a1a0a')
+          map.setPaintProperty(l.id, 'fill-color', '#1b4332')
         } else if (l.type === 'line' && sl === 'road') {
-          map.setPaintProperty(l.id, 'line-color', '#1a0000')
-          if (l.source) {
-            roadSource = l.source
-            roadSourceLayer = sl
-          }
+          map.setPaintProperty(l.id, 'line-color', '#c9cdd8')
+        } else if (l.type === 'symbol') {
+          map.setPaintProperty(l.id, 'text-color', '#e8eaf0')
+          map.setPaintProperty(l.id, 'text-halo-color', '#11131f')
         } else if (
           (l.type === 'fill' || l.type === 'fill-extrusion') &&
           sl === 'building'
@@ -112,34 +134,12 @@ function applyRevsTheme(map: mapboxgl.Map) {
           }
         }
       } catch {
-        /* layer / property absent in this style */
+        /* property absent on this layer */
       }
     }
 
     type AddLayer = Parameters<typeof map.addLayer>[0]
 
-    // Thin red liseré on motorways/trunks, just below the labels.
-    if (roadSource && roadSourceLayer && !map.getLayer('revs-highway')) {
-      map.addLayer(
-        {
-          id: 'revs-highway',
-          type: 'line',
-          source: roadSource,
-          'source-layer': roadSourceLayer,
-          filter: [
-            'match',
-            ['get', 'class'],
-            ['motorway', 'trunk', 'motorway_link', 'trunk_link'],
-            true,
-            false,
-          ],
-          paint: { 'line-color': '#E63946', 'line-width': 0.5 },
-        } as unknown as AddLayer,
-        firstSymbolId,
-      )
-    }
-
-    // 3D buildings for depth.
     if (!map.getLayer('revs-3d-buildings')) {
       map.addLayer(
         {
@@ -147,17 +147,17 @@ function applyRevsTheme(map: mapboxgl.Map) {
           type: 'fill-extrusion',
           source: buildingSource ?? 'composite',
           'source-layer': buildingSourceLayer ?? 'building',
-          minzoom: 14,
+          minzoom: 13,
           paint: {
-            'fill-extrusion-color': '#111111',
+            'fill-extrusion-color': '#1f4068',
             'fill-extrusion-height': [
               'interpolate',
               ['linear'],
               ['zoom'],
-              14,
+              13,
               0,
               16,
-              ['coalesce', ['get', 'render_height'], ['get', 'height'], 12],
+              ['coalesce', ['get', 'render_height'], ['get', 'height'], 14],
             ],
             'fill-extrusion-base': [
               'coalesce',
@@ -165,11 +165,33 @@ function applyRevsTheme(map: mapboxgl.Map) {
               ['get', 'min_height'],
               0,
             ],
-            'fill-extrusion-opacity': 0.85,
+            'fill-extrusion-opacity': 0.9,
           },
         } as unknown as AddLayer,
         firstSymbolId,
       )
+    }
+
+    // 3D relief — great for the Annecy / Genève mountains.
+    if (!map.getSource('mapbox-dem')) {
+      map.addSource('mapbox-dem', {
+        type: 'raster-dem',
+        url: 'mapbox://mapbox.mapbox-terrain-dem-v1',
+        tileSize: 512,
+        maxzoom: 14,
+      })
+    }
+    map.setTerrain({ source: 'mapbox-dem', exaggeration: 1.5 })
+    if (!map.getLayer('sky')) {
+      map.addLayer({
+        id: 'sky',
+        type: 'sky',
+        paint: {
+          'sky-type': 'atmosphere',
+          'sky-atmosphere-sun': [0, 0],
+          'sky-atmosphere-sun-intensity': 4,
+        },
+      } as unknown as AddLayer)
     }
   } catch {
     /* theming is best-effort — never break the map */
@@ -182,12 +204,13 @@ export default function MapPage() {
 
   const containerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<mapboxgl.Map | null>(null)
-  const markersRef = useRef<globalThis.Map<string, mapboxgl.Marker>>(
-    new globalThis.Map(),
-  )
   const allSpotsRef = useRef<globalThis.Map<string, Spot>>(new globalThis.Map())
+  const namesRef = useRef<globalThis.Map<string, string>>(new globalThis.Map())
+  const markersRef = useRef<Record<string, mapboxgl.Marker>>({})
+  const onScreenRef = useRef<Record<string, mapboxgl.Marker>>({})
   const filterRef = useRef<string>('Tous')
-  const renderRef = useRef<(() => void) | null>(null)
+  const refreshRef = useRef<(() => void) | null>(null)
+
   const [error, setError] = useState<string | null>(null)
   const [activeFilter, setActiveFilter] = useState<string>('Tous')
   const [toast, setToast] = useState<string | null>(null)
@@ -217,20 +240,14 @@ export default function MapPage() {
         )
         setTimeout(() => setGeoError(null), 6000)
       },
-      // maximumAge:0 forces a fresh fix — iOS PWA can otherwise hand back
-      // a stale/empty cached position and appear to do nothing.
       { enableHighAccuracy: false, timeout: 15000, maximumAge: 0 },
     )
   }
 
-  // On iOS, getCurrentPosition fails silently when permission isn't
-  // already granted. Check Permissions API first (when available): if
-  // denied, tell the user exactly where to enable it; otherwise locate.
   function flyToUser() {
     if (!mapRef.current) return
     const perms = navigator.permissions
     if (!perms?.query) {
-      // Older iOS has no Permissions API — go straight to geolocation.
       locate()
       return
     }
@@ -249,7 +266,6 @@ export default function MapPage() {
       .catch(() => locate())
   }
 
-  // Toast après publication (passé via react-router state).
   useEffect(() => {
     const s = location.state as { toast?: string } | null
     if (s?.toast) {
@@ -274,9 +290,10 @@ export default function MapPage() {
     try {
       map = new mapboxgl.Map({
         container: containerRef.current,
-        style: 'mapbox://styles/mapbox/navigation-night-v1',
+        style: 'mapbox://styles/mapbox/streets-v12',
         center: PARIS,
         zoom: DEFAULT_ZOOM,
+        pitch: 45,
         attributionControl: true,
       })
     } catch {
@@ -284,39 +301,114 @@ export default function MapPage() {
       return
     }
     mapRef.current = map
-    const markers = markersRef.current
     const allSpots = allSpotsRef.current
+    const names = namesRef.current
 
-    function matches(spot: Spot): boolean {
+    function featureCollection(): GeoJSON.FeatureCollection {
       const cat = FILTER_CATEGORY[filterRef.current]
-      return cat == null || spot.category === cat
-    }
-
-    function addMarker(spot: Spot) {
-      if (!spot?.id || markers.has(spot.id)) return
-      const popup = new mapboxgl.Popup({ offset: 28, closeButton: true }).setHTML(
-        popupHtml(spot),
-      )
-      const marker = new mapboxgl.Marker({ element: createSpotMarkerEl(spot) })
-        .setLngLat([spot.lng, spot.lat])
-        .setPopup(popup)
-        .addTo(map)
-      markers.set(spot.id, marker)
-    }
-
-    function render() {
-      for (const m of markers.values()) m.remove()
-      markers.clear()
-      for (const spot of allSpots.values()) {
-        if (matches(spot)) addMarker(spot)
+      const feats: GeoJSON.Feature[] = []
+      for (const sp of allSpots.values()) {
+        if (cat != null && sp.category !== cat) continue
+        feats.push({
+          type: 'Feature',
+          geometry: { type: 'Point', coordinates: [sp.lng, sp.lat] },
+          properties: {
+            id: sp.id,
+            brand: sp.brand ?? '',
+            model: sp.model ?? '',
+            photo_url: sp.photo_url ?? null,
+            spotter: names.get(sp.user_id) ?? 'Anonyme',
+          },
+        })
       }
-      setVisibleCount(markers.size)
+      setVisibleCount(feats.length)
+      return { type: 'FeatureCollection', features: feats }
     }
-    renderRef.current = render
+
+    function refreshSource() {
+      const src = map.getSource('spots') as mapboxgl.GeoJSONSource | undefined
+      if (src) src.setData(featureCollection())
+    }
+    refreshRef.current = refreshSource
+
+    function updateMarkers() {
+      const feats = map.querySourceFeatures('spots')
+      const next: Record<string, mapboxgl.Marker> = {}
+      const markers = markersRef.current
+      for (const f of feats) {
+        if (f.geometry.type !== 'Point') continue
+        const coords = f.geometry.coordinates as [number, number]
+        const props = (f.properties ?? {}) as Record<string, unknown>
+        let key: string
+        let marker = undefined as mapboxgl.Marker | undefined
+
+        if (props.cluster) {
+          key = `c${props.cluster_id}`
+          marker = markers[key]
+          if (!marker) {
+            const count = Number(props.point_count ?? 0)
+            const el = clusterMarkerEl(count)
+            el.addEventListener('click', () => {
+              const src = map.getSource(
+                'spots',
+              ) as mapboxgl.GeoJSONSource | null
+              src?.getClusterExpansionZoom(
+                Number(props.cluster_id),
+                (err, zoom) => {
+                  if (err == null && zoom != null)
+                    map.easeTo({ center: coords, zoom })
+                },
+              )
+            })
+            marker = new mapboxgl.Marker({ element: el }).setLngLat(coords)
+            markers[key] = marker
+          }
+        } else {
+          const sp: SpotProps = {
+            id: String(props.id ?? ''),
+            brand: String(props.brand ?? ''),
+            model: String(props.model ?? ''),
+            photo_url:
+              typeof props.photo_url === 'string' ? props.photo_url : null,
+            spotter: String(props.spotter ?? 'Anonyme'),
+          }
+          key = `s${sp.id}`
+          marker = markers[key]
+          if (!marker) {
+            const el = spotMarkerEl(sp)
+            const inner = el.firstElementChild as HTMLElement
+            el.addEventListener('click', (ev) => {
+              ev.stopPropagation()
+              inner.style.transform = 'scale(1.2)'
+              const popup = new mapboxgl.Popup({
+                offset: 26,
+                closeButton: true,
+              })
+                .setLngLat(coords)
+                .setHTML(popupHtml(sp))
+                .addTo(map)
+              popup.on('close', () => {
+                inner.style.transform = 'scale(1)'
+              })
+            })
+            marker = new mapboxgl.Marker({ element: el }).setLngLat(coords)
+            markers[key] = marker
+          }
+        }
+        next[key] = marker
+        if (!onScreenRef.current[key]) marker.addTo(map)
+      }
+      for (const k in onScreenRef.current) {
+        if (!next[k]) onScreenRef.current[k].remove()
+      }
+      onScreenRef.current = next
+    }
 
     map.on('error', (e) => {
       const msg = e.error?.message ?? ''
-      if (/401|403|unauthorized|forbidden|access token|not authorized/i.test(msg)) {
+      if (
+        /401|403|unauthorized|forbidden|access token|not authorized/i.test(msg)
+      ) {
         setError('Carte indisponible : token Mapbox invalide ou non autorisé.')
       }
     })
@@ -331,9 +423,43 @@ export default function MapPage() {
         .from('spots')
         .select('*')
         .order('created_at', { ascending: false })
-        .limit(100)
-      for (const spot of (data ?? []) as Spot[]) allSpots.set(spot.id, spot)
-      render()
+        .limit(200)
+      const spots = (data ?? []) as Spot[]
+      for (const sp of spots) allSpots.set(sp.id, sp)
+
+      const ids = [...new Set(spots.map((s) => s.user_id))]
+      if (ids.length) {
+        const { data: profs } = await supabase
+          .from('profiles')
+          .select('user_id, pseudo')
+          .in('user_id', ids)
+        for (const p of (profs ?? []) as {
+          user_id: string
+          pseudo: string | null
+        }[]) {
+          if (p.pseudo) names.set(p.user_id, p.pseudo)
+        }
+      }
+
+      map.addSource('spots', {
+        type: 'geojson',
+        data: featureCollection(),
+        cluster: true,
+        clusterMaxZoom: 14,
+        clusterRadius: 50,
+      })
+      // Invisible layer so the source's tiles load (querySourceFeatures
+      // only returns features from rendered tiles).
+      map.addLayer({
+        id: 'spot-src',
+        type: 'circle',
+        source: 'spots',
+        paint: { 'circle-radius': 0, 'circle-opacity': 0 },
+      })
+      map.on('render', () => {
+        if (!map.isSourceLoaded('spots')) return
+        updateMarkers()
+      })
     })
 
     const channel = supabase
@@ -342,43 +468,38 @@ export default function MapPage() {
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'spots' },
         (payload) => {
-          const spot = payload.new as Spot
-          if (!spot?.id) return
-          allSpots.set(spot.id, spot)
-          if (matches(spot)) {
-            addMarker(spot)
-            setVisibleCount(markers.size)
-          }
+          const sp = payload.new as Spot
+          if (!sp?.id) return
+          allSpots.set(sp.id, sp)
+          refreshSource()
         },
       )
       .subscribe()
 
     return () => {
       supabase.removeChannel(channel)
-      for (const m of markers.values()) m.remove()
-      markers.clear()
+      for (const k in onScreenRef.current) onScreenRef.current[k].remove()
+      onScreenRef.current = {}
+      markersRef.current = {}
       allSpots.clear()
-      renderRef.current = null
+      names.clear()
+      refreshRef.current = null
       map.remove()
       mapRef.current = null
       setMapReady(false)
     }
   }, [])
 
-  // Changement de filtre : on régénère les markers depuis le cache local.
   useEffect(() => {
     filterRef.current = activeFilter
-    renderRef.current?.()
+    refreshRef.current?.()
   }, [activeFilter])
 
   return (
     <div className="fixed inset-0">
-      {/* Hauteur explicite inline : bat la règle .mapboxgl-map { position: relative }
-          de mapbox-gl, qui sinon écrase un positionnement par classe et fait
-          s'effondrer le conteneur à 0 (carte noire). */}
       <div
         ref={containerRef}
-        style={{ width: '100%', height: '100vh', backgroundColor: '#0A0A0A' }}
+        style={{ width: '100%', height: '100vh', backgroundColor: '#1a1a2e' }}
       />
 
       {!mapReady && !error && <SkeletonMap />}
@@ -407,7 +528,6 @@ export default function MapPage() {
         </div>
       )}
 
-      {/* Barre de filtre */}
       <div className="absolute left-0 right-0 top-0 z-10 px-4 pt-[max(4rem,calc(env(safe-area-inset-top)+3rem))]">
         <div className="mx-auto flex max-w-md gap-1 rounded-full bg-black/60 p-1 backdrop-blur">
           {FILTERS.map((f) => (
@@ -415,7 +535,9 @@ export default function MapPage() {
               key={f}
               onClick={() => setActiveFilter(f)}
               className={`flex-1 rounded-full py-2 text-xs font-medium transition-colors ${
-                activeFilter === f ? 'bg-accent text-fg' : 'text-fg/50 hover:text-fg'
+                activeFilter === f
+                  ? 'bg-accent text-fg'
+                  : 'text-fg/50 hover:text-fg'
               }`}
             >
               {f}
@@ -424,7 +546,6 @@ export default function MapPage() {
         </div>
       </div>
 
-      {/* Bouton "Me localiser" */}
       <button
         onClick={flyToUser}
         aria-label="Me localiser"
