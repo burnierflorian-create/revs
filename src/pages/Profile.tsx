@@ -7,6 +7,7 @@ import { xpLevel } from '../lib/xp'
 import { Skeleton } from '../components/Skeleton'
 
 type TopRow = { user_id: string; xp: number }
+type ProfileRow = { user_id: string; pseudo: string | null; ville: string | null }
 
 function memberSince(iso: string | undefined): string {
   if (!iso) return ''
@@ -30,6 +31,9 @@ export default function Profile() {
   const [hasEvent, setHasEvent] = useState(false)
   const [xp, setXp] = useState(0)
   const [top, setTop] = useState<TopRow[]>([])
+  const [profiles, setProfiles] = useState<
+    Record<string, { pseudo: string | null; ville: string | null }>
+  >({})
   const [animPct, setAnimPct] = useState(0)
 
   useEffect(() => {
@@ -72,9 +76,33 @@ export default function Profile() {
         rk = idx >= 0 ? idx + 1 : null
       }
 
+      const topRows = Array.isArray(topRes.data)
+        ? (topRes.data as TopRow[])
+        : []
+
+      const ids = [user.id, ...topRows.map((r) => r.user_id)]
+      const { data: profData } = await supabase
+        .from('profiles')
+        .select('user_id, pseudo, ville')
+        .in('user_id', ids)
+      if (!active) return
+
+      const profMap: Record<
+        string,
+        { pseudo: string | null; ville: string | null }
+      > = {}
+      for (const p of (profData ?? []) as ProfileRow[]) {
+        profMap[p.user_id] = { pseudo: p.pseudo, ville: p.ville }
+      }
+
       const email = user.email ?? ''
+      const ownPseudo =
+        profMap[user.id]?.pseudo ||
+        (email ? email.split('@')[0] : '') ||
+        'Spotter'
+
       setUserId(user.id)
-      setPseudo(email ? email.split('@')[0] || 'Spotter' : 'Spotter')
+      setPseudo(ownPseudo)
       setJoined(memberSince(user.created_at))
       setSpots(mySpots)
       setUniqueBrands(
@@ -83,7 +111,8 @@ export default function Profile() {
       setRank(rk)
       setHasEvent((eventsRes.count ?? 0) > 0)
       setXp(typeof xpRes.data === 'number' ? xpRes.data : 0)
-      setTop(Array.isArray(topRes.data) ? (topRes.data as TopRow[]) : [])
+      setTop(topRows)
+      setProfiles(profMap)
       setLoading(false)
     })()
     return () => {
@@ -154,7 +183,8 @@ export default function Profile() {
   ]
 
   const nameFor = (uid: string) =>
-    uid === userId ? pseudo : `Spotter ${uid.slice(0, 4)}`
+    profiles[uid]?.pseudo ||
+    (uid === userId ? pseudo : `Spotter ${uid.slice(0, 4)}`)
 
   return (
     <div className="min-h-screen bg-bg px-4 pt-[max(1rem,env(safe-area-inset-top))] text-fg">
@@ -258,6 +288,9 @@ export default function Profile() {
                       </p>
                       <p className="text-xs text-[#888888]">
                         {xpLevel(r.xp).name}
+                        {profiles[r.user_id]?.ville
+                          ? ` · ${profiles[r.user_id]?.ville}`
+                          : ''}
                       </p>
                     </div>
                     <span className="text-sm font-semibold text-accent">

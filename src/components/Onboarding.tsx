@@ -1,6 +1,7 @@
 import { useState, type ComponentType } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Camera, Sparkles, Users } from 'lucide-react'
+import { supabase } from '../lib/supabase'
 
 const STORAGE_KEY = 'revs_onboarded'
 
@@ -10,7 +11,6 @@ function isOnboarded(): boolean {
   try {
     return localStorage.getItem(STORAGE_KEY) === '1'
   } catch {
-    // Storage unavailable: skip onboarding rather than block the app.
     return true
   }
 }
@@ -19,7 +19,7 @@ function markOnboarded() {
   try {
     localStorage.setItem(STORAGE_KEY, '1')
   } catch {
-    /* no-op: nothing we can do, just don't crash */
+    /* no-op */
   }
 }
 
@@ -49,20 +49,56 @@ const SLIDES: Slide[] = [
   },
 ]
 
+// 3 info slides + a final profile form.
+const TOTAL = SLIDES.length + 1
+const FORM_INDEX = SLIDES.length
+
 export default function Onboarding() {
   const navigate = useNavigate()
   const [visible, setVisible] = useState(() => !isOnboarded())
   const [slide, setSlide] = useState(0)
+  const [pseudo, setPseudo] = useState('')
+  const [ville, setVille] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   if (!visible) return null
 
-  const isLast = slide === SLIDES.length - 1
+  const onForm = slide === FORM_INDEX
+  const canFinish = pseudo.trim().length > 0 && ville.trim().length > 0
 
-  function next() {
-    if (isLast) {
+  async function finish() {
+    setError(null)
+    setSaving(true)
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (user) {
+        const { error: upErr } = await supabase.from('profiles').upsert(
+          {
+            user_id: user.id,
+            pseudo: pseudo.trim(),
+            ville: ville.trim(),
+          },
+          { onConflict: 'user_id' },
+        )
+        if (upErr) throw upErr
+      }
       markOnboarded()
       setVisible(false)
       navigate('/map')
+    } catch (e) {
+      setError(
+        e instanceof Error ? e.message : 'Impossible d’enregistrer le profil',
+      )
+      setSaving(false)
+    }
+  }
+
+  function next() {
+    if (onForm) {
+      finish()
       return
     }
     setSlide((s) => s + 1)
@@ -74,28 +110,68 @@ export default function Onboarding() {
         <div
           className="flex h-full transition-transform duration-300 ease-out"
           style={{
-            width: '300%',
-            transform: `translateX(-${slide * (100 / SLIDES.length)}%)`,
+            width: `${TOTAL * 100}%`,
+            transform: `translateX(-${slide * (100 / TOTAL)}%)`,
           }}
         >
           {SLIDES.map(({ icon: Icon, title, subtitle }) => (
             <section
               key={title}
-              className="flex h-full w-1/3 shrink-0 flex-col items-center justify-center gap-6 px-10 text-center"
+              style={{ width: `${100 / TOTAL}%` }}
+              className="flex h-full shrink-0 flex-col items-center justify-center gap-6 px-10 text-center"
             >
               <Icon className="h-20 w-20 text-accent" strokeWidth={1.5} />
               <h1 className="text-3xl font-bold leading-tight">{title}</h1>
               <p className="max-w-xs text-base text-fg/60">{subtitle}</p>
             </section>
           ))}
+
+          <section
+            style={{ width: `${100 / TOTAL}%` }}
+            className="flex h-full shrink-0 flex-col justify-center gap-6 px-8"
+          >
+            <div className="space-y-2 text-center">
+              <h1 className="text-2xl font-bold">Crée ton profil</h1>
+              <p className="text-sm text-fg/60">
+                Ton pseudo et ta ville pour le classement des spotters
+              </p>
+            </div>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-[11px] uppercase tracking-widest text-fg/40">
+                  Pseudo
+                </label>
+                <input
+                  value={pseudo}
+                  onChange={(e) => setPseudo(e.target.value)}
+                  maxLength={24}
+                  placeholder="ex: speedhunter_75"
+                  className="w-full rounded-lg bg-card px-3 py-3 text-fg outline-none focus:ring-1 focus:ring-accent"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-[11px] uppercase tracking-widest text-fg/40">
+                  Ville
+                </label>
+                <input
+                  value={ville}
+                  onChange={(e) => setVille(e.target.value)}
+                  maxLength={48}
+                  placeholder="ex: Annecy"
+                  className="w-full rounded-lg bg-card px-3 py-3 text-fg outline-none focus:ring-1 focus:ring-accent"
+                />
+              </div>
+              {error && <p className="text-sm text-accent">{error}</p>}
+            </div>
+          </section>
         </div>
       </div>
 
       <footer className="space-y-7 px-8 pb-[max(2rem,env(safe-area-inset-bottom))] pt-4">
         <div className="flex justify-center gap-2">
-          {SLIDES.map((s, i) => (
+          {Array.from({ length: TOTAL }).map((_, i) => (
             <span
-              key={s.title}
+              key={i}
               className={`h-2 rounded-full transition-all duration-300 ${
                 i === slide ? 'w-6 bg-accent' : 'w-2 bg-fg/20'
               }`}
@@ -105,9 +181,10 @@ export default function Onboarding() {
 
         <button
           onClick={next}
-          className="w-full rounded-full bg-accent py-4 font-medium"
+          disabled={onForm && (!canFinish || saving)}
+          className="w-full rounded-full bg-accent py-4 font-medium disabled:opacity-50"
         >
-          {isLast ? 'Commencer' : 'Continuer'}
+          {onForm ? (saving ? '…' : 'Commencer') : 'Continuer'}
         </button>
       </footer>
     </div>

@@ -293,16 +293,60 @@ create or replace function public.top_spotters(limit_count int default 10)
   limit limit_count;
 $$;
 
--- One-time backfill for data created before the triggers existed. Guarded
--- so re-running this file does not double-count.
+-- Backfill: reconcile each user's XP to the rule-based total for all
+-- EXISTING data (spots ×10, events ×20, likes received ×5). Inserts a
+-- single delta per user, guarded by a per-user 'reconcile' row so it is
+-- idempotent regardless of whether triggers already fired.
 insert into public.xp_transactions (user_id, amount, reason)
-select user_id, 10, 'spot' from public.spots
-  where not exists (select 1 from public.xp_transactions)
-union all
-select organizer_id, 20, 'event' from public.events
-  where not exists (select 1 from public.xp_transactions)
-union all
-select s.user_id, 5, 'like'
-  from public.spot_likes l
-  join public.spots s on s.id = l.spot_id
-  where not exists (select 1 from public.xp_transactions);
+select u.user_id, u.target - coalesce(c.cur, 0), 'reconcile'
+from (
+  select uid as user_id, sum(pts) as target from (
+    select user_id as uid, count(*) * 10 as pts
+      from public.spots group by user_id
+    union all
+    select organizer_id, count(*) * 20
+      from public.events group by organizer_id
+    union all
+    select s.user_id, count(*) * 5
+      from public.spot_likes l
+      join public.spots s on s.id = l.spot_id
+      group by s.user_id
+  ) parts group by uid
+) u
+left join (
+  select user_id, sum(amount) as cur
+    from public.xp_transactions group by user_id
+) c on c.user_id = u.user_id
+where u.target - coalesce(c.cur, 0) <> 0
+  and not exists (
+    select 1 from public.xp_transactions x
+    where x.user_id = u.user_id and x.reason = 'reconcile'
+  );
+
+-- 10. Profiles --------------------------------------------------------------
+create table if not exists public.profiles (
+  user_id    uuid primary key references auth.users (id) on delete cascade,
+  pseudo     text,
+  ville      text,
+  avatar     text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.profiles enable row level security;
+
+-- Public read (pseudo / ville / avatar shown in feed, leaderboard, etc.).
+drop policy if exists "profiles readable by everyone" on public.profiles;
+create policy "profiles readable by everyone"
+  on public.profiles for select using (true);
+
+-- A user can create and edit only their own profile.
+drop policy if exists "users insert own profile" on public.profiles;
+create policy "users insert own profile"
+  on public.profiles for insert to authenticated
+  with check (auth.uid() = user_id);
+
+drop policy if exists "users update own profile" on public.profiles;
+create policy "users update own profile"
+  on public.profiles for update to authenticated
+  using (auth.uid() = user_id);
