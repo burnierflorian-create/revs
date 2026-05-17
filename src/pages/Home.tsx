@@ -1,27 +1,86 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowRight, Car, Settings } from 'lucide-react'
+import {
+  Settings,
+  Camera,
+  Car,
+  Tag,
+  Trophy,
+  Zap,
+  Flame,
+  Flag,
+  Target,
+  Newspaper,
+  ChevronRight,
+  Sparkles,
+} from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { timeAgo, type Spot } from '../lib/spots'
-import { formatEventDate, type CarEvent } from '../lib/events'
+import { xpLevel } from '../lib/xp'
+import { GP_2026 } from '../lib/f1'
 import { Skeleton } from '../components/Skeleton'
 
-function levelFor(n: number): { num: number; label: string } {
-  if (n >= 50) return { num: 4, label: 'Légende' }
-  if (n >= 20) return { num: 3, label: 'Expert' }
-  if (n >= 5) return { num: 2, label: 'Spotter' }
-  return { num: 1, label: 'Débutant' }
+type NewsLite = {
+  id: string
+  title: string
+  category: string
+  url: string
+  image_url: string | null
+}
+
+const NEWS_BADGE: Record<string, string> = {
+  F1: 'bg-accent text-fg',
+  Supercar: 'bg-[#F59E0B] text-[#0A0A0A]',
+  Hypercar: 'bg-[#8B5CF6] text-fg',
+  Events: 'bg-[#3B82F6] text-fg',
+}
+
+const CHALLENGE_TARGET = 2
+const CHALLENGE_XP = 20
+
+function startOfTodayISO(): string {
+  const d = new Date()
+  d.setHours(0, 0, 0, 0)
+  return d.toISOString()
+}
+
+function SectionTitle({
+  icon,
+  label,
+  action,
+}: {
+  icon: ReactNode
+  label: string
+  action?: ReactNode
+}) {
+  return (
+    <div className="mb-3 flex items-center justify-between">
+      <h2 className="flex items-center gap-2 font-display text-base font-bold text-fg">
+        <span className="text-accent">{icon}</span>
+        {label}
+      </h2>
+      {action}
+    </div>
+  )
 }
 
 export default function Home() {
   const navigate = useNavigate()
   const [loading, setLoading] = useState(true)
   const [name, setName] = useState('Spotter')
+  const [xp, setXp] = useState(0)
   const [totalSpots, setTotalSpots] = useState(0)
   const [uniqueBrands, setUniqueBrands] = useState(0)
   const [rank, setRank] = useState<number | null>(null)
   const [recent, setRecent] = useState<Spot[]>([])
-  const [nextEvent, setNextEvent] = useState<CarEvent | null>(null)
+  const [todayCount, setTodayCount] = useState(0)
+  const [news, setNews] = useState<NewsLite[]>([])
+  const [now, setNow] = useState(() => Date.now())
+
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(t)
+  }, [])
 
   useEffect(() => {
     let active = true
@@ -31,31 +90,50 @@ export default function Home() {
       } = await supabase.auth.getUser()
       if (!user) return
 
-      const email = user.email ?? ''
-      const display = email ? email.split('@')[0] : 'Spotter'
-
-      const [countRes, brandsRes, allUidsRes, recentRes, eventRes] =
-        await Promise.all([
-          supabase
-            .from('spots')
-            .select('*', { count: 'exact', head: true })
-            .eq('user_id', user.id),
-          supabase.from('spots').select('brand').eq('user_id', user.id),
-          supabase.from('spots').select('user_id'),
-          supabase
-            .from('spots')
-            .select('*')
-            .order('created_at', { ascending: false })
-            .limit(3),
-          supabase
-            .from('events')
-            .select('*')
-            .gt('starts_at', new Date().toISOString())
-            .order('starts_at', { ascending: true })
-            .limit(1),
-        ])
+      const [
+        profRes,
+        countRes,
+        brandsRes,
+        allUidsRes,
+        recentRes,
+        todayRes,
+        xpRes,
+        newsRes,
+      ] = await Promise.all([
+        supabase
+          .from('profiles')
+          .select('pseudo')
+          .eq('user_id', user.id)
+          .maybeSingle(),
+        supabase
+          .from('spots')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', user.id),
+        supabase.from('spots').select('brand').eq('user_id', user.id),
+        supabase.from('spots').select('user_id'),
+        supabase
+          .from('spots')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(10),
+        supabase
+          .from('spots')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', user.id)
+          .gte('created_at', startOfTodayISO()),
+        supabase.rpc('my_xp'),
+        supabase
+          .from('news')
+          .select('id, title, category, url, image_url')
+          .order('published_at', { ascending: false, nullsFirst: false })
+          .limit(6),
+      ])
 
       if (!active) return
+
+      const pseudo =
+        (profRes.data?.pseudo as string | undefined)?.trim() ||
+        (user.email ? user.email.split('@')[0] : 'Spotter')
 
       const total = countRes.count ?? 0
       const brands = brandsRes.data
@@ -75,12 +153,14 @@ export default function Home() {
         rk = idx >= 0 ? idx + 1 : null
       }
 
-      setName(display)
+      setName(pseudo)
+      setXp((xpRes.data as number | null) ?? 0)
       setTotalSpots(total)
       setUniqueBrands(brands)
       setRank(rk)
       setRecent((recentRes.data ?? []) as Spot[])
-      setNextEvent((eventRes.data?.[0] ?? null) as CarEvent | null)
+      setTodayCount(todayRes.count ?? 0)
+      setNews(((newsRes.data ?? []) as NewsLite[]).slice(0, 3))
       setLoading(false)
     })()
     return () => {
@@ -88,36 +168,38 @@ export default function Home() {
     }
   }, [])
 
-  const level = levelFor(totalSpots)
+  const level = xpLevel(xp)
+  const nextGp = GP_2026.find((g) => new Date(g.date).getTime() >= now)
+  const gpDiff = nextGp ? new Date(nextGp.date).getTime() - now : 0
+  const cd = {
+    d: Math.max(0, Math.floor(gpDiff / 86400000)),
+    h: Math.max(0, Math.floor((gpDiff % 86400000) / 3600000)),
+    m: Math.max(0, Math.floor((gpDiff % 3600000) / 60000)),
+    s: Math.max(0, Math.floor((gpDiff % 60000) / 1000)),
+  }
+  const challengeDone = Math.min(todayCount, CHALLENGE_TARGET)
+  const challengePct = Math.round((challengeDone / CHALLENGE_TARGET) * 100)
+  const challengeComplete = todayCount >= CHALLENGE_TARGET
 
   if (loading) {
     return (
       <div className="min-h-screen bg-bg px-5 pt-[max(1rem,env(safe-area-inset-top))]">
         <div className="flex items-center justify-between py-5">
           <div className="space-y-2">
-            <Skeleton className="h-7 w-44 rounded" />
-            <Skeleton className="h-5 w-32 rounded-full" />
+            <Skeleton className="h-8 w-48 rounded" />
+            <Skeleton className="h-5 w-28 rounded-full" />
           </div>
-          <Skeleton className="h-6 w-6 rounded" />
+          <Skeleton className="h-9 w-9 rounded-full" />
         </div>
-        <div className="space-y-8">
-          <Skeleton className="h-24 w-full rounded-2xl" />
-          <div className="grid grid-cols-3 gap-3">
-            {Array.from({ length: 3 }).map((_, i) => (
+        <div className="space-y-7 pb-8">
+          <Skeleton className="h-40 w-full rounded-3xl" />
+          <div className="grid grid-cols-4 gap-2">
+            {Array.from({ length: 4 }).map((_, i) => (
               <Skeleton key={i} className="h-20 rounded-2xl" />
             ))}
           </div>
-          <div className="space-y-3">
-            {Array.from({ length: 3 }).map((_, i) => (
-              <div key={i} className="flex items-center gap-3">
-                <Skeleton className="h-12 w-12 rounded-full" />
-                <div className="flex-1 space-y-2">
-                  <Skeleton className="h-4 w-1/2 rounded" />
-                  <Skeleton className="h-3 w-1/4 rounded" />
-                </div>
-              </div>
-            ))}
-          </div>
+          <Skeleton className="h-44 w-full rounded-2xl" />
+          <Skeleton className="h-28 w-full rounded-2xl" />
         </div>
       </div>
     )
@@ -125,146 +207,285 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-bg px-5 pt-[max(1rem,env(safe-area-inset-top))] text-fg">
-      {/* SECTION 1 — Header */}
+      {/* 1 — HEADER */}
       <header className="flex items-start justify-between py-5">
         <div>
-          <h1 className="text-2xl font-bold text-fg">Bonjour {name}</h1>
-          <span className="mt-2 inline-block rounded-full bg-accent px-3 py-1 text-xs font-medium text-fg">
-            Niveau {level.num} · {level.label}
+          <h1 className="font-display text-3xl font-bold leading-tight text-fg">
+            Bonjour {name}
+          </h1>
+          <span className="lvl-glow mt-2.5 inline-flex items-center gap-1.5 rounded-full bg-accent/15 px-3 py-1 text-xs font-semibold text-accent">
+            {level.name}
+            <Sparkles className="h-3.5 w-3.5" />
           </span>
         </div>
         <button
           onClick={() => navigate('/settings')}
           aria-label="Réglages"
-          className="text-fg/40 transition-colors hover:text-fg"
+          className="flex h-9 w-9 items-center justify-center rounded-full bg-card text-fg/50 transition-colors hover:text-fg"
         >
-          <Settings className="h-6 w-6" />
+          <Settings className="h-5 w-5" />
         </button>
       </header>
 
-      <div className="space-y-8 pb-8">
-        {/* SECTION 2 — CTA Spotter */}
+      <div className="space-y-8 pb-10">
+        {/* 2 — HERO SPOTTER */}
         <button
           onClick={() => navigate('/new-spot')}
-          className="w-full rounded-2xl bg-accent px-5 py-5 text-left"
+          className="relative w-full overflow-hidden rounded-3xl p-6 text-left ring-1 ring-accent/30"
+          style={{
+            background:
+              'linear-gradient(135deg,#4a0f16 0%,#1c0709 48%,#0a0a0a 100%)',
+          }}
         >
-          <div className="text-lg font-semibold text-fg">
-            📷 Spotter une voiture
-          </div>
-          <div className="mt-1 text-sm text-fg/70">
-            L'IA reconnaîtra la voiture automatiquement
+          <span className="shimmer-sweep" />
+          <div className="relative">
+            <p className="font-display text-2xl font-bold text-fg">
+              Spotte maintenant
+            </p>
+            <p className="mt-1.5 max-w-[16rem] text-sm text-fg/60">
+              L'IA reconnaît la voiture en quelques secondes
+            </p>
+            <span className="mt-5 inline-flex items-center gap-2 rounded-full bg-accent px-5 py-3 text-sm font-semibold text-fg shadow-lg shadow-accent/40">
+              <Camera className="h-5 w-5" />
+              Ouvrir la caméra
+            </span>
           </div>
         </button>
 
-        {/* SECTION 3 — Stats */}
-        <section className="grid grid-cols-3 gap-3">
-          <Stat value={String(totalSpots)} label="Spots" />
-          <Stat value={String(uniqueBrands)} label="Marques" />
-          <Stat value={rank ? `#${rank}` : '—'} label="Rang local" />
+        {/* 3 — STATS ROW */}
+        <section className="grid grid-cols-4 gap-2.5">
+          <StatCard
+            icon={<Camera className="h-4 w-4" />}
+            value={String(totalSpots)}
+            label="Spots"
+          />
+          <StatCard
+            icon={<Tag className="h-4 w-4" />}
+            value={String(uniqueBrands)}
+            label="Marques"
+          />
+          <StatCard
+            icon={<Trophy className="h-4 w-4" />}
+            value={rank ? `#${rank}` : '—'}
+            label="Rang"
+          />
+          <StatCard
+            icon={<Zap className="h-4 w-4" />}
+            value={String(xp)}
+            label="XP"
+          />
         </section>
 
-        {/* SECTION 4 — Spots récents */}
+        {/* 4 — SPOTS RÉCENTS */}
         <section>
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-base font-semibold text-fg">
-              🔥 Spots récents
-            </h2>
-            <button
-              onClick={() => navigate('/feed')}
-              aria-label="Voir le feed"
-              className="text-fg/40 transition-colors hover:text-fg"
-            >
-              <ArrowRight className="h-5 w-5" />
-            </button>
-          </div>
+          <SectionTitle
+            icon={<Flame className="h-[18px] w-[18px]" />}
+            label="Spots récents"
+            action={
+              <button
+                onClick={() => navigate('/feed')}
+                aria-label="Voir le feed"
+                className="text-fg/40 transition-colors hover:text-fg"
+              >
+                <ChevronRight className="h-5 w-5" />
+              </button>
+            }
+          />
           {recent.length === 0 ? (
-            <p className="text-sm text-[#888888]">Aucun spot pour le moment.</p>
+            <div className="flex flex-col items-center rounded-2xl border border-white/5 bg-card px-6 py-10 text-center">
+              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-accent/10">
+                <Car className="h-8 w-8 text-accent/70" />
+              </div>
+              <p className="mt-4 font-medium text-fg">
+                Sois le premier à spotter ici
+              </p>
+              <button
+                onClick={() => navigate('/new-spot')}
+                className="mt-4 rounded-full bg-accent px-6 py-2.5 text-sm font-semibold text-fg"
+              >
+                Spotter
+              </button>
+            </div>
           ) : (
-            <ul className="space-y-3">
+            <div className="no-scrollbar -mx-5 flex gap-3 overflow-x-auto px-5 pb-1">
               {recent.map((s) => (
-                <li key={s.id} className="flex items-center gap-3">
+                <button
+                  key={s.id}
+                  onClick={() => navigate(`/spot/${s.id}`)}
+                  className="relative h-40 w-40 flex-none overflow-hidden rounded-2xl bg-card text-left ring-1 ring-white/5"
+                >
                   {s.photo_url ? (
                     <img
                       src={s.photo_url}
                       alt=""
-                      className="h-12 w-12 flex-none rounded-full object-cover"
+                      className="h-full w-full object-cover"
                     />
                   ) : (
-                    <div className="flex h-12 w-12 flex-none items-center justify-center rounded-full bg-white/5">
-                      <Car size={20} color="#444444" />
+                    <div className="flex h-full w-full items-center justify-center">
+                      <Car className="h-9 w-9 text-fg/20" />
                     </div>
                   )}
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-fg">
+                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 to-transparent p-3">
+                    <p className="truncate text-sm font-semibold text-fg">
                       {s.brand} {s.model}
                     </p>
-                    <p className="text-xs text-fg/40">
+                    <p className="text-[11px] text-fg/50">
                       {timeAgo(s.created_at)}
                     </p>
                   </div>
-                </li>
+                </button>
               ))}
-            </ul>
-          )}
-        </section>
-
-        {/* SECTION 5 — Prochain événement */}
-        <section>
-          <h2 className="mb-3 text-base font-semibold text-fg">
-            📅 Prochain événement
-          </h2>
-          {nextEvent ? (
-            <div className="rounded-2xl bg-card p-4">
-              <p className="font-semibold text-fg">{nextEvent.title}</p>
-              <p className="mt-1 text-sm text-accent">
-                {formatEventDate(nextEvent.starts_at)}
-              </p>
-              <p className="mt-1 text-sm text-fg/60">{nextEvent.location}</p>
-              <button
-                onClick={() => navigate('/events')}
-                className="mt-3 rounded-full bg-accent px-4 py-2 text-xs font-medium text-fg"
-              >
-                Voir
-              </button>
             </div>
-          ) : (
-            <p className="text-sm text-[#888888]">
-              Aucun événement prévu ·{' '}
-              <button
-                onClick={() => navigate('/new-event')}
-                className="text-accent"
-              >
-                Proposez le premier !
-              </button>
-            </p>
           )}
         </section>
 
-        {/* SECTION 6 — Challenge du jour */}
-        <section className="rounded-2xl bg-card p-4">
-          <h2 className="text-base font-semibold text-fg">
-            🏆 Challenge du jour
-          </h2>
-          <p className="mt-1 text-sm text-fg/60">
-            Spotte ta première supercar à Annecy ou Genève
-          </p>
-          <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-white/10">
-            <div
-              className="h-full rounded-full bg-accent transition-all"
-              style={{ width: totalSpots > 0 ? '100%' : '0%' }}
+        {/* 5 — PROCHAIN GP */}
+        {nextGp && (
+          <section>
+            <SectionTitle
+              icon={<Flag className="h-[18px] w-[18px]" />}
+              label="Prochain GP"
             />
+            <div className="overflow-hidden rounded-2xl border-l-2 border-accent bg-card">
+              <div className="bg-gradient-to-r from-accent/15 to-transparent p-4">
+                <div className="flex items-center gap-3">
+                  <span className="text-3xl leading-none">{nextGp.flag}</span>
+                  <div className="min-w-0">
+                    <p className="truncate font-display font-bold text-fg">
+                      {nextGp.name}
+                    </p>
+                    <p className="truncate text-xs text-fg/50">
+                      {nextGp.circuit}
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-4 grid grid-cols-4 gap-2">
+                  {[
+                    { v: cd.d, l: 'JOURS' },
+                    { v: cd.h, l: 'HRS' },
+                    { v: cd.m, l: 'MIN' },
+                    { v: cd.s, l: 'SEC' },
+                  ].map((u) => (
+                    <div
+                      key={u.l}
+                      className="rounded-xl bg-black/40 py-2 text-center"
+                    >
+                      <div className="font-mono text-xl font-bold tabular-nums text-accent">
+                        {String(u.v).padStart(2, '0')}
+                      </div>
+                      <div className="text-[9px] tracking-widest text-fg/40">
+                        {u.l}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {/* 6 — CHALLENGE DU JOUR */}
+        <section>
+          <SectionTitle
+            icon={<Target className="h-[18px] w-[18px]" />}
+            label="Challenge du jour"
+          />
+          <div className="rounded-2xl border border-white/5 bg-card p-4">
+            <div className="flex items-start justify-between gap-3">
+              <p className="font-medium text-fg">
+                Spotte {CHALLENGE_TARGET} voitures aujourd'hui
+              </p>
+              <span className="flex-none rounded-full bg-accent/15 px-2.5 py-1 text-[11px] font-bold text-accent">
+                +{CHALLENGE_XP} XP
+              </span>
+            </div>
+            <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-white/10">
+              <div
+                className="h-full rounded-full bg-accent transition-all duration-500"
+                style={{ width: `${challengePct}%` }}
+              />
+            </div>
+            <p className="mt-2 text-xs text-fg/40">
+              {challengeDone}/{CHALLENGE_TARGET} aujourd'hui
+            </p>
+            <button
+              onClick={() => navigate('/new-spot')}
+              disabled={challengeComplete}
+              className="mt-4 w-full rounded-full bg-accent py-3 text-sm font-semibold text-fg transition-opacity disabled:opacity-40"
+            >
+              {challengeComplete ? 'Défi relevé ✦' : 'Relever le défi'}
+            </button>
           </div>
         </section>
+
+        {/* 7 — ACTU DU MOMENT */}
+        {news.length > 0 && (
+          <section>
+            <SectionTitle
+              icon={<Newspaper className="h-[18px] w-[18px]" />}
+              label="Actu du moment"
+              action={
+                <button
+                  onClick={() => navigate('/discover')}
+                  aria-label="Voir l'actu"
+                  className="text-fg/40 transition-colors hover:text-fg"
+                >
+                  <ChevronRight className="h-5 w-5" />
+                </button>
+              }
+            />
+            <div className="no-scrollbar -mx-5 flex gap-3 overflow-x-auto px-5 pb-1">
+              {news.map((n) => (
+                <a
+                  key={n.id}
+                  href={n.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-56 flex-none overflow-hidden rounded-2xl border border-white/5 bg-card"
+                >
+                  {n.image_url && (
+                    <img
+                      src={n.image_url}
+                      alt=""
+                      className="aspect-video w-full object-cover"
+                    />
+                  )}
+                  <div className="p-3">
+                    <span
+                      className={`inline-block rounded-full px-2.5 py-0.5 text-[9px] font-bold tracking-wide ${
+                        NEWS_BADGE[n.category] ?? 'bg-white/15 text-fg'
+                      }`}
+                    >
+                      {n.category.toUpperCase()}
+                    </span>
+                    <p className="clamp-2 mt-2 text-sm font-medium text-fg">
+                      {n.title}
+                    </p>
+                  </div>
+                </a>
+              ))}
+            </div>
+          </section>
+        )}
       </div>
     </div>
   )
 }
 
-function Stat({ value, label }: { value: string; label: string }) {
+function StatCard({
+  icon,
+  value,
+  label,
+}: {
+  icon: ReactNode
+  value: string
+  label: string
+}) {
   return (
-    <div className="rounded-2xl bg-card px-2 py-4 text-center">
-      <div className="text-xl font-bold text-fg">{value}</div>
-      <div className="mt-1 text-[11px] text-fg/40">{label}</div>
+    <div className="flex flex-col items-center gap-1 rounded-2xl border border-white/5 bg-card py-3.5 shadow-[0_2px_10px_rgba(0,0,0,0.4)]">
+      <span className="text-accent/70">{icon}</span>
+      <div className="font-display text-lg font-bold text-fg">{value}</div>
+      <div className="text-[10px] tracking-wide text-fg/40">{label}</div>
     </div>
   )
 }
