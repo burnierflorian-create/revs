@@ -12,6 +12,7 @@ import Premium from './pages/Premium'
 import Settings from './pages/Settings'
 import Privacy from './pages/Privacy'
 import Legal from './pages/Legal'
+import Cgu from './pages/Cgu'
 import SpotDetail from './pages/SpotDetail'
 import Discover from './pages/Discover'
 import GrandPrixDetail from './pages/GrandPrixDetail'
@@ -52,6 +53,7 @@ export default function App() {
           <Route path="/settings" element={<Settings />} />
           <Route path="/confidentialite" element={<Privacy />} />
           <Route path="/mentions-legales" element={<Legal />} />
+          <Route path="/cgu" element={<Cgu />} />
           <Route path="/premium" element={<Premium />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
