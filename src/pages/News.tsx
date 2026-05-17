@@ -241,7 +241,9 @@ export default function News({
               <div className="mt-3">
                 <h2 className="font-semibold text-fg">{n.title}</h2>
                 {n.summary && (
-                  <p className="mt-1 text-sm text-fg/60">{n.summary}</p>
+                  <p className="clamp-3 mt-1 text-sm text-fg/60">
+                    {n.summary}
+                  </p>
                 )}
                 <p className="mt-2 text-xs text-fg/30">
                   {[n.source, timeAgo(n.published_at ?? n.created_at)]

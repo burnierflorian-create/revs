@@ -61,7 +61,9 @@ PERTINENCE — mets "relevant" à true UNIQUEMENT si l'article est DIRECTEMENT e
 
 Mets "relevant" à false pour TOUT LE RESTE, même si une voiture est citée en passant : avions, bateaux/yachts, motos, vélos, trains, immobilier, crypto/bourse/finance, jeux vidéo, hardware/tech grand public, politique, people/célébrités, sport non automobile, SUV/utilitaires familiaux sans dimension sportive. Dans le moindre doute → false.
 
-RÉSUMÉ — si pertinent, rédige "summary" : 2 à 3 lignes en français, enthousiaste, précis sur les chiffres de performance s'ils sont donnés. TEXTE BRUT UNIQUEMENT : aucun markdown, pas d'astérisques, pas de gras, pas de titres, pas de listes. Si non pertinent, "summary" = chaîne vide.`
+TITRE — "title" : traduis le titre en français si nécessaire (s'il est déjà en français, garde-le tel quel). Garde les noms propres inchangés (pilotes, écuries, marques, modèles, circuits). Concis, sans guillemets ajoutés, sans point final.
+
+RÉSUMÉ — si pertinent, rédige "summary" : 2 à 3 lignes maximum en français, concis et enthousiaste, précis sur les chiffres de performance s'ils sont donnés. TEXTE BRUT UNIQUEMENT : aucun markdown, pas d'astérisques, pas de gras, pas de titres, pas de listes. Si non pertinent, "summary" = chaîne vide (mais renvoie quand même "title" traduit).`
 
 const SUPABASE_URL =
   process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
@@ -129,9 +131,10 @@ const SUMMARY_SCHEMA = {
   type: 'object',
   properties: {
     relevant: { type: 'boolean' },
+    title: { type: 'string' },
     summary: { type: 'string' },
   },
-  required: ['relevant', 'summary'],
+  required: ['relevant', 'title', 'summary'],
   additionalProperties: false,
 }
 
@@ -139,17 +142,18 @@ async function summarize(
   client: Anthropic,
   title: string,
   description: string,
-): Promise<{ relevant: boolean; summary: string }> {
+): Promise<{ relevant: boolean; title: string; summary: string }> {
   // Fail open on infra/parse errors: keep the (curated, on-topic) feed
-  // content rather than dropping it.
+  // content rather than dropping it (original title kept untranslated).
   const fallback = {
     relevant: true,
+    title,
     summary: stripMarkdown(description).slice(0, 300),
   }
   try {
     const res = await client.messages.create({
       model: MODEL,
-      max_tokens: 300,
+      max_tokens: 350,
       system: [
         { type: 'text', text: SYSTEM, cache_control: { type: 'ephemeral' } },
       ],
@@ -168,11 +172,18 @@ async function summarize(
     if (!text) return fallback
     const parsed = JSON.parse(text) as {
       relevant?: boolean
+      title?: string
       summary?: string
     }
+    const frTitle = stripMarkdown(parsed.title ?? '').trim() || title
     const summary = stripMarkdown(parsed.summary ?? '')
-    if (parsed.relevant === false) return { relevant: false, summary: '' }
-    return { relevant: true, summary: summary || fallback.summary }
+    if (parsed.relevant === false)
+      return { relevant: false, title: frTitle, summary: '' }
+    return {
+      relevant: true,
+      title: frTitle,
+      summary: summary || fallback.summary,
+    }
   } catch {
     return fallback
   }
@@ -329,10 +340,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Drop non-automotive articles (planes, boats, gaming, etc.).
   const rows = summarized
     .filter((x) => x.relevant)
-    .map(({ c, summary }) => {
+    .map(({ c, title, summary }) => {
       perFeed[c.source] += 1
       return {
-        title: c.title,
+        title,
         summary,
         source: c.source,
         category: c.category,

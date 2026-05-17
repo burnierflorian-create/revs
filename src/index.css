@@ -67,6 +67,14 @@ h4 {
   animation: discoverFade 0.22s ease;
 }
 
+/* Clamp an article summary to 3 lines with a trailing ellipsis. */
+.clamp-3 {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
 .mapboxgl-popup-content {
   background: var(--color-card);
   color: var(--color-fg);
