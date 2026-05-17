@@ -165,64 +165,89 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     .limit(500)
   const known = new Set((existing ?? []).map((r: { url: string }) => r.url))
 
-  const rows: Record<string, unknown>[] = []
   const perFeed: Record<string, number> = {}
-
-  for (const feed of FEEDS) {
-    if (rows.length >= MAX_TOTAL) break
-    perFeed[feed.source] = 0
-    try {
-      const resp = await fetch(feed.url, { headers: FETCH_HEADERS })
-      if (!resp.ok) continue
-      const xml = await resp.text()
-      const parsed = parser.parse(xml)
-      const channel = parsed?.rss?.channel ?? parsed?.feed
-      const rawItems = channel?.item ?? channel?.entry ?? []
-      const items: Record<string, unknown>[] = Array.isArray(rawItems)
-        ? rawItems
-        : [rawItems]
-
-      for (const item of items.slice(0, PER_FEED)) {
-        if (rows.length >= MAX_TOTAL) break
-        const link =
-          asText(item.link) ||
-          (item.link as Record<string, string>)?.['@_href'] ||
-          asText(item.guid)
-        if (!link || known.has(link)) continue
-
-        const title = stripHtml(asText(item.title))
-        if (!title) continue
-        const description = stripHtml(
-          asText(item.description) ||
-            asText(item['content:encoded']) ||
-            asText(item.summary) ||
-            asText(item.content),
-        )
-        const pub = asText(item.pubDate) || asText(item.published)
-        const publishedAt = pub ? new Date(pub) : null
-
-        const summary = await summarize(anthropic, title, description)
-
-        rows.push({
-          title,
-          summary,
-          source: feed.source,
-          category: feed.category,
-          url: link,
-          image_url: pickImage(item),
-          published_at:
-            publishedAt && !isNaN(publishedAt.getTime())
-              ? publishedAt.toISOString()
-              : null,
-        })
-        known.add(link)
-        perFeed[feed.source] += 1
-      }
-    } catch {
-      // Skip a failing feed, keep the others.
-      continue
-    }
+  type Candidate = {
+    title: string
+    description: string
+    source: string
+    category: string
+    url: string
+    image_url: string | null
+    published_at: string | null
   }
+
+  // Fetch + parse every feed in parallel (I/O bound, fast). No Claude
+  // calls here — those are the expensive part and run in one parallel
+  // batch below. Sequential summaries blew past the 60s Hobby ceiling.
+  const candidateLists = await Promise.all(
+    FEEDS.map(async (feed): Promise<Candidate[]> => {
+      perFeed[feed.source] = 0
+      try {
+        const resp = await fetch(feed.url, { headers: FETCH_HEADERS })
+        if (!resp.ok) return []
+        const xml = await resp.text()
+        const parsed = parser.parse(xml)
+        const channel = parsed?.rss?.channel ?? parsed?.feed
+        const rawItems = channel?.item ?? channel?.entry ?? []
+        const items: Record<string, unknown>[] = Array.isArray(rawItems)
+          ? rawItems
+          : [rawItems]
+        const out: Candidate[] = []
+        for (const item of items) {
+          if (out.length >= PER_FEED) break
+          const link =
+            asText(item.link) ||
+            (item.link as Record<string, string>)?.['@_href'] ||
+            asText(item.guid)
+          if (!link || known.has(link)) continue
+          const title = stripHtml(asText(item.title))
+          if (!title) continue
+          known.add(link)
+          const description = stripHtml(
+            asText(item.description) ||
+              asText(item['content:encoded']) ||
+              asText(item.summary) ||
+              asText(item.content),
+          )
+          const pub = asText(item.pubDate) || asText(item.published)
+          const publishedAt = pub ? new Date(pub) : null
+          out.push({
+            title,
+            description,
+            source: feed.source,
+            category: feed.category,
+            url: link,
+            image_url: pickImage(item),
+            published_at:
+              publishedAt && !isNaN(publishedAt.getTime())
+                ? publishedAt.toISOString()
+                : null,
+          })
+        }
+        return out
+      } catch {
+        return []
+      }
+    }),
+  )
+
+  const candidates = candidateLists.flat().slice(0, MAX_TOTAL)
+
+  const rows = await Promise.all(
+    candidates.map(async (c) => {
+      const summary = await summarize(anthropic, c.title, c.description)
+      perFeed[c.source] += 1
+      return {
+        title: c.title,
+        summary,
+        source: c.source,
+        category: c.category,
+        url: c.url,
+        image_url: c.image_url,
+        published_at: c.published_at,
+      }
+    }),
+  )
 
   let upsertError: string | null = null
   if (rows.length > 0) {
