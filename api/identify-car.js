@@ -15,6 +15,8 @@ const ALLOWED_MIME = new Set([
   'image/webp',
 ])
 
+// valid defaults to true so an infra/parse failure never hard-blocks the
+// user — only an explicit model judgment (valid:false) rejects a photo.
 const EMPTY = {
   brand: '',
   model: '',
@@ -23,16 +25,20 @@ const EMPTY = {
   category: 'other',
   confidence: 0,
   alternatives: [],
+  valid: true,
+  reason: '',
 }
 
-const SYSTEM = `You are an expert automotive identifier. Given a single photo, identify the car.
+const SYSTEM = `You are an expert automotive identifier. Given a single photo, identify the car and judge whether it is authentic.
 
 Rules:
 - "category" must be exactly one of: "supercar", "hypercar", "classic", "youngtimer", "JDM", "other".
 - "confidence" is an integer 0-100 reflecting how sure you are of brand + model.
 - "year" is the model year as an integer, or null if you cannot tell.
 - "alternatives": at most 2 plausible other identifications, only if there is genuine doubt; otherwise an empty array.
-- If the image does not clearly contain a car, or you cannot identify it, return empty strings, year null, category "other", confidence 0, and an empty alternatives array.`
+- If the image does not clearly contain a car, or you cannot identify it, return empty strings, year null, category "other", confidence 0, and an empty alternatives array.
+- "valid": true ONLY if this is a genuine photograph of a real car taken live in real-world conditions. Set "valid": false if the image is a photo of a screen/monitor/phone display, a printed photo, a magazine or poster, a 3D render or video-game capture, a scale model or toy car, or anything that is not a real car photographed on the spot.
+- "reason": when "valid" is false, a short user-facing explanation IN FRENCH (e.g. "Photo d'un écran détectée", "Ceci ressemble à une miniature", "Image imprimée détectée"). Empty string when "valid" is true.`
 
 const SCHEMA = {
   type: 'object',
@@ -59,6 +65,8 @@ const SCHEMA = {
         additionalProperties: false,
       },
     },
+    valid: { type: 'boolean' },
+    reason: { type: 'string' },
   },
   required: [
     'brand',
@@ -68,6 +76,8 @@ const SCHEMA = {
     'category',
     'confidence',
     'alternatives',
+    'valid',
+    'reason',
   ],
   additionalProperties: false,
 }

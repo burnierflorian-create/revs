@@ -1,3 +1,5 @@
+import exifr from 'exifr'
+
 export type SpotCategory =
   | 'supercar'
   | 'hypercar'
@@ -48,6 +50,51 @@ export type IdentifyResult = {
   category: SpotCategory
   confidence: number
   alternatives: IdentifyAlternative[]
+  valid: boolean
+  reason: string
+}
+
+export type PhotoMeta = {
+  takenAt: Date | null
+  lat: number | null
+  lng: number | null
+}
+
+// Read EXIF from the ORIGINAL file (canvas re-encoding strips it, so this
+// must run before resizeImageToJpeg). Missing tags are returned as null —
+// browser camera captures often omit GPS and sometimes the timestamp.
+export async function readPhotoMeta(file: File): Promise<PhotoMeta> {
+  try {
+    const meta = await exifr.parse(file, { gps: true })
+    if (!meta) return { takenAt: null, lat: null, lng: null }
+    const raw = meta.DateTimeOriginal ?? meta.CreateDate ?? null
+    const takenAt =
+      raw instanceof Date ? raw : raw ? new Date(raw) : null
+    return {
+      takenAt: takenAt && !isNaN(takenAt.getTime()) ? takenAt : null,
+      lat: typeof meta.latitude === 'number' ? meta.latitude : null,
+      lng: typeof meta.longitude === 'number' ? meta.longitude : null,
+    }
+  } catch {
+    return { takenAt: null, lat: null, lng: null }
+  }
+}
+
+// Haversine distance in metres.
+export function distanceMeters(
+  lat1: number,
+  lng1: number,
+  lat2: number,
+  lng2: number,
+): number {
+  const R = 6371000
+  const toRad = (d: number) => (d * Math.PI) / 180
+  const dLat = toRad(lat2 - lat1)
+  const dLng = toRad(lng2 - lng1)
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2
+  return 2 * R * Math.asin(Math.sqrt(a))
 }
 
 export function timeAgo(iso: string): string {

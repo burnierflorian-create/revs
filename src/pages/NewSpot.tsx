@@ -4,12 +4,18 @@ import { ArrowLeft, Camera, Loader2, MapPin } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import {
   CATEGORIES,
+  distanceMeters,
+  readPhotoMeta,
   resizeImageToJpeg,
   type IdentifyResult,
+  type PhotoMeta,
   type SpotCategory,
 } from '../lib/spots'
 
 type Step = 1 | 2 | 3 | 4
+
+const MAX_PHOTO_AGE_MS = 10 * 60 * 1000
+const MAX_GPS_DRIFT_M = 300
 
 const EMPTY_RESULT: IdentifyResult = {
   brand: '',
@@ -19,6 +25,8 @@ const EMPTY_RESULT: IdentifyResult = {
   category: 'other',
   confidence: 0,
   alternatives: [],
+  valid: true,
+  reason: '',
 }
 
 function getPosition(): Promise<GeolocationPosition> {
@@ -52,6 +60,8 @@ export default function NewSpot() {
   const [category, setCategory] = useState<SpotCategory>('other')
   const [description, setDescription] = useState('')
 
+  const [photoMeta, setPhotoMeta] = useState<PhotoMeta | null>(null)
+  const [rejection, setRejection] = useState<string | null>(null)
   const [pubError, setPubError] = useState<string | null>(null)
   const [pubStatus, setPubStatus] = useState('')
 
@@ -61,18 +71,35 @@ export default function NewSpot() {
     }
   }, [previewUrl])
 
+  function rejectAndRestart(message: string) {
+    if (previewUrl) URL.revokeObjectURL(previewUrl)
+    setPreviewUrl(null)
+    setImage(null)
+    setPhotoMeta(null)
+    setResult(EMPTY_RESULT)
+    setPubError(null)
+    setPubStatus('')
+    setRejection(message)
+    setStep(1)
+  }
+
   async function onPick(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     e.target.value = ''
     if (!file) return
     if (previewUrl) URL.revokeObjectURL(previewUrl)
+    setRejection(null)
+    setPubError(null)
     setPreviewUrl(URL.createObjectURL(file))
     setImage(null)
+    // EXIF must be read from the original file: resizing re-encodes via
+    // canvas and strips all metadata.
+    setPhotoMeta(await readPhotoMeta(file))
     try {
       const resized = await resizeImageToJpeg(file)
       setImage(resized)
     } catch {
-      setPubError("Impossible de lire cette image.")
+      setPubError('Impossible de lire cette image.')
     }
   }
 
@@ -100,12 +127,21 @@ export default function NewSpot() {
         }),
         signal: ctrl.signal,
       })
-      const data = (await res.json()) as IdentifyResult
-      applyResult({ ...EMPTY_RESULT, ...data })
-    } catch {
-      applyResult(EMPTY_RESULT)
-    } finally {
+      const data = { ...EMPTY_RESULT, ...((await res.json()) as IdentifyResult) }
       clearTimeout(timer)
+      if (data.valid === false) {
+        rejectAndRestart(
+          data.reason ||
+            "Cette photo ne semble pas être une vraie voiture en conditions réelles.",
+        )
+        return
+      }
+      applyResult(data)
+      setStep(3)
+    } catch {
+      // Infra/timeout failure: fail open to manual entry, don't block.
+      clearTimeout(timer)
+      applyResult(EMPTY_RESULT)
       setStep(3)
     }
   }
@@ -122,6 +158,27 @@ export default function NewSpot() {
     try {
       setPubStatus('Localisation…')
       const pos = await getPosition()
+
+      // Anti-fraude : photo prise sur le moment et au bon endroit.
+      const takenAt = photoMeta?.takenAt ?? null
+      if (takenAt && Date.now() - takenAt.getTime() > MAX_PHOTO_AGE_MS) {
+        rejectAndRestart('Photo trop ancienne - prends la photo sur le moment')
+        return
+      }
+      const photoLat = photoMeta?.lat ?? null
+      const photoLng = photoMeta?.lng ?? null
+      if (photoLat != null && photoLng != null) {
+        const drift = distanceMeters(
+          photoLat,
+          photoLng,
+          pos.coords.latitude,
+          pos.coords.longitude,
+        )
+        if (drift > MAX_GPS_DRIFT_M) {
+          rejectAndRestart('Localisation incohérente')
+          return
+        }
+      }
 
       setPubStatus('Authentification…')
       const {
@@ -174,6 +231,7 @@ export default function NewSpot() {
 
   function back() {
     setPubError(null)
+    setRejection(null)
     if (step === 1) navigate('/')
     else if (step === 3) setStep(1)
     else setStep((s) => (s - 1) as Step)
@@ -215,6 +273,12 @@ export default function NewSpot() {
             onChange={onPick}
             className="hidden"
           />
+
+          {rejection && (
+            <div className="rounded-2xl border border-accent/40 bg-accent/10 px-4 py-3 text-sm text-accent">
+              {rejection}
+            </div>
+          )}
 
           {previewUrl ? (
             <div className="space-y-5">
