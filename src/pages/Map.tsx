@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import mapboxgl from 'mapbox-gl'
+import type { DataDrivenPropertyValueSpecification } from 'mapbox-gl'
 import 'mapbox-gl/dist/mapbox-gl.css'
 import { Car, LocateFixed } from 'lucide-react'
 import { supabase } from '../lib/supabase'
@@ -9,6 +10,9 @@ import { escapeHtml, timeAgo, type Spot } from '../lib/spots'
 
 const PARIS: [number, number] = [2.3522, 48.8566]
 const DEFAULT_ZOOM = 13
+const USER_ZOOM = 15
+const RECENTER_ZOOM = 17
+const GEO_TIMEOUT_MS = 3000
 const SPOT_TTL_MS = 60 * 60 * 1000
 const POLL_MS = 60 * 1000
 
@@ -268,17 +272,40 @@ function applySnapStyle(map: mapboxgl.Map) {
         } else if (l.type === 'line' && sl === 'admin') {
           map.setPaintProperty(l.id, 'line-color', SNAP.admin)
         } else if (isRoadLabel) {
+          // Keep major + neighbourhood streets available, but only show
+          // the small ones past zoom 15 (fading in 15→16) so the map is
+          // clean from afar and useful up close.
           map.setFilter(
             l.id,
             [
               'match',
               ['get', 'class'],
-              MAJOR_ROADS,
+              [...MAJOR_ROADS, 'tertiary', 'street', 'street_limited'],
               true,
               false,
             ] as unknown as Parameters<typeof map.setFilter>[1],
           )
-          map.setLayoutProperty(l.id, 'text-size', 11.5)
+          map.setLayoutProperty(
+            l.id,
+            'text-size',
+            [
+              'step',
+              ['zoom'],
+              ['match', ['get', 'class'], MAJOR_ROADS, 11.5, 0],
+              15,
+              12,
+            ] as unknown as DataDrivenPropertyValueSpecification<number>,
+          )
+          map.setPaintProperty(
+            l.id,
+            'text-opacity',
+            [
+              'case',
+              ['match', ['get', 'class'], MAJOR_ROADS, true, false],
+              1,
+              ['interpolate', ['linear'], ['zoom'], 15, 0, 16, 1],
+            ] as unknown as DataDrivenPropertyValueSpecification<number>,
+          )
           map.setPaintProperty(l.id, 'text-color', SNAP.street)
           map.setPaintProperty(l.id, 'text-halo-color', SNAP.halo)
           map.setPaintProperty(l.id, 'text-halo-width', 1.1)
@@ -415,7 +442,8 @@ export default function MapPage() {
         setGeoError(null)
         mapRef.current?.flyTo({
           center: [pos.coords.longitude, pos.coords.latitude],
-          zoom: 14,
+          zoom: RECENTER_ZOOM,
+          speed: 2,
           essential: true,
         })
       },
@@ -427,7 +455,7 @@ export default function MapPage() {
         )
         setTimeout(() => setGeoError(null), 6000)
       },
-      { enableHighAccuracy: false, timeout: 15000, maximumAge: 0 },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
     )
   }
 
@@ -466,28 +494,82 @@ export default function MapPage() {
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return
 
-    const token = import.meta.env.VITE_MAPBOX_TOKEN as string | undefined
-    if (!token) {
+    const tokenMb = import.meta.env.VITE_MAPBOX_TOKEN as string | undefined
+    if (!tokenMb) {
       setError('Token Mapbox manquant (VITE_MAPBOX_TOKEN).')
       return
     }
-    mapboxgl.accessToken = token
+    mapboxgl.accessToken = tokenMb
 
+    let cancelled = false
+    let cleanup: (() => void) | null = null
+    const containerEl = containerRef.current
+
+    // Resolve the freshest GPS fix BEFORE building the map so it opens
+    // straight on the user — never a Paris flash. Paris only if the fix
+    // is unavailable or takes longer than 3s.
+    function initialView(): Promise<{
+      center: [number, number]
+      zoom: number
+    }> {
+      return new Promise((resolve) => {
+        if (!navigator.geolocation) {
+          resolve({ center: PARIS, zoom: DEFAULT_ZOOM })
+          return
+        }
+        let settled = false
+        const fallback = setTimeout(() => {
+          if (settled) return
+          settled = true
+          resolve({ center: PARIS, zoom: DEFAULT_ZOOM })
+        }, GEO_TIMEOUT_MS)
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            if (settled) return
+            settled = true
+            clearTimeout(fallback)
+            resolve({
+              center: [pos.coords.longitude, pos.coords.latitude],
+              zoom: USER_ZOOM,
+            })
+          },
+          () => {
+            if (settled) return
+            settled = true
+            clearTimeout(fallback)
+            resolve({ center: PARIS, zoom: DEFAULT_ZOOM })
+          },
+          { enableHighAccuracy: true, timeout: GEO_TIMEOUT_MS, maximumAge: 0 },
+        )
+      })
+    }
+
+    void initialView().then((view) => {
+      if (cancelled || !containerEl || mapRef.current) return
+      cleanup = initMap(containerEl, view.center, view.zoom)
+    })
+
+    function initMap(
+      el: HTMLDivElement,
+      initCenter: [number, number],
+      initZoom: number,
+    ): (() => void) | null {
     let map: mapboxgl.Map
     try {
       map = new mapboxgl.Map({
-        container: containerRef.current,
+        container: el,
         style: 'mapbox://styles/mapbox/light-v11',
-        center: PARIS,
-        zoom: DEFAULT_ZOOM,
+        center: initCenter,
+        zoom: initZoom,
         pitch: 0,
         attributionControl: true,
         fadeDuration: 0,
         refreshExpiredTiles: false,
+        renderWorldCopies: false,
       })
     } catch {
       setError('Impossible d’initialiser la carte.')
-      return
+      return null
     }
     mapRef.current = map
     const allSpots = allSpotsRef.current
@@ -684,7 +766,6 @@ export default function MapPage() {
       map.resize()
       applySnapStyle(map)
       setMapReady(true)
-      flyToUser()
 
       await fetchSpots()
 
@@ -769,6 +850,12 @@ export default function MapPage() {
       map.remove()
       mapRef.current = null
       setMapReady(false)
+    }
+    } // end initMap
+
+    return () => {
+      cancelled = true
+      if (cleanup) cleanup()
     }
   }, [])
 
