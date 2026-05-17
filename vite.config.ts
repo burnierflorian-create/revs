@@ -8,6 +8,14 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       injectRegister: 'auto',
+      // The precaching service worker has repeatedly bricked clients
+      // after deploys (stale SW serving an old index.html that points at
+      // deleted hashed chunks -> "client-side exception"). Ship a
+      // self-destroying SW: it unregisters any existing SW and clears all
+      // caches on every client, so the app is always served fresh from
+      // the network. Trade-off: no offline caching (acceptable — the app
+      // is data-driven and reliability is the priority).
+      selfDestroying: true,
       includeAssets: ['favicon.svg'],
       workbox: {
         // mapbox-gl pushes the main bundle past the 2 MiB default
