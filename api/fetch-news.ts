@@ -9,27 +9,42 @@ const MODEL = 'claude-sonnet-4-6'
 
 const FEEDS: { url: string; source: string; category: string }[] = [
   {
+    url: 'https://www.formula1.com/content/fom-website/en/latest/all.xml',
+    source: 'Formula 1',
+    category: 'F1',
+  },
+  {
     url: 'https://www.motorsport.com/rss/f1/news/',
     source: 'Motorsport',
     category: 'F1',
   },
   {
-    url: 'https://www.autosport.com/rss/f1/news/',
-    source: 'Autosport',
-    category: 'F1',
+    url: 'https://www.autocar.co.uk/rss/cars/supercar',
+    source: 'Autocar',
+    category: 'Supercar',
   },
   {
-    url: 'https://www.caradisiac.com/rss.xml',
-    source: 'Caradisiac',
+    url: 'https://www.topgear.com/rss.xml',
+    source: 'Top Gear',
+    category: 'Supercar',
+  },
+  {
+    url: 'https://www.evo.co.uk/rss',
+    source: 'evo',
+    category: 'Supercar',
+  },
+  {
+    url: 'https://www.gtplanet.net/feed/',
+    source: 'GTPlanet',
     category: 'Auto',
   },
 ]
 
-const PER_FEED = 5
-const MAX_TOTAL = 12
+const PER_FEED = 3
+const MAX_TOTAL = 15
 
 const SYSTEM =
-  'Tu es un rédacteur automobile francophone. Résume l’article en français en 2 à 3 phrases courtes, factuelles, sans préambule ni formule d’introduction. Ne mentionne pas que c’est un résumé.'
+  'Tu es un expert passion auto. Résume cet article en 2-3 lignes en français, en mettant en avant ce qui est excitant pour un passionné de supercars, hypercars ou F1. Sois enthousiaste et précis sur les chiffres de performance si mentionnés.'
 
 const SUPABASE_URL =
   process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
@@ -127,6 +142,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     attributeNamePrefix: '@_',
   })
 
+  // Manual maintenance lever: GET /api/fetch-news?purge=1 wipes the table
+  // before repopulating. The scheduled cron calls the path without the
+  // param, so normal runs stay non-destructive.
+  let purged: number | null = null
+  if (req.query.purge === '1') {
+    const { error, count } = await admin
+      .from('news')
+      .delete({ count: 'exact' })
+      .not('id', 'is', null)
+    purged = error ? -1 : (count ?? 0)
+    if (error) console.error('news purge failed:', error)
+  }
+
   const { data: existing } = await admin
     .from('news')
     .select('url')
@@ -164,7 +192,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const title = stripHtml(asText(item.title))
         if (!title) continue
         const description = stripHtml(
-          asText(item.description) || asText(item['content:encoded']),
+          asText(item.description) ||
+            asText(item['content:encoded']) ||
+            asText(item.summary) ||
+            asText(item.content),
         )
         const pub = asText(item.pubDate) || asText(item.published)
         const publishedAt = pub ? new Date(pub) : null
@@ -208,6 +239,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     .select('*', { count: 'exact', head: true })
 
   res.status(200).json({
+    purged,
     processed: rows.length,
     perFeed,
     upsertError,
