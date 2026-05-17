@@ -168,26 +168,45 @@ type RawLayer = {
   'source-layer'?: string
 }
 
-// Strip the GPS clutter from dark-v11: keep roads, water, landuse and
-// city/region names; drop every POI / transit / airport / parking /
-// road / water label. Add a single simple 3D building extrusion so the
-// map feels immersive without being busy.
-function applyCleanStyle(map: mapboxgl.Map) {
+type MapMode = '2D' | '3D'
+
+const MODE_KEY = 'revs-map-mode'
+
+// Snapchat-soft palette + a REVS red accent on the big roads.
+const SNAP = {
+  bg: '#F5F0E8',
+  water: '#A8D8EA',
+  green: '#B8E0C8',
+  building: '#E8E4DE',
+  building3d: '#CDC5B6',
+  roadFill: '#FFFFFF',
+  roadCase: '#DCD5C7',
+  roadMajor: '#E63946',
+  outline: '#D8D2C8',
+  admin: 'rgba(150,138,116,0.45)',
+} as const
+
+// Soft Snap-like recolor + a total POI strip. We keep only roads,
+// water, parks/landuse, relief and city/neighbourhood names — every
+// POI / transit / airport / parking / road / water label is removed.
+// REVS touch: a thin red casing on major roads, a lightly darkened
+// extruded-building layer (toggled on only in 3D).
+function applySnapStyle(map: mapboxgl.Map) {
   try {
     const layers = (map.getStyle()?.layers ?? []) as unknown as RawLayer[]
     let buildingSource: string | undefined
     let buildingSourceLayer: string | undefined
-    let firstSymbolId: string | undefined
+    let firstPlaceId: string | undefined
     const toRemove: string[] = []
 
     for (const l of layers) {
       const sl = l['source-layer']
-      if (l.type === 'symbol' && !firstSymbolId) firstSymbolId = l.id
-
-      const isPlaceLabel =
+      const isPlace =
         l.type === 'symbol' &&
         /settlement|state-label|country-label|continent-label/.test(l.id)
-      if (l.type === 'symbol' && !isPlaceLabel) {
+      if (isPlace && !firstPlaceId) firstPlaceId = l.id
+
+      if (l.type === 'symbol' && !isPlace) {
         toRemove.push(l.id)
         continue
       }
@@ -195,19 +214,65 @@ function applyCleanStyle(map: mapboxgl.Map) {
         toRemove.push(l.id)
         continue
       }
-      if (
-        (l.type === 'fill' || l.type === 'fill-extrusion') &&
-        sl === 'building' &&
-        l.source
-      ) {
-        buildingSource = l.source
-        buildingSourceLayer = sl
-        toRemove.push(l.id)
+
+      try {
+        if (l.type === 'background') {
+          map.setPaintProperty(l.id, 'background-color', SNAP.bg)
+        } else if (l.type === 'fill' && sl === 'water') {
+          map.setPaintProperty(l.id, 'fill-color', SNAP.water)
+        } else if (l.type === 'line' && sl === 'waterway') {
+          map.setPaintProperty(l.id, 'line-color', SNAP.water)
+        } else if (
+          l.type === 'fill' &&
+          (sl === 'landuse' ||
+            sl === 'landcover' ||
+            sl === 'national_park' ||
+            /landuse|landcover|park|grass|wood|golf|pitch/.test(l.id))
+        ) {
+          map.setPaintProperty(l.id, 'fill-color', SNAP.green)
+        } else if (
+          (l.type === 'fill' || l.type === 'fill-extrusion') &&
+          sl === 'building'
+        ) {
+          if (l.source) {
+            buildingSource = l.source
+            buildingSourceLayer = sl
+          }
+          if (l.type === 'fill')
+            map.setPaintProperty(l.id, 'fill-color', SNAP.building)
+        } else if (l.type === 'line' && sl === 'building') {
+          map.setPaintProperty(l.id, 'line-color', SNAP.outline)
+        } else if (l.type === 'line' && sl === 'road') {
+          const isCase = /case|casing|outline/.test(l.id)
+          const isMajor = /motorway|trunk|primary|secondary/.test(l.id)
+          map.setPaintProperty(
+            l.id,
+            'line-color',
+            isCase
+              ? isMajor
+                ? SNAP.roadMajor
+                : SNAP.roadCase
+              : SNAP.roadFill,
+          )
+        } else if (l.type === 'line' && sl === 'admin') {
+          map.setPaintProperty(l.id, 'line-color', SNAP.admin)
+        }
+      } catch {
+        /* property absent on this layer */
       }
     }
 
     for (const id of toRemove) {
       if (map.getLayer(id)) map.removeLayer(id)
+    }
+
+    if (!map.getSource('mapbox-dem')) {
+      map.addSource('mapbox-dem', {
+        type: 'raster-dem',
+        url: 'mapbox://mapbox.mapbox-terrain-dem-v1',
+        tileSize: 512,
+        maxzoom: 14,
+      })
     }
 
     type AddLayer = Parameters<typeof map.addLayer>[0]
@@ -219,8 +284,9 @@ function applyCleanStyle(map: mapboxgl.Map) {
           source: buildingSource ?? 'composite',
           'source-layer': buildingSourceLayer ?? 'building',
           minzoom: 14,
+          layout: { visibility: 'none' },
           paint: {
-            'fill-extrusion-color': '#23252b',
+            'fill-extrusion-color': SNAP.building3d,
             'fill-extrusion-height': [
               'interpolate',
               ['linear'],
@@ -236,14 +302,35 @@ function applyCleanStyle(map: mapboxgl.Map) {
               ['get', 'min_height'],
               0,
             ],
-            'fill-extrusion-opacity': 0.85,
+            'fill-extrusion-opacity': 0.9,
           },
         } as unknown as AddLayer,
-        firstSymbolId,
+        firstPlaceId,
       )
     }
   } catch {
     /* styling is best-effort — never break the map */
+  }
+}
+
+// 2D = flat top-down. 3D = tilted with terrain relief + extruded
+// buildings (great over Annecy / Genève / the Alps). Pitch is eased
+// for a smooth Snap-like transition.
+function applyMode(map: mapboxgl.Map, mode: MapMode) {
+  try {
+    if (mode === '3D') {
+      map.setTerrain({ source: 'mapbox-dem', exaggeration: 1.5 })
+      if (map.getLayer('revs-3d-buildings'))
+        map.setLayoutProperty('revs-3d-buildings', 'visibility', 'visible')
+      map.easeTo({ pitch: 45, duration: 700 })
+    } else {
+      map.setTerrain(null)
+      if (map.getLayer('revs-3d-buildings'))
+        map.setLayoutProperty('revs-3d-buildings', 'visibility', 'none')
+      map.easeTo({ pitch: 0, bearing: 0, duration: 700 })
+    }
+  } catch {
+    /* never break the map on a mode switch */
   }
 }
 
@@ -266,6 +353,15 @@ export default function MapPage() {
   const [geoError, setGeoError] = useState<string | null>(null)
   const [visibleCount, setVisibleCount] = useState(0)
   const [mapReady, setMapReady] = useState(false)
+  const [mode, setMode] = useState<MapMode>(() => {
+    try {
+      const v = localStorage.getItem(MODE_KEY)
+      if (v === '2D' || v === '3D') return v
+    } catch {
+      /* localStorage unavailable */
+    }
+    return '3D'
+  })
 
   function locate() {
     if (!navigator.geolocation) {
@@ -339,10 +435,10 @@ export default function MapPage() {
     try {
       map = new mapboxgl.Map({
         container: containerRef.current,
-        style: 'mapbox://styles/mapbox/dark-v11',
+        style: 'mapbox://styles/mapbox/light-v11',
         center: PARIS,
         zoom: DEFAULT_ZOOM,
-        pitch: 45,
+        pitch: 0,
         attributionControl: true,
       })
     } catch {
@@ -531,7 +627,7 @@ export default function MapPage() {
 
     map.on('load', async () => {
       map.resize()
-      applyCleanStyle(map)
+      applySnapStyle(map)
       setMapReady(true)
       flyToUser()
 
@@ -608,11 +704,20 @@ export default function MapPage() {
     refreshRef.current?.()
   }, [activeFilter])
 
+  useEffect(() => {
+    try {
+      localStorage.setItem(MODE_KEY, mode)
+    } catch {
+      /* localStorage unavailable */
+    }
+    if (mapReady && mapRef.current) applyMode(mapRef.current, mode)
+  }, [mode, mapReady])
+
   return (
     <div className="fixed inset-0">
       <div
         ref={containerRef}
-        style={{ width: '100%', height: '100vh', backgroundColor: '#0A0A0A' }}
+        style={{ width: '100%', height: '100vh', backgroundColor: '#F5F0E8' }}
       />
 
       {!mapReady && !error && <SkeletonMap />}
@@ -654,6 +759,29 @@ export default function MapPage() {
               }`}
             >
               {f}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div
+        className="absolute right-4 z-10"
+        style={{
+          top: 'calc(max(4rem, env(safe-area-inset-top) + 3rem) + 3.25rem)',
+        }}
+      >
+        <div className="flex gap-1 rounded-full bg-black/60 p-1 backdrop-blur">
+          {(['2D', '3D'] as MapMode[]).map((m) => (
+            <button
+              key={m}
+              onClick={() => setMode(m)}
+              className={`rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors ${
+                mode === m
+                  ? 'bg-accent text-fg'
+                  : 'text-fg/60 hover:text-fg'
+              }`}
+            >
+              {m}
             </button>
           ))}
         </div>
