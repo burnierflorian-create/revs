@@ -87,6 +87,13 @@ export default function Settings() {
   const [avatarFile, setAvatarFile] = useState<Blob | null>(null)
   const [isPublic, setIsPublic] = useState(true)
   const [notif, setNotif] = useState(false)
+  const [geo, setGeo] = useState(false)
+  const [geoDenied, setGeoDenied] = useState(false)
+  const [camStatus, setCamStatus] = useState<
+    'granted' | 'denied' | 'prompt' | 'unknown'
+  >('unknown')
+  const [analytics, setAnalytics] = useState(false)
+  const [marketing, setMarketing] = useState(false)
 
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
@@ -120,9 +127,39 @@ export default function Settings() {
             typeof Notification !== 'undefined' &&
             Notification.permission === 'granted',
         )
+        setGeo(localStorage.getItem('revs_geo') === '1')
+        setAnalytics(localStorage.getItem('revs_consent_analytics') === '1')
+        setMarketing(localStorage.getItem('revs_consent_marketing') === '1')
       } catch {
         /* ignore */
       }
+      // Permissions API is optional (older iOS lacks it / 'camera' name).
+      const q = navigator.permissions?.query?.bind(navigator.permissions)
+      if (q) {
+        try {
+          const g = await q({ name: 'geolocation' as PermissionName })
+          if (active) {
+            setGeoDenied(g.state === 'denied')
+            if (g.state === 'granted') setGeo(true)
+          }
+        } catch {
+          /* ignore */
+        }
+        try {
+          const c = await q({ name: 'camera' as PermissionName })
+          if (active)
+            setCamStatus(
+              c.state === 'granted'
+                ? 'granted'
+                : c.state === 'denied'
+                  ? 'denied'
+                  : 'prompt',
+            )
+        } catch {
+          /* unsupported */
+        }
+      }
+      if (!active) return
       setLoading(false)
     })()
     return () => {
@@ -219,6 +256,50 @@ export default function Settings() {
     } else {
       setErr('Permission notifications refusée.')
     }
+  }
+
+  function persist(key: string, on: boolean) {
+    try {
+      localStorage.setItem(key, on ? '1' : '0')
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function toggleGeo() {
+    if (geo) {
+      setGeo(false)
+      persist('revs_geo', false)
+      return
+    }
+    if (!navigator.geolocation) {
+      setErr('Géolocalisation non disponible sur cet appareil.')
+      return
+    }
+    navigator.geolocation.getCurrentPosition(
+      () => {
+        setGeo(true)
+        setGeoDenied(false)
+        persist('revs_geo', true)
+      },
+      (e) => {
+        if (e.code === e.PERMISSION_DENIED) setGeoDenied(true)
+        else setErr('Position indisponible, réessaie.')
+      },
+      { enableHighAccuracy: false, timeout: 15000, maximumAge: 0 },
+    )
+  }
+
+  function toggleAnalytics() {
+    const next = !analytics
+    setAnalytics(next)
+    persist('revs_consent_analytics', next)
+  }
+
+  function toggleMarketing() {
+    const next = !marketing
+    setMarketing(next)
+    persist('revs_consent_marketing', next)
   }
 
   async function togglePrivacy() {
@@ -374,12 +455,103 @@ export default function Settings() {
             <Row label="Changer mon mot de passe" onClick={changePassword} />
           </Section>
 
-          {/* Notifications */}
-          <Section title="Notifications">
-            <Row
-              label="Notifications push"
-              right={<Toggle checked={notif} onChange={toggleNotif} />}
-            />
+          {/* Autorisations */}
+          <Section title="Autorisations">
+            <div className="border-b border-white/5 px-4 py-3.5">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-sm text-fg">Localisation</span>
+                <Toggle checked={geo} onChange={toggleGeo} />
+              </div>
+              <p className="mt-1 text-xs text-fg/40">
+                Nécessaire pour spotter et voir les voitures près de toi
+              </p>
+              {(!geo || geoDenied) && (
+                <p className="mt-2 text-xs text-accent">
+                  Désactivée — active-la dans Réglages → Confidentialité →
+                  Localisation (iOS) ou Paramètres → Applications → REVS
+                  (Android)
+                </p>
+              )}
+            </div>
+
+            <div className="border-b border-white/5 px-4 py-3.5">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-sm text-fg">Notifications</span>
+                <Toggle checked={notif} onChange={toggleNotif} />
+              </div>
+              <p className="mt-1 text-xs text-fg/40">
+                Pour être alerté des spots près de toi et des événements
+              </p>
+            </div>
+
+            <div className="border-b border-white/5 px-4 py-3.5">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-sm text-fg">Caméra</span>
+                <span className="text-xs text-fg/40">
+                  {camStatus === 'granted'
+                    ? 'Accordé'
+                    : camStatus === 'denied'
+                      ? 'Refusé'
+                      : camStatus === 'prompt'
+                        ? 'À l’usage'
+                        : '—'}
+                </span>
+              </div>
+              <p className="mt-1 text-xs text-fg/40">
+                Utilisée pour photographier les voitures spottées
+              </p>
+              {camStatus === 'denied' && (
+                <p className="mt-2 text-xs text-accent">
+                  Refusée — réactive-la dans Réglages → Confidentialité →
+                  Appareil photo
+                </p>
+              )}
+            </div>
+
+            <div className="border-b border-white/5 px-4 py-3.5">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-sm text-fg">
+                  Cookies et données analytiques
+                </span>
+                <Toggle checked={analytics} onChange={toggleAnalytics} />
+              </div>
+              <p className="mt-1 text-xs text-fg/40">
+                Mesure d’audience anonyme pour améliorer l’app (RGPD)
+              </p>
+            </div>
+
+            <div className="border-b border-white/5 px-4 py-3.5">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-sm text-fg">
+                  Communications marketing
+                </span>
+                <Toggle checked={marketing} onChange={toggleMarketing} />
+              </div>
+              <p className="mt-1 text-xs text-fg/40">
+                Recevoir nos newsletters et offres Premium (RGPD)
+              </p>
+            </div>
+
+            <div className="space-y-2 px-4 py-4 text-xs text-fg/40">
+              <p>
+                Conformément au RGPD, vous pouvez modifier vos préférences à
+                tout moment. Vos données sont hébergées en Europe.
+              </p>
+              <div className="flex flex-wrap gap-4">
+                <button
+                  onClick={() => navigate('/confidentialite')}
+                  className="text-accent"
+                >
+                  Politique de confidentialité
+                </button>
+                <button
+                  onClick={() => navigate('/mentions-legales')}
+                  className="text-accent"
+                >
+                  Mentions légales
+                </button>
+              </div>
+            </div>
           </Section>
 
           {/* Confidentialité */}

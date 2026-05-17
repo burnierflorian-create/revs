@@ -319,7 +319,10 @@ export default function MapPage() {
       <button
         onClick={flyToUser}
         aria-label="Me localiser"
-        className="absolute bottom-24 right-4 z-10 flex h-12 w-12 items-center justify-center rounded-full bg-accent shadow-lg shadow-accent/40 transition-transform active:scale-95"
+        style={{
+          bottom: 'calc(env(safe-area-inset-bottom) + 5rem + 0.75rem + 20px)',
+        }}
+        className="absolute right-4 z-10 flex h-12 w-12 items-center justify-center rounded-full bg-accent shadow-lg shadow-accent/40 transition-transform active:scale-95"
       >
         <LocateFixed className="h-5 w-5 text-fg" />
       </button>

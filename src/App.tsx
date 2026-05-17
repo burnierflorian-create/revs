@@ -11,6 +11,8 @@ import NewEvent from './pages/NewEvent'
 import Profile from './pages/Profile'
 import Premium from './pages/Premium'
 import Settings from './pages/Settings'
+import Privacy from './pages/Privacy'
+import Legal from './pages/Legal'
 import SpotDetail from './pages/SpotDetail'
 import News from './pages/News'
 import Onboarding from './components/Onboarding'
@@ -46,6 +48,8 @@ export default function App() {
           <Route path="/new-event" element={<NewEvent />} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/confidentialite" element={<Privacy />} />
+          <Route path="/mentions-legales" element={<Legal />} />
           <Route path="/premium" element={<Premium />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
