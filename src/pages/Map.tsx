@@ -178,35 +178,46 @@ const SNAP = {
   water: '#A8D8EA',
   green: '#B8E0C8',
   building: '#E8E4DE',
-  building3d: '#CDC5B6',
+  building3d: '#D4C5B0',
   roadFill: '#FFFFFF',
   roadCase: '#DCD5C7',
   roadMajor: '#E63946',
   outline: '#D8D2C8',
   admin: 'rgba(150,138,116,0.45)',
+  street: '#555555',
+  place: '#3F3F3F',
+  halo: '#F5F0E8',
 } as const
 
-// Soft Snap-like recolor + a total POI strip. We keep only roads,
-// water, parks/landuse, relief and city/neighbourhood names — every
-// POI / transit / airport / parking / road / water label is removed.
-// REVS touch: a thin red casing on major roads, a lightly darkened
-// extruded-building layer (toggled on only in 3D).
+// Only label these road classes — no alleys / small streets.
+const MAJOR_ROADS = ['motorway', 'trunk', 'primary', 'secondary']
+
+// Soft Snap-like recolor + a near-total POI strip. We keep roads,
+// water, parks/landuse, relief, major-road names and city/neighbourhood
+// names — every POI / transit / airport / parking / water label is
+// removed. REVS touch: a thin red casing on major roads, a warm-beige
+// shaded 3D-building layer (toggled on only in 3D).
 function applySnapStyle(map: mapboxgl.Map) {
   try {
     const layers = (map.getStyle()?.layers ?? []) as unknown as RawLayer[]
     let buildingSource: string | undefined
     let buildingSourceLayer: string | undefined
-    let firstPlaceId: string | undefined
+    let firstRoadLineId: string | undefined
+    let firstSymbolId: string | undefined
     const toRemove: string[] = []
 
     for (const l of layers) {
       const sl = l['source-layer']
+      if (l.type === 'symbol' && !firstSymbolId) firstSymbolId = l.id
+      if (l.type === 'line' && sl === 'road' && !firstRoadLineId)
+        firstRoadLineId = l.id
+
       const isPlace =
         l.type === 'symbol' &&
         /settlement|state-label|country-label|continent-label/.test(l.id)
-      if (isPlace && !firstPlaceId) firstPlaceId = l.id
+      const isRoadLabel = l.type === 'symbol' && /^road-label/.test(l.id)
 
-      if (l.type === 'symbol' && !isPlace) {
+      if (l.type === 'symbol' && !isPlace && !isRoadLabel) {
         toRemove.push(l.id)
         continue
       }
@@ -256,6 +267,25 @@ function applySnapStyle(map: mapboxgl.Map) {
           )
         } else if (l.type === 'line' && sl === 'admin') {
           map.setPaintProperty(l.id, 'line-color', SNAP.admin)
+        } else if (isRoadLabel) {
+          map.setFilter(
+            l.id,
+            [
+              'match',
+              ['get', 'class'],
+              MAJOR_ROADS,
+              true,
+              false,
+            ] as unknown as Parameters<typeof map.setFilter>[1],
+          )
+          map.setLayoutProperty(l.id, 'text-size', 11.5)
+          map.setPaintProperty(l.id, 'text-color', SNAP.street)
+          map.setPaintProperty(l.id, 'text-halo-color', SNAP.halo)
+          map.setPaintProperty(l.id, 'text-halo-width', 1.1)
+        } else if (isPlace) {
+          map.setPaintProperty(l.id, 'text-color', SNAP.place)
+          map.setPaintProperty(l.id, 'text-halo-color', SNAP.halo)
+          map.setPaintProperty(l.id, 'text-halo-width', 1.4)
         }
       } catch {
         /* property absent on this layer */
@@ -275,7 +305,18 @@ function applySnapStyle(map: mapboxgl.Map) {
       })
     }
 
+    // Directional light so extruded buildings get a lit face and a
+    // shaded face — the Snap-Map relief look.
+    map.setLight({
+      anchor: 'map',
+      color: '#fff4e0',
+      intensity: 0.45,
+      position: [1.5, 210, 32],
+    })
+
     type AddLayer = Parameters<typeof map.addLayer>[0]
+    // Insert below the road lines so roads + labels stay visible on
+    // top of the buildings in 3D.
     if (!map.getLayer('revs-3d-buildings')) {
       map.addLayer(
         {
@@ -287,14 +328,15 @@ function applySnapStyle(map: mapboxgl.Map) {
           layout: { visibility: 'none' },
           paint: {
             'fill-extrusion-color': SNAP.building3d,
+            'fill-extrusion-vertical-gradient': true,
             'fill-extrusion-height': [
               'interpolate',
               ['linear'],
               ['zoom'],
               14,
               0,
-              16.5,
-              ['coalesce', ['get', 'render_height'], ['get', 'height'], 12],
+              15.5,
+              ['coalesce', ['get', 'render_height'], ['get', 'height'], 6],
             ],
             'fill-extrusion-base': [
               'coalesce',
@@ -302,10 +344,10 @@ function applySnapStyle(map: mapboxgl.Map) {
               ['get', 'min_height'],
               0,
             ],
-            'fill-extrusion-opacity': 0.9,
+            'fill-extrusion-opacity': 0.95,
           },
         } as unknown as AddLayer,
-        firstPlaceId,
+        firstRoadLineId ?? firstSymbolId,
       )
     }
   } catch {
@@ -313,21 +355,21 @@ function applySnapStyle(map: mapboxgl.Map) {
   }
 }
 
-// 2D = flat top-down. 3D = tilted with terrain relief + extruded
-// buildings (great over Annecy / Genève / the Alps). Pitch is eased
-// for a smooth Snap-like transition.
+// 2D = flat top-down. 3D = Snap-like tilt (50°) with a subtle terrain
+// relief + extruded buildings (great over Annecy / Genève / the Alps).
+// Pitch is eased 800ms for a smooth transition.
 function applyMode(map: mapboxgl.Map, mode: MapMode) {
   try {
     if (mode === '3D') {
-      map.setTerrain({ source: 'mapbox-dem', exaggeration: 1.5 })
+      map.setTerrain({ source: 'mapbox-dem', exaggeration: 1.2 })
       if (map.getLayer('revs-3d-buildings'))
         map.setLayoutProperty('revs-3d-buildings', 'visibility', 'visible')
-      map.easeTo({ pitch: 45, duration: 700 })
+      map.easeTo({ pitch: 50, duration: 800 })
     } else {
       map.setTerrain(null)
       if (map.getLayer('revs-3d-buildings'))
         map.setLayoutProperty('revs-3d-buildings', 'visibility', 'none')
-      map.easeTo({ pitch: 0, bearing: 0, duration: 700 })
+      map.easeTo({ pitch: 0, bearing: 0, duration: 800 })
     }
   } catch {
     /* never break the map on a mode switch */
@@ -440,6 +482,8 @@ export default function MapPage() {
         zoom: DEFAULT_ZOOM,
         pitch: 0,
         attributionControl: true,
+        fadeDuration: 0,
+        refreshExpiredTiles: false,
       })
     } catch {
       setError('Impossible d’initialiser la carte.')
@@ -449,6 +493,9 @@ export default function MapPage() {
     const allSpots = allSpotsRef.current
     const names = namesRef.current
     let pollId: ReturnType<typeof setInterval> | undefined
+    // Signature of the on-screen marker set — lets us skip all DOM work
+    // when a pan/zoom doesn't change which markers are visible.
+    let lastSig = ''
 
     function isAlive(sp: Spot): boolean {
       return new Date(sp.expires_at).getTime() > Date.now()
@@ -491,6 +538,7 @@ export default function MapPage() {
       onScreenRef.current[k]?.remove()
       delete onScreenRef.current[k]
       delete markersRef.current[k]
+      lastSig = '' // force the next sync to rebuild this marker
     }
 
     async function fetchSpots() {
@@ -608,7 +656,14 @@ export default function MapPage() {
           }
         }
         next[key] = marker
-        if (!onScreenRef.current[key]) marker.addTo(map)
+      }
+      // Mapbox keeps already-added markers positioned on its own, so if
+      // the visible set is unchanged there is nothing to do.
+      const sig = Object.keys(next).sort().join('|')
+      if (sig === lastSig) return
+      lastSig = sig
+      for (const key in next) {
+        if (!onScreenRef.current[key]) next[key].addTo(map)
       }
       for (const k in onScreenRef.current) {
         if (!next[k]) onScreenRef.current[k].remove()
@@ -648,10 +703,28 @@ export default function MapPage() {
         source: 'spots',
         paint: { 'circle-radius': 0, 'circle-opacity': 0 },
       })
-      map.on('render', () => {
-        if (!map.isSourceLoaded('spots')) return
-        updateMarkers()
+      // Coalesce marker syncs to one per frame and only on events that
+      // can actually change the visible set — never per render frame
+      // (that was the source of pan/zoom jank under terrain).
+      let syncQueued = false
+      function scheduleSync() {
+        if (syncQueued) return
+        syncQueued = true
+        requestAnimationFrame(() => {
+          syncQueued = false
+          if (!map.isSourceLoaded('spots')) return
+          updateMarkers()
+        })
+      }
+      map.on('move', scheduleSync)
+      map.on('moveend', scheduleSync)
+      map.on('zoom', scheduleSync)
+      map.on('idle', scheduleSync)
+      map.on('sourcedata', (e) => {
+        if (e.sourceId === 'spots' && map.isSourceLoaded('spots'))
+          scheduleSync()
       })
+      scheduleSync()
 
       // Re-poll so freshly-expired spots drop and extended ones return.
       pollId = setInterval(() => {
