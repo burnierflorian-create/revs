@@ -45,12 +45,23 @@ const FETCH_HEADERS = {
 
 const PER_FEED = 3
 const MAX_TOTAL = 15
+// Articles older than 48h are dropped before they ever reach Claude.
+const MAX_AGE_MS = 48 * 60 * 60 * 1000
+// Public (non-cron) callers can only trigger a real run if the freshest
+// article is older than this — bounds Claude/API cost under load.
+const MIN_REFRESH_MS = 90 * 60 * 1000
 
-const SYSTEM = `Tu es un expert passion auto.
+const SYSTEM = `Tu es l'éditeur automobile de l'app REVS. Tu es strict.
 
-D'abord, juge la pertinence: "relevant" est true UNIQUEMENT si l'article concerne l'automobile au sens large — voitures, F1, motorsport, supercars, hypercars, ou événements automobiles. Si l'article parle d'un avion, d'un bateau, de jeux vidéo, de matériel informatique, ou de tout autre sujet non automobile, "relevant" est false.
+PERTINENCE — mets "relevant" à true UNIQUEMENT si l'article est DIRECTEMENT et principalement consacré à l'un de ces sujets :
+- Formule 1 / motorsport automobile (Grands Prix, écuries, pilotes, circuits, résultats)
+- supercars et hypercars (essais, présentations officielles, performances)
+- voitures de sport, de performance ou de collection
+- événements automobiles (salons, meetings, track days, rassemblements, enchères de voitures)
 
-Ensuite, si pertinent, rédige "summary": un résumé en français de 2 à 3 lignes, enthousiaste, précis sur les chiffres de performance si mentionnés. TEXTE BRUT UNIQUEMENT: aucun markdown, pas d'astérisques, pas de gras, pas de titres, pas de listes. Si non pertinent, "summary" peut être une chaîne vide.`
+Mets "relevant" à false pour TOUT LE RESTE, même si une voiture est citée en passant : avions, bateaux/yachts, motos, vélos, trains, immobilier, crypto/bourse/finance, jeux vidéo, hardware/tech grand public, politique, people/célébrités, sport non automobile, SUV/utilitaires familiaux sans dimension sportive. Dans le moindre doute → false.
+
+RÉSUMÉ — si pertinent, rédige "summary" : 2 à 3 lignes en français, enthousiaste, précis sur les chiffres de performance s'ils sont donnés. TEXTE BRUT UNIQUEMENT : aucun markdown, pas d'astérisques, pas de gras, pas de titres, pas de listes. Si non pertinent, "summary" = chaîne vide.`
 
 const SUPABASE_URL =
   process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
@@ -168,12 +179,14 @@ async function summarize(
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (process.env.CRON_SECRET) {
-    if (req.headers.authorization !== `Bearer ${process.env.CRON_SECRET}`) {
-      res.status(401).json({ error: 'Unauthorized' })
-      return
-    }
-  }
+  // The Vercel cron is identified by CRON_SECRET (auto-sent as a bearer)
+  // and always runs. Without that header it's a public/client trigger:
+  // allowed, but rate-limited below so it can't run up Claude costs.
+  const cronSecret = process.env.CRON_SECRET
+  const isCron =
+    !cronSecret || req.headers.authorization === `Bearer ${cronSecret}`
+  const force = req.query.force === '1'
+
   if (!SUPABASE_URL || !SERVICE_ROLE || !process.env.ANTHROPIC_API_KEY) {
     res.status(500).json({ error: 'Missing env (Supabase service role / Anthropic key)' })
     return
@@ -187,6 +200,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     ignoreAttributes: false,
     attributeNamePrefix: '@_',
   })
+
+  // Public client trigger: skip cheaply if the feed is already fresh.
+  if (!isCron && !force && req.query.purge !== '1') {
+    const { data: latest } = await admin
+      .from('news')
+      .select('created_at')
+      .order('created_at', { ascending: false })
+      .limit(1)
+    const newest = latest?.[0]?.created_at as string | undefined
+    if (newest) {
+      const ageMs = Date.now() - new Date(newest).getTime()
+      if (ageMs < MIN_REFRESH_MS) {
+        res.status(200).json({
+          skipped: true,
+          reason: 'fresh',
+          ageMinutes: Math.round(ageMs / 60000),
+        })
+        return
+      }
+    }
+  }
 
   // Manual maintenance lever: GET /api/fetch-news?purge=1 wipes the table
   // before repopulating. The scheduled cron calls the path without the
@@ -274,7 +308,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }),
   )
 
-  const candidates = candidateLists.flat().slice(0, MAX_TOTAL)
+  // Hard 48h cap: drop anything we can date that's older than 48h
+  // before spending Claude calls on it.
+  const cutoff = Date.now() - MAX_AGE_MS
+  const candidates = candidateLists
+    .flat()
+    .filter(
+      (c) =>
+        !c.published_at || new Date(c.published_at).getTime() >= cutoff,
+    )
+    .slice(0, MAX_TOTAL)
 
   const summarized = await Promise.all(
     candidates.map(async (c) => ({

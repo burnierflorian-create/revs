@@ -1,7 +1,30 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { Loader2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { timeAgo } from '../lib/spots'
 import { SkeletonCard } from '../components/Skeleton'
+
+// Vercel Hobby crons run once/day, so news goes stale through the day.
+// When someone opens Actu and the freshest article is older than this,
+// we ping /api/fetch-news (server-throttled) so the feed self-heals.
+const STALE_MS = 2 * 60 * 60 * 1000
+// Don't re-ping within this window even across remounts (Discover tab
+// switches remount News).
+const TRIGGER_COOLDOWN_MS = 15 * 60 * 1000
+const TRIGGER_KEY = 'revs_news_triggered_at'
+
+function newestStamp(list: { created_at: string }[]): string | null {
+  let max = 0
+  let stamp: string | null = null
+  for (const n of list) {
+    const t = new Date(n.created_at).getTime()
+    if (t > max) {
+      max = t
+      stamp = n.created_at
+    }
+  }
+  return stamp
+}
 
 type NewsItem = {
   id: string
@@ -49,8 +72,10 @@ export default function News() {
   const [items, setItems] = useState<NewsItem[] | null>(null)
   const [filter, setFilter] = useState<Filter>('Tout')
   const [refreshing, setRefreshing] = useState(false)
+  const [autoBusy, setAutoBusy] = useState(false)
   const [pull, setPull] = useState(0)
   const startY = useRef<number | null>(null)
+  const triedRef = useRef(false)
 
   const load = useCallback(async (initial = false) => {
     if (initial) setItems(null)
@@ -65,12 +90,51 @@ export default function News() {
     if (!initial) setRefreshing(false)
   }, [])
 
+  const triggerServerRefresh = useCallback(async () => {
+    try {
+      sessionStorage.setItem(TRIGGER_KEY, String(Date.now()))
+    } catch {
+      /* sessionStorage unavailable */
+    }
+    setAutoBusy(true)
+    try {
+      // Server is throttled + idempotent (dedup on url), so a naive
+      // call here is safe even if several users open Actu at once.
+      await fetch('/api/fetch-news', { method: 'GET' })
+    } catch {
+      /* offline — keep showing what we have */
+    }
+    await load(false)
+    setAutoBusy(false)
+  }, [load])
+
   useEffect(() => {
     load(true)
-    // Auto-refresh every 30 minutes.
+    // Reload from DB every 30 min in case the cron / another client
+    // refreshed it while this tab stayed open.
     const id = window.setInterval(() => load(false), 30 * 60 * 1000)
     return () => window.clearInterval(id)
   }, [load])
+
+  // Once the first list arrives, self-heal if it's stale.
+  useEffect(() => {
+    if (triedRef.current || items === null) return
+    triedRef.current = true
+    const stamp = newestStamp(items)
+    const ageMs = stamp ? Date.now() - new Date(stamp).getTime() : Infinity
+    let lastTrigger = 0
+    try {
+      lastTrigger = Number(sessionStorage.getItem(TRIGGER_KEY) || 0)
+    } catch {
+      /* ignore */
+    }
+    if (
+      ageMs > STALE_MS &&
+      Date.now() - lastTrigger > TRIGGER_COOLDOWN_MS
+    ) {
+      void triggerServerRefresh()
+    }
+  }, [items, triggerServerRefresh])
 
   const PULL_THRESHOLD = 70
 
@@ -112,7 +176,20 @@ export default function News() {
               : 'Tire pour actualiser'}
         </div>
       )}
-      <div className="no-scrollbar -mx-4 mb-2 mt-1 flex gap-2 overflow-x-auto px-4 pb-2">
+      <div className="flex items-center justify-between px-1 pb-1 pt-1 text-[11px] text-fg/40">
+        <span>
+          {autoBusy
+            ? 'Actualisation des news…'
+            : items && items.length > 0
+              ? `Mis à jour ${timeAgo(newestStamp(items) ?? items[0].created_at)}`
+              : ''}
+        </span>
+        {autoBusy && (
+          <Loader2 className="h-3.5 w-3.5 animate-spin text-accent" />
+        )}
+      </div>
+
+      <div className="no-scrollbar -mx-4 mb-2 flex gap-2 overflow-x-auto px-4 pb-2">
         {FILTERS.map((f) => (
           <button
             key={f}
