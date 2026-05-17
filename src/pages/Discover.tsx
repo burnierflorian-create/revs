@@ -153,14 +153,14 @@ export default function Discover({ initial }: { initial?: 'events' }) {
       <div key={`${universe}-${sub}`} className="discover-fade pt-3">
         {isF1 ? (
           f1Sub === 'actu' ? (
-            <News categories={['F1']} accent={RED} />
+            <News categories={['F1']} />
           ) : (
             <div className="px-4">
               <F1Calendar />
             </div>
           )
         ) : carsSub === 'actu' ? (
-          <News categories={['Supercar', 'Hypercar']} accent={ORANGE} />
+          <News categories={['Supercar', 'Hypercar']} />
         ) : (
           <Meets />
         )}

@@ -1,17 +1,22 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Loader2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { timeAgo } from '../lib/spots'
 import { SkeletonCard } from '../components/Skeleton'
 
-// Vercel Hobby crons run once/day, so news goes stale through the day.
-// When someone opens Actu and the freshest article is older than this,
-// we ping /api/fetch-news (server-throttled) so the feed self-heals.
-const STALE_MS = 2 * 60 * 60 * 1000
+// Opening Discover silently pings /api/fetch-news (server-throttled) if
+// the freshest article is older than this, so news stays fresh without
+// the user noticing.
+const STALE_MS = 30 * 60 * 1000
 // Don't re-ping within this window even across remounts (Discover tab
 // switches remount News).
 const TRIGGER_COOLDOWN_MS = 15 * 60 * 1000
 const TRIGGER_KEY = 'revs_news_triggered_at'
+// "NOUVEAU" badge for articles published in the last hour.
+const NEW_MS = 60 * 60 * 1000
+// When a category has fewer than this, top it up with other recent
+// articles instead of showing a near-empty page.
+const MIN_VISIBLE = 5
+const FILL_WINDOW_MS = 48 * 60 * 60 * 1000
 
 function newestStamp(list: { created_at: string }[]): string | null {
   let max = 0
@@ -65,31 +70,26 @@ function fallbackImg(cat: string): string {
   return CATEGORY_IMG[cat] ?? CATEGORY_IMG.Supercar
 }
 
-export default function News({
-  categories,
-  accent = '#E63946',
-}: {
-  categories: string[]
-  accent?: string
-}) {
+export default function News({ categories }: { categories: string[] }) {
   const [items, setItems] = useState<NewsItem[] | null>(null)
   const [refreshing, setRefreshing] = useState(false)
-  const [autoBusy, setAutoBusy] = useState(false)
   const [pull, setPull] = useState(0)
   const startY = useRef<number | null>(null)
   const triedRef = useRef(false)
 
-  const load = useCallback(async (initial = false) => {
+  const load = useCallback(async (initial = false, silent = false) => {
     if (initial) setItems(null)
-    else setRefreshing(true)
+    else if (!silent) setRefreshing(true)
     const { data, error } = await supabase
       .from('news')
       .select('*')
+      .gt('expires_at', new Date().toISOString())
       .order('published_at', { ascending: false, nullsFirst: false })
+      .order('created_at', { ascending: false })
       .limit(50)
     if (error) console.error('news fetch failed:', error)
     setItems((data ?? []) as NewsItem[])
-    if (!initial) setRefreshing(false)
+    if (!initial && !silent) setRefreshing(false)
   }, [])
 
   const triggerServerRefresh = useCallback(async () => {
@@ -98,16 +98,15 @@ export default function News({
     } catch {
       /* sessionStorage unavailable */
     }
-    setAutoBusy(true)
     try {
       // Server is throttled + idempotent (dedup on url), so a naive
-      // call here is safe even if several users open Actu at once.
+      // call here is safe even if several users open Discover at once.
       await fetch('/api/fetch-news', { method: 'GET' })
     } catch {
       /* offline — keep showing what we have */
     }
-    await load(false)
-    setAutoBusy(false)
+    // Silent: reload without flipping any visible refreshing indicator.
+    await load(false, true)
   }, [load])
 
   useEffect(() => {
@@ -154,9 +153,33 @@ export default function News({
     startY.current = null
   }
 
-  const visible = items
-    ? items.filter((n) => categories.includes(n.category))
-    : items
+  // Category first; if fewer than MIN_VISIBLE, top up with the most
+  // recent other articles (last 48h) so the page is never near-empty.
+  let visible: NewsItem[] | null = null
+  if (items) {
+    const inCat = items.filter((n) => categories.includes(n.category))
+    if (inCat.length >= MIN_VISIBLE) {
+      visible = inCat
+    } else {
+      const cutoff = Date.now() - FILL_WINDOW_MS
+      const fill = items.filter(
+        (n) =>
+          !categories.includes(n.category) &&
+          new Date(n.published_at ?? n.created_at).getTime() >= cutoff,
+      )
+      visible = [...inCat, ...fill].slice(
+        0,
+        Math.max(MIN_VISIBLE, inCat.length),
+      )
+    }
+  }
+
+  function isNew(n: NewsItem): boolean {
+    return (
+      Date.now() - new Date(n.published_at ?? n.created_at).getTime() <
+      NEW_MS
+    )
+  }
 
   return (
     <div
@@ -177,20 +200,10 @@ export default function News({
               : 'Tire pour actualiser'}
         </div>
       )}
-      <div className="flex items-center justify-between px-1 pb-1 pt-1 text-[11px] text-fg/40">
-        <span>
-          {autoBusy
-            ? 'Actualisation des news…'
-            : items && items.length > 0
-              ? `Mis à jour ${timeAgo(newestStamp(items) ?? items[0].created_at)}`
-              : ''}
-        </span>
-        {autoBusy && (
-          <Loader2
-            className="h-3.5 w-3.5 animate-spin"
-            style={{ color: accent }}
-          />
-        )}
+      <div className="px-1 pb-1 pt-1 text-[11px] text-fg/40">
+        {items && items.length > 0
+          ? `Mis à jour ${timeAgo(newestStamp(items) ?? items[0].created_at)}`
+          : ''}
       </div>
 
       {items === null ? (
@@ -236,6 +249,11 @@ export default function News({
                 >
                   {n.category.toUpperCase()}
                 </span>
+                {isNew(n) && (
+                  <span className="badge-new absolute right-3 top-3 rounded-full bg-accent px-2.5 py-1 text-[10px] font-bold tracking-wide text-fg">
+                    NOUVEAU
+                  </span>
+                )}
               </div>
 
               <div className="mt-3">

@@ -123,6 +123,20 @@ h4 {
   animation: lvlPulse 2.6s ease-in-out infinite;
 }
 
+/* Pulsing red "NOUVEAU" badge for articles < 1h old. */
+@keyframes newPulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(230, 57, 70, 0.55);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(230, 57, 70, 0);
+  }
+}
+.badge-new {
+  animation: newPulse 1.5s ease-out infinite;
+}
+
 .mapboxgl-popup-content {
   background: var(--color-card);
   color: var(--color-fg);

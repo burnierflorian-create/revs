@@ -1,11 +1,17 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus } from 'lucide-react'
+import { Plus, MapPin } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { formatEventDate, type CarEvent } from '../lib/events'
 import { Skeleton } from './Skeleton'
 
 const ORANGE = '#F59E0B'
+
+// Static mini-map of the area (Europe view) for the empty state.
+const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN as string | undefined
+const MINI_MAP_URL = MAPBOX_TOKEN
+  ? `https://api.mapbox.com/styles/v1/mapbox/dark-v11/static/2.4,46.6,4/640x220@2x?access_token=${MAPBOX_TOKEN}&attribution=false&logo=false`
+  : null
 
 // Community meets, created only by verified organizers. A normal user
 // sees the list but no create button.
@@ -19,6 +25,7 @@ export default function Meets() {
     supabase
       .from('events')
       .select('*')
+      .gte('starts_at', new Date().toISOString())
       .order('starts_at', { ascending: true })
       .limit(50)
       .then(({ data }) => {
@@ -55,10 +62,13 @@ export default function Meets() {
           Créer un événement
         </button>
       ) : (
-        <p className="my-4 rounded-xl bg-card px-4 py-3 text-center text-xs text-fg/40">
-          Création réservée aux organisateurs vérifiés — fais une demande
-          dans Paramètres.
-        </p>
+        events !== null &&
+        events.length > 0 && (
+          <p className="my-4 rounded-xl bg-card px-4 py-3 text-center text-xs text-fg/40">
+            Création réservée aux organisateurs vérifiés — fais une demande
+            dans Paramètres.
+          </p>
+        )
       )}
 
       <div className="space-y-3">
@@ -75,15 +85,45 @@ export default function Meets() {
             </div>
           ))
         ) : events.length === 0 ? (
-          <div className="rounded-2xl border border-white/5 bg-card p-6 text-center">
-            <p className="text-sm text-fg/60">
-              Aucun meet communautaire pour le moment.
-            </p>
-            <p className="mt-1 text-xs text-fg/40">
-              {canCreate
-                ? 'Sois le premier à en organiser un !'
-                : 'Reviens bientôt — les organisateurs en publient régulièrement.'}
-            </p>
+          <div className="overflow-hidden rounded-2xl border border-white/5 bg-card">
+            <div className="relative h-36 w-full">
+              {MINI_MAP_URL ? (
+                <img
+                  src={MINI_MAP_URL}
+                  alt="Carte de la zone"
+                  className="h-full w-full object-cover opacity-70"
+                />
+              ) : (
+                <div className="h-full w-full bg-gradient-to-br from-[#F59E0B]/15 to-transparent" />
+              )}
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div
+                  className="flex h-12 w-12 items-center justify-center rounded-full"
+                  style={{ backgroundColor: `${ORANGE}26` }}
+                >
+                  <MapPin className="h-6 w-6" style={{ color: ORANGE }} />
+                </div>
+              </div>
+            </div>
+            <div className="p-6 text-center">
+              <p className="font-medium text-fg">
+                Aucun événement dans ta région pour le moment
+              </p>
+              <p className="mt-1 text-xs text-fg/40">
+                {canCreate
+                  ? 'Sois le premier à organiser un meet ici.'
+                  : 'Tu organises des meets ? Deviens organisateur vérifié.'}
+              </p>
+              <button
+                onClick={() =>
+                  navigate(canCreate ? '/new-event' : '/settings')
+                }
+                className="mt-4 rounded-full px-6 py-2.5 text-sm font-semibold text-[#0A0A0A]"
+                style={{ backgroundColor: ORANGE }}
+              >
+                {canCreate ? 'Créer un événement' : 'Devenir organisateur'}
+              </button>
+            </div>
           </div>
         ) : (
           events.map((ev) => (

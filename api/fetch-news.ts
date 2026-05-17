@@ -49,7 +49,7 @@ const MAX_TOTAL = 15
 const MAX_AGE_MS = 48 * 60 * 60 * 1000
 // Public (non-cron) callers can only trigger a real run if the freshest
 // article is older than this — bounds Claude/API cost under load.
-const MIN_REFRESH_MS = 90 * 60 * 1000
+const MIN_REFRESH_MS = 20 * 60 * 1000
 
 const SYSTEM = `Tu es l'éditeur automobile de l'app REVS. Tu es strict.
 
@@ -111,6 +111,40 @@ function pickImage(item: Record<string, unknown>): string | null {
       null)
   )
 }
+
+// Near-duplicate detection: normalize then Dice coefficient on
+// character bigrams. >= 0.8 means "same story, different wording".
+function normTitle(s: string): string {
+  return s
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+}
+
+function titleSimilarity(a: string, b: string): number {
+  const x = normTitle(a)
+  const y = normTitle(b)
+  if (!x || !y) return 0
+  if (x === y) return 1
+  if (x.length < 2 || y.length < 2) return x === y ? 1 : 0
+  const bigrams = (s: string) => {
+    const m = new Map<string, number>()
+    for (let i = 0; i < s.length - 1; i++) {
+      const g = s.slice(i, i + 2)
+      m.set(g, (m.get(g) ?? 0) + 1)
+    }
+    return m
+  }
+  const ma = bigrams(x)
+  const mb = bigrams(y)
+  let overlap = 0
+  for (const [g, c] of ma) overlap += Math.min(c, mb.get(g) ?? 0)
+  return (2 * overlap) / (x.length - 1 + (y.length - 1))
+}
+
+const DUP_THRESHOLD = 0.8
 
 // Defensive: strip common markdown so summaries never render literal
 // **bold**, headings, list bullets, etc.
@@ -212,6 +246,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     attributeNamePrefix: '@_',
   })
 
+  // Housekeeping: drop articles past their 24h TTL on every call
+  // (cron + client), so the table never accumulates stale news.
+  const nowIso = new Date().toISOString()
+  let expired: number | null = null
+  {
+    const { error, count } = await admin
+      .from('news')
+      .delete({ count: 'exact' })
+      .lt('expires_at', nowIso)
+    expired = error ? -1 : (count ?? 0)
+    if (error) console.error('news ttl cleanup failed:', error)
+  }
+
   // Public client trigger: skip cheaply if the feed is already fresh.
   if (!isCron && !force && req.query.purge !== '1') {
     const { data: latest } = await admin
@@ -248,10 +295,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const { data: existing } = await admin
     .from('news')
-    .select('url')
+    .select('url, title')
     .order('created_at', { ascending: false })
     .limit(500)
-  const known = new Set((existing ?? []).map((r: { url: string }) => r.url))
+  const existingRows = (existing ?? []) as { url: string; title: string }[]
+  const known = new Set(existingRows.map((r) => r.url))
+  // Recent titles (table only holds <=24h after TTL cleanup) for the
+  // near-duplicate check, plus titles accepted earlier this same run.
+  const seenTitles = existingRows.map((r) => r.title).filter(Boolean)
 
   const perFeed: Record<string, number> = {}
   type Candidate = {
@@ -337,21 +388,44 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     })),
   )
 
-  // Drop non-automotive articles (planes, boats, gaming, etc.).
-  const rows = summarized
-    .filter((x) => x.relevant)
-    .map(({ c, title, summary }) => {
-      perFeed[c.source] += 1
-      return {
-        title,
-        summary,
-        source: c.source,
-        category: c.category,
-        url: c.url,
-        image_url: c.image_url,
-        published_at: c.published_at,
-      }
+  // Drop non-automotive articles, then drop near-duplicate titles
+  // (same story already in the table or earlier in this batch).
+  let dedupSkipped = 0
+  const rows: {
+    title: string
+    summary: string
+    source: string
+    category: string
+    url: string
+    image_url: string | null
+    published_at: string | null
+    expires_at: string
+  }[] = []
+  for (const { c, relevant, title, summary } of summarized) {
+    if (!relevant) continue
+    const isDup = seenTitles.some(
+      (t) => titleSimilarity(t, title) >= DUP_THRESHOLD,
+    )
+    if (isDup) {
+      dedupSkipped += 1
+      continue
+    }
+    seenTitles.push(title)
+    perFeed[c.source] += 1
+    const base = c.published_at ? new Date(c.published_at) : new Date()
+    rows.push({
+      title,
+      summary,
+      source: c.source,
+      category: c.category,
+      url: c.url,
+      image_url: c.image_url,
+      published_at: c.published_at,
+      expires_at: new Date(
+        base.getTime() + 24 * 60 * 60 * 1000,
+      ).toISOString(),
     })
+  }
 
   let upsertError: string | null = null
   if (rows.length > 0) {
@@ -370,6 +444,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   res.status(200).json({
     purged,
+    expired,
+    dedupSkipped,
     processed: rows.length,
     perFeed,
     upsertError,
