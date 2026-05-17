@@ -10,6 +10,7 @@ import {
 } from '../lib/spots'
 import EmptyState from '../components/EmptyState'
 import { SkeletonCard } from '../components/Skeleton'
+import LikeButton from '../components/LikeButton'
 
 export default function Feed() {
   const navigate = useNavigate()
@@ -67,35 +68,49 @@ export default function Feed() {
       <div className="divide-y divide-white/5">
         {spots.map((spot) => (
           <article key={spot.id} className="py-5">
-            <div className="relative">
-              {spot.photo_url ? (
-                <img
-                  src={spot.photo_url}
-                  alt={`${spot.brand} ${spot.model}`}
-                  className="aspect-video w-full rounded-2xl object-cover"
-                />
-              ) : (
-                <div className="flex aspect-video w-full items-center justify-center rounded-2xl bg-white/5">
-                  <Car size={40} color="#444444" />
-                </div>
-              )}
-              <span className="absolute left-3 top-3 rounded-full bg-black/70 px-3 py-1 text-[10px] font-semibold tracking-wide text-fg backdrop-blur">
-                {categoryLabel(spot.category).toUpperCase()}
-              </span>
+            <div
+              role="link"
+              tabIndex={0}
+              onClick={() => navigate(`/spot/${spot.id}`)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') navigate(`/spot/${spot.id}`)
+              }}
+              className="cursor-pointer"
+            >
+              <div className="relative">
+                {spot.photo_url ? (
+                  <img
+                    src={spot.photo_url}
+                    alt={`${spot.brand} ${spot.model}`}
+                    className="aspect-video w-full rounded-2xl object-cover"
+                  />
+                ) : (
+                  <div className="flex aspect-video w-full items-center justify-center rounded-2xl bg-white/5">
+                    <Car size={40} color="#444444" />
+                  </div>
+                )}
+                <span className="absolute left-3 top-3 rounded-full bg-black/70 px-3 py-1 text-[10px] font-semibold tracking-wide text-fg backdrop-blur">
+                  {categoryLabel(spot.category).toUpperCase()}
+                </span>
+              </div>
+
+              <div className="mt-3">
+                <h2 className="font-semibold text-fg">
+                  {spot.brand} {spot.model}
+                </h2>
+                <p className="mt-1 text-sm text-fg/50">
+                  {[spot.color, spot.year, timeAgo(spot.created_at)]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </p>
+                <p className="mt-1 text-xs text-fg/30">
+                  par {spotterName(null)}
+                </p>
+              </div>
             </div>
 
             <div className="mt-3">
-              <h2 className="font-semibold text-fg">
-                {spot.brand} {spot.model}
-              </h2>
-              <p className="mt-1 text-sm text-fg/50">
-                {[spot.color, spot.year, timeAgo(spot.created_at)]
-                  .filter(Boolean)
-                  .join(' · ')}
-              </p>
-              <p className="mt-1 text-xs text-fg/30">
-                par {spotterName(null)}
-              </p>
+              <LikeButton spotId={spot.id} />
             </div>
           </article>
         ))}

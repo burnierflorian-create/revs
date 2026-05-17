@@ -207,6 +207,7 @@ export default function NewSpot() {
         category,
         description: description.trim() || null,
         photo_url: pub.publicUrl,
+        confidence: result.confidence,
         lat: pos.coords.latitude,
         lng: pos.coords.longitude,
       })

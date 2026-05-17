@@ -12,10 +12,14 @@ create table if not exists public.spots (
   category    text not null default 'other',
   description text,
   photo_url   text,
+  confidence  integer,
   lat         double precision not null,
   lng         double precision not null,
   created_at  timestamptz not null default now()
 );
+
+-- For databases created before the confidence column existed.
+alter table public.spots add column if not exists confidence integer;
 
 create index if not exists spots_created_at_idx on public.spots (created_at desc);
 
@@ -125,3 +129,36 @@ create policy "users read their own subscription"
 -- Writes are performed only by the Stripe webhook using the Supabase
 -- service-role key, which bypasses RLS — so no insert/update policy is
 -- granted to normal authenticated clients on purpose.
+
+-- 7. Spot likes --------------------------------------------------------------
+create table if not exists public.spot_likes (
+  id         uuid primary key default gen_random_uuid(),
+  spot_id    uuid not null references public.spots (id) on delete cascade,
+  user_id    uuid not null references auth.users (id) on delete cascade,
+  created_at timestamptz not null default now(),
+  unique (spot_id, user_id)
+);
+
+create index if not exists spot_likes_spot_id_idx on public.spot_likes (spot_id);
+
+alter table public.spot_likes enable row level security;
+
+-- Anyone authenticated can read likes (needed for counts).
+create policy "spot likes are readable by authenticated users"
+  on public.spot_likes for select
+  to authenticated
+  using (true);
+
+-- A user can only create a like attributed to themselves.
+create policy "users like as themselves"
+  on public.spot_likes for insert
+  to authenticated
+  with check (auth.uid() = user_id);
+
+-- A user can only remove their own like.
+create policy "users remove their own like"
+  on public.spot_likes for delete
+  to authenticated
+  using (auth.uid() = user_id);
+
+alter publication supabase_realtime add table public.spot_likes;

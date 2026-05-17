@@ -97,7 +97,11 @@ export default function MapPage() {
         })
       },
       () => {},
-      { enableHighAccuracy: true, timeout: 8000 },
+      // The previous 8s/highAccuracy timeout counted the permission-prompt
+      // wait too, so first-load almost always timed out and the map stayed
+      // on Paris. Relax it: city-level fix is enough to recentre, accept a
+      // recent cached position, and allow time for the prompt.
+      { enableHighAccuracy: false, timeout: 20000, maximumAge: 60000 },
     )
   }
 

@@ -31,6 +31,7 @@ export type Spot = {
   category: SpotCategory
   description: string | null
   photo_url: string | null
+  confidence: number | null
   lat: number
   lng: number
   created_at: string
@@ -106,6 +107,14 @@ export function timeAgo(iso: string): string {
   if (hours < 24) return `il y a ${hours} h`
   const days = Math.floor(hours / 24)
   return `il y a ${days} j`
+}
+
+export function spotterLevel(spotCount: number): string {
+  if (spotCount >= 100) return 'Légende'
+  if (spotCount >= 50) return 'Élite'
+  if (spotCount >= 20) return 'Expert'
+  if (spotCount >= 5) return 'Spotter'
+  return 'Débutant'
 }
 
 export function spotterName(email: string | null | undefined): string {

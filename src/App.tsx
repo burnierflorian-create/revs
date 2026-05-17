@@ -10,6 +10,7 @@ import Events from './pages/Events'
 import NewEvent from './pages/NewEvent'
 import Profile from './pages/Profile'
 import Premium from './pages/Premium'
+import SpotDetail from './pages/SpotDetail'
 import Onboarding from './components/Onboarding'
 
 export default function App() {
@@ -36,6 +37,7 @@ export default function App() {
           <Route path="/" element={<Home />} />
           <Route path="/map" element={<MapPage />} />
           <Route path="/feed" element={<Feed />} />
+          <Route path="/spot/:id" element={<SpotDetail />} />
           <Route path="/new-spot" element={<NewSpot />} />
           <Route path="/events" element={<Events />} />
           <Route path="/new-event" element={<NewEvent />} />
