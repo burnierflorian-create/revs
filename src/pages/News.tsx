@@ -38,16 +38,6 @@ type NewsItem = {
   created_at: string
 }
 
-const FILTERS = ['Tout', 'F1', 'Supercars & Hypercars'] as const
-type Filter = (typeof FILTERS)[number]
-
-// Which DB categories each sub-filter shows. null = everything.
-const FILTER_CATS: Record<Filter, string[] | null> = {
-  Tout: null,
-  F1: ['F1'],
-  'Supercars & Hypercars': ['Supercar', 'Hypercar'],
-}
-
 // Badge colour per category — F1 red, Supercar orange, Hypercar violet,
 // Events blue.
 const BADGE: Record<string, string> = {
@@ -75,9 +65,14 @@ function fallbackImg(cat: string): string {
   return CATEGORY_IMG[cat] ?? CATEGORY_IMG.Supercar
 }
 
-export default function News() {
+export default function News({
+  categories,
+  accent = '#E63946',
+}: {
+  categories: string[]
+  accent?: string
+}) {
   const [items, setItems] = useState<NewsItem[] | null>(null)
-  const [filter, setFilter] = useState<Filter>('Tout')
   const [refreshing, setRefreshing] = useState(false)
   const [autoBusy, setAutoBusy] = useState(false)
   const [pull, setPull] = useState(0)
@@ -159,9 +154,9 @@ export default function News() {
     startY.current = null
   }
 
-  const cats = FILTER_CATS[filter]
-  const visible =
-    items && cats ? items.filter((n) => cats.includes(n.category)) : items
+  const visible = items
+    ? items.filter((n) => categories.includes(n.category))
+    : items
 
   return (
     <div
@@ -191,24 +186,11 @@ export default function News() {
               : ''}
         </span>
         {autoBusy && (
-          <Loader2 className="h-3.5 w-3.5 animate-spin text-accent" />
+          <Loader2
+            className="h-3.5 w-3.5 animate-spin"
+            style={{ color: accent }}
+          />
         )}
-      </div>
-
-      <div className="no-scrollbar -mx-4 mb-2 flex gap-2 overflow-x-auto px-4 pb-2">
-        {FILTERS.map((f) => (
-          <button
-            key={f}
-            onClick={() => setFilter(f)}
-            className={`shrink-0 whitespace-nowrap rounded-full px-4 py-2 text-sm font-medium transition-colors ${
-              filter === f
-                ? 'bg-accent text-fg'
-                : 'bg-card text-fg/50 hover:text-fg'
-            }`}
-          >
-            {f}
-          </button>
-        ))}
       </div>
 
       {items === null ? (
@@ -229,7 +211,7 @@ export default function News() {
         </div>
       ) : visible && visible.length === 0 ? (
         <p className="px-1 py-8 text-center text-sm text-fg/40">
-          Aucun article dans « {filter} ».
+          Aucun article pour le moment.
         </p>
       ) : (
         <div className="divide-y divide-white/5">

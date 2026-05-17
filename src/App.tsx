@@ -44,7 +44,7 @@ export default function App() {
           <Route path="/spot/:id" element={<SpotDetail />} />
           <Route path="/new-spot" element={<NewSpot />} />
           <Route path="/discover" element={<Discover />} />
-          <Route path="/actu" element={<Discover initial="actu" />} />
+          <Route path="/actu" element={<Discover />} />
           <Route path="/events" element={<Discover initial="events" />} />
           <Route path="/f1/:round" element={<GrandPrixDetail />} />
           <Route path="/new-event" element={<NewEvent />} />
