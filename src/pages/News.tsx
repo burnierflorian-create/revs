@@ -38,8 +38,15 @@ type NewsItem = {
   created_at: string
 }
 
-const FILTERS = ['Tout', 'F1', 'Supercar', 'Hypercar', 'Events'] as const
+const FILTERS = ['Tout', 'F1', 'Supercars & Hypercars'] as const
 type Filter = (typeof FILTERS)[number]
+
+// Which DB categories each sub-filter shows. null = everything.
+const FILTER_CATS: Record<Filter, string[] | null> = {
+  Tout: null,
+  F1: ['F1'],
+  'Supercars & Hypercars': ['Supercar', 'Hypercar'],
+}
 
 // Badge colour per category — F1 red, Supercar orange, Hypercar violet,
 // Events blue.
@@ -152,10 +159,9 @@ export default function News() {
     startY.current = null
   }
 
+  const cats = FILTER_CATS[filter]
   const visible =
-    items && filter !== 'Tout'
-      ? items.filter((n) => n.category === filter)
-      : items
+    items && cats ? items.filter((n) => cats.includes(n.category)) : items
 
   return (
     <div

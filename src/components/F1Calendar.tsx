@@ -26,8 +26,7 @@ export default function F1Calendar() {
   }
 
   return (
-    <section className="pb-2">
-      <h2 className="py-3 text-lg font-semibold text-fg">Calendrier F1 2026</h2>
+    <section className="pb-2 pt-3">
       <div className="space-y-2">
         {GP_2026.map((g, i) => {
           const isPast = new Date(g.date).getTime() < now
