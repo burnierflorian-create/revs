@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Newspaper } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { timeAgo } from '../lib/spots'
 import { SkeletonCard } from '../components/Skeleton'
@@ -29,6 +28,21 @@ const BADGE: Record<string, string> = {
 }
 function badgeClass(cat: string): string {
   return BADGE[cat] ?? 'bg-white/20'
+}
+
+// Royalty-free Unsplash fallbacks per category (verified URLs) used when
+// the RSS item has no image — instead of a grey placeholder.
+const CATEGORY_IMG: Record<string, string> = {
+  F1: 'https://images.unsplash.com/photo-1752959805242-0a7799902ae4?w=800',
+  Supercar:
+    'https://images.unsplash.com/photo-1541348263662-e068662d82af?w=800',
+  Hypercar:
+    'https://images.unsplash.com/photo-1567808291548-fc3ee04dbcf0?w=800',
+  Events:
+    'https://images.unsplash.com/photo-1617060219602-8cbf8f1eff8d?w=800',
+}
+function fallbackImg(cat: string): string {
+  return CATEGORY_IMG[cat] ?? CATEGORY_IMG.Supercar
 }
 
 export default function News() {
@@ -106,17 +120,11 @@ export default function News() {
               className="block py-5"
             >
               <div className="relative">
-                {n.image_url ? (
-                  <img
-                    src={n.image_url}
-                    alt={n.title}
-                    className="aspect-video w-full rounded-2xl object-cover"
-                  />
-                ) : (
-                  <div className="flex aspect-video w-full items-center justify-center rounded-2xl bg-card">
-                    <Newspaper size={40} color="#444444" />
-                  </div>
-                )}
+                <img
+                  src={n.image_url || fallbackImg(n.category)}
+                  alt={n.title}
+                  className="aspect-video w-full rounded-2xl object-cover"
+                />
                 <span
                   className={`absolute left-3 top-3 rounded-full px-3 py-1 text-[10px] font-semibold tracking-wide text-fg backdrop-blur ${badgeClass(
                     n.category,

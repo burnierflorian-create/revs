@@ -46,8 +46,11 @@ const FETCH_HEADERS = {
 const PER_FEED = 3
 const MAX_TOTAL = 15
 
-const SYSTEM =
-  'Tu es un expert passion auto. Résume cet article en 2-3 lignes en français, en mettant en avant ce qui est excitant pour un passionné de supercars, hypercars ou F1. Sois enthousiaste et précis sur les chiffres de performance si mentionnés.'
+const SYSTEM = `Tu es un expert passion auto.
+
+D'abord, juge la pertinence: "relevant" est true UNIQUEMENT si l'article concerne l'automobile au sens large — voitures, F1, motorsport, supercars, hypercars, ou événements automobiles. Si l'article parle d'un avion, d'un bateau, de jeux vidéo, de matériel informatique, ou de tout autre sujet non automobile, "relevant" est false.
+
+Ensuite, si pertinent, rédige "summary": un résumé en français de 2 à 3 lignes, enthousiaste, précis sur les chiffres de performance si mentionnés. TEXTE BRUT UNIQUEMENT: aucun markdown, pas d'astérisques, pas de gras, pas de titres, pas de listes. Si non pertinent, "summary" peut être une chaîne vide.`
 
 const SUPABASE_URL =
   process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
@@ -96,16 +99,46 @@ function pickImage(item: Record<string, unknown>): string | null {
   )
 }
 
+// Defensive: strip common markdown so summaries never render literal
+// **bold**, headings, list bullets, etc.
+function stripMarkdown(s: string): string {
+  return s
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/__([^_]+)__/g, '$1')
+    .replace(/\*([^*]+)\*/g, '$1')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/^\s{0,3}#{1,6}\s+/gm, '')
+    .replace(/^\s*[-*+]\s+/gm, '')
+    .replace(/[*_`]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+const SUMMARY_SCHEMA = {
+  type: 'object',
+  properties: {
+    relevant: { type: 'boolean' },
+    summary: { type: 'string' },
+  },
+  required: ['relevant', 'summary'],
+  additionalProperties: false,
+}
+
 async function summarize(
   client: Anthropic,
   title: string,
   description: string,
-): Promise<string> {
-  const fallback = description.slice(0, 300)
+): Promise<{ relevant: boolean; summary: string }> {
+  // Fail open on infra/parse errors: keep the (curated, on-topic) feed
+  // content rather than dropping it.
+  const fallback = {
+    relevant: true,
+    summary: stripMarkdown(description).slice(0, 300),
+  }
   try {
     const res = await client.messages.create({
       model: MODEL,
-      max_tokens: 250,
+      max_tokens: 300,
       system: [
         { type: 'text', text: SYSTEM, cache_control: { type: 'ephemeral' } },
       ],
@@ -115,10 +148,20 @@ async function summarize(
           content: `Titre: ${title}\n\nDescription: ${description.slice(0, 1500)}`,
         },
       ],
+      output_config: {
+        format: { type: 'json_schema', schema: SUMMARY_SCHEMA },
+      },
     })
     const block = res.content.find((b) => b.type === 'text')
-    const text = block && 'text' in block ? block.text.trim() : ''
-    return text || fallback
+    const text = block && 'text' in block ? block.text : ''
+    if (!text) return fallback
+    const parsed = JSON.parse(text) as {
+      relevant?: boolean
+      summary?: string
+    }
+    const summary = stripMarkdown(parsed.summary ?? '')
+    if (parsed.relevant === false) return { relevant: false, summary: '' }
+    return { relevant: true, summary: summary || fallback.summary }
   } catch {
     return fallback
   }
@@ -233,9 +276,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const candidates = candidateLists.flat().slice(0, MAX_TOTAL)
 
-  const rows = await Promise.all(
-    candidates.map(async (c) => {
-      const summary = await summarize(anthropic, c.title, c.description)
+  const summarized = await Promise.all(
+    candidates.map(async (c) => ({
+      c,
+      ...(await summarize(anthropic, c.title, c.description)),
+    })),
+  )
+
+  // Drop non-automotive articles (planes, boats, gaming, etc.).
+  const rows = summarized
+    .filter((x) => x.relevant)
+    .map(({ c, summary }) => {
       perFeed[c.source] += 1
       return {
         title: c.title,
@@ -246,8 +297,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         image_url: c.image_url,
         published_at: c.published_at,
       }
-    }),
-  )
+    })
 
   let upsertError: string | null = null
   if (rows.length > 0) {
