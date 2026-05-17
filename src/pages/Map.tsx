@@ -83,25 +83,37 @@ export default function MapPage() {
   const [error, setError] = useState<string | null>(null)
   const [activeFilter, setActiveFilter] = useState<string>('Tous')
   const [toast, setToast] = useState<string | null>(null)
+  const [geoError, setGeoError] = useState<string | null>(null)
   const [visibleCount, setVisibleCount] = useState(0)
   const [mapReady, setMapReady] = useState(false)
 
+  // Called directly from the button's onClick (and on map load) so the
+  // getCurrentPosition call stays inside the user gesture — iOS Safari /
+  // iOS PWA require that to surface the permission prompt and to recentre.
   function flyToUser() {
-    if (!mapRef.current || !navigator.geolocation) return
+    if (!navigator.geolocation) {
+      setGeoError('Géolocalisation non disponible sur cet appareil.')
+      return
+    }
+    if (!mapRef.current) return
     navigator.geolocation.getCurrentPosition(
       (pos) => {
+        setGeoError(null)
         mapRef.current?.flyTo({
           center: [pos.coords.longitude, pos.coords.latitude],
           zoom: 14,
           essential: true,
         })
       },
-      () => {},
-      // The previous 8s/highAccuracy timeout counted the permission-prompt
-      // wait too, so first-load almost always timed out and the map stayed
-      // on Paris. Relax it: city-level fix is enough to recentre, accept a
-      // recent cached position, and allow time for the prompt.
-      { enableHighAccuracy: false, timeout: 20000, maximumAge: 60000 },
+      (err) => {
+        setGeoError(
+          err.code === err.PERMISSION_DENIED
+            ? 'Localisation refusée. Autorise-la dans les réglages pour te recentrer.'
+            : 'Position indisponible pour le moment, réessaie.',
+        )
+        setTimeout(() => setGeoError(null), 5000)
+      },
+      { enableHighAccuracy: false, timeout: 10000, maximumAge: 30000 },
     )
   }
 
@@ -241,6 +253,12 @@ export default function MapPage() {
       {toast && (
         <div className="absolute left-1/2 top-[max(1rem,env(safe-area-inset-top))] z-20 -translate-x-1/2 rounded-full bg-accent px-5 py-2.5 text-sm font-medium shadow-lg">
           {toast}
+        </div>
+      )}
+
+      {geoError && (
+        <div className="absolute left-1/2 top-[max(1rem,env(safe-area-inset-top))] z-20 max-w-[90%] -translate-x-1/2 rounded-full bg-card px-5 py-2.5 text-center text-sm font-medium shadow-lg">
+          {geoError}
         </div>
       )}
 

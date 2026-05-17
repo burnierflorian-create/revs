@@ -1,15 +1,14 @@
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Camera } from 'lucide-react'
 
-// Hidden inside the creation flow itself (a "go to camera" FAB there
-// would be redundant and overlap the step UI).
-const HIDDEN_ON = ['/new-spot', '/new-event']
+// Only on Carte and Accueil — not Feed, Actu, Events, Profil, etc.
+const SHOWN_ON = ['/', '/map']
 
 export default function SpotFab() {
   const navigate = useNavigate()
   const { pathname } = useLocation()
 
-  if (HIDDEN_ON.includes(pathname)) return null
+  if (!SHOWN_ON.includes(pathname)) return null
 
   return (
     <div

@@ -23,6 +23,45 @@ function markOnboarded() {
   }
 }
 
+// Fire the permission prompts in order — geolocation first (needed to
+// spot), then notifications. Must run synchronously from the click
+// (no await before) so iOS Safari / iOS PWA surface the geo prompt.
+// Refusal is fine: the app keeps working, changeable later in Settings.
+function kickoffPermissions() {
+  try {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        () => {},
+        () => {},
+        { enableHighAccuracy: false, timeout: 10000, maximumAge: 30000 },
+      )
+    }
+  } catch {
+    /* ignore */
+  }
+  try {
+    if (
+      typeof Notification !== 'undefined' &&
+      Notification.permission === 'default'
+    ) {
+      Notification.requestPermission()
+        .then((p) => {
+          try {
+            localStorage.setItem(
+              'revs_notifications',
+              p === 'granted' ? '1' : '0',
+            )
+          } catch {
+            /* ignore */
+          }
+        })
+        .catch(() => {})
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
 type IconProps = { className?: string; strokeWidth?: number }
 
 type Slide = {
@@ -68,6 +107,8 @@ export default function Onboarding() {
   const canFinish = pseudo.trim().length > 0 && ville.trim().length > 0
 
   async function finish() {
+    // Request permissions within the user gesture, before any await.
+    kickoffPermissions()
     setError(null)
     setSaving(true)
     try {

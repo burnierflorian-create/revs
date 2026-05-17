@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { timeAgo } from '../lib/spots'
 import { SkeletonCard } from '../components/Skeleton'
@@ -48,9 +48,13 @@ function fallbackImg(cat: string): string {
 export default function News() {
   const [items, setItems] = useState<NewsItem[] | null>(null)
   const [filter, setFilter] = useState<Filter>('Tout')
+  const [refreshing, setRefreshing] = useState(false)
+  const [pull, setPull] = useState(0)
+  const startY = useRef<number | null>(null)
 
-  const fetchNews = useCallback(async () => {
-    setItems(null)
+  const load = useCallback(async (initial = false) => {
+    if (initial) setItems(null)
+    else setRefreshing(true)
     const { data, error } = await supabase
       .from('news')
       .select('*')
@@ -58,11 +62,31 @@ export default function News() {
       .limit(50)
     if (error) console.error('news fetch failed:', error)
     setItems((data ?? []) as NewsItem[])
+    if (!initial) setRefreshing(false)
   }, [])
 
   useEffect(() => {
-    fetchNews()
-  }, [fetchNews])
+    load(true)
+    // Auto-refresh every 30 minutes.
+    const id = window.setInterval(() => load(false), 30 * 60 * 1000)
+    return () => window.clearInterval(id)
+  }, [load])
+
+  const PULL_THRESHOLD = 70
+
+  function onTouchStart(e: React.TouchEvent) {
+    startY.current = window.scrollY <= 0 ? e.touches[0].clientY : null
+  }
+  function onTouchMove(e: React.TouchEvent) {
+    if (startY.current == null) return
+    const delta = e.touches[0].clientY - startY.current
+    setPull(delta > 0 && window.scrollY <= 0 ? Math.min(delta, 90) : 0)
+  }
+  function onTouchEnd() {
+    if (pull >= PULL_THRESHOLD && !refreshing) load(false)
+    setPull(0)
+    startY.current = null
+  }
 
   const visible =
     items && filter !== 'Tout'
@@ -70,7 +94,24 @@ export default function News() {
       : items
 
   return (
-    <div className="min-h-screen bg-bg px-4 pt-[max(1rem,env(safe-area-inset-top))]">
+    <div
+      onTouchStart={onTouchStart}
+      onTouchMove={onTouchMove}
+      onTouchEnd={onTouchEnd}
+      className="min-h-screen bg-bg px-4 pt-[max(1rem,env(safe-area-inset-top))]"
+    >
+      {(pull > 0 || refreshing) && (
+        <div
+          style={{ height: refreshing ? 36 : Math.round(pull / 2) }}
+          className="flex items-center justify-center overflow-hidden text-xs text-fg/50 transition-[height]"
+        >
+          {refreshing
+            ? 'Actualisation…'
+            : pull >= PULL_THRESHOLD
+              ? 'Relâche pour actualiser'
+              : 'Tire pour actualiser'}
+        </div>
+      )}
       <h1 className="py-4 text-2xl font-semibold text-fg">Actu</h1>
 
       <div className="no-scrollbar -mx-4 mb-2 flex gap-2 overflow-x-auto px-4 pb-2">
@@ -99,7 +140,7 @@ export default function News() {
         <div className="rounded-2xl border border-white/5 bg-card p-6 text-center">
           <p className="text-sm text-fg/60">Pas d'actu pour le moment.</p>
           <button
-            onClick={fetchNews}
+            onClick={() => load(false)}
             className="mt-4 rounded-full bg-accent px-6 py-3 text-sm font-medium text-fg"
           >
             Rafraîchir
