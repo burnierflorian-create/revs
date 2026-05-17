@@ -10,6 +10,7 @@ import Events from './pages/Events'
 import NewEvent from './pages/NewEvent'
 import Profile from './pages/Profile'
 import Premium from './pages/Premium'
+import Onboarding from './components/Onboarding'
 
 export default function App() {
   const { session, loading } = useAuth()
@@ -43,6 +44,7 @@ export default function App() {
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      {session && <Onboarding />}
     </>
   )
 }
