@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowRight, Car, Settings } from 'lucide-react'
+import SettingsMenu from '../components/SettingsMenu'
 import { supabase } from '../lib/supabase'
 import { timeAgo, type Spot } from '../lib/spots'
 import { formatEventDate, type CarEvent } from '../lib/events'
@@ -22,6 +23,7 @@ export default function Home() {
   const [rank, setRank] = useState<number | null>(null)
   const [recent, setRecent] = useState<Spot[]>([])
   const [nextEvent, setNextEvent] = useState<CarEvent | null>(null)
+  const [settingsOpen, setSettingsOpen] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -134,12 +136,18 @@ export default function Home() {
           </span>
         </div>
         <button
+          onClick={() => setSettingsOpen(true)}
           aria-label="Réglages"
           className="text-fg/40 transition-colors hover:text-fg"
         >
           <Settings className="h-6 w-6" />
         </button>
       </header>
+
+      <SettingsMenu
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+      />
 
       <div className="space-y-8 pb-8">
         {/* SECTION 2 — CTA Spotter */}
