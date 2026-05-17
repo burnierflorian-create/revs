@@ -1,37 +1,56 @@
-// Applies supabase/fix-spots-rls.sql to the live database.
+// Applies a SQL migration to the live Supabase database.
 //
-// DDL (CREATE POLICY) cannot go through the PostgREST data API, so this
-// uses the Supabase Management API SQL endpoint. It needs a token with
-// DDL rights in SUPABASE_DB_TOKEN (a Supabase personal access token,
-// "sbp_..."), falling back to SUPABASE_SERVICE_ROLE_KEY if that is what
-// you have. Reads credentials from .env.local — never prints them.
+//   node scripts/apply-rls.mjs [path-to.sql]   (default: supabase/fix-spots-rls.sql)
+//
+// DDL (CREATE/DROP POLICY) CANNOT go through the PostgREST data API, and
+// the Supabase Management API rejects the project's service_role JWT.
+// So this needs a Supabase **personal access token** ("sbp_...") in
+// .env.local as SUPABASE_ACCESS_TOKEN (or SUPABASE_DB_TOKEN). That one
+// token then lets every future migration run from code — no dashboard.
+//
+// Credentials are read from .env.local by safe regex parsing — the file
+// is never executed and secrets are never printed.
 
 import { readFileSync } from 'node:fs'
 
 function loadEnv(path) {
   const out = {}
-  for (const line of readFileSync(path, 'utf8').split('\n')) {
-    const m = line.match(/^([A-Z0-9_]+)=(.*)$/)
-    if (m) out[m[1]] = m[2].replace(/^["']|["']$/g, '')
+  let txt = ''
+  try {
+    txt = readFileSync(path, 'utf8')
+  } catch {
+    return out
+  }
+  for (const line of txt.split('\n')) {
+    const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)$/)
+    if (m) out[m[1]] = m[2].trim().replace(/^["']|["']$/g, '')
   }
   return out
 }
 
 const env = loadEnv(new URL('../.env.local', import.meta.url))
-const sql = readFileSync(
-  new URL('../supabase/fix-spots-rls.sql', import.meta.url),
-  'utf8',
-)
+const sqlPath = process.argv[2] || 'supabase/fix-spots-rls.sql'
+const sql = readFileSync(new URL(`../${sqlPath}`, import.meta.url), 'utf8')
 
 const url = env.VITE_SUPABASE_URL
-const ref = url && new URL(url).hostname.split('.')[0]
-const token = env.SUPABASE_DB_TOKEN || env.SUPABASE_SERVICE_ROLE_KEY
+const ref = url ? new URL(url).hostname.split('.')[0] : null
+const token = env.SUPABASE_ACCESS_TOKEN || env.SUPABASE_DB_TOKEN
 
-if (!ref || !token) {
-  console.error('Missing VITE_SUPABASE_URL or a DB token in .env.local')
+if (!ref) {
+  console.error('Missing VITE_SUPABASE_URL in .env.local')
+  process.exit(1)
+}
+if (!token) {
+  console.error(
+    'No DDL token found. Add a Supabase personal access token to ' +
+      '.env.local as SUPABASE_ACCESS_TOKEN=sbp_xxx (Supabase → Account ' +
+      '→ Access Tokens). The service_role key cannot run DDL — this is ' +
+      'a one-time setup; afterwards every migration applies from code.',
+  )
   process.exit(1)
 }
 
+console.log(`Applying ${sqlPath} to project ${ref} …`)
 const res = await fetch(
   `https://api.supabase.com/v1/projects/${ref}/database/query`,
   {
@@ -46,5 +65,5 @@ const res = await fetch(
 
 const body = await res.text()
 console.log(`status ${res.status}`)
-console.log(body.slice(0, 600))
+console.log(body.slice(0, 800))
 process.exit(res.ok ? 0 : 2)
