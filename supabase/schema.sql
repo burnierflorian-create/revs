@@ -178,6 +178,14 @@ create table if not exists public.news (
 
 create index if not exists news_published_at_idx on public.news (published_at desc);
 
+-- Allowed categories must match the Actu filters (F1 / Supercar /
+-- Hypercar / Events). Drop any prior restrictive check, then re-add the
+-- current set so re-running this file upgrades existing databases.
+alter table public.news drop constraint if exists news_category_check;
+alter table public.news
+  add constraint news_category_check
+  check (category in ('F1', 'Supercar', 'Hypercar', 'Events', 'Auto'));
+
 alter table public.news enable row level security;
 
 -- News is public content: readable by everyone (anon + authenticated).
