@@ -7,7 +7,11 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 // 2026-06-15); using its current drop-in replacement.
 const MODEL = 'claude-sonnet-4-6'
 
+// `category` is only a fallback hint — Claude reclassifies every
+// article into exactly F1 | Supercar | Hypercar (strict separation),
+// so an F1 story from a generalist car feed still lands in F1.
 const FEEDS: { url: string; source: string; category: string }[] = [
+  // — F1 / Motorsport —
   {
     url: 'https://www.formula1.com/content/fom-website/en/latest/all.xml',
     source: 'Formula 1',
@@ -18,6 +22,7 @@ const FEEDS: { url: string; source: string; category: string }[] = [
     source: 'Motorsport',
     category: 'F1',
   },
+  // — Road cars: marques & magazines —
   {
     url: 'https://www.autocar.co.uk/rss/cars/supercar',
     source: 'Autocar',
@@ -29,9 +34,32 @@ const FEEDS: { url: string; source: string; category: string }[] = [
     category: 'Hypercar',
   },
   {
-    url: 'https://www.gtplanet.net/feed/',
-    source: 'GTPlanet',
-    category: 'Events',
+    url: 'https://www.ferrari.com/en-EN/rss/news',
+    source: 'Ferrari',
+    category: 'Hypercar',
+  },
+  { url: 'https://www.lamborghini.com/rss', source: 'Lamborghini', category: 'Hypercar' },
+  { url: 'https://www.porsche.com/rss', source: 'Porsche', category: 'Supercar' },
+  {
+    url: 'https://www.autocar.co.uk/rss/cars',
+    source: 'Autocar',
+    category: 'Supercar',
+  },
+  {
+    url: 'https://www.topgear.com/car-news/feed',
+    source: 'Top Gear',
+    category: 'Supercar',
+  },
+  {
+    url: 'https://www.caranddriver.com/rss/all.xml',
+    source: 'Car and Driver',
+    category: 'Supercar',
+  },
+  { url: 'https://jalopnik.com/rss', source: 'Jalopnik', category: 'Supercar' },
+  {
+    url: 'https://www.motortrend.com/feeds/all/',
+    source: 'MotorTrend',
+    category: 'Supercar',
   },
 ]
 
@@ -60,6 +88,12 @@ PERTINENCE — mets "relevant" à true UNIQUEMENT si l'article est DIRECTEMENT e
 - événements automobiles (salons, meetings, track days, rassemblements, enchères de voitures)
 
 Mets "relevant" à false pour TOUT LE RESTE, même si une voiture est citée en passant : avions, bateaux/yachts, motos, vélos, trains, immobilier, crypto/bourse/finance, jeux vidéo, hardware/tech grand public, politique, people/célébrités, sport non automobile, SUV/utilitaires familiaux sans dimension sportive. Dans le moindre doute → false.
+
+CATÉGORIE — règle STRICTE, choisis exactement UNE valeur pour "category" :
+- "F1" → l'article parle de Formule 1 ou de motorsport (Grand Prix, écurie, pilote, qualif, circuit, championnat, résultats). AUCUNE voiture de route ici.
+- "Supercar" → voiture de route sportive / grande marque (Porsche, BMW M, AMG, essais, nouveautés, reviews).
+- "Hypercar" → voiture de route d'exception, ultra limitée ou hyper-performante (Ferrari/Lamborghini/Bugatti/Koenigsegg/McLaren halo, hypercars).
+Ne JAMAIS mélanger F1 et voiture de route. Si c'est F1/Motorsport → "F1" obligatoirement, jamais Supercar/Hypercar. Si c'est une voiture de route → "Supercar" ou "Hypercar", jamais "F1".
 
 TITRE — "title" : traduis le titre en français si nécessaire (s'il est déjà en français, garde-le tel quel). Garde les noms propres inchangés (pilotes, écuries, marques, modèles, circuits). Concis, sans guillemets ajoutés, sans point final.
 
@@ -95,21 +129,87 @@ function stripHtml(html: string): string {
     .trim()
 }
 
-function pickImage(item: Record<string, unknown>): string | null {
-  const enc = item.enclosure as Record<string, string> | undefined
-  if (enc?.['@_url'] && (enc['@_type'] ?? '').startsWith('image'))
-    return enc['@_url']
-  const norm = (x: unknown): string | null => {
-    const node = Array.isArray(x) ? x[0] : x
-    const u = (node as Record<string, string> | undefined)?.['@_url']
-    return u || null
+// High-quality Unsplash fallbacks (>=1200px) per category, used when
+// the RSS image is missing or known to be < 400px wide.
+const CATEGORY_IMG: Record<string, string> = {
+  F1: 'https://images.unsplash.com/photo-1752959805242-0a7799902ae4?w=1280&q=80',
+  Supercar:
+    'https://images.unsplash.com/photo-1541348263662-e068662d82af?w=1280&q=80',
+  Hypercar:
+    'https://images.unsplash.com/photo-1567808291548-fc3ee04dbcf0?w=1280&q=80',
+  Events:
+    'https://images.unsplash.com/photo-1617060219602-8cbf8f1eff8d?w=1280&q=80',
+}
+function fallbackImg(category: string): string {
+  return CATEGORY_IMG[category] ?? CATEGORY_IMG.Supercar
+}
+
+// Collect every image candidate with its known width (0 = unknown),
+// from enclosure / media:content / media:thumbnail / media:group /
+// inline <img width> / og:image.
+function imageCandidates(
+  item: Record<string, unknown>,
+): { url: string; w: number }[] {
+  const out: { url: string; w: number }[] = []
+  const push = (u: unknown, w: unknown) => {
+    if (typeof u === 'string' && /^https?:\/\//i.test(u))
+      out.push({ url: u, w: Number(w) || 0 })
   }
-  return (
-    norm(item['media:content']) ||
-    norm(item['media:thumbnail']) ||
-    (asText(item.description).match(/<img[^>]+src=["']([^"']+)["']/i)?.[1] ??
-      null)
-  )
+  const arr = (x: unknown): unknown[] =>
+    x == null ? [] : Array.isArray(x) ? x : [x]
+
+  for (const e of arr(item.enclosure)) {
+    const o = e as Record<string, string>
+    if (
+      (o['@_type'] ?? '').startsWith('image') ||
+      /\.(jpe?g|png|webp)/i.test(o['@_url'] ?? '')
+    )
+      push(o['@_url'], o['@_width'])
+  }
+  for (const m of arr(item['media:content'])) {
+    const o = m as Record<string, string>
+    if (
+      o['@_medium'] === 'image' ||
+      /image/i.test(o['@_type'] ?? '') ||
+      /\.(jpe?g|png|webp)/i.test(o['@_url'] ?? '')
+    )
+      push(o['@_url'], o['@_width'])
+  }
+  for (const t of arr(item['media:thumbnail'])) {
+    const o = t as Record<string, string>
+    push(o['@_url'], o['@_width'])
+  }
+  const mg = item['media:group'] as Record<string, unknown> | undefined
+  if (mg)
+    for (const m of arr(mg['media:content'])) {
+      const o = m as Record<string, string>
+      push(o['@_url'], o['@_width'])
+    }
+  const html =
+    asText(item['content:encoded']) || asText(item.description) || ''
+  const imgTag = html.match(/<img[^>]+>/i)?.[0]
+  if (imgTag) {
+    push(
+      imgTag.match(/src=["']([^"']+)["']/i)?.[1],
+      imgTag.match(/width=["']?(\d+)/i)?.[1],
+    )
+  }
+  push(html.match(/og:image["'][^>]*content=["']([^"']+)["']/i)?.[1], 0)
+  return out
+}
+
+// Best real image, or null if none acceptable (caller then uses a
+// high-quality category fallback). Prefer the largest >=400px image;
+// else an unknown-size one; never a known < 400px image.
+function pickBestImage(item: Record<string, unknown>): string | null {
+  const cands = imageCandidates(item)
+  if (cands.length === 0) return null
+  const big = cands
+    .filter((c) => c.w >= 400)
+    .sort((a, b) => b.w - a.w)[0]
+  if (big) return big.url
+  const unknown = cands.find((c) => c.w === 0)
+  return unknown ? unknown.url : null
 }
 
 // Near-duplicate detection: normalize then Dice coefficient on
@@ -161,14 +261,26 @@ function stripMarkdown(s: string): string {
     .trim()
 }
 
+const CATEGORIES = ['F1', 'Supercar', 'Hypercar'] as const
+type NewsCategory = (typeof CATEGORIES)[number]
+
+function normCategory(v: unknown, fallback: string): NewsCategory {
+  const s = String(v ?? '')
+  if ((CATEGORIES as readonly string[]).includes(s)) return s as NewsCategory
+  if ((CATEGORIES as readonly string[]).includes(fallback))
+    return fallback as NewsCategory
+  return 'Supercar'
+}
+
 const SUMMARY_SCHEMA = {
   type: 'object',
   properties: {
     relevant: { type: 'boolean' },
+    category: { type: 'string', enum: ['F1', 'Supercar', 'Hypercar'] },
     title: { type: 'string' },
     summary: { type: 'string' },
   },
-  required: ['relevant', 'title', 'summary'],
+  required: ['relevant', 'category', 'title', 'summary'],
   additionalProperties: false,
 }
 
@@ -176,11 +288,18 @@ async function summarize(
   client: Anthropic,
   title: string,
   description: string,
-): Promise<{ relevant: boolean; title: string; summary: string }> {
+  feedCategory: string,
+): Promise<{
+  relevant: boolean
+  category: NewsCategory
+  title: string
+  summary: string
+}> {
   // Fail open on infra/parse errors: keep the (curated, on-topic) feed
   // content rather than dropping it (original title kept untranslated).
   const fallback = {
     relevant: true,
+    category: normCategory(feedCategory, 'Supercar'),
     title,
     summary: stripMarkdown(description).slice(0, 300),
   }
@@ -206,15 +325,18 @@ async function summarize(
     if (!text) return fallback
     const parsed = JSON.parse(text) as {
       relevant?: boolean
+      category?: string
       title?: string
       summary?: string
     }
+    const category = normCategory(parsed.category, feedCategory)
     const frTitle = stripMarkdown(parsed.title ?? '').trim() || title
     const summary = stripMarkdown(parsed.summary ?? '')
     if (parsed.relevant === false)
-      return { relevant: false, title: frTitle, summary: '' }
+      return { relevant: false, category, title: frTitle, summary: '' }
     return {
       relevant: true,
+      category,
       title: frTitle,
       summary: summary || fallback.summary,
     }
@@ -356,7 +478,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             source: feed.source,
             category: feed.category,
             url: link,
-            image_url: pickImage(item),
+            image_url: pickBestImage(item),
             published_at:
               publishedAt && !isNaN(publishedAt.getTime())
                 ? publishedAt.toISOString()
@@ -384,7 +506,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const summarized = await Promise.all(
     candidates.map(async (c) => ({
       c,
-      ...(await summarize(anthropic, c.title, c.description)),
+      ...(await summarize(anthropic, c.title, c.description, c.category)),
     })),
   )
 
@@ -401,7 +523,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     published_at: string | null
     expires_at: string
   }[] = []
-  for (const { c, relevant, title, summary } of summarized) {
+  for (const { c, relevant, category, title, summary } of summarized) {
     if (!relevant) continue
     const isDup = seenTitles.some(
       (t) => titleSimilarity(t, title) >= DUP_THRESHOLD,
@@ -417,9 +539,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       title,
       summary,
       source: c.source,
-      category: c.category,
+      // Claude's strict classification, not the feed hint.
+      category,
       url: c.url,
-      image_url: c.image_url,
+      // Real RSS image if good enough, else a high-res category image.
+      image_url: c.image_url ?? fallbackImg(category),
       published_at: c.published_at,
       expires_at: new Date(
         base.getTime() + 24 * 60 * 60 * 1000,
