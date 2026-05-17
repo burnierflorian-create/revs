@@ -12,7 +12,7 @@
 
     <!-- Standard PWA -->
     <meta name="mobile-web-app-capable" content="yes" />
-    <meta name="theme-color" content="#D40000" />
+    <meta name="theme-color" content="#E63946" />
 
     <!-- iOS -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -41,6 +41,59 @@
     />
 
     <title>revs</title>
+
+    <!-- Self-heal: if a hashed asset 404s (stale service worker serving an
+         old index.html after a deploy), unregister the SW, clear caches and
+         reload once so the app can never get permanently bricked. -->
+    <script>
+      (function () {
+        window.addEventListener(
+          'error',
+          function (e) {
+            var t = e && e.target
+            if (
+              !t ||
+              t.tagName !== 'SCRIPT' ||
+              !t.src ||
+              t.src.indexOf('/assets/') === -1
+            )
+              return
+            if (sessionStorage.getItem('revs_recovered')) return
+            sessionStorage.setItem('revs_recovered', '1')
+            Promise.resolve()
+              .then(function () {
+                if ('serviceWorker' in navigator)
+                  return navigator.serviceWorker
+                    .getRegistrations()
+                    .then(function (rs) {
+                      return Promise.all(
+                        rs.map(function (r) {
+                          return r.unregister()
+                        }),
+                      )
+                    })
+              })
+              .then(function () {
+                if (window.caches)
+                  return caches.keys().then(function (ks) {
+                    return Promise.all(
+                      ks.map(function (k) {
+                        return caches.delete(k)
+                      }),
+                    )
+                  })
+              })
+              .then(function () {
+                location.reload()
+              })
+              .catch(function () {
+                location.reload()
+              })
+          },
+          true,
+        )
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -15,8 +15,19 @@ export default defineConfig({
         skipWaiting: true,
         clientsClaim: true,
         cleanupOutdatedCaches: true,
-        navigateFallback: 'index.html',
+        // No navigateFallback: serving the *precached* index.html after a
+        // deploy points at deleted hashed JS and bricks the app. Fetch the
+        // document network-first so asset hashes always match the deploy.
         runtimeCaching: [
+          {
+            urlPattern: ({ request }) => request.mode === 'navigate',
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'html',
+              networkTimeoutSeconds: 3,
+              expiration: { maxEntries: 10 },
+            },
+          },
           {
             urlPattern: /^https:\/\/api\.mapbox\.com\//,
             handler: 'NetworkFirst',
@@ -39,7 +50,7 @@ export default defineConfig({
         name: 'revs',
         short_name: 'revs',
         description: 'Spotte les supercars autour de toi',
-        theme_color: '#D40000',
+        theme_color: '#E63946',
         background_color: '#0A0A0A',
         display: 'standalone',
         orientation: 'portrait',
