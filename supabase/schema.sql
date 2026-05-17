@@ -180,9 +180,11 @@ create index if not exists news_published_at_idx on public.news (published_at de
 
 alter table public.news enable row level security;
 
--- Readable by the app (authenticated). Inserts are done only by the cron
--- with the service-role key, which bypasses RLS — no write policy needed.
-create policy "news readable by authenticated users"
+-- News is public content: readable by everyone (anon + authenticated).
+-- Inserts are done only by the cron with the service-role key, which
+-- bypasses RLS — no write policy needed.
+drop policy if exists "news readable by authenticated users" on public.news;
+drop policy if exists "news readable by everyone" on public.news;
+create policy "news readable by everyone"
   on public.news for select
-  to authenticated
   using (true);

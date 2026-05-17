@@ -22,11 +22,12 @@ export default function News() {
 
   const fetchNews = useCallback(async () => {
     setItems(null)
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('news')
       .select('*')
       .order('published_at', { ascending: false, nullsFirst: false })
       .limit(50)
+    if (error) console.error('news fetch failed:', error)
     setItems((data ?? []) as NewsItem[])
   }, [])
 
