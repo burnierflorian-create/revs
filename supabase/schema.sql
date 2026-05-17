@@ -196,3 +196,113 @@ drop policy if exists "news readable by everyone" on public.news;
 create policy "news readable by everyone"
   on public.news for select
   using (true);
+
+-- 9. XP / gamification -------------------------------------------------------
+create table if not exists public.xp_transactions (
+  id         uuid primary key default gen_random_uuid(),
+  user_id    uuid not null references auth.users (id) on delete cascade,
+  amount     integer not null,
+  reason     text not null,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists xp_user_idx on public.xp_transactions (user_id);
+
+alter table public.xp_transactions enable row level security;
+
+-- Readable by everyone (the leaderboard aggregates across users). Writes
+-- happen only via the SECURITY DEFINER triggers below, so no write policy.
+drop policy if exists "xp readable" on public.xp_transactions;
+create policy "xp readable" on public.xp_transactions for select using (true);
+
+-- Award functions run as definer so they can write xp_transactions
+-- regardless of who triggered the row (e.g. a like on someone else's spot).
+create or replace function public.award_xp_spot()
+  returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  insert into public.xp_transactions (user_id, amount, reason)
+  values (new.user_id, 10, 'spot');
+  return new;
+end; $$;
+
+create or replace function public.award_xp_event()
+  returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  insert into public.xp_transactions (user_id, amount, reason)
+  values (new.organizer_id, 20, 'event');
+  return new;
+end; $$;
+
+create or replace function public.award_xp_like()
+  returns trigger language plpgsql security definer set search_path = public as $$
+declare owner uuid;
+begin
+  select user_id into owner from public.spots where id = new.spot_id;
+  if owner is not null then
+    insert into public.xp_transactions (user_id, amount, reason)
+    values (owner, 5, 'like');
+  end if;
+  return new;
+end; $$;
+
+-- Unlike reverses the +5 so XP can't be farmed by like/unlike loops.
+create or replace function public.revoke_xp_like()
+  returns trigger language plpgsql security definer set search_path = public as $$
+declare owner uuid;
+begin
+  select user_id into owner from public.spots where id = old.spot_id;
+  if owner is not null then
+    insert into public.xp_transactions (user_id, amount, reason)
+    values (owner, -5, 'like_removed');
+  end if;
+  return old;
+end; $$;
+
+drop trigger if exists trg_xp_spot on public.spots;
+create trigger trg_xp_spot after insert on public.spots
+  for each row execute function public.award_xp_spot();
+
+drop trigger if exists trg_xp_event on public.events;
+create trigger trg_xp_event after insert on public.events
+  for each row execute function public.award_xp_event();
+
+drop trigger if exists trg_xp_like on public.spot_likes;
+create trigger trg_xp_like after insert on public.spot_likes
+  for each row execute function public.award_xp_like();
+
+drop trigger if exists trg_xp_unlike on public.spot_likes;
+create trigger trg_xp_unlike after delete on public.spot_likes
+  for each row execute function public.revoke_xp_like();
+
+-- Current user's XP total.
+create or replace function public.my_xp()
+  returns integer language sql security definer set search_path = public as $$
+  select coalesce(sum(amount), 0)::int
+  from public.xp_transactions
+  where user_id = auth.uid();
+$$;
+
+-- Leaderboard aggregate (exposes totals, not individual transactions).
+create or replace function public.top_spotters(limit_count int default 10)
+  returns table (user_id uuid, xp int)
+  language sql security definer set search_path = public as $$
+  select user_id, coalesce(sum(amount), 0)::int as xp
+  from public.xp_transactions
+  group by user_id
+  order by xp desc
+  limit limit_count;
+$$;
+
+-- One-time backfill for data created before the triggers existed. Guarded
+-- so re-running this file does not double-count.
+insert into public.xp_transactions (user_id, amount, reason)
+select user_id, 10, 'spot' from public.spots
+  where not exists (select 1 from public.xp_transactions)
+union all
+select organizer_id, 20, 'event' from public.events
+  where not exists (select 1 from public.xp_transactions)
+union all
+select s.user_id, 5, 'like'
+  from public.spot_likes l
+  join public.spots s on s.id = l.spot_id
+  where not exists (select 1 from public.xp_transactions);

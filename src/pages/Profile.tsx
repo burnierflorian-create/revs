@@ -3,17 +3,10 @@ import { useNavigate } from 'react-router-dom'
 import { Car, Warehouse } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { categoryLabel, timeAgo, type Spot } from '../lib/spots'
+import { xpLevel } from '../lib/xp'
 import { Skeleton } from '../components/Skeleton'
 
-type Tier = { label: string; emoji: string }
-
-function tierFor(n: number): Tier {
-  if (n >= 100) return { label: 'Légende', emoji: '👑' }
-  if (n >= 50) return { label: 'Élite', emoji: '💎' }
-  if (n >= 20) return { label: 'Expert', emoji: '🔥' }
-  if (n >= 5) return { label: 'Spotter', emoji: '⭐' }
-  return { label: 'Débutant', emoji: '🔰' }
-}
+type TopRow = { user_id: string; xp: number }
 
 function memberSince(iso: string | undefined): string {
   if (!iso) return ''
@@ -28,12 +21,16 @@ export default function Profile() {
   const navigate = useNavigate()
 
   const [loading, setLoading] = useState(true)
+  const [userId, setUserId] = useState<string | null>(null)
   const [pseudo, setPseudo] = useState('Spotter')
   const [joined, setJoined] = useState('')
   const [spots, setSpots] = useState<Spot[]>([])
   const [uniqueBrands, setUniqueBrands] = useState(0)
   const [rank, setRank] = useState<number | null>(null)
   const [hasEvent, setHasEvent] = useState(false)
+  const [xp, setXp] = useState(0)
+  const [top, setTop] = useState<TopRow[]>([])
+  const [animPct, setAnimPct] = useState(0)
 
   useEffect(() => {
     let active = true
@@ -43,18 +40,21 @@ export default function Profile() {
       } = await supabase.auth.getUser()
       if (!user) return
 
-      const [spotsRes, allUidsRes, eventsRes] = await Promise.all([
-        supabase
-          .from('spots')
-          .select('*')
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false }),
-        supabase.from('spots').select('user_id'),
-        supabase
-          .from('events')
-          .select('id', { count: 'exact', head: true })
-          .eq('organizer_id', user.id),
-      ])
+      const [spotsRes, allUidsRes, eventsRes, xpRes, topRes] =
+        await Promise.all([
+          supabase
+            .from('spots')
+            .select('*')
+            .eq('user_id', user.id)
+            .order('created_at', { ascending: false }),
+          supabase.from('spots').select('user_id'),
+          supabase
+            .from('events')
+            .select('id', { count: 'exact', head: true })
+            .eq('organizer_id', user.id),
+          supabase.rpc('my_xp'),
+          supabase.rpc('top_spotters'),
+        ])
 
       if (!active) return
 
@@ -73,6 +73,7 @@ export default function Profile() {
       }
 
       const email = user.email ?? ''
+      setUserId(user.id)
       setPseudo(email ? email.split('@')[0] || 'Spotter' : 'Spotter')
       setJoined(memberSince(user.created_at))
       setSpots(mySpots)
@@ -81,12 +82,22 @@ export default function Profile() {
       )
       setRank(rk)
       setHasEvent((eventsRes.count ?? 0) > 0)
+      setXp(typeof xpRes.data === 'number' ? xpRes.data : 0)
+      setTop(Array.isArray(topRes.data) ? (topRes.data as TopRow[]) : [])
       setLoading(false)
     })()
     return () => {
       active = false
     }
   }, [])
+
+  const level = xpLevel(xp)
+
+  useEffect(() => {
+    if (loading) return
+    const id = requestAnimationFrame(() => setAnimPct(level.pct))
+    return () => cancelAnimationFrame(id)
+  }, [loading, level.pct])
 
   async function logout() {
     await supabase.auth.signOut()
@@ -102,6 +113,7 @@ export default function Profile() {
             <Skeleton className="mt-4 h-6 w-32 rounded" />
             <Skeleton className="mt-2 h-5 w-40 rounded-full" />
           </div>
+          <Skeleton className="h-24 rounded-xl" />
           <div className="grid grid-cols-3 gap-3">
             {Array.from({ length: 3 }).map((_, i) => (
               <Skeleton key={i} className="h-20 rounded-xl" />
@@ -112,18 +124,12 @@ export default function Profile() {
               <Skeleton key={i} className="h-16 rounded-xl" />
             ))}
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <Skeleton key={i} className="aspect-[4/3] rounded-xl" />
-            ))}
-          </div>
         </div>
       </div>
     )
   }
 
   const total = spots.length
-  const tier = tierFor(total)
   const has = (pred: (s: Spot) => boolean) => spots.some(pred)
   const brandHas = (needle: string) =>
     has((s) => (s.brand ?? '').toLowerCase().includes(needle))
@@ -147,6 +153,9 @@ export default function Profile() {
     },
   ]
 
+  const nameFor = (uid: string) =>
+    uid === userId ? pseudo : `Spotter ${uid.slice(0, 4)}`
+
   return (
     <div className="min-h-screen bg-bg px-4 pt-[max(1rem,env(safe-area-inset-top))] text-fg">
       <div className="space-y-8 pb-8">
@@ -157,21 +166,40 @@ export default function Profile() {
           </div>
           <h1 className="mt-4 text-xl font-bold">{pseudo}</h1>
           <span className="mt-2 inline-block rounded-full bg-accent px-3 py-1 text-xs font-medium">
-            {tier.label} {tier.emoji}
+            {level.name}
           </span>
           {joined && (
             <p className="mt-2 text-sm text-[#888888]">Membre depuis {joined}</p>
           )}
         </header>
 
-        {/* SECTION 2 — Stats */}
+        {/* SECTION 2 — XP / progression */}
+        <section className="rounded-xl bg-card p-4">
+          <div className="flex items-baseline justify-between">
+            <span className="text-sm text-[#888888]">Niveau {level.name}</span>
+            <span className="text-lg font-bold text-fg">{xp} XP</span>
+          </div>
+          <div className="mt-3 h-2.5 w-full overflow-hidden rounded-full bg-white/10">
+            <div
+              className="h-full rounded-full bg-accent transition-[width] duration-1000 ease-out"
+              style={{ width: `${animPct}%` }}
+            />
+          </div>
+          <p className="mt-2 text-xs text-[#888888]">
+            {level.isMax
+              ? 'Niveau maximum atteint 👑'
+              : `Plus que ${level.toNext} XP avant ${level.next}`}
+          </p>
+        </section>
+
+        {/* SECTION 3 — Stats */}
         <section className="grid grid-cols-3 gap-3">
           <Stat value={String(total)} label="Spots" />
           <Stat value={String(uniqueBrands)} label="Marques" />
           <Stat value={rank ? `#${rank}` : '—'} label="Rang global" />
         </section>
 
-        {/* SECTION 3 — Badges */}
+        {/* SECTION 4 — Badges */}
         <section>
           <h2 className="mb-3 text-[18px] font-semibold">Mes badges</h2>
           <div className="grid grid-cols-4 gap-2">
@@ -195,7 +223,54 @@ export default function Profile() {
           </div>
         </section>
 
-        {/* SECTION 4 — Garage */}
+        {/* SECTION 5 — Top spotters */}
+        <section>
+          <h2 className="mb-1 text-[18px] font-semibold">Top spotters</h2>
+          <p className="mb-3 text-xs text-[#888888]">
+            Classement global par XP
+          </p>
+          {top.length === 0 ? (
+            <p className="rounded-xl bg-card px-4 py-6 text-center text-sm text-fg/60">
+              Pas encore de classement — spotte pour gagner de l'XP.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {top.map((r, i) => {
+                const isMe = r.user_id === userId
+                const name = nameFor(r.user_id)
+                return (
+                  <div
+                    key={r.user_id}
+                    className={`flex items-center gap-3 rounded-xl px-3 py-2.5 ${
+                      isMe ? 'bg-accent/15 ring-1 ring-accent' : 'bg-card'
+                    }`}
+                  >
+                    <span className="w-5 text-center text-sm font-bold text-[#888888]">
+                      {i + 1}
+                    </span>
+                    <div className="flex h-9 w-9 flex-none items-center justify-center rounded-full bg-accent text-sm font-bold text-fg">
+                      {name.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium text-fg">
+                        {name}
+                        {isMe && ' (toi)'}
+                      </p>
+                      <p className="text-xs text-[#888888]">
+                        {xpLevel(r.xp).name}
+                      </p>
+                    </div>
+                    <span className="text-sm font-semibold text-accent">
+                      {r.xp} XP
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </section>
+
+        {/* SECTION 6 — Garage */}
         <section>
           <h2 className="mb-3 text-[18px] font-semibold">
             Mon garage ({total} voiture{total > 1 ? 's' : ''})
@@ -248,7 +323,7 @@ export default function Profile() {
           )}
         </section>
 
-        {/* SECTION 5 — Premium + Déconnexion */}
+        {/* SECTION 7 — Premium + Déconnexion */}
         <button
           onClick={() => navigate('/premium')}
           className="w-full rounded-full bg-accent py-3 text-sm font-medium"
