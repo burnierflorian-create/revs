@@ -192,11 +192,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
   }
 
+  let upsertError: string | null = null
   if (rows.length > 0) {
-    await admin
+    const { error } = await admin
       .from('news')
       .upsert(rows, { onConflict: 'url', ignoreDuplicates: true })
+    if (error) {
+      upsertError = `${error.code ?? ''} ${error.message} ${error.details ?? ''} ${error.hint ?? ''}`.trim()
+      console.error('news upsert failed:', error)
+    }
   }
 
-  res.status(200).json({ processed: rows.length, perFeed })
+  const { count: tableTotal, error: countError } = await admin
+    .from('news')
+    .select('*', { count: 'exact', head: true })
+
+  res.status(200).json({
+    processed: rows.length,
+    perFeed,
+    upsertError,
+    tableTotal: tableTotal ?? null,
+    countError: countError ? countError.message : null,
+  })
 }
