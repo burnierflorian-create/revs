@@ -4,6 +4,25 @@ import { Camera, Sparkles, Users } from 'lucide-react'
 
 const STORAGE_KEY = 'revs_onboarded'
 
+// localStorage can throw (private mode, blocked storage, sandboxed
+// context). This runs during render, so it must never crash the app.
+function isOnboarded(): boolean {
+  try {
+    return localStorage.getItem(STORAGE_KEY) === '1'
+  } catch {
+    // Storage unavailable: skip onboarding rather than block the app.
+    return true
+  }
+}
+
+function markOnboarded() {
+  try {
+    localStorage.setItem(STORAGE_KEY, '1')
+  } catch {
+    /* no-op: nothing we can do, just don't crash */
+  }
+}
+
 type IconProps = { className?: string; strokeWidth?: number }
 
 type Slide = {
@@ -32,9 +51,7 @@ const SLIDES: Slide[] = [
 
 export default function Onboarding() {
   const navigate = useNavigate()
-  const [visible, setVisible] = useState(
-    () => localStorage.getItem(STORAGE_KEY) !== '1',
-  )
+  const [visible, setVisible] = useState(() => !isOnboarded())
   const [slide, setSlide] = useState(0)
 
   if (!visible) return null
@@ -43,7 +60,7 @@ export default function Onboarding() {
 
   function next() {
     if (isLast) {
-      localStorage.setItem(STORAGE_KEY, '1')
+      markOnboarded()
       setVisible(false)
       navigate('/map')
       return
