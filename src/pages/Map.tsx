@@ -4,6 +4,7 @@ import mapboxgl from 'mapbox-gl'
 import 'mapbox-gl/dist/mapbox-gl.css'
 import { Car, LocateFixed } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { SkeletonMap } from '../components/Skeleton'
 import {
   categoryLabel,
   escapeHtml,
@@ -83,6 +84,7 @@ export default function MapPage() {
   const [activeFilter, setActiveFilter] = useState<string>('Tous')
   const [toast, setToast] = useState<string | null>(null)
   const [visibleCount, setVisibleCount] = useState(0)
+  const [mapReady, setMapReady] = useState(false)
 
   function flyToUser() {
     if (!mapRef.current || !navigator.geolocation) return
@@ -173,6 +175,7 @@ export default function MapPage() {
 
     map.on('load', async () => {
       map.resize()
+      setMapReady(true)
       flyToUser()
 
       const { data } = await supabase
@@ -209,6 +212,7 @@ export default function MapPage() {
       renderRef.current = null
       map.remove()
       mapRef.current = null
+      setMapReady(false)
     }
   }, [])
 
@@ -227,6 +231,8 @@ export default function MapPage() {
         ref={containerRef}
         style={{ width: '100%', height: '100vh', backgroundColor: '#0A0A0A' }}
       />
+
+      {!mapReady && !error && <SkeletonMap />}
 
       {toast && (
         <div className="absolute left-1/2 top-[max(1rem,env(safe-area-inset-top))] z-20 -translate-x-1/2 rounded-full bg-accent px-5 py-2.5 text-sm font-medium shadow-lg">

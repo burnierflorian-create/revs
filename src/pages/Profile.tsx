@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Car } from 'lucide-react'
+import { Car, Warehouse } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { categoryLabel, timeAgo, type Spot } from '../lib/spots'
+import { Skeleton } from '../components/Skeleton'
 
 type Tier = { label: string; emoji: string }
 
@@ -94,8 +95,29 @@ export default function Profile() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-bg">
-        <div className="text-sm text-fg/40">Chargement…</div>
+      <div className="min-h-screen bg-bg px-4 pt-[max(1rem,env(safe-area-inset-top))]">
+        <div className="space-y-8 pb-8">
+          <div className="flex flex-col items-center pt-6">
+            <Skeleton className="h-20 w-20 rounded-full" />
+            <Skeleton className="mt-4 h-6 w-32 rounded" />
+            <Skeleton className="mt-2 h-5 w-40 rounded-full" />
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <Skeleton key={i} className="h-20 rounded-xl" />
+            ))}
+          </div>
+          <div className="grid grid-cols-4 gap-2">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <Skeleton key={i} className="h-16 rounded-xl" />
+            ))}
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Skeleton key={i} className="aspect-[4/3] rounded-xl" />
+            ))}
+          </div>
+        </div>
       </div>
     )
   }
@@ -180,16 +202,15 @@ export default function Profile() {
           </h2>
           {total === 0 ? (
             <div className="flex flex-col items-center rounded-xl bg-card px-6 py-12 text-center">
-              <Car size={48} color="#444444" strokeWidth={1.5} />
-              <p className="mt-4 font-medium">Ton garage est vide</p>
-              <p className="mt-1 text-sm text-[#888888]">
-                Sois le premier à spotter une voiture !
+              <Warehouse size={48} color="#444444" strokeWidth={1.5} />
+              <p className="mt-4 max-w-[15rem] font-medium">
+                Ton garage est vide, pars chasser ta première supercar
               </p>
               <button
                 onClick={() => navigate('/new-spot')}
                 className="mt-6 rounded-full bg-accent px-6 py-3 text-sm font-medium"
               >
-                Spotter maintenant
+                Spotter
               </button>
             </div>
           ) : (

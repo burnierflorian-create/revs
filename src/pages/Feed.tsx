@@ -9,6 +9,7 @@ import {
   type Spot,
 } from '../lib/spots'
 import EmptyState from '../components/EmptyState'
+import { SkeletonCard } from '../components/Skeleton'
 
 export default function Feed() {
   const navigate = useNavigate()
@@ -38,8 +39,13 @@ export default function Feed() {
 
   if (spots === null) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-bg">
-        <div className="text-sm text-fg/40">Chargement…</div>
+      <div className="min-h-screen bg-bg px-4 pt-[max(1rem,env(safe-area-inset-top))]">
+        <h1 className="py-4 text-2xl font-semibold text-fg">Feed</h1>
+        <div className="divide-y divide-white/5">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <SkeletonCard key={i} />
+          ))}
+        </div>
       </div>
     )
   }
@@ -48,8 +54,7 @@ export default function Feed() {
     return (
       <EmptyState
         icon={Car}
-        title="Aucun spot pour le moment"
-        subtitle="Soyez les premiers à spotter une supercar !"
+        title="Sois le premier à spotter dans ta ville"
         buttonLabel="Spotter maintenant"
         onButton={() => navigate('/new-spot')}
       />

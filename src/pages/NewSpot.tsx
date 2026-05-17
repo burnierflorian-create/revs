@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, Camera, Loader2, MapPin } from 'lucide-react'
+import { ArrowLeft, Camera, MapPin } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import {
   CATEGORIES,
@@ -11,6 +11,7 @@ import {
   type PhotoMeta,
   type SpotCategory,
 } from '../lib/spots'
+import { Skeleton } from '../components/Skeleton'
 
 type Step = 1 | 2 | 3 | 4
 
@@ -322,9 +323,18 @@ export default function NewSpot() {
 
       {/* ÉTAPE 2 — ANALYSE IA */}
       {step === 2 && (
-        <div className="flex min-h-[60vh] flex-col items-center justify-center gap-5">
-          <Loader2 className="h-10 w-10 animate-spin text-accent" />
+        <div className="space-y-6 pb-8">
           <p className="text-sm text-fg/60">Identification de la voiture…</p>
+          <Skeleton className="h-12 w-full rounded-2xl" />
+          <div className="space-y-4">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="space-y-2">
+                <Skeleton className="h-3 w-24 rounded" />
+                <Skeleton className="h-11 w-full rounded-lg" />
+              </div>
+            ))}
+          </div>
+          <Skeleton className="h-14 w-full rounded-full" />
         </div>
       )}
 
@@ -434,9 +444,9 @@ export default function NewSpot() {
               </button>
             </div>
           ) : (
-            <div className="flex items-center gap-3 text-sm text-fg/60">
-              <Loader2 className="h-5 w-5 animate-spin text-accent" />
-              {pubStatus || 'Publication…'}
+            <div className="w-56 space-y-3 text-sm text-fg/60">
+              <p>{pubStatus || 'Publication…'}</p>
+              <Skeleton className="h-2 w-full rounded-full" />
             </div>
           )}
         </div>
