@@ -24,13 +24,8 @@ const FEEDS: { url: string; source: string; category: string }[] = [
     category: 'Supercar',
   },
   {
-    url: 'https://www.topgear.com/rss.xml',
-    source: 'Top Gear',
-    category: 'Supercar',
-  },
-  {
-    url: 'https://www.evo.co.uk/rss',
-    source: 'evo',
+    url: 'https://www.supercars.net/blog/feed/',
+    source: 'Supercars.net',
     category: 'Supercar',
   },
   {
@@ -39,6 +34,14 @@ const FEEDS: { url: string; source: string; category: string }[] = [
     category: 'Auto',
   },
 ]
+
+// Several publishers block non-browser User-Agents (403/Access Denied).
+// A realistic browser UA gets through (verified for supercars.net).
+const FETCH_HEADERS = {
+  'User-Agent':
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36',
+  Accept: 'application/rss+xml, application/xml, text/xml, */*',
+}
 
 const PER_FEED = 3
 const MAX_TOTAL = 15
@@ -169,9 +172,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (rows.length >= MAX_TOTAL) break
     perFeed[feed.source] = 0
     try {
-      const resp = await fetch(feed.url, {
-        headers: { 'User-Agent': 'revs-news-bot/1.0 (+https://revs.app)' },
-      })
+      const resp = await fetch(feed.url, { headers: FETCH_HEADERS })
       if (!resp.ok) continue
       const xml = await resp.text()
       const parsed = parser.parse(xml)
