@@ -6,7 +6,6 @@ import Home from './pages/Home'
 import MapPage from './pages/Map'
 import Feed from './pages/Feed'
 import NewSpot from './pages/NewSpot'
-import Events from './pages/Events'
 import NewEvent from './pages/NewEvent'
 import Profile from './pages/Profile'
 import Premium from './pages/Premium'
@@ -14,7 +13,8 @@ import Settings from './pages/Settings'
 import Privacy from './pages/Privacy'
 import Legal from './pages/Legal'
 import SpotDetail from './pages/SpotDetail'
-import News from './pages/News'
+import Discover from './pages/Discover'
+import GrandPrixDetail from './pages/GrandPrixDetail'
 import Onboarding from './components/Onboarding'
 
 export default function App() {
@@ -43,8 +43,10 @@ export default function App() {
           <Route path="/feed" element={<Feed />} />
           <Route path="/spot/:id" element={<SpotDetail />} />
           <Route path="/new-spot" element={<NewSpot />} />
-          <Route path="/actu" element={<News />} />
-          <Route path="/events" element={<Events />} />
+          <Route path="/discover" element={<Discover />} />
+          <Route path="/actu" element={<Discover initial="actu" />} />
+          <Route path="/events" element={<Discover initial="events" />} />
+          <Route path="/f1/:round" element={<GrandPrixDetail />} />
           <Route path="/new-event" element={<NewEvent />} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/settings" element={<Settings />} />

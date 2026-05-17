@@ -98,7 +98,7 @@ export default function News() {
       onTouchStart={onTouchStart}
       onTouchMove={onTouchMove}
       onTouchEnd={onTouchEnd}
-      className="min-h-screen bg-bg px-4 pt-[max(1rem,env(safe-area-inset-top))]"
+      className="bg-bg px-4"
     >
       {(pull > 0 || refreshing) && (
         <div
@@ -112,9 +112,7 @@ export default function News() {
               : 'Tire pour actualiser'}
         </div>
       )}
-      <h1 className="py-4 text-2xl font-semibold text-fg">Actu</h1>
-
-      <div className="no-scrollbar -mx-4 mb-2 flex gap-2 overflow-x-auto px-4 pb-2">
+      <div className="no-scrollbar -mx-4 mb-2 mt-1 flex gap-2 overflow-x-auto px-4 pb-2">
         {FILTERS.map((f) => (
           <button
             key={f}

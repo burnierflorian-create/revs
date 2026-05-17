@@ -1,6 +1,6 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, Lock } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { EVENT_TYPES, type EventType } from '../lib/events'
 
@@ -14,6 +14,31 @@ export default function NewEvent() {
   const [description, setDescription] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [allowed, setAllowed] = useState<boolean | null>(null)
+
+  useEffect(() => {
+    let active = true
+    ;(async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (!user) {
+        if (active) setAllowed(false)
+        return
+      }
+      const { data } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('user_id', user.id)
+        .maybeSingle()
+      if (!active) return
+      const role = (data?.role as string | undefined) ?? 'user'
+      setAllowed(role === 'organizer' || role === 'admin')
+    })()
+    return () => {
+      active = false
+    }
+  }, [])
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault()
@@ -40,6 +65,42 @@ export default function NewEvent() {
       setError(err instanceof Error ? err.message : 'Échec de la publication')
       setBusy(false)
     }
+  }
+
+  if (allowed === false) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-5 bg-bg px-8 text-center text-fg">
+        <div className="flex h-14 w-14 items-center justify-center rounded-full bg-accent/15">
+          <Lock className="h-6 w-6 text-accent" />
+        </div>
+        <p className="max-w-sm text-sm leading-relaxed text-fg/70">
+          La création d'événements est réservée aux organisateurs officiels.
+          Fais une demande via les paramètres.
+        </p>
+        <div className="flex gap-3">
+          <button
+            onClick={() => navigate('/events')}
+            className="rounded-full bg-card px-6 py-3 text-sm font-medium text-fg"
+          >
+            Retour
+          </button>
+          <button
+            onClick={() => navigate('/settings')}
+            className="rounded-full bg-accent px-6 py-3 text-sm font-semibold text-fg"
+          >
+            Devenir organisateur
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  if (allowed === null) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-bg text-sm text-fg/40">
+        Chargement…
+      </div>
+    )
   }
 
   return (

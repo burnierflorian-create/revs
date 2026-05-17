@@ -26,8 +26,7 @@ export default function Events() {
   }, [])
 
   return (
-    <div className="min-h-screen bg-bg px-4 pt-[max(1rem,env(safe-area-inset-top))]">
-      <h1 className="py-4 text-2xl font-semibold text-fg">Événements</h1>
+    <div className="bg-bg px-4 pb-4">
 
       {/* SECTION 1 — Calendrier F1 (titre rendu par le composant) */}
       <section>

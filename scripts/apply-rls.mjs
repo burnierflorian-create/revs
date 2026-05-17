@@ -13,28 +13,42 @@
 
 import { readFileSync } from 'node:fs'
 
-function loadEnv(path) {
-  const out = {}
-  let txt = ''
+function readEnvText(path) {
   try {
-    txt = readFileSync(path, 'utf8')
+    // Normalize literal "\n" written by echo/printf into real newlines
+    // so a mangled append still parses.
+    return readFileSync(path, 'utf8').replace(/\\n/g, '\n')
   } catch {
-    return out
+    return ''
   }
-  for (const line of txt.split('\n')) {
-    const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)$/)
-    if (m) out[m[1]] = m[2].trim().replace(/^["']|["']$/g, '')
-  }
-  return out
 }
 
-const env = loadEnv(new URL('../.env.local', import.meta.url))
+// Extract a value tolerantly: the var may have a leading "\n",
+// surrounding quotes/spaces, or be glued after another line.
+function pick(txt, name, valueRe) {
+  const re = new RegExp(`${name}\\s*=\\s*['"]?\\s*(${valueRe})`, 'g')
+  let best = ''
+  for (const m of txt.matchAll(re)) if (m[1].length > best.length) best = m[1]
+  return best
+}
+
+const envText = readEnvText(new URL('../.env.local', import.meta.url))
 const sqlPath = process.argv[2] || 'supabase/fix-spots-rls.sql'
 const sql = readFileSync(new URL(`../${sqlPath}`, import.meta.url), 'utf8')
 
-const url = env.VITE_SUPABASE_URL
+const url =
+  process.env.VITE_SUPABASE_URL ||
+  pick(envText, 'VITE_SUPABASE_URL', 'https://[^\\s\'"]+')
 const ref = url ? new URL(url).hostname.split('.')[0] : null
-const token = env.SUPABASE_ACCESS_TOKEN || env.SUPABASE_DB_TOKEN
+// Prefer an inline env var (so you can run it without editing files):
+//   SUPABASE_ACCESS_TOKEN=sbp_xxx node scripts/apply-rls.mjs
+// From the file, take the LONGEST sbp_ match so a leftover truncated
+// fragment never shadows the real token.
+const token =
+  process.env.SUPABASE_ACCESS_TOKEN ||
+  process.env.SUPABASE_DB_TOKEN ||
+  pick(envText, 'SUPABASE_ACCESS_TOKEN', 'sbp_[A-Za-z0-9_]+') ||
+  pick(envText, 'SUPABASE_DB_TOKEN', 'sbp_[A-Za-z0-9_]+')
 
 if (!ref) {
   console.error('Missing VITE_SUPABASE_URL in .env.local')

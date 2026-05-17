@@ -62,15 +62,25 @@ drop policy if exists "users modify their own events"              on public.eve
 drop policy if exists "users delete their own events"              on public.events;
 drop policy if exists "events public read"                         on public.events;
 drop policy if exists "events insert own"                          on public.events;
+drop policy if exists "events insert organizer"                    on public.events;
 drop policy if exists "events update own"                          on public.events;
 drop policy if exists "events delete own"                          on public.events;
 
 create policy "events public read"
   on public.events for select using (true);
 
-create policy "events insert own"
+-- Event creation is gated to organizers/admins (see 0002-organizer.sql).
+-- Keep this in sync so re-running this file never re-opens it.
+create policy "events insert organizer"
   on public.events for insert to authenticated
-  with check (auth.uid() = organizer_id);
+  with check (
+    auth.uid() = organizer_id
+    and exists (
+      select 1 from public.profiles p
+      where p.user_id = auth.uid()
+        and p.role in ('organizer', 'admin')
+    )
+  );
 
 create policy "events update own"
   on public.events for update to authenticated

@@ -99,6 +99,11 @@ export default function Settings() {
   const [msg, setMsg] = useState<string | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [role, setRole] = useState<string>('user')
+  const [orgOpen, setOrgOpen] = useState(false)
+  const [orgRaison, setOrgRaison] = useState('')
+  const [orgSending, setOrgSending] = useState(false)
+  const [orgSent, setOrgSent] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -111,7 +116,7 @@ export default function Settings() {
       setEmail(user.email ?? '')
       const { data } = await supabase
         .from('profiles')
-        .select('pseudo, ville, avatar, is_public')
+        .select('pseudo, ville, avatar, is_public, role')
         .eq('user_id', user.id)
         .maybeSingle()
       if (!active) return
@@ -120,7 +125,14 @@ export default function Settings() {
         setVille(data.ville ?? '')
         setAvatarUrl(data.avatar ?? null)
         setIsPublic(data.is_public ?? true)
+        setRole((data.role as string | undefined) ?? 'user')
       }
+      const { data: existingReq } = await supabase
+        .from('organizer_requests')
+        .select('id')
+        .eq('user_id', user.id)
+        .limit(1)
+      if (active && existingReq && existingReq.length > 0) setOrgSent(true)
       try {
         setNotif(
           localStorage.getItem('revs_notifications') === '1' &&
@@ -356,6 +368,28 @@ export default function Settings() {
     window.location.reload()
   }
 
+  async function submitOrganizerRequest() {
+    if (!userId || orgSending) return
+    setErr(null)
+    setMsg(null)
+    setOrgSending(true)
+    const { error } = await supabase.from('organizer_requests').insert({
+      user_id: userId,
+      pseudo: pseudo.trim() || null,
+      ville: ville.trim() || null,
+      raison: orgRaison.trim() || null,
+    })
+    setOrgSending(false)
+    if (error) {
+      setErr("Échec de l'envoi de la demande. Réessaie plus tard.")
+      return
+    }
+    setOrgSent(true)
+    setOrgOpen(false)
+    setOrgRaison('')
+    setMsg('Demande envoyée — on revient vers toi rapidement.')
+  }
+
   return (
     <div className="min-h-screen bg-bg px-4 pt-[max(1rem,env(safe-area-inset-top))] text-fg">
       <div className="flex items-center gap-4 py-4">
@@ -453,6 +487,56 @@ export default function Settings() {
           <Section title="Mon compte">
             <Row label="Email" right={<span className="text-fg/40">{email}</span>} />
             <Row label="Changer mon mot de passe" onClick={changePassword} />
+          </Section>
+
+          {/* Organisateur */}
+          <Section title="Organisateur">
+            {role === 'organizer' || role === 'admin' ? (
+              <div className="px-4 py-3.5 text-sm text-fg">
+                Tu es organisateur officiel — tu peux créer des événements.
+              </div>
+            ) : orgSent ? (
+              <div className="px-4 py-3.5 text-sm text-fg/60">
+                Demande envoyée. Un admin la validera prochainement.
+              </div>
+            ) : !orgOpen ? (
+              <Row
+                label="Devenir organisateur"
+                onClick={() => setOrgOpen(true)}
+              />
+            ) : (
+              <div className="space-y-3 px-4 py-4">
+                <p className="text-xs text-fg/40">
+                  Explique pourquoi tu veux organiser des événements (club,
+                  marque, association…).
+                </p>
+                <textarea
+                  value={orgRaison}
+                  rows={3}
+                  onChange={(e) => setOrgRaison(e.target.value)}
+                  placeholder="Ta motivation"
+                  className="w-full resize-none rounded-lg bg-white/5 px-3 py-3 text-sm text-fg outline-none focus:ring-1 focus:ring-accent"
+                />
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => {
+                      setOrgOpen(false)
+                      setOrgRaison('')
+                    }}
+                    className="flex-1 rounded-full bg-white/5 py-3 text-sm font-medium text-fg"
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    onClick={submitOrganizerRequest}
+                    disabled={orgSending}
+                    className="flex-1 rounded-full bg-accent py-3 text-sm font-semibold text-fg disabled:opacity-50"
+                  >
+                    {orgSending ? '…' : 'Envoyer la demande'}
+                  </button>
+                </div>
+              </div>
+            )}
           </Section>
 
           {/* Autorisations */}

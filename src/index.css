@@ -52,6 +52,21 @@ h4 {
   -webkit-tap-highlight-color: transparent;
 }
 
+@keyframes discoverFade {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.discover-fade {
+  animation: discoverFade 0.22s ease;
+}
+
 .mapboxgl-popup-content {
   background: var(--color-card);
   color: var(--color-fg);
