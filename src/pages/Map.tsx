@@ -68,6 +68,114 @@ function popupHtml(spot: Spot): string {
     </div>`
 }
 
+type RawLayer = {
+  id: string
+  type: string
+  source?: string
+  'source-layer'?: string
+}
+
+// Sports-car-at-night theming, applied over navigation-night-v1.
+// Layer IDs differ per Mapbox style, so we drive everything off the
+// vector source-layer (water/landuse/road/building) — robust and never
+// fatal (every op is guarded).
+function applyRevsTheme(map: mapboxgl.Map) {
+  try {
+    const layers = (map.getStyle()?.layers ?? []) as unknown as RawLayer[]
+    let roadSource: string | undefined
+    let roadSourceLayer: string | undefined
+    let buildingSource: string | undefined
+    let buildingSourceLayer: string | undefined
+    let firstSymbolId: string | undefined
+
+    for (const l of layers) {
+      const sl = l['source-layer']
+      if (l.type === 'symbol' && !firstSymbolId) firstSymbolId = l.id
+      try {
+        if (l.type === 'fill' && sl === 'water') {
+          map.setPaintProperty(l.id, 'fill-color', '#0a0a1a')
+        } else if (l.type === 'fill' && (sl === 'landuse' || sl === 'park')) {
+          map.setPaintProperty(l.id, 'fill-color', '#0a1a0a')
+        } else if (l.type === 'line' && sl === 'road') {
+          map.setPaintProperty(l.id, 'line-color', '#1a0000')
+          if (l.source) {
+            roadSource = l.source
+            roadSourceLayer = sl
+          }
+        } else if (
+          (l.type === 'fill' || l.type === 'fill-extrusion') &&
+          sl === 'building'
+        ) {
+          if (l.source) {
+            buildingSource = l.source
+            buildingSourceLayer = sl
+          }
+        }
+      } catch {
+        /* layer / property absent in this style */
+      }
+    }
+
+    type AddLayer = Parameters<typeof map.addLayer>[0]
+
+    // Thin red liseré on motorways/trunks, just below the labels.
+    if (roadSource && roadSourceLayer && !map.getLayer('revs-highway')) {
+      map.addLayer(
+        {
+          id: 'revs-highway',
+          type: 'line',
+          source: roadSource,
+          'source-layer': roadSourceLayer,
+          filter: [
+            'match',
+            ['get', 'class'],
+            ['motorway', 'trunk', 'motorway_link', 'trunk_link'],
+            true,
+            false,
+          ],
+          paint: { 'line-color': '#E63946', 'line-width': 0.5 },
+        } as unknown as AddLayer,
+        firstSymbolId,
+      )
+    }
+
+    // 3D buildings for depth.
+    if (!map.getLayer('revs-3d-buildings')) {
+      map.addLayer(
+        {
+          id: 'revs-3d-buildings',
+          type: 'fill-extrusion',
+          source: buildingSource ?? 'composite',
+          'source-layer': buildingSourceLayer ?? 'building',
+          minzoom: 14,
+          paint: {
+            'fill-extrusion-color': '#111111',
+            'fill-extrusion-height': [
+              'interpolate',
+              ['linear'],
+              ['zoom'],
+              14,
+              0,
+              16,
+              ['coalesce', ['get', 'render_height'], ['get', 'height'], 12],
+            ],
+            'fill-extrusion-base': [
+              'coalesce',
+              ['get', 'render_min_height'],
+              ['get', 'min_height'],
+              0,
+            ],
+            'fill-extrusion-opacity': 0.85,
+          },
+        } as unknown as AddLayer,
+        firstSymbolId,
+      )
+    }
+  } catch {
+    /* theming is best-effort — never break the map */
+  }
+}
+
 export default function MapPage() {
   const navigate = useNavigate()
   const location = useLocation()
@@ -166,7 +274,7 @@ export default function MapPage() {
     try {
       map = new mapboxgl.Map({
         container: containerRef.current,
-        style: 'mapbox://styles/mapbox/dark-v11',
+        style: 'mapbox://styles/mapbox/navigation-night-v1',
         center: PARIS,
         zoom: DEFAULT_ZOOM,
         attributionControl: true,
@@ -215,6 +323,7 @@ export default function MapPage() {
 
     map.on('load', async () => {
       map.resize()
+      applyRevsTheme(map)
       setMapReady(true)
       flyToUser()
 
