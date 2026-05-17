@@ -71,24 +71,44 @@ export default function Onboarding() {
     setError(null)
     setSaving(true)
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-      if (user) {
-        const { error: upErr } = await supabase.from('profiles').upsert(
-          {
-            user_id: user.id,
-            pseudo: pseudo.trim(),
-            ville: ville.trim(),
-          },
-          { onConflict: 'user_id' },
-        )
-        if (upErr) throw upErr
+      const { data: auth, error: authErr } = await supabase.auth.getUser()
+      if (authErr || !auth.user) {
+        console.error('onboarding: not authenticated', authErr)
+        setError('Tu n’es pas connecté. Reconnecte-toi puis réessaie.')
+        setSaving(false)
+        return
       }
+
+      const { error: upErr } = await supabase.from('profiles').upsert(
+        {
+          user_id: auth.user.id,
+          pseudo: pseudo.trim(),
+          ville: ville.trim(),
+        },
+        { onConflict: 'user_id' },
+      )
+
+      if (upErr) {
+        // Supabase returns a PostgrestError object (NOT an Error
+        // instance), so the message was being swallowed before.
+        console.error('profile upsert failed:', {
+          code: upErr.code,
+          message: upErr.message,
+          details: upErr.details,
+          hint: upErr.hint,
+        })
+        setError(
+          `Profil non enregistré (${upErr.code ?? 'erreur'}): ${upErr.message}`,
+        )
+        setSaving(false)
+        return
+      }
+
       markOnboarded()
       setVisible(false)
       navigate('/map')
     } catch (e) {
+      console.error('onboarding finish crashed:', e)
       setError(
         e instanceof Error ? e.message : 'Impossible d’enregistrer le profil',
       )

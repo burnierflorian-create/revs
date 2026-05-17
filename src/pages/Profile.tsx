@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Car, Warehouse } from 'lucide-react'
+import { Car, Settings, Warehouse } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { categoryLabel, timeAgo, type Spot } from '../lib/spots'
 import { xpLevel } from '../lib/xp'
@@ -187,7 +187,14 @@ export default function Profile() {
     (uid === userId ? pseudo : `Spotter ${uid.slice(0, 4)}`)
 
   return (
-    <div className="min-h-screen bg-bg px-4 pt-[max(1rem,env(safe-area-inset-top))] text-fg">
+    <div className="relative min-h-screen bg-bg px-4 pt-[max(1rem,env(safe-area-inset-top))] text-fg">
+      <button
+        onClick={() => navigate('/settings')}
+        aria-label="Paramètres"
+        className="absolute right-4 top-[max(1rem,env(safe-area-inset-top))] z-10 text-fg/40 transition-colors hover:text-fg"
+      >
+        <Settings className="h-6 w-6" />
+      </button>
       <div className="space-y-8 pb-8">
         {/* SECTION 1 — Header */}
         <header className="flex flex-col items-center pt-6 text-center">

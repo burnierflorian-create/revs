@@ -10,6 +10,7 @@ import Events from './pages/Events'
 import NewEvent from './pages/NewEvent'
 import Profile from './pages/Profile'
 import Premium from './pages/Premium'
+import Settings from './pages/Settings'
 import SpotDetail from './pages/SpotDetail'
 import News from './pages/News'
 import Onboarding from './components/Onboarding'
@@ -44,6 +45,7 @@ export default function App() {
           <Route path="/events" element={<Events />} />
           <Route path="/new-event" element={<NewEvent />} />
           <Route path="/profile" element={<Profile />} />
+          <Route path="/settings" element={<Settings />} />
           <Route path="/premium" element={<Premium />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />

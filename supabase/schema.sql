@@ -329,18 +329,26 @@ create table if not exists public.profiles (
   pseudo     text,
   ville      text,
   avatar     text,
+  is_public  boolean not null default true,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 
+-- For databases created before is_public existed.
+alter table public.profiles
+  add column if not exists is_public boolean not null default true;
+
 alter table public.profiles enable row level security;
 
--- Public read (pseudo / ville / avatar shown in feed, leaderboard, etc.).
+-- Readable when public, or always by the owner (privacy toggle).
 drop policy if exists "profiles readable by everyone" on public.profiles;
-create policy "profiles readable by everyone"
-  on public.profiles for select using (true);
+drop policy if exists "profiles readable" on public.profiles;
+create policy "profiles readable"
+  on public.profiles for select
+  using (is_public or auth.uid() = user_id);
 
--- A user can create and edit only their own profile.
+-- A user can create and edit only their own profile. WITH CHECK on
+-- UPDATE is required so upsert's conflict-update path passes RLS.
 drop policy if exists "users insert own profile" on public.profiles;
 create policy "users insert own profile"
   on public.profiles for insert to authenticated
@@ -349,4 +357,33 @@ create policy "users insert own profile"
 drop policy if exists "users update own profile" on public.profiles;
 create policy "users update own profile"
   on public.profiles for update to authenticated
-  using (auth.uid() = user_id);
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+-- 11. Avatars storage bucket -------------------------------------------------
+insert into storage.buckets (id, name, public)
+values ('avatars', 'avatars', true)
+on conflict (id) do nothing;
+
+drop policy if exists "public read avatars" on storage.objects;
+create policy "public read avatars"
+  on storage.objects for select
+  using (bucket_id = 'avatars');
+
+drop policy if exists "users upload own avatar" on storage.objects;
+create policy "users upload own avatar"
+  on storage.objects for insert
+  to authenticated
+  with check (
+    bucket_id = 'avatars'
+    and (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+drop policy if exists "users update own avatar" on storage.objects;
+create policy "users update own avatar"
+  on storage.objects for update
+  to authenticated
+  using (
+    bucket_id = 'avatars'
+    and (storage.foldername(name))[1] = auth.uid()::text
+  );
