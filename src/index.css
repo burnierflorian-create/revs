@@ -29,6 +29,14 @@ h4 {
   letter-spacing: -0.01em;
 }
 
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
 /* Safe areas — encoche Android + home indicator iPhone.
    La barre de nav fixe réserve sa propre hauteur + l'inset bas ;
    le contenu principal réserve l'équivalent pour ne pas passer dessous. */

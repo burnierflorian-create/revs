@@ -26,12 +26,12 @@ const FEEDS: { url: string; source: string; category: string }[] = [
   {
     url: 'https://www.supercars.net/blog/feed/',
     source: 'Supercars.net',
-    category: 'Supercar',
+    category: 'Hypercar',
   },
   {
     url: 'https://www.gtplanet.net/feed/',
     source: 'GTPlanet',
-    category: 'Auto',
+    category: 'Events',
   },
 ]
 
