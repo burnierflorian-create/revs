@@ -102,3 +102,26 @@ create policy "users delete their own events"
   on public.events for delete
   to authenticated
   using (auth.uid() = organizer_id);
+
+-- 6. Subscriptions (Stripe) --------------------------------------------------
+create table if not exists public.subscriptions (
+  id                 uuid primary key default gen_random_uuid(),
+  user_id            uuid not null unique references auth.users (id) on delete cascade,
+  stripe_customer_id text,
+  plan               text,
+  status             text,
+  current_period_end timestamptz,
+  updated_at         timestamptz not null default now()
+);
+
+alter table public.subscriptions enable row level security;
+
+-- A user can read their own subscription.
+create policy "users read their own subscription"
+  on public.subscriptions for select
+  to authenticated
+  using (auth.uid() = user_id);
+
+-- Writes are performed only by the Stripe webhook using the Supabase
+-- service-role key, which bypasses RLS — so no insert/update policy is
+-- granted to normal authenticated clients on purpose.

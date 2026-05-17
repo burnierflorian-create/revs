@@ -9,6 +9,7 @@ import NewSpot from './pages/NewSpot'
 import Events from './pages/Events'
 import NewEvent from './pages/NewEvent'
 import Profile from './pages/Profile'
+import Premium from './pages/Premium'
 
 export default function App() {
   const { session, loading } = useAuth()
@@ -38,6 +39,7 @@ export default function App() {
           <Route path="/events" element={<Events />} />
           <Route path="/new-event" element={<NewEvent />} />
           <Route path="/profile" element={<Profile />} />
+          <Route path="/premium" element={<Premium />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

@@ -74,13 +74,13 @@ export default function Feed() {
                   <Car size={40} color="#444444" />
                 </div>
               )}
-              <span className="absolute left-3 top-3 rounded-full bg-black/70 px-3 py-1 text-[10px] font-semibold tracking-wide text-white backdrop-blur">
+              <span className="absolute left-3 top-3 rounded-full bg-black/70 px-3 py-1 text-[10px] font-semibold tracking-wide text-fg backdrop-blur">
                 {categoryLabel(spot.category).toUpperCase()}
               </span>
             </div>
 
             <div className="mt-3">
-              <h2 className="font-semibold text-white">
+              <h2 className="font-semibold text-fg">
                 {spot.brand} {spot.model}
               </h2>
               <p className="mt-1 text-sm text-fg/50">

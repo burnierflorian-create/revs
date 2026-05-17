@@ -1,0 +1,19 @@
+/* REVS — Design system
+   Source of truth for the palette and typography.
+   Tailwind tokens in tailwind.config.js mirror these values
+   (bg / fg / accent / card, font families). Keep them in sync. */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+
+:root {
+  /* Palette */
+  --color-bg: #0a0a0a; /* noir profond */
+  --color-fg: #f5f5f0; /* blanc cassé */
+  --color-accent: #e63946; /* rouge accent */
+  --color-card: #1a1a1a; /* gris carte */
+
+  /* Typographie */
+  --font-display: 'Space Grotesk', 'Inter', system-ui, -apple-system,
+    sans-serif;
+  --font-body: 'Inter', system-ui, -apple-system, sans-serif;
+}

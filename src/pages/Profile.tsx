@@ -126,11 +126,11 @@ export default function Profile() {
   ]
 
   return (
-    <div className="min-h-screen bg-bg px-4 pt-[max(1rem,env(safe-area-inset-top))] text-white">
+    <div className="min-h-screen bg-bg px-4 pt-[max(1rem,env(safe-area-inset-top))] text-fg">
       <div className="space-y-8 pb-8">
         {/* SECTION 1 — Header */}
         <header className="flex flex-col items-center pt-6 text-center">
-          <div className="flex h-20 w-20 items-center justify-center rounded-full bg-accent text-3xl font-bold text-white">
+          <div className="flex h-20 w-20 items-center justify-center rounded-full bg-accent text-3xl font-bold text-fg">
             {pseudo.charAt(0).toUpperCase()}
           </div>
           <h1 className="mt-4 text-xl font-bold">{pseudo}</h1>
@@ -156,7 +156,7 @@ export default function Profile() {
             {badges.map((b) => (
               <div
                 key={b.name}
-                className={`flex flex-col items-center gap-1 rounded-xl bg-[#111111] px-1 py-3 text-center ${
+                className={`flex flex-col items-center gap-1 rounded-xl bg-card px-1 py-3 text-center ${
                   b.unlocked ? '' : 'opacity-30 grayscale'
                 }`}
               >
@@ -179,7 +179,7 @@ export default function Profile() {
             Mon garage ({total} voiture{total > 1 ? 's' : ''})
           </h2>
           {total === 0 ? (
-            <div className="flex flex-col items-center rounded-xl bg-[#111111] px-6 py-12 text-center">
+            <div className="flex flex-col items-center rounded-xl bg-card px-6 py-12 text-center">
               <Car size={48} color="#444444" strokeWidth={1.5} />
               <p className="mt-4 font-medium">Ton garage est vide</p>
               <p className="mt-1 text-sm text-[#888888]">
@@ -197,7 +197,7 @@ export default function Profile() {
               {spots.map((s) => (
                 <div
                   key={s.id}
-                  className="relative aspect-[4/3] overflow-hidden rounded-xl bg-[#111111]"
+                  className="relative aspect-[4/3] overflow-hidden rounded-xl bg-card"
                 >
                   {s.photo_url ? (
                     <img
@@ -227,7 +227,13 @@ export default function Profile() {
           )}
         </section>
 
-        {/* SECTION 5 — Déconnexion */}
+        {/* SECTION 5 — Premium + Déconnexion */}
+        <button
+          onClick={() => navigate('/premium')}
+          className="w-full rounded-full bg-accent py-3 text-sm font-medium"
+        >
+          Passer Premium ✨
+        </button>
         <button
           onClick={logout}
           className="w-full rounded-full border border-accent py-3 text-sm font-medium text-accent transition-colors hover:bg-accent/10"
@@ -241,8 +247,8 @@ export default function Profile() {
 
 function Stat({ value, label }: { value: string; label: string }) {
   return (
-    <div className="rounded-xl bg-[#111111] px-2 py-4 text-center">
-      <div className="text-xl font-bold text-white">{value}</div>
+    <div className="rounded-xl bg-card px-2 py-4 text-center">
+      <div className="text-xl font-bold text-fg">{value}</div>
       <div className="mt-1 text-[11px] text-[#888888]">{label}</div>
     </div>
   )

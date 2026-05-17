@@ -63,21 +63,21 @@ export default function InstallBanner() {
   if (!platform) return null
 
   return (
-    <div className="fixed inset-x-3 bottom-24 z-40 flex items-center gap-3 rounded-2xl border border-white/10 bg-[#1a1a1a] px-4 py-3 shadow-lg shadow-black/50">
+    <div className="fixed inset-x-3 bottom-24 z-40 flex items-center gap-3 rounded-2xl border border-white/10 bg-card px-4 py-3 shadow-lg shadow-black/50">
       {platform === 'android' ? (
         <>
-          <span className="flex-1 text-sm text-white">
+          <span className="flex-1 text-sm text-fg">
             📱 Installe revs sur ton écran d'accueil
           </span>
           <button
             onClick={install}
-            className="rounded-full bg-accent px-4 py-1.5 text-xs font-medium text-white"
+            className="rounded-full bg-accent px-4 py-1.5 text-xs font-medium text-fg"
           >
             Installer
           </button>
         </>
       ) : (
-        <span className="flex-1 text-sm text-white">
+        <span className="flex-1 text-sm text-fg">
           📱 Pour installer : appuie sur{' '}
           <Share className="mx-1 inline h-4 w-4 align-text-bottom" /> puis « Sur
           l'écran d'accueil »

@@ -102,8 +102,8 @@ export default function Home() {
       {/* SECTION 1 — Header */}
       <header className="flex items-start justify-between py-5">
         <div>
-          <h1 className="text-2xl font-bold text-white">Bonjour {name}</h1>
-          <span className="mt-2 inline-block rounded-full bg-accent px-3 py-1 text-xs font-medium text-white">
+          <h1 className="text-2xl font-bold text-fg">Bonjour {name}</h1>
+          <span className="mt-2 inline-block rounded-full bg-accent px-3 py-1 text-xs font-medium text-fg">
             Niveau {level.num} · {level.label}
           </span>
         </div>
@@ -121,10 +121,10 @@ export default function Home() {
           onClick={() => navigate('/new-spot')}
           className="w-full rounded-2xl bg-accent px-5 py-5 text-left"
         >
-          <div className="text-lg font-semibold text-white">
+          <div className="text-lg font-semibold text-fg">
             📷 Spotter une voiture
           </div>
-          <div className="mt-1 text-sm text-white/70">
+          <div className="mt-1 text-sm text-fg/70">
             L'IA reconnaîtra la voiture automatiquement
           </div>
         </button>
@@ -139,7 +139,7 @@ export default function Home() {
         {/* SECTION 4 — Spots récents */}
         <section>
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-base font-semibold text-white">
+            <h2 className="text-base font-semibold text-fg">
               🔥 Spots récents
             </h2>
             <button
@@ -168,7 +168,7 @@ export default function Home() {
                     </div>
                   )}
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-white">
+                    <p className="truncate text-sm font-medium text-fg">
                       {s.brand} {s.model}
                     </p>
                     <p className="text-xs text-fg/40">
@@ -183,19 +183,19 @@ export default function Home() {
 
         {/* SECTION 5 — Prochain événement */}
         <section>
-          <h2 className="mb-3 text-base font-semibold text-white">
+          <h2 className="mb-3 text-base font-semibold text-fg">
             📅 Prochain événement
           </h2>
           {nextEvent ? (
-            <div className="rounded-2xl bg-[#111111] p-4">
-              <p className="font-semibold text-white">{nextEvent.title}</p>
+            <div className="rounded-2xl bg-card p-4">
+              <p className="font-semibold text-fg">{nextEvent.title}</p>
               <p className="mt-1 text-sm text-accent">
                 {formatEventDate(nextEvent.starts_at)}
               </p>
               <p className="mt-1 text-sm text-fg/60">{nextEvent.location}</p>
               <button
                 onClick={() => navigate('/events')}
-                className="mt-3 rounded-full bg-accent px-4 py-2 text-xs font-medium text-white"
+                className="mt-3 rounded-full bg-accent px-4 py-2 text-xs font-medium text-fg"
               >
                 Voir
               </button>
@@ -214,8 +214,8 @@ export default function Home() {
         </section>
 
         {/* SECTION 6 — Challenge du jour */}
-        <section className="rounded-2xl bg-[#111111] p-4">
-          <h2 className="text-base font-semibold text-white">
+        <section className="rounded-2xl bg-card p-4">
+          <h2 className="text-base font-semibold text-fg">
             🏆 Challenge du jour
           </h2>
           <p className="mt-1 text-sm text-fg/60">
@@ -233,7 +233,7 @@ export default function Home() {
       {/* Bouton flottant — page Accueil uniquement */}
       <button
         onClick={() => navigate('/new-spot')}
-        className="fixed bottom-24 right-4 z-20 rounded-full bg-accent px-5 py-3 text-sm font-medium text-white shadow-lg shadow-accent/40 active:scale-95"
+        className="fixed bottom-24 right-4 z-20 rounded-full bg-accent px-5 py-3 text-sm font-medium text-fg shadow-lg shadow-accent/40 active:scale-95"
       >
         📷 Spotter
       </button>
@@ -243,8 +243,8 @@ export default function Home() {
 
 function Stat({ value, label }: { value: string; label: string }) {
   return (
-    <div className="rounded-2xl bg-[#111111] px-2 py-4 text-center">
-      <div className="text-xl font-bold text-white">{value}</div>
+    <div className="rounded-2xl bg-card px-2 py-4 text-center">
+      <div className="text-xl font-bold text-fg">{value}</div>
       <div className="mt-1 text-[11px] text-fg/40">{label}</div>
     </div>
   )

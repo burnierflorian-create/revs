@@ -31,7 +31,7 @@ function createSpotMarkerEl(spot: Spot): HTMLDivElement {
   el.style.width = '52px'
   el.style.height = '52px'
   el.style.borderRadius = '9999px'
-  el.style.border = '2px solid #D40000'
+  el.style.border = '2px solid #E63946'
   el.style.overflow = 'hidden'
   el.style.cursor = 'pointer'
   el.style.boxShadow = '0 4px 12px rgba(0,0,0,0.5)'
@@ -40,7 +40,7 @@ function createSpotMarkerEl(spot: Spot): HTMLDivElement {
     el.style.backgroundSize = 'cover'
     el.style.backgroundPosition = 'center'
   } else {
-    el.style.background = '#D40000'
+    el.style.background = '#E63946'
     el.style.display = 'flex'
     el.style.alignItems = 'center'
     el.style.justifyContent = 'center'
@@ -62,7 +62,7 @@ function popupHtml(spot: Spot): string {
         <div style="font-weight:600;font-size:14px">${title || 'Spot'}</div>
         ${sub ? `<div style="font-size:12px;opacity:.6;margin-top:2px">${escapeHtml(sub)}</div>` : ''}
         <div style="font-size:11px;opacity:.45;margin-top:4px">${escapeHtml(timeAgo(spot.created_at))}</div>
-        <div style="display:inline-block;margin-top:6px;font-size:10px;padding:2px 8px;border-radius:9999px;background:rgba(212,0,0,.2);color:#fff">${escapeHtml(categoryLabel(spot.category))}</div>
+        <div style="display:inline-block;margin-top:6px;font-size:10px;padding:2px 8px;border-radius:9999px;background:rgba(230,57,70,.2);color:#F5F5F0">${escapeHtml(categoryLabel(spot.category))}</div>
       </div>
     </div>`
 }
@@ -237,7 +237,7 @@ export default function MapPage() {
       {activeFilter !== 'Tous' && visibleCount === 0 && !error && (
         <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center px-8 text-center">
           <Car size={48} color="#444444" strokeWidth={1.5} />
-          <p className="mt-4 text-base font-medium text-white">
+          <p className="mt-4 text-base font-medium text-fg">
             Aucun spot en {activeFilter}
           </p>
           <p className="mt-1 text-sm text-[#888888]">

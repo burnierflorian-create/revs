@@ -53,10 +53,10 @@ export default function Events() {
             key={ev.id}
             className="rounded-2xl border border-white/5 bg-white/5 p-4"
           >
-            <span className="inline-block rounded-full bg-accent/20 px-3 py-1 text-[10px] font-semibold tracking-wide text-white">
+            <span className="inline-block rounded-full bg-accent/20 px-3 py-1 text-[10px] font-semibold tracking-wide text-fg">
               {ev.type.toUpperCase()}
             </span>
-            <h2 className="mt-2 font-semibold text-white">{ev.title}</h2>
+            <h2 className="mt-2 font-semibold text-fg">{ev.title}</h2>
             <p className="mt-1 text-sm text-accent">
               {formatEventDate(ev.starts_at)}
             </p>
