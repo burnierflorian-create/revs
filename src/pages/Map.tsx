@@ -5,10 +5,12 @@ import 'mapbox-gl/dist/mapbox-gl.css'
 import { Car, LocateFixed } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { SkeletonMap } from '../components/Skeleton'
-import { escapeHtml, type Spot } from '../lib/spots'
+import { escapeHtml, timeAgo, type Spot } from '../lib/spots'
 
 const PARIS: [number, number] = [2.3522, 48.8566]
 const DEFAULT_ZOOM = 13
+const SPOT_TTL_MS = 60 * 60 * 1000
+const POLL_MS = 60 * 1000
 
 const FILTERS = ['Tous', 'Supercars', 'Classics', 'JDM'] as const
 const FILTER_CATEGORY: Record<string, string | null> = {
@@ -18,7 +20,7 @@ const FILTER_CATEGORY: Record<string, string | null> = {
   JDM: 'JDM',
 }
 
-const CAR_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><path d="M9 17h6"/><circle cx="17" cy="17" r="2"/></svg>`
+const CAR_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><path d="M9 17h6"/><circle cx="17" cy="17" r="2"/></svg>`
 
 type SpotProps = {
   id: string
@@ -26,34 +28,98 @@ type SpotProps = {
   model: string
   photo_url: string | null
   spotter: string
+  created_at: string
 }
 
-// Outer element is positioned by Mapbox (it owns the transform); the
-// inner element carries the visual + the tap scale so we never clobber
-// Mapbox's positioning transform.
-function spotMarkerEl(p: SpotProps): HTMLDivElement {
+// Outer element is positioned by Mapbox (it owns the transform). Inside
+// it: an SVG "story ring" that depletes over the spot's remaining life,
+// and a photo disc that carries the tap-scale (so we never clobber
+// Mapbox's positioning transform).
+function spotMarkerEl(p: SpotProps, remainingMs: number): HTMLDivElement {
+  const size = 48
+  const r = 21
+  const c = 2 * Math.PI * r
+  const frac = Math.max(0, Math.min(1, remainingMs / SPOT_TTL_MS))
+
   const outer = document.createElement('div')
   outer.style.cursor = 'pointer'
-  const inner = document.createElement('div')
-  inner.style.width = '40px'
-  inner.style.height = '40px'
-  inner.style.borderRadius = '9999px'
-  inner.style.border = '2px solid #E63946'
-  inner.style.overflow = 'hidden'
-  inner.style.boxShadow = '0 3px 10px rgba(0,0,0,0.55)'
-  inner.style.transition = 'transform .15s ease'
+
+  const wrap = document.createElement('div')
+  wrap.style.position = 'relative'
+  wrap.style.width = `${size}px`
+  wrap.style.height = `${size}px`
+
+  const svgns = 'http://www.w3.org/2000/svg'
+  const svg = document.createElementNS(svgns, 'svg')
+  svg.setAttribute('width', String(size))
+  svg.setAttribute('height', String(size))
+  svg.style.position = 'absolute'
+  svg.style.inset = '0'
+  svg.style.transform = 'rotate(-90deg)'
+  svg.style.pointerEvents = 'none'
+
+  const track = document.createElementNS(svgns, 'circle')
+  track.setAttribute('cx', String(size / 2))
+  track.setAttribute('cy', String(size / 2))
+  track.setAttribute('r', String(r))
+  track.setAttribute('fill', 'none')
+  track.setAttribute('stroke', 'rgba(255,255,255,0.16)')
+  track.setAttribute('stroke-width', '3')
+
+  const arc = document.createElementNS(svgns, 'circle')
+  arc.setAttribute('cx', String(size / 2))
+  arc.setAttribute('cy', String(size / 2))
+  arc.setAttribute('r', String(r))
+  arc.setAttribute('fill', 'none')
+  arc.setAttribute('stroke', '#E63946')
+  arc.setAttribute('stroke-width', '3')
+  arc.setAttribute('stroke-linecap', 'round')
+  arc.style.strokeDasharray = String(c)
+  arc.style.strokeDashoffset = String(c * (1 - frac))
+  arc.style.transition = `stroke-dashoffset ${Math.max(0, remainingMs)}ms linear`
+
+  svg.appendChild(track)
+  svg.appendChild(arc)
+
+  const ps = 38
+  const photo = document.createElement('div')
+  photo.dataset.photo = '1'
+  photo.style.position = 'absolute'
+  photo.style.left = '50%'
+  photo.style.top = '50%'
+  photo.style.width = `${ps}px`
+  photo.style.height = `${ps}px`
+  photo.style.marginLeft = `-${ps / 2}px`
+  photo.style.marginTop = `-${ps / 2}px`
+  photo.style.borderRadius = '9999px'
+  photo.style.overflow = 'hidden'
+  photo.style.border = '2px solid #0A0A0A'
+  photo.style.boxShadow = '0 3px 10px rgba(0,0,0,0.55)'
+  photo.style.transition = 'transform .15s ease'
   if (p.photo_url) {
-    inner.style.backgroundImage = `url("${p.photo_url.replace(/"/g, '%22')}")`
-    inner.style.backgroundSize = 'cover'
-    inner.style.backgroundPosition = 'center'
+    photo.style.backgroundImage = `url("${p.photo_url.replace(/"/g, '%22')}")`
+    photo.style.backgroundSize = 'cover'
+    photo.style.backgroundPosition = 'center'
   } else {
-    inner.style.background = '#E63946'
-    inner.style.display = 'flex'
-    inner.style.alignItems = 'center'
-    inner.style.justifyContent = 'center'
-    inner.innerHTML = CAR_SVG
+    photo.style.background = '#E63946'
+    photo.style.display = 'flex'
+    photo.style.alignItems = 'center'
+    photo.style.justifyContent = 'center'
+    photo.innerHTML = CAR_SVG
   }
-  outer.appendChild(inner)
+
+  wrap.appendChild(svg)
+  wrap.appendChild(photo)
+  outer.appendChild(wrap)
+
+  // Kick the depletion: on the next frame, run the ring down to empty
+  // over the remaining lifetime via the CSS transition above.
+  requestAnimationFrame(() =>
+    requestAnimationFrame(() => {
+      arc.style.strokeDashoffset = String(c)
+    }),
+  )
+
   return outer
 }
 
@@ -90,6 +156,7 @@ function popupHtml(p: SpotProps): string {
       <div style="min-width:0">
         <div style="font-weight:700;font-size:14px">${title || 'Spot'}</div>
         <div style="font-size:12px;opacity:.6;margin-top:3px">par ${escapeHtml(p.spotter)}</div>
+        <div style="font-size:11px;opacity:.45;margin-top:2px">${escapeHtml(timeAgo(p.created_at))}</div>
       </div>
     </div>`
 }
@@ -101,45 +168,49 @@ type RawLayer = {
   'source-layer'?: string
 }
 
-// Snapchat-night theme on top of streets-v12 + 3D terrain.
-function applyRevsTheme(map: mapboxgl.Map) {
+// Strip the GPS clutter from dark-v11: keep roads, water, landuse and
+// city/region names; drop every POI / transit / airport / parking /
+// road / water label. Add a single simple 3D building extrusion so the
+// map feels immersive without being busy.
+function applyCleanStyle(map: mapboxgl.Map) {
   try {
     const layers = (map.getStyle()?.layers ?? []) as unknown as RawLayer[]
     let buildingSource: string | undefined
     let buildingSourceLayer: string | undefined
     let firstSymbolId: string | undefined
+    const toRemove: string[] = []
 
     for (const l of layers) {
       const sl = l['source-layer']
       if (l.type === 'symbol' && !firstSymbolId) firstSymbolId = l.id
-      try {
-        if (l.type === 'background') {
-          map.setPaintProperty(l.id, 'background-color', '#1a1a2e')
-        } else if (l.type === 'fill' && sl === 'water') {
-          map.setPaintProperty(l.id, 'fill-color', '#162447')
-        } else if (l.type === 'fill' && (sl === 'landuse' || sl === 'park')) {
-          map.setPaintProperty(l.id, 'fill-color', '#1b4332')
-        } else if (l.type === 'line' && sl === 'road') {
-          map.setPaintProperty(l.id, 'line-color', '#c9cdd8')
-        } else if (l.type === 'symbol') {
-          map.setPaintProperty(l.id, 'text-color', '#e8eaf0')
-          map.setPaintProperty(l.id, 'text-halo-color', '#11131f')
-        } else if (
-          (l.type === 'fill' || l.type === 'fill-extrusion') &&
-          sl === 'building'
-        ) {
-          if (l.source) {
-            buildingSource = l.source
-            buildingSourceLayer = sl
-          }
-        }
-      } catch {
-        /* property absent on this layer */
+
+      const isPlaceLabel =
+        l.type === 'symbol' &&
+        /settlement|state-label|country-label|continent-label/.test(l.id)
+      if (l.type === 'symbol' && !isPlaceLabel) {
+        toRemove.push(l.id)
+        continue
+      }
+      if (/parking/.test(l.id)) {
+        toRemove.push(l.id)
+        continue
+      }
+      if (
+        (l.type === 'fill' || l.type === 'fill-extrusion') &&
+        sl === 'building' &&
+        l.source
+      ) {
+        buildingSource = l.source
+        buildingSourceLayer = sl
+        toRemove.push(l.id)
       }
     }
 
-    type AddLayer = Parameters<typeof map.addLayer>[0]
+    for (const id of toRemove) {
+      if (map.getLayer(id)) map.removeLayer(id)
+    }
 
+    type AddLayer = Parameters<typeof map.addLayer>[0]
     if (!map.getLayer('revs-3d-buildings')) {
       map.addLayer(
         {
@@ -147,17 +218,17 @@ function applyRevsTheme(map: mapboxgl.Map) {
           type: 'fill-extrusion',
           source: buildingSource ?? 'composite',
           'source-layer': buildingSourceLayer ?? 'building',
-          minzoom: 13,
+          minzoom: 14,
           paint: {
-            'fill-extrusion-color': '#1f4068',
+            'fill-extrusion-color': '#23252b',
             'fill-extrusion-height': [
               'interpolate',
               ['linear'],
               ['zoom'],
-              13,
+              14,
               0,
-              16,
-              ['coalesce', ['get', 'render_height'], ['get', 'height'], 14],
+              16.5,
+              ['coalesce', ['get', 'render_height'], ['get', 'height'], 12],
             ],
             'fill-extrusion-base': [
               'coalesce',
@@ -165,36 +236,14 @@ function applyRevsTheme(map: mapboxgl.Map) {
               ['get', 'min_height'],
               0,
             ],
-            'fill-extrusion-opacity': 0.9,
+            'fill-extrusion-opacity': 0.85,
           },
         } as unknown as AddLayer,
         firstSymbolId,
       )
     }
-
-    // 3D relief — great for the Annecy / Genève mountains.
-    if (!map.getSource('mapbox-dem')) {
-      map.addSource('mapbox-dem', {
-        type: 'raster-dem',
-        url: 'mapbox://mapbox.mapbox-terrain-dem-v1',
-        tileSize: 512,
-        maxzoom: 14,
-      })
-    }
-    map.setTerrain({ source: 'mapbox-dem', exaggeration: 1.5 })
-    if (!map.getLayer('sky')) {
-      map.addLayer({
-        id: 'sky',
-        type: 'sky',
-        paint: {
-          'sky-type': 'atmosphere',
-          'sky-atmosphere-sun': [0, 0],
-          'sky-atmosphere-sun-intensity': 4,
-        },
-      } as unknown as AddLayer)
-    }
   } catch {
-    /* theming is best-effort — never break the map */
+    /* styling is best-effort — never break the map */
   }
 }
 
@@ -290,7 +339,7 @@ export default function MapPage() {
     try {
       map = new mapboxgl.Map({
         container: containerRef.current,
-        style: 'mapbox://styles/mapbox/streets-v12',
+        style: 'mapbox://styles/mapbox/dark-v11',
         center: PARIS,
         zoom: DEFAULT_ZOOM,
         pitch: 45,
@@ -303,11 +352,17 @@ export default function MapPage() {
     mapRef.current = map
     const allSpots = allSpotsRef.current
     const names = namesRef.current
+    let pollId: ReturnType<typeof setInterval> | undefined
+
+    function isAlive(sp: Spot): boolean {
+      return new Date(sp.expires_at).getTime() > Date.now()
+    }
 
     function featureCollection(): GeoJSON.FeatureCollection {
       const cat = FILTER_CATEGORY[filterRef.current]
       const feats: GeoJSON.Feature[] = []
       for (const sp of allSpots.values()) {
+        if (!isAlive(sp)) continue
         if (cat != null && sp.category !== cat) continue
         feats.push({
           type: 'Feature',
@@ -318,6 +373,8 @@ export default function MapPage() {
             model: sp.model ?? '',
             photo_url: sp.photo_url ?? null,
             spotter: names.get(sp.user_id) ?? 'Anonyme',
+            created_at: sp.created_at,
+            expires_at: sp.expires_at,
           },
         })
       }
@@ -330,6 +387,42 @@ export default function MapPage() {
       if (src) src.setData(featureCollection())
     }
     refreshRef.current = refreshSource
+
+    // Drop a marker so updateMarkers rebuilds it (fresh story ring) the
+    // next render — used when a spot's expiry is extended.
+    function refreshMarker(id: string) {
+      const k = `s${id}`
+      onScreenRef.current[k]?.remove()
+      delete onScreenRef.current[k]
+      delete markersRef.current[k]
+    }
+
+    async function fetchSpots() {
+      const { data } = await supabase
+        .from('spots')
+        .select('*')
+        .gt('expires_at', new Date().toISOString())
+        .order('created_at', { ascending: false })
+        .limit(200)
+      const spots = (data ?? []) as Spot[]
+      allSpots.clear()
+      for (const sp of spots) allSpots.set(sp.id, sp)
+
+      const ids = [...new Set(spots.map((s) => s.user_id))]
+      if (ids.length) {
+        const { data: profs } = await supabase
+          .from('profiles')
+          .select('user_id, pseudo')
+          .in('user_id', ids)
+        for (const p of (profs ?? []) as {
+          user_id: string
+          pseudo: string | null
+        }[]) {
+          if (p.pseudo) names.set(p.user_id, p.pseudo)
+        }
+      }
+      refreshSource()
+    }
 
     function updateMarkers() {
       const feats = map.querySourceFeatures('spots')
@@ -371,15 +464,23 @@ export default function MapPage() {
             photo_url:
               typeof props.photo_url === 'string' ? props.photo_url : null,
             spotter: String(props.spotter ?? 'Anonyme'),
+            created_at: String(props.created_at ?? ''),
           }
           key = `s${sp.id}`
           marker = markers[key]
           if (!marker) {
-            const el = spotMarkerEl(sp)
-            const inner = el.firstElementChild as HTMLElement
+            const expiresAt =
+              typeof props.expires_at === 'string' ? props.expires_at : ''
+            const remainingMs = expiresAt
+              ? new Date(expiresAt).getTime() - Date.now()
+              : 0
+            const el = spotMarkerEl(sp, remainingMs)
+            const photoEl = el.querySelector(
+              '[data-photo]',
+            ) as HTMLElement | null
             el.addEventListener('click', (ev) => {
               ev.stopPropagation()
-              inner.style.transform = 'scale(1.2)'
+              if (photoEl) photoEl.style.transform = 'scale(1.2)'
               const popup = new mapboxgl.Popup({
                 offset: 26,
                 closeButton: true,
@@ -388,8 +489,23 @@ export default function MapPage() {
                 .setHTML(popupHtml(sp))
                 .addTo(map)
               popup.on('close', () => {
-                inner.style.transform = 'scale(1)'
+                if (photoEl) photoEl.style.transform = 'scale(1)'
               })
+              // A view keeps the spot alive 1h more; reflect it locally
+              // so the ring visibly refills.
+              supabase
+                .rpc('touch_spot', { p_spot_id: sp.id })
+                .then(() => {
+                  const cur = allSpots.get(sp.id)
+                  if (cur) {
+                    cur.expires_at = new Date(
+                      Date.now() + SPOT_TTL_MS,
+                    ).toISOString()
+                    allSpots.set(sp.id, cur)
+                    refreshSource()
+                    refreshMarker(sp.id)
+                  }
+                })
             })
             marker = new mapboxgl.Marker({ element: el }).setLngLat(coords)
             markers[key] = marker
@@ -415,31 +531,11 @@ export default function MapPage() {
 
     map.on('load', async () => {
       map.resize()
-      applyRevsTheme(map)
+      applyCleanStyle(map)
       setMapReady(true)
       flyToUser()
 
-      const { data } = await supabase
-        .from('spots')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(200)
-      const spots = (data ?? []) as Spot[]
-      for (const sp of spots) allSpots.set(sp.id, sp)
-
-      const ids = [...new Set(spots.map((s) => s.user_id))]
-      if (ids.length) {
-        const { data: profs } = await supabase
-          .from('profiles')
-          .select('user_id, pseudo')
-          .in('user_id', ids)
-        for (const p of (profs ?? []) as {
-          user_id: string
-          pseudo: string | null
-        }[]) {
-          if (p.pseudo) names.set(p.user_id, p.pseudo)
-        }
-      }
+      await fetchSpots()
 
       map.addSource('spots', {
         type: 'geojson',
@@ -460,6 +556,11 @@ export default function MapPage() {
         if (!map.isSourceLoaded('spots')) return
         updateMarkers()
       })
+
+      // Re-poll so freshly-expired spots drop and extended ones return.
+      pollId = setInterval(() => {
+        void fetchSpots()
+      }, POLL_MS)
     })
 
     const channel = supabase
@@ -474,9 +575,21 @@ export default function MapPage() {
           refreshSource()
         },
       )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'spots' },
+        (payload) => {
+          const sp = payload.new as Spot
+          if (!sp?.id) return
+          allSpots.set(sp.id, sp)
+          refreshSource()
+          refreshMarker(sp.id)
+        },
+      )
       .subscribe()
 
     return () => {
+      if (pollId) clearInterval(pollId)
       supabase.removeChannel(channel)
       for (const k in onScreenRef.current) onScreenRef.current[k].remove()
       onScreenRef.current = {}
@@ -499,7 +612,7 @@ export default function MapPage() {
     <div className="fixed inset-0">
       <div
         ref={containerRef}
-        style={{ width: '100%', height: '100vh', backgroundColor: '#1a1a2e' }}
+        style={{ width: '100%', height: '100vh', backgroundColor: '#0A0A0A' }}
       />
 
       {!mapReady && !error && <SkeletonMap />}

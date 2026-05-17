@@ -15,13 +15,29 @@ create table if not exists public.spots (
   confidence  integer,
   lat         double precision not null,
   lng         double precision not null,
+  expires_at  timestamptz not null default (now() + interval '1 hour'),
   created_at  timestamptz not null default now()
 );
 
--- For databases created before the confidence column existed.
+-- For databases created before these columns existed.
 alter table public.spots add column if not exists confidence integer;
+alter table public.spots
+  add column if not exists expires_at timestamptz not null
+  default (now() + interval '1 hour');
 
 create index if not exists spots_created_at_idx on public.spots (created_at desc);
+create index if not exists spots_expires_at_idx on public.spots (expires_at);
+
+-- Extend a spot's life by 1h (a like or a view "keeps it alive").
+-- SECURITY DEFINER so any authenticated viewer can extend a spot they
+-- don't own, without a broad UPDATE policy. (The like-trigger lives
+-- after the spot_likes table, in section 7.)
+create or replace function public.touch_spot(p_spot_id uuid)
+  returns void language sql security definer set search_path = public as $$
+  update public.spots
+  set expires_at = now() + interval '1 hour'
+  where id = p_spot_id;
+$$;
 
 -- 2. Row Level Security ------------------------------------------------------
 alter table public.spots enable row level security;
@@ -162,6 +178,20 @@ create policy "users remove their own like"
   using (auth.uid() = user_id);
 
 alter publication supabase_realtime add table public.spot_likes;
+
+-- A like keeps the spot alive for another hour.
+create or replace function public.extend_spot_on_like()
+  returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  update public.spots
+  set expires_at = now() + interval '1 hour'
+  where id = new.spot_id;
+  return new;
+end; $$;
+
+drop trigger if exists trg_extend_spot_on_like on public.spot_likes;
+create trigger trg_extend_spot_on_like after insert on public.spot_likes
+  for each row execute function public.extend_spot_on_like();
 
 -- 8. News (filled by the Vercel cron via the service-role key) ---------------
 create table if not exists public.news (

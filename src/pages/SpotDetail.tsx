@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import mapboxgl from 'mapbox-gl'
 import 'mapbox-gl/dist/mapbox-gl.css'
-import { ArrowLeft, Car } from 'lucide-react'
+import { ArrowLeft, Car, Navigation } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import {
   categoryLabel,
@@ -17,6 +17,21 @@ function formatDateTime(iso: string): string {
     dateStyle: 'long',
     timeStyle: 'short',
   }).format(new Date(iso))
+}
+
+// Hand off to the device's native maps app for turn-by-turn.
+function openNavigation(lat: number, lng: number) {
+  const ua = navigator.userAgent || ''
+  const isIOS =
+    /iPad|iPhone|iPod/.test(ua) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+  const isAndroid = /Android/.test(ua)
+  const url = isIOS
+    ? `maps://?daddr=${lat},${lng}`
+    : isAndroid
+      ? `geo:${lat},${lng}?q=${lat},${lng}`
+      : `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`
+  window.location.href = url
 }
 
 export default function SpotDetail() {
@@ -46,6 +61,8 @@ export default function SpotDetail() {
       }
       const s = data as Spot
       setSpot(s)
+      // Opening a spot counts as a view → keep it alive 1h more.
+      void supabase.rpc('touch_spot', { p_spot_id: s.id })
       const { count } = await supabase
         .from('spots')
         .select('*', { count: 'exact', head: true })
@@ -170,6 +187,14 @@ export default function SpotDetail() {
             </div>
           ))}
         </div>
+
+        <button
+          onClick={() => openNavigation(spot.lat, spot.lng)}
+          className="flex w-full items-center justify-center gap-2 rounded-full bg-accent py-3.5 text-sm font-semibold text-fg shadow-lg shadow-accent/30 transition-transform active:scale-[0.98]"
+        >
+          <Navigation className="h-4 w-4" />
+          Y aller
+        </button>
 
         <div
           ref={mapContainerRef}

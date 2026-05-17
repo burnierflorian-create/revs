@@ -34,6 +34,7 @@ export type Spot = {
   confidence: number | null
   lat: number
   lng: number
+  expires_at: string
   created_at: string
 }
 
