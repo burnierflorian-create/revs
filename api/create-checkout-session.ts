@@ -2,6 +2,7 @@ import Stripe from 'stripe'
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 
 const PLANS: Record<string, { name: string; amount: number }> = {
+  starter: { name: 'REVS Starter', amount: 300 },
   premium: { name: 'REVS Premium', amount: 800 },
   vip: { name: 'REVS VIP', amount: 2500 },
 }

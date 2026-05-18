@@ -11,7 +11,6 @@ export type SpotCategory =
 export const CATEGORIES: { value: SpotCategory; label: string }[] = [
   { value: 'supercar', label: 'Supercar' },
   { value: 'hypercar', label: 'Hypercar' },
-  { value: 'classic', label: 'Classic' },
   { value: 'youngtimer', label: 'Youngtimer' },
   { value: 'JDM', label: 'JDM' },
   { value: 'other', label: 'Autre' },

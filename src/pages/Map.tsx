@@ -25,11 +25,11 @@ const GEO_TIMEOUT_MS = 3000
 const SPOT_TTL_MS = 60 * 60 * 1000
 const POLL_MS = 60 * 1000
 
-const FILTERS = ['Tous', 'Supercars', 'Classics', 'JDM'] as const
+const FILTERS = ['Tous', 'Supercars', 'Autre', 'JDM'] as const
 const FILTER_CATEGORY: Record<string, string | null> = {
   Tous: null,
   Supercars: 'supercar',
-  Classics: 'classic',
+  Autre: 'other',
   JDM: 'JDM',
 }
 

@@ -93,6 +93,7 @@ export default function NewSpot() {
   const [photoMeta, setPhotoMeta] = useState<PhotoMeta | null>(null)
   const [rejection, setRejection] = useState<string | null>(null)
   const [pubError, setPubError] = useState<string | null>(null)
+  const [limitReached, setLimitReached] = useState(false)
   const [pubStatus, setPubStatus] = useState('')
 
   useEffect(() => {
@@ -151,7 +152,7 @@ export default function NewSpot() {
     setModel(r.model)
     setYear(r.year != null ? String(r.year) : '')
     setColor(r.color)
-    setCategory(r.category)
+    setCategory(r.category === 'classic' ? 'other' : r.category)
   }
 
   async function analyze() {
@@ -197,6 +198,7 @@ export default function NewSpot() {
   async function publish() {
     if (!image) return
     setPubError(null)
+    setLimitReached(false)
     try {
       setPubStatus('Localisation…')
       const pos = await getPosition()
@@ -227,6 +229,32 @@ export default function NewSpot() {
         data: { user },
       } = await supabase.auth.getUser()
       if (!user) throw new Error('Non authentifié')
+
+      // Limite quotidienne : 5 spots/jour pour les comptes gratuits.
+      const { data: sub } = await supabase
+        .from('subscriptions')
+        .select('status')
+        .eq('user_id', user.id)
+        .maybeSingle()
+      const subscribed =
+        sub?.status === 'active' || sub?.status === 'trialing'
+      if (!subscribed) {
+        const today = new Date().toISOString().slice(0, 10)
+        const { data: cnt } = await supabase
+          .from('spot_count_daily')
+          .select('count')
+          .eq('user_id', user.id)
+          .eq('date', today)
+          .maybeSingle()
+        if ((cnt?.count ?? 0) >= 5) {
+          setLimitReached(true)
+          setPubError(
+            "Tu as atteint ta limite de 5 spots aujourd'hui. Passe au plan Starter pour des spots illimités.",
+          )
+          setPubStatus('')
+          return
+        }
+      }
 
       setPubStatus('Envoi de la photo…')
       const path = `${user.id}/${Date.now()}.jpg`
@@ -477,7 +505,23 @@ export default function NewSpot() {
           <p className="text-sm text-fg/70">
             📍 Votre position GPS sera enregistrée.
           </p>
-          {pubError ? (
+          {limitReached ? (
+            <div className="max-w-xs space-y-4">
+              <p className="text-sm text-fg/80">{pubError}</p>
+              <button
+                onClick={() => navigate('/premium')}
+                className="w-full rounded-full bg-accent px-6 py-3 text-sm font-semibold"
+              >
+                Voir les abonnements
+              </button>
+              <button
+                onClick={() => navigate('/')}
+                className="w-full rounded-full bg-card px-6 py-3 text-sm font-medium text-fg/70"
+              >
+                Plus tard
+              </button>
+            </div>
+          ) : pubError ? (
             <div className="space-y-4">
               <p className="text-sm text-accent">{pubError}</p>
               <button

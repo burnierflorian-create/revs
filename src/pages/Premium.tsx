@@ -4,36 +4,42 @@ import { ArrowLeft, Check } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
 type Plan = {
-  id: 'premium' | 'vip'
+  id: 'starter' | 'premium' | 'vip'
   name: string
   price: string
   perks: string[]
-  highlight?: boolean
+  popular?: boolean
 }
 
 const PLANS: Plan[] = [
   {
+    id: 'starter',
+    name: 'Starter',
+    price: '3€',
+    perks: ['Spots illimités', 'Badge Supporter exclusif'],
+  },
+  {
     id: 'premium',
     name: 'Premium',
     price: '8€',
+    popular: true,
     perks: [
       'Spots illimités',
       'Reconnaissance IA prioritaire',
-      'Badge Premium sur ton profil',
-      'Expérience sans publicité',
+      'Badge Premium',
+      'Sans publicité',
     ],
   },
   {
     id: 'vip',
     name: 'VIP',
     price: '25€',
-    highlight: true,
     perks: [
       'Tous les avantages Premium',
       'Accès anticipé aux événements',
       'Statistiques avancées',
       'Support prioritaire',
-      'Badge VIP exclusif 👑',
+      'Badge VIP 👑',
     ],
   },
 ]
@@ -108,29 +114,38 @@ export default function Premium() {
         </div>
       )}
 
-      <div className="space-y-4 pb-8">
+      <div className="grid grid-cols-3 gap-2 pb-8">
         {PLANS.map((plan) => (
           <section
             key={plan.id}
-            className={`rounded-2xl bg-card p-5 ${
-              plan.highlight ? 'ring-1 ring-accent' : ''
+            className={`relative flex flex-col rounded-2xl bg-card p-3 ${
+              plan.popular
+                ? 'ring-2 ring-accent'
+                : 'ring-1 ring-white/5'
             }`}
           >
-            <div className="flex items-baseline justify-between">
-              <h2 className="text-xl font-bold">{plan.name}</h2>
-              <div className="text-right">
-                <span className="text-2xl font-bold">{plan.price}</span>
-                <span className="text-sm text-fg/50"> / mois</span>
-              </div>
+            {plan.popular && (
+              <span className="absolute -top-2 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-accent px-2.5 py-0.5 text-[9px] font-bold tracking-wide text-fg">
+                POPULAIRE
+              </span>
+            )}
+            <h2 className="mt-1 text-center text-base font-bold">
+              {plan.name}
+            </h2>
+            <div className="mt-1 text-center">
+              <span className="font-display text-2xl font-bold">
+                {plan.price}
+              </span>
+              <span className="block text-[10px] text-fg/40">/ mois</span>
             </div>
 
-            <ul className="mt-4 space-y-2">
+            <ul className="mt-3 flex-1 space-y-1.5">
               {plan.perks.map((perk) => (
                 <li
                   key={perk}
-                  className="flex items-center gap-2 text-sm text-fg/80"
+                  className="flex items-start gap-1 text-[11px] leading-tight text-fg/75"
                 >
-                  <Check className="h-4 w-4 flex-none text-accent" />
+                  <Check className="mt-0.5 h-3 w-3 flex-none text-accent" />
                   {perk}
                 </li>
               ))}
@@ -139,9 +154,13 @@ export default function Premium() {
             <button
               onClick={() => subscribe(plan.id)}
               disabled={busy !== null}
-              className="mt-5 w-full rounded-full bg-accent py-3 text-sm font-medium disabled:opacity-50"
+              className={`mt-3 w-full rounded-full py-2.5 text-xs font-semibold disabled:opacity-50 ${
+                plan.popular
+                  ? 'bg-accent text-fg'
+                  : 'bg-white/10 text-fg hover:bg-white/15'
+              }`}
             >
-              {busy === plan.id ? '…' : `Choisir ${plan.name}`}
+              {busy === plan.id ? '…' : 'Choisir'}
             </button>
           </section>
         ))}

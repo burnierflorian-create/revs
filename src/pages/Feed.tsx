@@ -20,7 +20,7 @@ const FILTERS = [
   'Supercars',
   'Hypercars',
   'JDM',
-  'Classics',
+  'Autre',
 ] as const
 type Filter = (typeof FILTERS)[number]
 
@@ -28,7 +28,7 @@ const FILTER_CAT: Record<string, string | undefined> = {
   Supercars: 'supercar',
   Hypercars: 'hypercar',
   JDM: 'JDM',
-  Classics: 'classic',
+  Autre: 'other',
 }
 
 // Distinct badge colour per category.

@@ -1,10 +1,20 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Car, Settings, Lock, Warehouse } from 'lucide-react'
+import { Car, Settings, Lock, Warehouse, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { categoryLabel, timeAgo, type Spot } from '../lib/spots'
 import { xpLevel } from '../lib/xp'
 import { Skeleton } from '../components/Skeleton'
+
+type Badge = {
+  emoji: string
+  name: string
+  desc: string
+  condition: string
+  unlocked: boolean
+  xp?: number
+  gold?: boolean
+}
 
 function memberSince(iso: string | undefined): string {
   if (!iso) return ''
@@ -27,7 +37,10 @@ export default function Profile() {
   const [rank, setRank] = useState<number | null>(null)
   const [hasEvent, setHasEvent] = useState(false)
   const [xp, setXp] = useState(0)
+  const [plan, setPlan] = useState<string | null>(null)
+  const [earlyAdopter, setEarlyAdopter] = useState(false)
   const [animPct, setAnimPct] = useState(0)
+  const [openBadge, setOpenBadge] = useState<Badge | null>(null)
 
   useEffect(() => {
     let active = true
@@ -37,7 +50,7 @@ export default function Profile() {
       } = await supabase.auth.getUser()
       if (!user) return
 
-      const [spotsRes, allUidsRes, eventsRes, xpRes, profRes] =
+      const [spotsRes, allUidsRes, eventsRes, xpRes, profRes, subRes] =
         await Promise.all([
           supabase
             .from('spots')
@@ -52,10 +65,27 @@ export default function Profile() {
           supabase.rpc('my_xp'),
           supabase
             .from('profiles')
-            .select('pseudo, ville, avatar')
+            .select('pseudo, ville, avatar, created_at')
+            .eq('user_id', user.id)
+            .maybeSingle(),
+          supabase
+            .from('subscriptions')
+            .select('plan, status')
             .eq('user_id', user.id)
             .maybeSingle(),
         ])
+
+      const myCreated =
+        (profRes.data?.created_at as string | undefined) ||
+        user.created_at
+      let earlier = 999
+      if (myCreated) {
+        const { count } = await supabase
+          .from('profiles')
+          .select('user_id', { count: 'exact', head: true })
+          .lt('created_at', myCreated)
+        earlier = count ?? 999
+      }
 
       if (!active) return
 
@@ -89,6 +119,13 @@ export default function Profile() {
       setRank(rk)
       setHasEvent((eventsRes.count ?? 0) > 0)
       setXp(typeof xpRes.data === 'number' ? xpRes.data : 0)
+      const s = subRes.data as { plan?: string; status?: string } | null
+      setPlan(
+        s && (s.status === 'active' || s.status === 'trialing')
+          ? (s.plan ?? null)
+          : null,
+      )
+      setEarlyAdopter(earlier < 100)
       setLoading(false)
     })()
     return () => {
@@ -139,57 +176,24 @@ export default function Profile() {
     spots.filter((s) => (s.estimated_price ?? 0) >= min).length
   const millionClub = priceAtLeast(1_000_000) >= 1
 
-  const badges: {
-    emoji: string
-    name: string
-    unlocked: boolean
-    gold?: boolean
-  }[] = [
-    { emoji: '🚀', name: 'Premier Spot', unlocked: total >= 1 },
-    { emoji: '🔟', name: 'Série de 10', unlocked: total >= 10 },
-    { emoji: '💯', name: 'Centurion', unlocked: total >= 100 },
-    { emoji: '🏎️', name: 'Ferrari', unlocked: brandHas('ferrari') },
-    { emoji: '🐂', name: 'Lambo', unlocked: brandHas('lamborghini') },
-    {
-      emoji: '🇯🇵',
-      name: 'Fan JDM',
-      unlocked: has((s) => s.category === 'JDM'),
-    },
-    { emoji: '📅', name: 'Organisateur', unlocked: hasEvent },
-    {
-      emoji: '⚡',
-      name: 'Hypercar',
-      unlocked: has((s) => s.category === 'hypercar'),
-    },
-    // Exclusifs liés au prix.
-    {
-      emoji: '🏆',
-      name: 'Million Club',
-      unlocked: millionClub,
-      gold: true,
-    },
-    {
-      emoji: '👑',
-      name: 'Légendaire',
-      unlocked: millionClub,
-      gold: true,
-    },
-    {
-      emoji: '🦅',
-      name: 'Hypercar Hunter',
-      unlocked: priceAtLeast(200_000) >= 5,
-    },
-    {
-      emoji: '🔭',
-      name: 'Supercar Spotter',
-      unlocked: priceAtLeast(80_000) >= 10,
-    },
-    {
-      emoji: '💎',
-      name: 'Rare Find',
-      unlocked: priceAtLeast(500_000) >= 1,
-      gold: true,
-    },
+  const badges: Badge[] = [
+    { emoji: '🚀', name: 'Premier Spot', desc: 'Ton tout premier spot publié.', condition: 'Poste ton premier spot', xp: 5, unlocked: total >= 1 },
+    { emoji: '🔟', name: 'Série de 10', desc: 'Tu prends le rythme.', condition: 'Atteins 10 spots au total', unlocked: total >= 10 },
+    { emoji: '💯', name: 'Centurion', desc: 'Un vrai chasseur.', condition: 'Atteins 100 spots au total', unlocked: total >= 100 },
+    { emoji: '🏎️', name: 'Ferrari Hunter', desc: 'Le Cheval cabré dans ton garage.', condition: 'Spotte une Ferrari', unlocked: brandHas('ferrari') },
+    { emoji: '🐂', name: 'Lambo Spotter', desc: 'Le taureau, capturé.', condition: 'Spotte une Lamborghini', unlocked: brandHas('lamborghini') },
+    { emoji: '🇯🇵', name: 'JDM Fan', desc: 'La culture japonaise de la perf.', condition: 'Spotte une japonaise de performance', unlocked: has((s) => s.category === 'JDM') },
+    { emoji: '📅', name: 'Organisateur', desc: 'Tu fais vivre la communauté.', condition: 'Crée un événement', xp: 20, unlocked: hasEvent },
+    { emoji: '⚡', name: 'Hypercar', desc: 'Tu vises haut de gamme.', condition: 'Spotte une voiture à plus de 200 000 €', xp: 40, unlocked: priceAtLeast(200_000) >= 1 },
+    { emoji: '🔭', name: 'Supercar Spotter', desc: 'Œil de lynx pour les supercars.', condition: '10 voitures à plus de 80 000 €', unlocked: priceAtLeast(80_000) >= 10 },
+    { emoji: '🦅', name: 'Hypercar Hunter', desc: 'Chasseur d’exception.', condition: '5 voitures à plus de 200 000 €', unlocked: priceAtLeast(200_000) >= 5 },
+    { emoji: '💎', name: 'Rare Find', desc: 'Une perle rare.', condition: 'Édition limitée ou plus de 500 000 €', unlocked: priceAtLeast(500_000) >= 1, gold: true },
+    { emoji: '🏆', name: 'Million Club', desc: 'Le club très fermé du million.', condition: 'Spotte une voiture à plus de 1 000 000 €', xp: 100, unlocked: millionClub, gold: true },
+    { emoji: '👑', name: 'Légendaire', desc: 'Badge doré ultra rare.', condition: 'Débloque le Million Club', unlocked: millionClub, gold: true },
+    { emoji: '🤝', name: 'Supporter', desc: 'Tu soutiens REVS.', condition: 'Abonne-toi au plan Starter', unlocked: plan === 'starter', gold: true },
+    { emoji: '✨', name: 'Premium', desc: 'Membre Premium.', condition: 'Abonne-toi au plan Premium', unlocked: plan === 'premium' },
+    { emoji: '👑', name: 'VIP', desc: 'Le statut ultime.', condition: 'Abonne-toi au plan VIP', unlocked: plan === 'vip', gold: true },
+    { emoji: '🌅', name: 'Early Adopter', desc: 'Tu étais là dès le début.', condition: 'Parmi les 100 premiers inscrits', unlocked: earlyAdopter, gold: true },
   ]
 
   return (
@@ -275,9 +279,10 @@ export default function Profile() {
           <h2 className="mb-3 font-display text-lg font-bold">Mes badges</h2>
           <div className="grid grid-cols-4 gap-2">
             {badges.map((b) => (
-              <div
+              <button
                 key={b.name}
-                className={`relative flex flex-col items-center gap-1.5 rounded-2xl px-1 py-3.5 text-center ${
+                onClick={() => setOpenBadge(b)}
+                className={`relative flex flex-col items-center gap-1.5 rounded-2xl px-1 py-3.5 text-center transition-transform active:scale-95 ${
                   b.unlocked
                     ? b.gold
                       ? 'bg-[#E0B341]/15 ring-1 ring-[#E0B341]/50'
@@ -303,7 +308,7 @@ export default function Profile() {
                 >
                   {b.name}
                 </span>
-              </div>
+              </button>
             ))}
           </div>
         </section>
@@ -367,6 +372,86 @@ export default function Profile() {
           )}
         </section>
       </div>
+
+      {openBadge && (
+        <div
+          onClick={() => setOpenBadge(null)}
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 backdrop-blur-sm sm:items-center"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-sm rounded-t-3xl bg-card p-6 pb-8 text-center sm:rounded-3xl"
+          >
+            <div className="flex justify-end">
+              <button
+                onClick={() => setOpenBadge(null)}
+                aria-label="Fermer"
+                className="text-fg/40 hover:text-fg"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div
+              className={`mx-auto flex h-20 w-20 items-center justify-center rounded-full text-4xl ${
+                openBadge.unlocked
+                  ? openBadge.gold
+                    ? 'bg-[#E0B341]/20 ring-2 ring-[#E0B341]/60'
+                    : 'bg-accent/15 ring-2 ring-accent/40'
+                  : 'bg-white/5'
+              }`}
+            >
+              {openBadge.unlocked ? (
+                openBadge.emoji
+              ) : (
+                <Lock className="h-7 w-7 text-fg/30" />
+              )}
+            </div>
+            <h3
+              className={`mt-4 font-display text-xl font-bold ${
+                openBadge.unlocked && openBadge.gold
+                  ? 'text-[#E0B341]'
+                  : 'text-fg'
+              }`}
+            >
+              {openBadge.name}
+            </h3>
+            <p className="mt-1 text-sm text-fg/60">{openBadge.desc}</p>
+
+            <div className="mt-5 space-y-2 rounded-2xl bg-white/5 p-4 text-left text-sm">
+              <div className="flex items-start justify-between gap-3">
+                <span className="text-fg/40">Comment l'obtenir</span>
+                <span className="text-right font-medium text-fg">
+                  {openBadge.condition}
+                </span>
+              </div>
+              {openBadge.xp != null && (
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-fg/40">XP associé</span>
+                  <span className="font-bold text-accent">
+                    +{openBadge.xp} XP
+                  </span>
+                </div>
+              )}
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-fg/40">Statut</span>
+                <span
+                  className={`font-semibold ${
+                    openBadge.unlocked ? 'text-accent' : 'text-fg/40'
+                  }`}
+                >
+                  {openBadge.unlocked ? 'Obtenu ✓' : 'Verrouillé'}
+                </span>
+              </div>
+            </div>
+
+            {!openBadge.unlocked && (
+              <p className="mt-4 text-xs text-fg/40">
+                Continue à spotter pour le débloquer 💪
+              </p>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
