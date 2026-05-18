@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, MapPin } from 'lucide-react'
+import { Plus, MapPin, Search, LocateFixed } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { formatEventDate, type CarEvent } from '../lib/events'
+import { distanceMeters } from '../lib/spots'
 import { Skeleton } from './Skeleton'
 
 const ORANGE = '#F59E0B'
+const NEAR_RADIUS_M = 50_000
 
 // Static mini-map of the area (Europe view) for the empty state.
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN as string | undefined
@@ -19,6 +21,40 @@ export default function Meets() {
   const navigate = useNavigate()
   const [events, setEvents] = useState<CarEvent[] | null>(null)
   const [canCreate, setCanCreate] = useState(false)
+  const [q, setQ] = useState('')
+  const [near, setNear] = useState(false)
+  const [pos, setPos] = useState<{ lat: number; lng: number } | null>(null)
+  const [geoBusy, setGeoBusy] = useState(false)
+  const [geoMsg, setGeoMsg] = useState<string | null>(null)
+
+  function toggleNear() {
+    if (near) {
+      setNear(false)
+      return
+    }
+    if (pos) {
+      setNear(true)
+      return
+    }
+    if (!navigator.geolocation) {
+      setGeoMsg('Géolocalisation non disponible.')
+      return
+    }
+    setGeoBusy(true)
+    setGeoMsg(null)
+    navigator.geolocation.getCurrentPosition(
+      (p) => {
+        setPos({ lat: p.coords.latitude, lng: p.coords.longitude })
+        setNear(true)
+        setGeoBusy(false)
+      },
+      () => {
+        setGeoMsg('Localisation refusée — impossible de filtrer autour de toi.')
+        setGeoBusy(false)
+      },
+      { enableHighAccuracy: false, timeout: 12000, maximumAge: 60000 },
+    )
+  }
 
   useEffect(() => {
     let active = true
@@ -50,6 +86,35 @@ export default function Meets() {
     }
   }, [])
 
+  const term = q.trim().toLowerCase()
+  const filtered =
+    events == null
+      ? null
+      : events.filter((ev) => {
+          if (
+            term &&
+            ![ev.title, ev.location, ev.type]
+              .filter(Boolean)
+              .some((v) => v!.toLowerCase().includes(term))
+          )
+            return false
+          if (near && pos) {
+            if (
+              ev.lat == null ||
+              ev.lng == null ||
+              !Number.isFinite(ev.lat) ||
+              !Number.isFinite(ev.lng)
+            )
+              return false
+            if (
+              distanceMeters(pos.lat, pos.lng, ev.lat, ev.lng) >
+              NEAR_RADIUS_M
+            )
+              return false
+          }
+          return true
+        })
+
   return (
     <div className="px-4 pb-8">
       {canCreate ? (
@@ -69,6 +134,36 @@ export default function Meets() {
             dans Paramètres.
           </p>
         )
+      )}
+
+      <div className="mb-3 flex gap-2">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-fg/30" />
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Rechercher un événement…"
+            className="w-full rounded-full bg-card py-2.5 pl-9 pr-3 text-sm text-fg outline-none placeholder:text-fg/30 focus:ring-1 focus:ring-[#F59E0B]"
+          />
+        </div>
+        <button
+          onClick={toggleNear}
+          disabled={geoBusy}
+          className={`flex flex-none items-center gap-1.5 rounded-full px-4 py-2.5 text-sm font-semibold transition-colors disabled:opacity-50 ${
+            near
+              ? 'text-[#0A0A0A]'
+              : 'bg-card text-fg/60 hover:text-fg'
+          }`}
+          style={near ? { backgroundColor: ORANGE } : undefined}
+        >
+          <LocateFixed className="h-4 w-4" />
+          {geoBusy ? '…' : 'Près de moi'}
+        </button>
+      </div>
+      {geoMsg && (
+        <p className="mb-3 rounded-xl bg-card px-4 py-2.5 text-xs text-fg/50">
+          {geoMsg}
+        </p>
       )}
 
       <div className="space-y-3">
@@ -125,8 +220,14 @@ export default function Meets() {
               </button>
             </div>
           </div>
+        ) : filtered && filtered.length === 0 ? (
+          <p className="px-1 py-12 text-center text-sm text-fg/40">
+            {near
+              ? 'Aucun événement dans un rayon de 50 km.'
+              : 'Aucun événement ne correspond à ta recherche.'}
+          </p>
         ) : (
-          events.map((ev) => (
+          (filtered ?? []).map((ev) => (
             <article
               key={ev.id}
               className="rounded-2xl border border-[#F59E0B]/20 bg-[#F59E0B]/5 p-4"

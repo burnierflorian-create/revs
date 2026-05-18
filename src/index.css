@@ -137,30 +137,32 @@ h4 {
   animation: newPulse 1.5s ease-out infinite;
 }
 
+/* !important beats mapbox-gl.css regardless of bundle order (its
+   default is white-on-... which made our text invisible). */
 .mapboxgl-popup-content {
-  background: var(--color-card);
-  color: var(--color-fg);
-  border-radius: 12px;
-  padding: 10px 28px 10px 14px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  background: #ffffff !important;
+  color: #111111 !important;
+  border-radius: 14px !important;
+  padding: 12px 30px 12px 14px !important;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35) !important;
 }
 
 .mapboxgl-popup-close-button {
-  color: var(--color-fg);
-  opacity: 0.5;
-  font-size: 16px;
-  padding: 0 6px;
+  color: #111111 !important;
+  opacity: 0.45;
+  font-size: 18px;
+  padding: 0 7px;
 }
 
 .mapboxgl-popup-anchor-top .mapboxgl-popup-tip {
-  border-bottom-color: var(--color-card);
+  border-bottom-color: #ffffff !important;
 }
 .mapboxgl-popup-anchor-bottom .mapboxgl-popup-tip {
-  border-top-color: var(--color-card);
+  border-top-color: #ffffff !important;
 }
 .mapboxgl-popup-anchor-left .mapboxgl-popup-tip {
-  border-right-color: var(--color-card);
+  border-right-color: #ffffff !important;
 }
 .mapboxgl-popup-anchor-right .mapboxgl-popup-tip {
-  border-left-color: var(--color-card);
+  border-left-color: #ffffff !important;
 }

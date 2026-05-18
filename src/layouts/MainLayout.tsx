@@ -29,7 +29,7 @@ export default function MainLayout() {
 
           <NavLink to="/feed" className={tabClass}>
             <Newspaper className="w-5 h-5" />
-            <span>Feed</span>
+            <span>Fil</span>
           </NavLink>
 
           <NavLink to="/" end className={tabClass}>
@@ -39,7 +39,7 @@ export default function MainLayout() {
 
           <NavLink to="/discover" className={tabClass}>
             <Compass className="w-5 h-5" />
-            <span>Discover</span>
+            <span>Explorer</span>
           </NavLink>
 
           <NavLink to="/profile" className={tabClass}>

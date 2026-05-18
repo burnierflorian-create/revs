@@ -143,7 +143,7 @@ export default function Profile() {
     { emoji: '🐂', name: 'Lambo', unlocked: brandHas('lamborghini') },
     {
       emoji: '🇯🇵',
-      name: 'JDM Fan',
+      name: 'Fan JDM',
       unlocked: has((s) => s.category === 'JDM'),
     },
     { emoji: '📅', name: 'Organisateur', unlocked: hasEvent },

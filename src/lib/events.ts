@@ -18,6 +18,8 @@ export type CarEvent = {
   starts_at: string
   location: string
   description: string | null
+  lat: number | null
+  lng: number | null
   created_at: string
 }
 

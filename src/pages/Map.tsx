@@ -6,7 +6,16 @@ import 'mapbox-gl/dist/mapbox-gl.css'
 import { Car, LocateFixed } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { SkeletonMap } from '../components/Skeleton'
-import { escapeHtml, timeAgo, type Spot } from '../lib/spots'
+import {
+  distanceMeters,
+  escapeHtml,
+  timeAgo,
+  type Spot,
+} from '../lib/spots'
+
+function fmtDist(m: number): string {
+  return m < 1000 ? `${Math.round(m)} m` : `${(m / 1000).toFixed(1)} km`
+}
 
 const PARIS: [number, number] = [2.3522, 48.8566]
 const DEFAULT_ZOOM = 13
@@ -30,6 +39,7 @@ type SpotProps = {
   id: string
   brand: string
   model: string
+  year: number | null
   photo_url: string | null
   spotter: string
   created_at: string
@@ -149,18 +159,20 @@ function clusterMarkerEl(count: number): HTMLDivElement {
   return outer
 }
 
-function popupHtml(p: SpotProps): string {
-  const title = `${escapeHtml(p.brand)} ${escapeHtml(p.model)}`.trim()
+function popupInner(p: SpotProps): string {
+  const title = (p.model || p.brand || 'Spot').trim()
+  const sub = [p.brand, p.year ?? undefined].filter(Boolean).join(' · ')
   const photo = p.photo_url
     ? `<img src="${escapeHtml(p.photo_url)}" alt="" style="width:72px;height:72px;border-radius:12px;object-fit:cover;flex:none" />`
     : ''
   return `
-    <div style="display:flex;gap:12px;align-items:center;max-width:240px">
+    <div style="display:flex;gap:12px;align-items:center;max-width:240px;color:#111111">
       ${photo}
       <div style="min-width:0">
-        <div style="font-weight:700;font-size:14px">${title || 'Spot'}</div>
-        <div style="font-size:12px;opacity:.6;margin-top:3px">par ${escapeHtml(p.spotter)}</div>
-        <div style="font-size:11px;opacity:.45;margin-top:2px">${escapeHtml(timeAgo(p.created_at))}</div>
+        <div style="font-weight:800;font-size:15px;color:#111111">${escapeHtml(title)}</div>
+        <div style="font-size:12px;color:#555555;margin-top:3px">${escapeHtml(sub || p.spotter)}</div>
+        <div style="font-size:11px;color:#777777;margin-top:3px">${escapeHtml(timeAgo(p.created_at))}</div>
+        <div style="font-size:11px;color:#E63946;font-weight:700;margin-top:6px">Voir le détail →</div>
       </div>
     </div>`
 }
@@ -415,12 +427,19 @@ export default function MapPage() {
   const onScreenRef = useRef<Record<string, mapboxgl.Marker>>({})
   const filterRef = useRef<string>('Tous')
   const refreshRef = useRef<(() => void) | null>(null)
+  const navRef = useRef(navigate)
+  navRef.current = navigate
+  const posRef = useRef<{ lat: number; lng: number } | null>(null)
 
   const [error, setError] = useState<string | null>(null)
   const [activeFilter, setActiveFilter] = useState<string>('Tous')
   const [toast, setToast] = useState<string | null>(null)
   const [geoError, setGeoError] = useState<string | null>(null)
   const [visibleCount, setVisibleCount] = useState(0)
+  const [panelSpots, setPanelSpots] = useState<Spot[]>([])
+  const [userPos, setUserPos] = useState<{ lat: number; lng: number } | null>(
+    null,
+  )
   const [mapReady, setMapReady] = useState(false)
   const [mode, setMode] = useState<MapMode>(() => {
     try {
@@ -440,6 +459,9 @@ export default function MapPage() {
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         setGeoError(null)
+        const p = { lat: pos.coords.latitude, lng: pos.coords.longitude }
+        posRef.current = p
+        setUserPos(p)
         mapRef.current?.flyTo({
           center: [pos.coords.longitude, pos.coords.latitude],
           zoom: RECENTER_ZOOM,
@@ -528,6 +550,9 @@ export default function MapPage() {
             if (settled) return
             settled = true
             clearTimeout(fallback)
+            const p = { lat: pos.coords.latitude, lng: pos.coords.longitude }
+            posRef.current = p
+            setUserPos(p)
             resolve({
               center: [pos.coords.longitude, pos.coords.latitude],
               zoom: USER_ZOOM,
@@ -586,9 +611,11 @@ export default function MapPage() {
     function featureCollection(): GeoJSON.FeatureCollection {
       const cat = FILTER_CATEGORY[filterRef.current]
       const feats: GeoJSON.Feature[] = []
+      const panel: Spot[] = []
       for (const sp of allSpots.values()) {
         if (!isAlive(sp)) continue
         if (cat != null && sp.category !== cat) continue
+        if (cat != null) panel.push(sp)
         feats.push({
           type: 'Feature',
           geometry: { type: 'Point', coordinates: [sp.lng, sp.lat] },
@@ -596,6 +623,7 @@ export default function MapPage() {
             id: sp.id,
             brand: sp.brand ?? '',
             model: sp.model ?? '',
+            year: sp.year ?? null,
             photo_url: sp.photo_url ?? null,
             spotter: names.get(sp.user_id) ?? 'Anonyme',
             created_at: sp.created_at,
@@ -603,7 +631,13 @@ export default function MapPage() {
           },
         })
       }
+      panel.sort(
+        (a, b) =>
+          new Date(b.created_at).getTime() -
+          new Date(a.created_at).getTime(),
+      )
       setVisibleCount(feats.length)
+      setPanelSpots(panel)
       return { type: 'FeatureCollection', features: feats }
     }
 
@@ -687,6 +721,8 @@ export default function MapPage() {
             id: String(props.id ?? ''),
             brand: String(props.brand ?? ''),
             model: String(props.model ?? ''),
+            year:
+              typeof props.year === 'number' ? props.year : null,
             photo_url:
               typeof props.photo_url === 'string' ? props.photo_url : null,
             spotter: String(props.spotter ?? 'Anonyme'),
@@ -711,9 +747,14 @@ export default function MapPage() {
                 offset: 26,
                 closeButton: true,
               })
-                .setLngLat(coords)
-                .setHTML(popupHtml(sp))
-                .addTo(map)
+              const node = document.createElement('div')
+              node.style.cursor = 'pointer'
+              node.innerHTML = popupInner(sp)
+              node.addEventListener('click', () => {
+                popup.remove()
+                navRef.current(`/spot/${sp.id}`)
+              })
+              popup.setLngLat(coords).setDOMContent(node).addTo(map)
               popup.on('close', () => {
                 if (photoEl) photoEl.style.transform = 'scale(1)'
               })
@@ -946,6 +987,65 @@ export default function MapPage() {
           ))}
         </div>
       </div>
+
+      {activeFilter !== 'Tous' && panelSpots.length > 0 && (
+        <div
+          className="animate-slide-up absolute left-0 right-0 z-10"
+          style={{ bottom: 'calc(env(safe-area-inset-bottom) + 5rem)' }}
+        >
+          <div className="mx-2 rounded-2xl bg-black/70 p-3 backdrop-blur">
+            <p className="mb-2 px-1 text-xs font-semibold text-fg/70">
+              {panelSpots.length} {activeFilter} sur la carte
+            </p>
+            <div className="no-scrollbar flex gap-3 overflow-x-auto">
+              {panelSpots.map((s) => {
+                const dist =
+                  userPos &&
+                  Number.isFinite(s.lat) &&
+                  Number.isFinite(s.lng)
+                    ? fmtDist(
+                        distanceMeters(
+                          userPos.lat,
+                          userPos.lng,
+                          s.lat,
+                          s.lng,
+                        ),
+                      )
+                    : null
+                return (
+                  <button
+                    key={s.id}
+                    onClick={() => navigate(`/spot/${s.id}`)}
+                    className="w-32 flex-none text-left"
+                  >
+                    <div className="h-20 w-32 overflow-hidden rounded-xl bg-card">
+                      {s.photo_url ? (
+                        <img
+                          src={s.photo_url}
+                          alt=""
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center">
+                          <Car className="h-6 w-6 text-fg/20" />
+                        </div>
+                      )}
+                    </div>
+                    <p className="mt-1 truncate text-xs font-semibold text-fg">
+                      {s.brand} {s.model}
+                    </p>
+                    <p className="truncate text-[10px] text-fg/50">
+                      {[dist, timeAgo(s.created_at)]
+                        .filter(Boolean)
+                        .join(' · ')}
+                    </p>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      )}
 
       <button
         onClick={flyToUser}

@@ -50,6 +50,20 @@ export default function NewEvent() {
       } = await supabase.auth.getUser()
       if (!user) throw new Error('Non authentifié')
 
+      // Best-effort: attach the organizer's position so the event can
+      // surface in "Près de moi". Never blocks creation if denied.
+      const coords = await new Promise<{ lat: number; lng: number } | null>(
+        (resolve) => {
+          if (!navigator.geolocation) return resolve(null)
+          navigator.geolocation.getCurrentPosition(
+            (p) =>
+              resolve({ lat: p.coords.latitude, lng: p.coords.longitude }),
+            () => resolve(null),
+            { enableHighAccuracy: false, timeout: 6000, maximumAge: 60000 },
+          )
+        },
+      )
+
       const { error: insErr } = await supabase.from('events').insert({
         organizer_id: user.id,
         title: title.trim(),
@@ -57,11 +71,27 @@ export default function NewEvent() {
         starts_at: new Date(datetime).toISOString(),
         location: location.trim(),
         description: description.trim() || null,
+        lat: coords?.lat ?? null,
+        lng: coords?.lng ?? null,
       })
-      if (insErr) throw insErr
+      if (insErr) {
+        const o = insErr as {
+          message?: string
+          code?: string
+          details?: string
+          hint?: string
+        }
+        console.error('[event] insert failed:', o)
+        throw new Error(
+          `Publication : ${[o.message, o.details, o.hint]
+            .filter(Boolean)
+            .join(' — ')}${o.code ? ` [${o.code}]` : ''}`,
+        )
+      }
 
       navigate('/events')
     } catch (err) {
+      console.error('[event] aborted:', err)
       setError(err instanceof Error ? err.message : 'Échec de la publication')
       setBusy(false)
     }

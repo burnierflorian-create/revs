@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Car, Loader2, MapPin } from 'lucide-react'
+import { Car, Layers, Loader2, MapPin } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import {
   categoryLabel,
@@ -57,6 +57,47 @@ const SLIDES = [
 
 type Prof = { pseudo: string | null; ville: string | null; avatar: string | null }
 
+// Burst grouping: consecutive spots of the SAME car (brand+model+color)
+// posted < 5 min apart AND < 100 m apart collapse into one card. A
+// different car in between breaks the run (the list is chronological).
+const GROUP_WINDOW_MS = 5 * 60 * 1000
+const GROUP_RADIUS_M = 100
+
+function carKey(s: Spot): string {
+  return [s.brand, s.model, s.color]
+    .map((x) => (x ?? '').trim().toLowerCase())
+    .join('|')
+}
+
+function groupSpots(list: Spot[]): { primary: Spot; count: number }[] {
+  const out: { primary: Spot; count: number }[] = []
+  let cur: { primary: Spot; count: number; prev: Spot } | null = null
+  for (const s of list) {
+    const close =
+      cur != null &&
+      carKey(s) === carKey(cur.prev) &&
+      Math.abs(
+        new Date(cur.prev.created_at).getTime() -
+          new Date(s.created_at).getTime(),
+      ) <= GROUP_WINDOW_MS &&
+      Number.isFinite(s.lat) &&
+      Number.isFinite(s.lng) &&
+      Number.isFinite(cur.prev.lat) &&
+      Number.isFinite(cur.prev.lng) &&
+      distanceMeters(cur.prev.lat, cur.prev.lng, s.lat, s.lng) <=
+        GROUP_RADIUS_M
+    if (cur && close) {
+      cur.count += 1
+      cur.prev = s
+    } else {
+      if (cur) out.push({ primary: cur.primary, count: cur.count })
+      cur = { primary: s, count: 1, prev: s }
+    }
+  }
+  if (cur) out.push({ primary: cur.primary, count: cur.count })
+  return out
+}
+
 function EmptyCarousel({ onSpot }: { onSpot: () => void }) {
   const [i, setI] = useState(0)
   useEffect(() => {
@@ -65,7 +106,7 @@ function EmptyCarousel({ onSpot }: { onSpot: () => void }) {
   }, [])
   return (
     <div className="flex min-h-screen flex-col bg-bg px-4 pb-10 pt-[max(1rem,env(safe-area-inset-top))]">
-      <h1 className="py-4 font-display text-2xl font-bold text-fg">Feed</h1>
+      <h1 className="py-4 font-display text-2xl font-bold text-fg">Fil</h1>
       <div className="relative flex-1 overflow-hidden rounded-3xl">
         {SLIDES.map((s, idx) => (
           <div
@@ -271,7 +312,7 @@ export default function Feed() {
   if (spots === null) {
     return (
       <div className="min-h-screen bg-bg px-4 pt-[max(1rem,env(safe-area-inset-top))]">
-        <h1 className="py-4 font-display text-2xl font-bold text-fg">Feed</h1>
+        <h1 className="py-4 font-display text-2xl font-bold text-fg">Fil</h1>
         <div className="space-y-5">
           {Array.from({ length: 3 }).map((_, i) => (
             <SkeletonCard key={i} />
@@ -287,7 +328,7 @@ export default function Feed() {
 
   return (
     <div className="min-h-screen bg-bg px-4 pt-[max(1rem,env(safe-area-inset-top))]">
-      <h1 className="py-4 font-display text-2xl font-bold text-fg">Feed</h1>
+      <h1 className="py-4 font-display text-2xl font-bold text-fg">Fil</h1>
 
       <div className="no-scrollbar -mx-4 mb-4 flex gap-2 overflow-x-auto px-4 pb-1">
         {FILTERS.map((f) => (
@@ -318,7 +359,7 @@ export default function Feed() {
         </p>
       ) : (
         <div className="space-y-5">
-          {spots.map((spot) => {
+          {groupSpots(spots).map(({ primary: spot, count }) => {
             const prof = profiles[spot.user_id]
             const pseudo = prof?.pseudo || 'Spotter'
             const color = CAT_COLOR[spot.category] ?? CAT_COLOR.other
@@ -350,6 +391,12 @@ export default function Feed() {
                   >
                     {categoryLabel(spot.category).toUpperCase()}
                   </span>
+                  {count > 1 && (
+                    <span className="absolute right-3 top-3 flex items-center gap-1 rounded-full bg-black/70 px-3 py-1 text-[10px] font-bold tracking-wide text-white backdrop-blur">
+                      <Layers className="h-3 w-3" />
+                      {count} photos
+                    </span>
+                  )}
                   <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/45 to-transparent p-4 pt-10 text-left">
                     <h2 className="font-display text-xl font-bold leading-tight text-white">
                       {name}
