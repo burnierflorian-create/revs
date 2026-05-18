@@ -19,6 +19,32 @@ type Step = 1 | 2 | 3 | 4
 const MAX_PHOTO_AGE_MS = 10 * 60 * 1000
 const MAX_GPS_DRIFT_M = 300
 
+// Supabase errors (Postgrest/Storage) are plain objects, NOT Error
+// instances — so a bare `instanceof Error` check hides the real cause.
+// Log the full shape and return an Error carrying a useful message.
+function supaError(label: string, e: unknown): Error {
+  const o = (e ?? {}) as {
+    message?: string
+    details?: string
+    hint?: string
+    code?: string | number
+    statusCode?: string | number
+    name?: string
+  }
+  const code = o.code ?? o.statusCode
+  console.error(`[spot] ${label} failed:`, {
+    message: o.message,
+    code,
+    details: o.details,
+    hint: o.hint,
+    name: o.name,
+  })
+  const detail = [o.message, o.details, o.hint].filter(Boolean).join(' — ')
+  return new Error(
+    `${label} : ${detail || 'erreur inconnue'}${code ? ` [${code}]` : ''}`,
+  )
+}
+
 const EMPTY_RESULT: IdentifyResult = {
   brand: '',
   model: '',
@@ -206,7 +232,7 @@ export default function NewSpot() {
       const { error: upErr } = await supabase.storage
         .from('spots')
         .upload(path, image.blob, { contentType: 'image/jpeg' })
-      if (upErr) throw upErr
+      if (upErr) throw supaError('Envoi de la photo', upErr)
 
       const { data: pub } = supabase.storage.from('spots').getPublicUrl(path)
 
@@ -225,10 +251,11 @@ export default function NewSpot() {
         lat: pos.coords.latitude,
         lng: pos.coords.longitude,
       })
-      if (insErr) throw insErr
+      if (insErr) throw supaError('Publication', insErr)
 
       navigate('/map', { state: { toast: 'Spot publié ! 🔥' } })
     } catch (err) {
+      console.error('[spot] publish aborted:', err)
       const msg =
         (err as { code?: number })?.code === 1
           ? 'Position GPS refusée. Active la localisation pour publier.'
