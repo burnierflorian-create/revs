@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Car, Layers, Loader2, MapPin } from 'lucide-react'
+import { Car, Layers, Loader2, MapPin, Zap } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import {
   categoryLabel,
   distanceMeters,
   timeAgo,
+  xpForPrice,
   type Spot,
 } from '../lib/spots'
 import { SkeletonCard } from '../components/Skeleton'
@@ -398,12 +399,22 @@ export default function Feed() {
                     </span>
                   )}
                   <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/45 to-transparent p-4 pt-10 text-left">
-                    <h2 className="font-display text-xl font-bold leading-tight text-white">
-                      {name}
-                    </h2>
-                    {sub && (
-                      <p className="mt-0.5 text-sm text-white/70">{sub}</p>
-                    )}
+                    <div className="flex items-end justify-between gap-3">
+                      <div className="min-w-0">
+                        <h2 className="font-display text-xl font-bold leading-tight text-white">
+                          {name}
+                        </h2>
+                        {sub && (
+                          <p className="mt-0.5 truncate text-sm text-white/70">
+                            {sub}
+                          </p>
+                        )}
+                      </div>
+                      <span className="flex flex-none items-center gap-1 rounded-full bg-accent px-2.5 py-1 text-[11px] font-bold text-fg">
+                        <Zap className="h-3 w-3" />+
+                        {xpForPrice(spot.estimated_price)} XP
+                      </span>
+                    </div>
                   </div>
                 </button>
 

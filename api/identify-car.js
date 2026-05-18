@@ -27,6 +27,32 @@ const EMPTY = {
   alternatives: [],
   valid: true,
   reason: '',
+  estimated_price: null,
+}
+
+const PRICE_SYSTEM =
+  'Tu es un expert automobile. Donne le prix neuf estimé en euros pour ' +
+  'la voiture indiquée (marque + modèle + année + finition si fournie). ' +
+  'Donne uniquement un nombre entier, pas de texte, pas de symbole, pas ' +
+  "d'espace."
+
+async function estimatePrice(client, brand, model, year) {
+  if (!brand || !model) return null
+  try {
+    const r = await client.messages.create({
+      model: MODEL,
+      max_tokens: 16,
+      system: PRICE_SYSTEM,
+      messages: [
+        { role: 'user', content: `${brand} ${model} ${year ?? ''}`.trim() },
+      ],
+    })
+    const tb = r.content.find((b) => b.type === 'text')
+    const n = tb ? parseInt(String(tb.text).replace(/[^0-9]/g, ''), 10) : NaN
+    return Number.isFinite(n) && n > 0 ? n : null
+  } catch {
+    return null
+  }
 }
 
 const SYSTEM = `You are an expert automotive identifier. Given a single photo, identify the car and judge whether it is authentic.
@@ -158,7 +184,16 @@ export default async function handler(req, res) {
     if (!textBlock) return sendJson(res, EMPTY)
 
     const parsed = JSON.parse(textBlock.text)
-    return sendJson(res, { ...EMPTY, ...parsed })
+    const estimated_price =
+      parsed.valid !== false
+        ? await estimatePrice(
+            client,
+            parsed.brand,
+            parsed.model,
+            parsed.year,
+          )
+        : null
+    return sendJson(res, { ...EMPTY, ...parsed, estimated_price })
   } catch {
     return sendJson(res, EMPTY)
   }

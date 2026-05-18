@@ -135,7 +135,16 @@ export default function Profile() {
   const brandHas = (needle: string) =>
     has((s) => (s.brand ?? '').toLowerCase().includes(needle))
 
-  const badges = [
+  const priceAtLeast = (min: number) =>
+    spots.filter((s) => (s.estimated_price ?? 0) >= min).length
+  const millionClub = priceAtLeast(1_000_000) >= 1
+
+  const badges: {
+    emoji: string
+    name: string
+    unlocked: boolean
+    gold?: boolean
+  }[] = [
     { emoji: '🚀', name: 'Premier Spot', unlocked: total >= 1 },
     { emoji: '🔟', name: 'Série de 10', unlocked: total >= 10 },
     { emoji: '💯', name: 'Centurion', unlocked: total >= 100 },
@@ -151,6 +160,35 @@ export default function Profile() {
       emoji: '⚡',
       name: 'Hypercar',
       unlocked: has((s) => s.category === 'hypercar'),
+    },
+    // Exclusifs liés au prix.
+    {
+      emoji: '🏆',
+      name: 'Million Club',
+      unlocked: millionClub,
+      gold: true,
+    },
+    {
+      emoji: '👑',
+      name: 'Légendaire',
+      unlocked: millionClub,
+      gold: true,
+    },
+    {
+      emoji: '🦅',
+      name: 'Hypercar Hunter',
+      unlocked: priceAtLeast(200_000) >= 5,
+    },
+    {
+      emoji: '🔭',
+      name: 'Supercar Spotter',
+      unlocked: priceAtLeast(80_000) >= 10,
+    },
+    {
+      emoji: '💎',
+      name: 'Rare Find',
+      unlocked: priceAtLeast(500_000) >= 1,
+      gold: true,
     },
   ]
 
@@ -241,7 +279,9 @@ export default function Profile() {
                 key={b.name}
                 className={`relative flex flex-col items-center gap-1.5 rounded-2xl px-1 py-3.5 text-center ${
                   b.unlocked
-                    ? 'bg-accent/10 ring-1 ring-accent/30'
+                    ? b.gold
+                      ? 'bg-[#E0B341]/15 ring-1 ring-[#E0B341]/50'
+                      : 'bg-accent/10 ring-1 ring-accent/30'
                     : 'bg-card'
                 }`}
               >
@@ -254,7 +294,11 @@ export default function Profile() {
                 )}
                 <span
                   className={`text-[10px] leading-tight ${
-                    b.unlocked ? 'text-accent' : 'text-fg/30'
+                    b.unlocked
+                      ? b.gold
+                        ? 'font-bold text-[#E0B341]'
+                        : 'text-accent'
+                      : 'text-fg/30'
                   }`}
                 >
                   {b.name}

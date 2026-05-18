@@ -32,10 +32,28 @@ export type Spot = {
   description: string | null
   photo_url: string | null
   confidence: number | null
+  estimated_price: number | null
   lat: number
   lng: number
   expires_at: string
   created_at: string
+}
+
+// XP awarded for a spot, by the car's estimated new price (€).
+// Mirrors the award_xp_spot() SQL trigger — keep both in sync.
+export function xpForPrice(price: number | null | undefined): number {
+  const p = price ?? 0
+  if (p >= 1_000_000) return 100
+  if (p >= 500_000) return 80
+  if (p >= 200_000) return 40
+  if (p >= 80_000) return 20
+  if (p >= 30_000) return 10
+  return 5
+}
+
+export function formatPrice(price: number | null | undefined): string | null {
+  if (price == null || price <= 0) return null
+  return `~${new Intl.NumberFormat('fr-FR').format(price)} €`
 }
 
 export type IdentifyAlternative = {
@@ -54,6 +72,7 @@ export type IdentifyResult = {
   alternatives: IdentifyAlternative[]
   valid: boolean
   reason: string
+  estimated_price: number | null
 }
 
 export type PhotoMeta = {

@@ -2,12 +2,14 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import mapboxgl from 'mapbox-gl'
 import 'mapbox-gl/dist/mapbox-gl.css'
-import { ArrowLeft, Car, Navigation } from 'lucide-react'
+import { ArrowLeft, Car, Navigation, Zap } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import {
   categoryLabel,
+  formatPrice,
   spotterLevel,
   spotterName,
+  xpForPrice,
   type Spot,
 } from '../lib/spots'
 import LikeButton from '../components/LikeButton'
@@ -175,6 +177,20 @@ export default function SpotDetail() {
             {spot.brand} {spot.model}
           </h1>
           <LikeButton spotId={spot.id} realtime />
+        </div>
+
+        <div className="flex items-center justify-between gap-4 rounded-2xl border border-accent/30 bg-accent/10 px-5 py-4">
+          <div>
+            <div className="text-[11px] uppercase tracking-widest text-fg/40">
+              Prix neuf estimé
+            </div>
+            <div className="mt-1 text-xl font-bold text-fg">
+              {formatPrice(spot.estimated_price) ?? 'Non estimé'}
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5 rounded-full bg-accent px-4 py-2 text-sm font-bold text-fg">
+            <Zap className="h-4 w-4" />+{xpForPrice(spot.estimated_price)} XP
+          </div>
         </div>
 
         <div className="grid grid-cols-2 gap-3">

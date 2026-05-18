@@ -13,6 +13,7 @@ create table if not exists public.spots (
   description text,
   photo_url   text,
   confidence  integer,
+  estimated_price integer,
   lat         double precision not null,
   lng         double precision not null,
   expires_at  timestamptz not null default (now() + interval '1 hour'),
@@ -21,6 +22,7 @@ create table if not exists public.spots (
 
 -- For databases created before these columns existed.
 alter table public.spots add column if not exists confidence integer;
+alter table public.spots add column if not exists estimated_price integer;
 alter table public.spots
   add column if not exists expires_at timestamptz not null
   default (now() + interval '1 hour');
@@ -270,11 +272,23 @@ create policy "xp readable" on public.xp_transactions for select using (true);
 
 -- Award functions run as definer so they can write xp_transactions
 -- regardless of who triggered the row (e.g. a like on someone else's spot).
+-- XP scales with the spotted car's estimated price (see
+-- supabase/0006-spot-price-xp.sql). Unknown price → ordinaire (+5).
 create or replace function public.award_xp_spot()
   returns trigger language plpgsql security definer set search_path = public as $$
+declare
+  p integer := coalesce(new.estimated_price, 0);
+  amt integer;
 begin
+  if    p >= 1000000 then amt := 100;
+  elsif p >=  500000 then amt := 80;
+  elsif p >=  200000 then amt := 40;
+  elsif p >=   80000 then amt := 20;
+  elsif p >=   30000 then amt := 10;
+  else                    amt := 5;
+  end if;
   insert into public.xp_transactions (user_id, amount, reason)
-  values (new.user_id, 10, 'spot');
+  values (new.user_id, amt, 'spot');
   return new;
 end; $$;
 

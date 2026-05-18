@@ -55,6 +55,7 @@ const EMPTY_RESULT: IdentifyResult = {
   alternatives: [],
   valid: true,
   reason: '',
+  estimated_price: null,
 }
 
 function getPosition(): Promise<GeolocationPosition> {
@@ -248,6 +249,7 @@ export default function NewSpot() {
         description: description.trim() || null,
         photo_url: pub.publicUrl,
         confidence: result.confidence,
+        estimated_price: result.estimated_price ?? null,
         lat: pos.coords.latitude,
         lng: pos.coords.longitude,
       })
