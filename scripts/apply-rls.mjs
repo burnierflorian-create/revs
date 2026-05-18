@@ -79,5 +79,5 @@ const res = await fetch(
 
 const body = await res.text()
 console.log(`status ${res.status}`)
-console.log(body.slice(0, 800))
+console.log(body.slice(0, 6000))
 process.exit(res.ok ? 0 : 2)

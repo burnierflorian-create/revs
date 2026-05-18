@@ -14,6 +14,14 @@ drop policy if exists "spots public read"                         on public.spot
 drop policy if exists "spots insert own"                          on public.spots;
 drop policy if exists "spots update own"                          on public.spots;
 drop policy if exists "spots delete own"                          on public.spots;
+-- Legacy hand-made policies found live (dashboard) — clear them so the
+-- canonical set below is the only thing on the table.
+drop policy if exists "Spots visibles par tous"           on public.spots;
+drop policy if exists "Users can read spots"              on public.spots;
+drop policy if exists "Users can insert spots"            on public.spots;
+drop policy if exists "Utilisateur peut créer ses spots"  on public.spots;
+drop policy if exists "Users can update own spots"        on public.spots;
+drop policy if exists "Utilisateur peut supprimer ses spots" on public.spots;
 
 create policy "spots public read"
   on public.spots for select using (true);
@@ -132,3 +140,35 @@ drop policy if exists "xp readable" on public.xp_transactions;
 
 create policy "xp readable"
   on public.xp_transactions for select using (true);
+
+-- ================================ storage: "spots" photo bucket ====
+-- ROOT CAUSE of "new row violates row-level security policy" when
+-- posting a spot: NewSpot uploads the photo to the `spots` bucket
+-- BEFORE the table insert, and storage.objects had NO policy for this
+-- bucket (only avatars). The upload was denied with that exact error,
+-- so fixing only the spots TABLE never helped.
+insert into storage.buckets (id, name, public)
+values ('spots', 'spots', true)
+on conflict (id) do nothing;
+
+drop policy if exists "public read spot photos"     on storage.objects;
+drop policy if exists "users upload own spot photos" on storage.objects;
+drop policy if exists "users update own spot photos" on storage.objects;
+
+create policy "public read spot photos"
+  on storage.objects for select
+  using (bucket_id = 'spots');
+
+create policy "users upload own spot photos"
+  on storage.objects for insert to authenticated
+  with check (
+    bucket_id = 'spots'
+    and (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+create policy "users update own spot photos"
+  on storage.objects for update to authenticated
+  using (
+    bucket_id = 'spots'
+    and (storage.foldername(name))[1] = auth.uid()::text
+  );

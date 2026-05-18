@@ -42,27 +42,37 @@ $$;
 -- 2. Row Level Security ------------------------------------------------------
 alter table public.spots enable row level security;
 
--- Any authenticated user can read all spots (the map shows everyone's).
-create policy "spots are readable by authenticated users"
-  on public.spots for select
-  to authenticated
-  using (true);
+-- Idempotent: drop every prior/legacy name, then recreate the
+-- canonical set. SELECT is public; writes are authenticated + own row.
+drop policy if exists "spots are readable by authenticated users" on public.spots;
+drop policy if exists "users insert their own spots"              on public.spots;
+drop policy if exists "users modify their own spots"              on public.spots;
+drop policy if exists "users delete their own spots"              on public.spots;
+drop policy if exists "Spots visibles par tous"                   on public.spots;
+drop policy if exists "Users can read spots"                      on public.spots;
+drop policy if exists "Users can insert spots"                    on public.spots;
+drop policy if exists "Utilisateur peut créer ses spots"          on public.spots;
+drop policy if exists "Users can update own spots"                on public.spots;
+drop policy if exists "Utilisateur peut supprimer ses spots"      on public.spots;
+drop policy if exists "spots public read"                         on public.spots;
+drop policy if exists "spots insert own"                          on public.spots;
+drop policy if exists "spots update own"                          on public.spots;
+drop policy if exists "spots delete own"                          on public.spots;
 
--- A user can only insert spots attributed to themselves.
-create policy "users insert their own spots"
-  on public.spots for insert
-  to authenticated
+create policy "spots public read"
+  on public.spots for select using (true);
+
+create policy "spots insert own"
+  on public.spots for insert to authenticated
   with check (auth.uid() = user_id);
 
--- A user can update/delete only their own spots.
-create policy "users modify their own spots"
-  on public.spots for update
-  to authenticated
-  using (auth.uid() = user_id);
+create policy "spots update own"
+  on public.spots for update to authenticated
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
 
-create policy "users delete their own spots"
-  on public.spots for delete
-  to authenticated
+create policy "spots delete own"
+  on public.spots for delete to authenticated
   using (auth.uid() = user_id);
 
 -- 3. Realtime ----------------------------------------------------------------
@@ -73,16 +83,29 @@ insert into storage.buckets (id, name, public)
 values ('spots', 'spots', true)
 on conflict (id) do nothing;
 
--- Public read of spot photos.
+-- Idempotent storage policies for the spots bucket. (Their ABSENCE on
+-- the live DB was the root cause of "new row violates RLS" on posting
+-- a spot — the photo upload was denied before the table insert.)
+drop policy if exists "public read spot photos"     on storage.objects;
+drop policy if exists "users upload own spot photos" on storage.objects;
+drop policy if exists "users update own spot photos" on storage.objects;
+
 create policy "public read spot photos"
   on storage.objects for select
   using (bucket_id = 'spots');
 
--- Authenticated users can upload only into their own {userId}/ folder.
 create policy "users upload own spot photos"
   on storage.objects for insert
   to authenticated
   with check (
+    bucket_id = 'spots'
+    and (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+create policy "users update own spot photos"
+  on storage.objects for update
+  to authenticated
+  using (
     bucket_id = 'spots'
     and (storage.foldername(name))[1] = auth.uid()::text
   );
