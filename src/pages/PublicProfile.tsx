@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Car } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { type Spot } from '../lib/spots'
+import { myPseudo, notifyPush } from '../lib/push'
 import { xpLevel } from '../lib/xp'
 import { Skeleton } from '../components/Skeleton'
 
@@ -96,6 +97,14 @@ export default function PublicProfile() {
       await supabase
         .from('followers')
         .insert({ follower_id: meId, following_id: id })
+      const who = await myPseudo()
+      void notifyPush({
+        user_id: id,
+        title: '👥 Nouvel abonné',
+        body: `${who} te suit maintenant`,
+        url: `/u/${meId}`,
+        type: 'followers',
+      })
     }
     setBusy(false)
   }

@@ -12,6 +12,7 @@ import {
   type SpotCategory,
 } from '../lib/spots'
 import { takePendingPhoto } from '../lib/pendingPhoto'
+import { maybePromptPush, myPseudo, notifyPush } from '../lib/push'
 import { Skeleton } from '../components/Skeleton'
 
 type Step = 1 | 2 | 3 | 4
@@ -282,6 +283,25 @@ export default function NewSpot() {
         lng: pos.coords.longitude,
       })
       if (insErr) throw supaError('Publication', insErr)
+
+      // After the first successful spot: ask for push permission, then
+      // notify nearby subscribers (server filters by ≤10km).
+      void (async () => {
+        await maybePromptPush()
+        const who = await myPseudo()
+        void notifyPush({
+          title: '🚗 Nouveau spot',
+          body: `${who} vient de spotter une ${brand.trim()} ${model.trim()} près de toi`,
+          url: '/map',
+          type: 'nearby',
+          nearby: {
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+            radiusKm: 10,
+            excludeUserId: user.id,
+          },
+        })
+      })()
 
       navigate('/map', { state: { toast: 'Spot publié ! 🔥' } })
     } catch (err) {

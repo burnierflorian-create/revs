@@ -14,6 +14,7 @@ import {
   type Spot,
 } from '../lib/spots'
 import LikeButton from '../components/LikeButton'
+import { myPseudo, notifyPush } from '../lib/push'
 
 function formatDateTime(iso: string): string {
   return new Intl.DateTimeFormat('fr-FR', {
@@ -114,6 +115,16 @@ export default function SpotDetail() {
     if (!error) {
       setText('')
       await loadComments()
+      if (spot && spot.user_id !== user.id) {
+        const who = await myPseudo()
+        void notifyPush({
+          user_id: spot.user_id,
+          title: '💬 Nouveau commentaire',
+          body: `${who} a commenté ton spot ${spot.brand} ${spot.model}`,
+          url: `/spot/${spot.id}`,
+          type: 'comments',
+        })
+      }
     }
   }
 

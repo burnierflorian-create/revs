@@ -8,52 +8,17 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       injectRegister: 'auto',
-      // The precaching service worker has repeatedly bricked clients
-      // after deploys (stale SW serving an old index.html that points at
-      // deleted hashed chunks -> "client-side exception"). Ship a
-      // self-destroying SW: it unregisters any existing SW and clears all
-      // caches on every client, so the app is always served fresh from
-      // the network. Trade-off: no offline caching (acceptable — the app
-      // is data-driven and reliability is the priority).
-      selfDestroying: true,
+      // Custom SW (src/sw.ts) via injectManifest. We do NOT precache
+      // app assets — the prior generateSW precache repeatedly bricked
+      // clients after deploys (stale index.html → deleted hashed chunks
+      // → blank screen). injectionPoint:undefined disables the precache
+      // manifest entirely; the SW only does Web Push + notifications and
+      // wipes any leftover caches on activate.
+      strategies: 'injectManifest',
+      srcDir: 'src',
+      filename: 'sw.ts',
+      injectManifest: { injectionPoint: undefined },
       includeAssets: ['favicon.svg'],
-      workbox: {
-        // mapbox-gl pushes the main bundle past the 2 MiB default
-        maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
-        skipWaiting: true,
-        clientsClaim: true,
-        cleanupOutdatedCaches: true,
-        // No navigateFallback: serving the *precached* index.html after a
-        // deploy points at deleted hashed JS and bricks the app. Fetch the
-        // document network-first so asset hashes always match the deploy.
-        runtimeCaching: [
-          {
-            urlPattern: ({ request }) => request.mode === 'navigate',
-            handler: 'NetworkFirst',
-            options: {
-              cacheName: 'html',
-              networkTimeoutSeconds: 3,
-              expiration: { maxEntries: 10 },
-            },
-          },
-          {
-            urlPattern: /^https:\/\/api\.mapbox\.com\//,
-            handler: 'NetworkFirst',
-            options: {
-              cacheName: 'mapbox-cache',
-              expiration: { maxEntries: 50, maxAgeSeconds: 3600 },
-            },
-          },
-          {
-            urlPattern: /^https:\/\/.*\.supabase\.co\//,
-            handler: 'NetworkFirst',
-            options: {
-              cacheName: 'supabase-cache',
-              expiration: { maxAgeSeconds: 60 },
-            },
-          },
-        ],
-      },
       manifest: {
         name: 'revs',
         short_name: 'revs',

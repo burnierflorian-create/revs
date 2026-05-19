@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Heart } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { myPseudo, notifyPush } from '../lib/push'
 
 type Props = {
   spotId: string
@@ -104,6 +105,25 @@ export default function LikeButton({
       // Revert on failure.
       setLiked(wasLiked)
       setCount((n) => Math.max(0, n + (wasLiked ? 1 : -1)))
+    } else if (!wasLiked) {
+      const { data: sp } = await supabase
+        .from('spots')
+        .select('user_id, brand, model')
+        .eq('id', spotId)
+        .maybeSingle()
+      const s = sp as
+        | { user_id: string; brand: string; model: string }
+        | null
+      if (s && s.user_id !== uid) {
+        const who = await myPseudo()
+        void notifyPush({
+          user_id: s.user_id,
+          title: '❤️ Nouveau like',
+          body: `${who} a liké ton spot ${s.brand} ${s.model}`,
+          url: `/spot/${spotId}`,
+          type: 'likes',
+        })
+      }
     }
     setBusy(false)
   }

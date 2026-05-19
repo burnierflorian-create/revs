@@ -111,6 +111,13 @@ export default function Settings() {
   const [orgRaison, setOrgRaison] = useState('')
   const [orgSending, setOrgSending] = useState(false)
   const [orgSent, setOrgSent] = useState(false)
+  const [npref, setNpref] = useState({
+    likes: true,
+    comments: true,
+    followers: true,
+    nearby: true,
+    streak: true,
+  })
 
   useEffect(() => {
     let active = true
@@ -122,7 +129,7 @@ export default function Settings() {
       setUserId(user.id)
       setEmail(user.email ?? '')
 
-      const [{ data: prof }, { data: orgReq }, { data: sub }] =
+      const [{ data: prof }, { data: orgReq }, { data: sub }, { data: np }] =
         await Promise.all([
           supabase
             .from('profiles')
@@ -139,6 +146,11 @@ export default function Settings() {
             .select('plan, status')
             .eq('user_id', user.id)
             .maybeSingle(),
+          supabase
+            .from('notification_prefs')
+            .select('likes, comments, followers, nearby, streak')
+            .eq('user_id', user.id)
+            .maybeSingle(),
         ])
       if (!active) return
       if (prof) {
@@ -148,6 +160,14 @@ export default function Settings() {
         setIsPublic(prof.is_public ?? true)
         setRole((prof.role as string | undefined) ?? 'user')
       }
+      if (np)
+        setNpref({
+          likes: np.likes ?? true,
+          comments: np.comments ?? true,
+          followers: np.followers ?? true,
+          nearby: np.nearby ?? true,
+          streak: np.streak ?? true,
+        })
       if (orgReq && orgReq.length > 0) setOrgSent(true)
       if (sub) {
         setPlan((sub.plan as string | undefined) ?? null)
@@ -364,6 +384,16 @@ export default function Settings() {
       setErr(m?.message ?? 'Suppression échouée')
       setSaving(false)
     }
+  }
+
+  async function toggleNpref(key: keyof typeof npref) {
+    if (!userId) return
+    const next = { ...npref, [key]: !npref[key] }
+    setNpref(next)
+    const { error } = await supabase
+      .from('notification_prefs')
+      .upsert({ user_id: userId, ...next }, { onConflict: 'user_id' })
+    if (error) setNpref(npref)
   }
 
   function resetOnboarding() {
@@ -583,6 +613,30 @@ export default function Settings() {
               sub="Toujours activé"
               right={<Toggle checked disabled />}
             />
+          </Section>
+
+          {/* NOTIFICATIONS */}
+          <Section title="Notifications">
+            {(
+              [
+                ['likes', 'Likes sur mes spots'],
+                ['comments', 'Commentaires'],
+                ['followers', 'Nouveaux abonnés'],
+                ['nearby', 'Spots près de moi'],
+                ['streak', 'Rappel de streak'],
+              ] as [keyof typeof npref, string][]
+            ).map(([k, label]) => (
+              <Row
+                key={k}
+                label={label}
+                right={
+                  <Toggle
+                    checked={npref[k]}
+                    onChange={() => toggleNpref(k)}
+                  />
+                }
+              />
+            ))}
           </Section>
 
           {/* CONFIDENTIALITÉ & LÉGAL */}
