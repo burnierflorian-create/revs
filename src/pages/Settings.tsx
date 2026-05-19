@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, ChevronRight, Camera } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { resizeImageToJpeg } from '../lib/spots'
+import { enablePush, pushSupported } from '../lib/push'
 
 function Section({
   title,
@@ -111,6 +112,8 @@ export default function Settings() {
   const [orgRaison, setOrgRaison] = useState('')
   const [orgSending, setOrgSending] = useState(false)
   const [orgSent, setOrgSent] = useState(false)
+  const [pushBusy, setPushBusy] = useState(false)
+  const [pushMsg, setPushMsg] = useState<string | null>(null)
   const [npref, setNpref] = useState({
     likes: true,
     comments: true,
@@ -386,6 +389,24 @@ export default function Settings() {
     }
   }
 
+  async function enableDevicePush() {
+    if (!pushSupported()) {
+      setPushMsg(
+        'Non supporté ici (sur iOS : ajoute l’app à l’écran d’accueil).',
+      )
+      return
+    }
+    setPushBusy(true)
+    setPushMsg('Activation…')
+    const ok = await enablePush()
+    setPushBusy(false)
+    setPushMsg(
+      ok
+        ? 'Notifications activées sur cet appareil ✓'
+        : 'Échec — autorise les notifications dans les réglages du navigateur.',
+    )
+  }
+
   async function toggleNpref(key: keyof typeof npref) {
     if (!userId) return
     const next = { ...npref, [key]: !npref[key] }
@@ -617,6 +638,11 @@ export default function Settings() {
 
           {/* NOTIFICATIONS */}
           <Section title="Notifications">
+            <Row
+              label="Activer les notifications sur cet appareil"
+              sub={pushMsg ?? undefined}
+              onClick={pushBusy ? undefined : enableDevicePush}
+            />
             {(
               [
                 ['likes', 'Likes sur mes spots'],

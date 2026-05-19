@@ -65,7 +65,9 @@ export async function enablePush(): Promise<boolean> {
   }
 }
 
-// Prompt at most once per device, only when not already decided.
+// Prompt after the first spot. Only lock the "done" flag once the
+// outcome is final (subscribed OK, or permission explicitly denied) —
+// a transient failure (e.g. SW not ready yet) must be retryable.
 export async function maybePromptPush(): Promise<void> {
   if (!pushSupported()) return
   try {
@@ -74,12 +76,20 @@ export async function maybePromptPush(): Promise<void> {
   } catch {
     /* ignore */
   }
+  const ok = await enablePush()
+  let denied = false
   try {
-    localStorage.setItem(PROMPTED_KEY, '1')
+    denied = Notification.permission === 'denied'
   } catch {
     /* ignore */
   }
-  await enablePush()
+  if (ok || denied) {
+    try {
+      localStorage.setItem(PROMPTED_KEY, '1')
+    } catch {
+      /* ignore */
+    }
+  }
 }
 
 export async function myPseudo(): Promise<string> {
