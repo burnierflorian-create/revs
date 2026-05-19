@@ -84,6 +84,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return
   }
 
+  try {
   webpush.setVapidDetails(
     'mailto:contact@revs.app',
     VAPID_PUBLIC,
@@ -177,4 +178,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   res.status(200).json({ sent, pruned: dead.length })
+  } catch (e) {
+    const err = e as { message?: string; stack?: string }
+    console.error('[send-push] crashed:', err)
+    res.status(500).json({
+      error: err?.message || String(e),
+      stack: (err?.stack || '').split('\n').slice(0, 5),
+    })
+  }
 }

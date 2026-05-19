@@ -88,6 +88,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     res.status(500).json({ error: 'Not configured' })
     return
   }
+  try {
   const admin = createClient(SUPABASE_URL, SERVICE_ROLE, {
     auth: { persistSession: false },
   })
@@ -169,4 +170,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   res.status(200).json({ streakSent, gpSent, users: userIds.length })
+  } catch (e) {
+    const err = e as { message?: string; stack?: string }
+    console.error('[cron-notify] crashed:', err)
+    res.status(500).json({
+      error: err?.message || String(e),
+      stack: (err?.stack || '').split('\n').slice(0, 5),
+    })
+  }
 }
