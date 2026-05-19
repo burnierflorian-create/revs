@@ -8,10 +8,12 @@ const SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
 function cleanKey(s: string | undefined): string {
   return (s || '')
     .trim()
+    .replace(/^['"]+|['"]+$/g, '') // surrounding quotes
     .replace(/\s+/g, '')
-    .replace(/=+$/, '')
     .replace(/\+/g, '-')
     .replace(/\//g, '_')
+    .replace(/=+$/, '')
+    .replace(/[^A-Za-z0-9_-]/g, '') // anything still non-url-safe
 }
 const VAPID_PUBLIC = cleanKey(process.env.VAPID_PUBLIC_KEY)
 const VAPID_PRIVATE = cleanKey(process.env.VAPID_PRIVATE_KEY)
@@ -184,6 +186,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     res.status(500).json({
       error: err?.message || String(e),
       stack: (err?.stack || '').split('\n').slice(0, 5),
+      // Safe diagnostics (public key is NOT secret; private key never
+      // exposed — only its length).
+      diag: {
+        pubLen: VAPID_PUBLIC.length,
+        pubHead: VAPID_PUBLIC.slice(0, 6),
+        pubTail: VAPID_PUBLIC.slice(-6),
+        privLen: VAPID_PRIVATE.length,
+        expectedPubLen: 87,
+      },
     })
   }
 }
