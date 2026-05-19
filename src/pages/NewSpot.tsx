@@ -96,6 +96,12 @@ export default function NewSpot() {
   const [pubError, setPubError] = useState<string | null>(null)
   const [limitReached, setLimitReached] = useState(false)
   const [pubStatus, setPubStatus] = useState('')
+  // Gate: a pseudo is required before spotting (no "Anonyme" spots).
+  const [profileOk, setProfileOk] = useState<boolean | null>(null)
+  const [gpPseudo, setGpPseudo] = useState('')
+  const [gpVille, setGpVille] = useState('')
+  const [gpSaving, setGpSaving] = useState(false)
+  const [gpErr, setGpErr] = useState<string | null>(null)
 
   useEffect(() => {
     return () => {
@@ -146,6 +152,61 @@ export default function NewSpot() {
     if (f) loadFile(f)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  useEffect(() => {
+    let active = true
+    ;(async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (!user) {
+        if (active) setProfileOk(false)
+        return
+      }
+      const { data } = await supabase
+        .from('profiles')
+        .select('pseudo, ville')
+        .eq('user_id', user.id)
+        .maybeSingle()
+      if (!active) return
+      if (data?.pseudo) setGpPseudo(data.pseudo)
+      if (data?.ville) setGpVille(data.ville)
+      setProfileOk(!!(data?.pseudo && String(data.pseudo).trim()))
+    })()
+    return () => {
+      active = false
+    }
+  }, [])
+
+  async function saveProfileGate() {
+    const p = gpPseudo.trim()
+    if (p.length < 2) {
+      setGpErr('Choisis un pseudo (2 caractères minimum).')
+      return
+    }
+    setGpSaving(true)
+    setGpErr(null)
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    if (!user) {
+      setGpSaving(false)
+      setGpErr('Non authentifié.')
+      return
+    }
+    const { error } = await supabase
+      .from('profiles')
+      .upsert(
+        { user_id: user.id, pseudo: p, ville: gpVille.trim() },
+        { onConflict: 'user_id' },
+      )
+    setGpSaving(false)
+    if (error) {
+      setGpErr("Échec de l'enregistrement. Réessaie.")
+      return
+    }
+    setProfileOk(true)
+  }
 
   function applyResult(r: IdentifyResult) {
     setResult(r)
@@ -328,6 +389,73 @@ export default function NewSpot() {
     if (step === 1) navigate('/')
     else if (step === 3) setStep(1)
     else setStep((s) => (s - 1) as Step)
+  }
+
+  if (profileOk === null) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-bg text-sm text-fg/40">
+        Chargement…
+      </div>
+    )
+  }
+
+  if (profileOk === false) {
+    return (
+      <div className="min-h-screen bg-bg px-6 pt-[max(1rem,env(safe-area-inset-top))] text-fg">
+        <div className="flex items-center gap-4 py-4">
+          <button
+            onClick={() => navigate('/')}
+            aria-label="Retour"
+            className="text-fg/60 transition-colors hover:text-fg"
+          >
+            <ArrowLeft className="h-6 w-6" />
+          </button>
+        </div>
+        <div className="mx-auto mt-6 max-w-sm space-y-5">
+          <div>
+            <h1 className="font-display text-2xl font-bold">
+              Crée ton pseudo avant de spotter
+            </h1>
+            <p className="mt-2 text-sm text-fg/60">
+              Ton pseudo apparaît sur tes spots dans le feed. Pas de spots
+              anonymes sur REVS.
+            </p>
+          </div>
+          <div className="space-y-2">
+            <label className="text-[11px] uppercase tracking-widest text-fg/40">
+              Pseudo
+            </label>
+            <input
+              value={gpPseudo}
+              maxLength={24}
+              onChange={(e) => setGpPseudo(e.target.value)}
+              placeholder="ex : speedhunter_74"
+              className="w-full rounded-lg bg-white/5 px-3 py-3 text-fg outline-none placeholder:text-fg/25 focus:ring-1 focus:ring-accent"
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-[11px] uppercase tracking-widest text-fg/40">
+              Ville
+            </label>
+            <input
+              value={gpVille}
+              maxLength={48}
+              onChange={(e) => setGpVille(e.target.value)}
+              placeholder="ex : Annecy"
+              className="w-full rounded-lg bg-white/5 px-3 py-3 text-fg outline-none placeholder:text-fg/25 focus:ring-1 focus:ring-accent"
+            />
+          </div>
+          {gpErr && <p className="text-sm text-accent">{gpErr}</p>}
+          <button
+            onClick={saveProfileGate}
+            disabled={gpSaving}
+            className="w-full rounded-full bg-accent py-3.5 text-sm font-semibold disabled:opacity-50"
+          >
+            {gpSaving ? '…' : 'Sauvegarder et spotter'}
+          </button>
+        </div>
+      </div>
+    )
   }
 
   return (

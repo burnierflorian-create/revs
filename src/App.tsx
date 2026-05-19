@@ -10,9 +10,9 @@ import NewEvent from './pages/NewEvent'
 import Profile from './pages/Profile'
 import Premium from './pages/Premium'
 import Settings from './pages/Settings'
-import Privacy from './pages/Privacy'
-import Legal from './pages/Legal'
-import Cgu from './pages/Cgu'
+import LegalMentions from './pages/LegalMentions'
+import LegalPrivacy from './pages/LegalPrivacy'
+import LegalTerms from './pages/LegalTerms'
 import SpotDetail from './pages/SpotDetail'
 import Discover from './pages/Discover'
 import GrandPrixDetail from './pages/GrandPrixDetail'
@@ -59,9 +59,9 @@ export default function App() {
           <Route path="/ma-galerie" element={<MyGallery />} />
           <Route path="/u/:id" element={<PublicProfile />} />
           <Route path="/settings" element={<Settings />} />
-          <Route path="/confidentialite" element={<Privacy />} />
-          <Route path="/mentions-legales" element={<Legal />} />
-          <Route path="/cgu" element={<Cgu />} />
+          <Route path="/legal/mentions" element={<LegalMentions />} />
+          <Route path="/legal/privacy" element={<LegalPrivacy />} />
+          <Route path="/legal/terms" element={<LegalTerms />} />
           <Route path="/premium" element={<Premium />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />

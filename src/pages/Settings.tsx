@@ -657,16 +657,16 @@ export default function Settings() {
               right={<Toggle checked={marketing} onChange={toggleMarketing} />}
             />
             <Row
-              label="Politique de confidentialité"
-              onClick={() => navigate('/confidentialite')}
-            />
-            <Row
               label="Mentions légales"
-              onClick={() => navigate('/mentions-legales')}
+              onClick={() => navigate('/legal/mentions')}
             />
             <Row
-              label="Conditions d'utilisation"
-              onClick={() => navigate('/cgu')}
+              label="Politique de confidentialité"
+              onClick={() => navigate('/legal/privacy')}
+            />
+            <Row
+              label="Conditions générales d'utilisation"
+              onClick={() => navigate('/legal/terms')}
             />
           </Section>
 
