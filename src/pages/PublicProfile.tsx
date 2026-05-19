@@ -101,7 +101,7 @@ export default function PublicProfile() {
       void notifyPush({
         user_id: id,
         title: '👥 Nouvel abonné',
-        body: `${who} te suit maintenant`,
+        body: `${who} a commencé à te suivre`,
         url: `/u/${meId}`,
         type: 'followers',
       })
