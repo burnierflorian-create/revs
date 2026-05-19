@@ -5,8 +5,18 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 const SUPABASE_URL =
   process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
 const SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
-const VAPID_PUBLIC = process.env.VAPID_PUBLIC_KEY || ''
-const VAPID_PRIVATE = process.env.VAPID_PRIVATE_KEY || ''
+// Env-pasted keys often carry a trailing newline/space or '=' padding;
+// web-push then rejects them. Normalize to URL-safe base64, no padding.
+function cleanKey(s: string | undefined): string {
+  return (s || '')
+    .trim()
+    .replace(/\s+/g, '')
+    .replace(/=+$/, '')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+}
+const VAPID_PUBLIC = cleanKey(process.env.VAPID_PUBLIC_KEY)
+const VAPID_PRIVATE = cleanKey(process.env.VAPID_PRIVATE_KEY)
 
 type PrefKey = 'likes' | 'comments' | 'followers' | 'nearby' | 'streak'
 

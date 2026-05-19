@@ -5,8 +5,16 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 const SUPABASE_URL =
   process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
 const SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
-const VAPID_PUBLIC = process.env.VAPID_PUBLIC_KEY || ''
-const VAPID_PRIVATE = process.env.VAPID_PRIVATE_KEY || ''
+function cleanKey(s: string | undefined): string {
+  return (s || '')
+    .trim()
+    .replace(/\s+/g, '')
+    .replace(/=+$/, '')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+}
+const VAPID_PUBLIC = cleanKey(process.env.VAPID_PUBLIC_KEY)
+const VAPID_PRIVATE = cleanKey(process.env.VAPID_PRIVATE_KEY)
 
 // Keep race dates in sync with src/lib/f1.ts.
 const GP_2026: { name: string; date: string }[] = [
