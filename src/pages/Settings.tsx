@@ -704,12 +704,9 @@ export default function Settings() {
             />
             {role === 'organizer' || role === 'admin' ? (
               <Row
-                label="Statut organisateur"
-                right={
-                  <span className="rounded-full bg-accent/15 px-2.5 py-1 text-[11px] font-bold text-accent">
-                    Vérifié
-                  </span>
-                }
+                label="Créer un événement"
+                sub="Organisateur vérifié"
+                onClick={() => navigate('/new-event')}
               />
             ) : orgSent ? (
               <Row
