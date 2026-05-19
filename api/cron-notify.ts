@@ -183,18 +183,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   } catch (e) {
     const err = e as { message?: string; stack?: string }
     console.error('[cron-notify] crashed:', err)
-    res.status(500).json({
-      error: err?.message || String(e),
-      stack: (err?.stack || '').split('\n').slice(0, 5),
-      // Safe diagnostics (public key is NOT secret; private key never
-      // exposed — only its length).
-      diag: {
-        pubLen: VAPID_PUBLIC.length,
-        pubHead: VAPID_PUBLIC.slice(0, 6),
-        pubTail: VAPID_PUBLIC.slice(-6),
-        privLen: VAPID_PRIVATE.length,
-        expectedPubLen: 87,
-      },
-    })
+    res.status(500).json({ error: err?.message || String(e) })
   }
 }
