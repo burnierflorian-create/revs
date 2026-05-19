@@ -16,6 +16,7 @@ const PAGE = 10
 
 const FILTERS = [
   'Tout',
+  'Abonnements',
   'Près de moi',
   'Supercars',
   'Hypercars',
@@ -158,6 +159,7 @@ export default function Feed() {
 
   const pageRef = useRef(0)
   const poolRef = useRef<Spot[]>([])
+  const followingRef = useRef<string[] | null>(null)
   const profilesRef = useRef<Record<string, Prof>>({})
   const sentinelRef = useRef<HTMLDivElement | null>(null)
 
@@ -190,6 +192,33 @@ export default function Feed() {
 
   const serverPage = useCallback(
     async (offset: number): Promise<Spot[]> => {
+      if (filter === 'Abonnements') {
+        if (followingRef.current === null) {
+          const {
+            data: { user },
+          } = await supabase.auth.getUser()
+          if (!user) {
+            followingRef.current = []
+          } else {
+            const { data } = await supabase
+              .from('followers')
+              .select('following_id')
+              .eq('follower_id', user.id)
+            followingRef.current = (
+              (data ?? []) as { following_id: string }[]
+            ).map((r) => r.following_id)
+          }
+        }
+        const ids = followingRef.current
+        if (ids.length === 0) return []
+        const { data } = await supabase
+          .from('spots')
+          .select('*')
+          .in('user_id', ids)
+          .order('created_at', { ascending: false })
+          .range(offset, offset + PAGE - 1)
+        return (data ?? []) as Spot[]
+      }
       const cat = FILTER_CAT[filter]
       const base = supabase.from('spots').select('*')
       const { data } = await (cat ? base.eq('category', cat) : base)
@@ -222,6 +251,7 @@ export default function Feed() {
     setGeoMsg(null)
     pageRef.current = 0
     poolRef.current = []
+    followingRef.current = null
     ;(async () => {
       if (filter === 'Près de moi') {
         const pos = await getPosition()

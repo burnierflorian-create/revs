@@ -39,6 +39,9 @@ export default function Profile() {
   const [xp, setXp] = useState(0)
   const [plan, setPlan] = useState<string | null>(null)
   const [earlyAdopter, setEarlyAdopter] = useState(false)
+  const [meId, setMeId] = useState<string | null>(null)
+  const [followers, setFollowers] = useState(0)
+  const [following, setFollowing] = useState(0)
   const [animPct, setAnimPct] = useState(0)
   const [openBadge, setOpenBadge] = useState<Badge | null>(null)
 
@@ -50,8 +53,16 @@ export default function Profile() {
       } = await supabase.auth.getUser()
       if (!user) return
 
-      const [spotsRes, allUidsRes, eventsRes, xpRes, profRes, subRes] =
-        await Promise.all([
+      const [
+        spotsRes,
+        allUidsRes,
+        eventsRes,
+        xpRes,
+        profRes,
+        subRes,
+        followersRes,
+        followingRes,
+      ] = await Promise.all([
           supabase
             .from('spots')
             .select('*')
@@ -73,6 +84,14 @@ export default function Profile() {
             .select('plan, status')
             .eq('user_id', user.id)
             .maybeSingle(),
+          supabase
+            .from('followers')
+            .select('follower_id', { count: 'exact', head: true })
+            .eq('following_id', user.id),
+          supabase
+            .from('followers')
+            .select('following_id', { count: 'exact', head: true })
+            .eq('follower_id', user.id),
         ])
 
       const myCreated =
@@ -126,6 +145,9 @@ export default function Profile() {
           : null,
       )
       setEarlyAdopter(earlier < 100)
+      setMeId(user.id)
+      setFollowers(followersRes.count ?? 0)
+      setFollowing(followingRes.count ?? 0)
       setLoading(false)
     })()
     return () => {
@@ -242,6 +264,17 @@ export default function Profile() {
               Membre depuis {joined}
             </p>
           )}
+          {meId && (
+            <button
+              onClick={() => navigate(`/u/${meId}`)}
+              className="mt-3 text-sm text-fg/70"
+            >
+              <span className="font-bold text-fg">{followers}</span> abonnés
+              {' · '}
+              <span className="font-bold text-fg">{following}</span>{' '}
+              abonnements
+            </button>
+          )}
         </div>
 
         {/* SECTION 2 — XP */}
@@ -269,9 +302,21 @@ export default function Profile() {
 
         {/* SECTION 3 — Stats */}
         <section className="grid grid-cols-3 gap-3">
-          <Stat value={String(total)} label="Spots" />
-          <Stat value={String(uniqueBrands)} label="Marques" />
-          <Stat value={rank ? `#${rank}` : '—'} label="Rang global" />
+          <Stat
+            value={String(total)}
+            label="Spots"
+            onClick={() => navigate('/ma-galerie')}
+          />
+          <Stat
+            value={String(uniqueBrands)}
+            label="Marques"
+            onClick={() => navigate('/mes-marques')}
+          />
+          <Stat
+            value={rank ? `#${rank}` : '—'}
+            label="Rang global"
+            onClick={() => navigate('/classement')}
+          />
         </section>
 
         {/* SECTION 4 — Badges */}
@@ -456,11 +501,22 @@ export default function Profile() {
   )
 }
 
-function Stat({ value, label }: { value: string; label: string }) {
+function Stat({
+  value,
+  label,
+  onClick,
+}: {
+  value: string
+  label: string
+  onClick?: () => void
+}) {
   return (
-    <div className="rounded-2xl border border-white/5 bg-card px-2 py-4 text-center shadow-[0_2px_10px_rgba(0,0,0,0.4)]">
+    <button
+      onClick={onClick}
+      className="w-full rounded-2xl border border-white/5 bg-card px-2 py-4 text-center shadow-[0_2px_10px_rgba(0,0,0,0.4)] transition-transform active:scale-95"
+    >
       <div className="font-display text-xl font-bold text-fg">{value}</div>
       <div className="mt-1 text-[11px] text-[#888888]">{label}</div>
-    </div>
+    </button>
   )
 }

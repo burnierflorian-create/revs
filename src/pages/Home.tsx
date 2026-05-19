@@ -74,6 +74,7 @@ export default function Home() {
   const [rank, setRank] = useState<number | null>(null)
   const [recent, setRecent] = useState<Spot[]>([])
   const [todayCount, setTodayCount] = useState(0)
+  const [streak, setStreak] = useState(0)
   const [news, setNews] = useState<NewsLite[]>([])
   const [now, setNow] = useState(() => Date.now())
 
@@ -99,6 +100,7 @@ export default function Home() {
         todayRes,
         xpRes,
         newsRes,
+        streakRes,
       ] = await Promise.all([
         supabase
           .from('profiles')
@@ -127,6 +129,13 @@ export default function Home() {
           .select('id, title, category, url, image_url')
           .order('published_at', { ascending: false, nullsFirst: false })
           .limit(6),
+        supabase
+          .from('spot_count_daily')
+          .select('date, count')
+          .eq('user_id', user.id)
+          .gt('count', 0)
+          .order('date', { ascending: false })
+          .limit(90),
       ])
 
       if (!active) return
@@ -152,6 +161,20 @@ export default function Home() {
         const idx = sorted.findIndex(([uid]) => uid === user.id)
         rk = idx >= 0 ? idx + 1 : null
       }
+
+      const days = new Set(
+        ((streakRes.data ?? []) as { date: string }[]).map((r) => r.date),
+      )
+      const dayStr = (d: Date) => d.toISOString().slice(0, 10)
+      const cursor = new Date()
+      if (!days.has(dayStr(cursor)))
+        cursor.setUTCDate(cursor.getUTCDate() - 1)
+      let st = 0
+      while (days.has(dayStr(cursor))) {
+        st += 1
+        cursor.setUTCDate(cursor.getUTCDate() - 1)
+      }
+      setStreak(st)
 
       setName(pseudo)
       setXp((xpRes.data as number | null) ?? 0)
@@ -213,10 +236,17 @@ export default function Home() {
           <h1 className="font-display text-3xl font-bold leading-tight text-fg">
             Bonjour {name}
           </h1>
-          <span className="lvl-glow mt-2.5 inline-flex items-center gap-1.5 rounded-full bg-accent/15 px-3 py-1 text-xs font-semibold text-accent">
-            {level.name}
-            <Sparkles className="h-3.5 w-3.5" />
-          </span>
+          <div className="mt-2.5 flex flex-wrap items-center gap-2">
+            <span className="lvl-glow inline-flex items-center gap-1.5 rounded-full bg-accent/15 px-3 py-1 text-xs font-semibold text-accent">
+              {level.name}
+              <Sparkles className="h-3.5 w-3.5" />
+            </span>
+            {streak > 0 && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-[#F59E0B]/15 px-3 py-1 text-xs font-bold text-[#F59E0B]">
+                🔥 {streak} {streak > 1 ? 'jours' : 'jour'}
+              </span>
+            )}
+          </div>
         </div>
         <button
           onClick={() => navigate('/settings')}
@@ -258,16 +288,19 @@ export default function Home() {
             icon={<Camera className="h-4 w-4" />}
             value={String(totalSpots)}
             label="Spots"
+            onClick={() => navigate('/ma-galerie')}
           />
           <StatCard
             icon={<Tag className="h-4 w-4" />}
             value={String(uniqueBrands)}
             label="Marques"
+            onClick={() => navigate('/mes-marques')}
           />
           <StatCard
             icon={<Trophy className="h-4 w-4" />}
             value={rank ? `#${rank}` : '—'}
             label="Rang"
+            onClick={() => navigate('/classement')}
           />
           <StatCard
             icon={<Zap className="h-4 w-4" />}
@@ -476,16 +509,27 @@ function StatCard({
   icon,
   value,
   label,
+  onClick,
 }: {
   icon: ReactNode
   value: string
   label: string
+  onClick?: () => void
 }) {
-  return (
-    <div className="flex flex-col items-center gap-1 rounded-2xl border border-white/5 bg-card py-3.5 shadow-[0_2px_10px_rgba(0,0,0,0.4)]">
+  const cls =
+    'flex w-full flex-col items-center gap-1 rounded-2xl border border-white/5 bg-card py-3.5 shadow-[0_2px_10px_rgba(0,0,0,0.4)]'
+  const inner = (
+    <>
       <span className="text-accent/70">{icon}</span>
       <div className="font-display text-lg font-bold text-fg">{value}</div>
       <div className="text-[10px] tracking-wide text-fg/40">{label}</div>
-    </div>
+    </>
+  )
+  return onClick ? (
+    <button onClick={onClick} className={`${cls} transition-transform active:scale-95`}>
+      {inner}
+    </button>
+  ) : (
+    <div className={cls}>{inner}</div>
   )
 }

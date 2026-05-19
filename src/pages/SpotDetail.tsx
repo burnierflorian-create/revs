@@ -2,13 +2,14 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import mapboxgl from 'mapbox-gl'
 import 'mapbox-gl/dist/mapbox-gl.css'
-import { ArrowLeft, Car, Navigation, Zap } from 'lucide-react'
+import { ArrowLeft, Car, Navigation, Zap, Share2, Send } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import {
   categoryLabel,
   formatPrice,
   spotterLevel,
   spotterName,
+  timeAgo,
   xpForPrice,
   type Spot,
 } from '../lib/spots'
@@ -43,6 +44,99 @@ export default function SpotDetail() {
   const [spot, setSpot] = useState<Spot | null>(null)
   const [notFound, setNotFound] = useState(false)
   const [level, setLevel] = useState<string | null>(null)
+  const [comments, setComments] = useState<
+    {
+      id: string
+      user_id: string
+      content: string
+      created_at: string
+    }[]
+  >([])
+  const [comProfiles, setComProfiles] = useState<
+    Record<string, { pseudo: string | null; avatar: string | null }>
+  >({})
+  const [text, setText] = useState('')
+  const [sending, setSending] = useState(false)
+  const [shareMsg, setShareMsg] = useState<string | null>(null)
+
+  async function loadComments() {
+    if (!id) return
+    const { data } = await supabase
+      .from('comments')
+      .select('id, user_id, content, created_at')
+      .eq('spot_id', id)
+      .order('created_at', { ascending: true })
+      .limit(200)
+    const list = (data ?? []) as {
+      id: string
+      user_id: string
+      content: string
+      created_at: string
+    }[]
+    setComments(list)
+    const ids = [...new Set(list.map((c) => c.user_id))]
+    if (ids.length) {
+      const { data: profs } = await supabase
+        .from('profiles')
+        .select('user_id, pseudo, avatar')
+        .in('user_id', ids)
+      const map: Record<string, { pseudo: string | null; avatar: string | null }> = {}
+      for (const p of (profs ?? []) as {
+        user_id: string
+        pseudo: string | null
+        avatar: string | null
+      }[])
+        map[p.user_id] = { pseudo: p.pseudo, avatar: p.avatar }
+      setComProfiles(map)
+    }
+  }
+
+  useEffect(() => {
+    loadComments()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id])
+
+  async function postComment() {
+    const body = text.trim()
+    if (!body || sending) return
+    setSending(true)
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    if (!user || !id) {
+      setSending(false)
+      return
+    }
+    const { error } = await supabase
+      .from('comments')
+      .insert({ spot_id: id, user_id: user.id, content: body.slice(0, 280) })
+    setSending(false)
+    if (!error) {
+      setText('')
+      await loadComments()
+    }
+  }
+
+  async function share() {
+    if (!spot) return
+    const url = `https://revs-ten.vercel.app/spot/${spot.id}`
+    const data = {
+      title: `${spot.brand} ${spot.model}`,
+      text: `Regarde ce spot sur REVS : ${spot.brand} ${spot.model}`,
+      url,
+    }
+    try {
+      if (navigator.share) {
+        await navigator.share(data)
+        return
+      }
+      await navigator.clipboard.writeText(url)
+      setShareMsg('Lien copié !')
+      setTimeout(() => setShareMsg(null), 2500)
+    } catch {
+      /* user cancelled share — ignore */
+    }
+  }
 
   const mapContainerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<mapboxgl.Map | null>(null)
@@ -169,6 +263,18 @@ export default function SpotDetail() {
         >
           <ArrowLeft className="h-5 w-5 text-fg" />
         </button>
+        <button
+          onClick={share}
+          aria-label="Partager"
+          className="absolute right-4 top-[max(1rem,env(safe-area-inset-top))] flex h-10 w-10 items-center justify-center rounded-full bg-black/50 backdrop-blur"
+        >
+          <Share2 className="h-5 w-5 text-fg" />
+        </button>
+        {shareMsg && (
+          <span className="absolute right-4 top-[max(3.5rem,calc(env(safe-area-inset-top)+2.5rem))] rounded-full bg-black/70 px-3 py-1 text-xs text-fg backdrop-blur">
+            {shareMsg}
+          </span>
+        )}
       </div>
 
       <div className="space-y-7 p-5 pb-10">
@@ -233,6 +339,74 @@ export default function SpotDetail() {
         <p className="text-sm text-fg/40">
           Spotté le {formatDateTime(spot.created_at)}
         </p>
+
+        <section className="border-t border-white/5 pt-6">
+          <h2 className="mb-3 font-display text-lg font-bold">
+            Commentaires{' '}
+            <span className="text-fg/40">({comments.length})</span>
+          </h2>
+
+          <div className="space-y-4">
+            {comments.length === 0 ? (
+              <p className="text-sm text-fg/40">
+                Sois le premier à commenter ce spot.
+              </p>
+            ) : (
+              comments.map((c) => {
+                const p = comProfiles[c.user_id]
+                const nm = p?.pseudo || 'Spotter'
+                return (
+                  <div key={c.id} className="flex gap-3">
+                    <div className="flex h-8 w-8 flex-none items-center justify-center overflow-hidden rounded-full bg-accent text-xs font-bold text-fg">
+                      {p?.avatar ? (
+                        <img
+                          src={p.avatar}
+                          alt=""
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        nm.charAt(0).toUpperCase()
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm">
+                        <span className="font-semibold text-fg">{nm}</span>{' '}
+                        <span className="text-xs text-fg/40">
+                          {timeAgo(c.created_at)}
+                        </span>
+                      </p>
+                      <p className="mt-0.5 break-words text-sm text-fg/80">
+                        {c.content}
+                      </p>
+                    </div>
+                  </div>
+                )
+              })
+            )}
+          </div>
+
+          <div className="mt-5 flex items-end gap-2">
+            <textarea
+              value={text}
+              maxLength={280}
+              rows={1}
+              onChange={(e) => setText(e.target.value)}
+              placeholder="Ajoute un commentaire…"
+              className="flex-1 resize-none rounded-2xl bg-card px-4 py-3 text-sm text-fg outline-none placeholder:text-fg/30 focus:ring-1 focus:ring-accent"
+            />
+            <button
+              onClick={postComment}
+              disabled={sending || !text.trim()}
+              aria-label="Envoyer"
+              className="flex h-11 w-11 flex-none items-center justify-center rounded-full bg-accent disabled:opacity-40"
+            >
+              <Send className="h-4 w-4 text-fg" />
+            </button>
+          </div>
+          <p className="mt-1 px-1 text-right text-[10px] text-fg/30">
+            {text.length}/280
+          </p>
+        </section>
       </div>
     </div>
   )

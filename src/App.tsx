@@ -16,6 +16,10 @@ import Cgu from './pages/Cgu'
 import SpotDetail from './pages/SpotDetail'
 import Discover from './pages/Discover'
 import GrandPrixDetail from './pages/GrandPrixDetail'
+import Leaderboard from './pages/Leaderboard'
+import MyBrands from './pages/MyBrands'
+import MyGallery from './pages/MyGallery'
+import PublicProfile from './pages/PublicProfile'
 import Onboarding from './components/Onboarding'
 
 export default function App() {
@@ -50,6 +54,10 @@ export default function App() {
           <Route path="/f1/:round" element={<GrandPrixDetail />} />
           <Route path="/new-event" element={<NewEvent />} />
           <Route path="/profile" element={<Profile />} />
+          <Route path="/classement" element={<Leaderboard />} />
+          <Route path="/mes-marques" element={<MyBrands />} />
+          <Route path="/ma-galerie" element={<MyGallery />} />
+          <Route path="/u/:id" element={<PublicProfile />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/confidentialite" element={<Privacy />} />
           <Route path="/mentions-legales" element={<Legal />} />
