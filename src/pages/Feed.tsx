@@ -449,20 +449,25 @@ export default function Feed() {
                 </button>
 
                 <div className="flex items-center gap-3 px-4 py-3">
-                  <div className="flex h-8 w-8 flex-none items-center justify-center overflow-hidden rounded-full bg-accent text-xs font-bold text-fg">
-                    {prof?.avatar ? (
-                      <img
-                        src={prof.avatar}
-                        alt=""
-                        className="h-full w-full object-cover"
-                      />
-                    ) : (
-                      pseudo.charAt(0).toUpperCase()
-                    )}
-                  </div>
-                  <span className="truncate text-sm font-medium text-fg">
-                    {pseudo}
-                  </span>
+                  <button
+                    onClick={() => navigate(`/u/${spot.user_id}`)}
+                    className="flex min-w-0 items-center gap-3"
+                  >
+                    <div className="flex h-8 w-8 flex-none items-center justify-center overflow-hidden rounded-full bg-accent text-xs font-bold text-fg">
+                      {prof?.avatar ? (
+                        <img
+                          src={prof.avatar}
+                          alt=""
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        pseudo.charAt(0).toUpperCase()
+                      )}
+                    </div>
+                    <span className="truncate text-sm font-medium text-fg">
+                      {pseudo}
+                    </span>
+                  </button>
                   <span className="flex-1 truncate text-center text-xs text-fg/40">
                     {[prof?.ville, timeAgo(spot.created_at)]
                       .filter(Boolean)

@@ -2,13 +2,20 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import mapboxgl from 'mapbox-gl'
 import 'mapbox-gl/dist/mapbox-gl.css'
-import { ArrowLeft, Car, Navigation, Zap, Share2, Send } from 'lucide-react'
+import {
+  ArrowLeft,
+  Car,
+  Navigation,
+  Zap,
+  Share2,
+  Send,
+  ChevronRight,
+} from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import {
   categoryLabel,
   formatPrice,
   spotterLevel,
-  spotterName,
   timeAgo,
   xpForPrice,
   type Spot,
@@ -45,6 +52,10 @@ export default function SpotDetail() {
   const [spot, setSpot] = useState<Spot | null>(null)
   const [notFound, setNotFound] = useState(false)
   const [level, setLevel] = useState<string | null>(null)
+  const [owner, setOwner] = useState<{
+    pseudo: string | null
+    avatar: string | null
+  } | null>(null)
   const [comments, setComments] = useState<
     {
       id: string
@@ -170,11 +181,23 @@ export default function SpotDetail() {
       setSpot(s)
       // Opening a spot counts as a view → keep it alive 1h more.
       void supabase.rpc('touch_spot', { p_spot_id: s.id })
-      const { count } = await supabase
-        .from('spots')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_id', s.user_id)
-      if (active) setLevel(spotterLevel(count ?? 0))
+      const [{ count }, { data: prof }] = await Promise.all([
+        supabase
+          .from('spots')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', s.user_id),
+        supabase
+          .from('profiles')
+          .select('pseudo, avatar')
+          .eq('user_id', s.user_id)
+          .maybeSingle(),
+      ])
+      if (!active) return
+      setLevel(spotterLevel(count ?? 0))
+      setOwner({
+        pseudo: (prof?.pseudo as string | undefined) ?? null,
+        avatar: (prof?.avatar as string | undefined) ?? null,
+      })
     })()
     return () => {
       active = false
@@ -335,17 +358,29 @@ export default function SpotDetail() {
           style={{ width: '100%', height: '180px', backgroundColor: '#1A1A1A' }}
         />
 
-        <div className="flex items-center gap-3 rounded-2xl bg-card p-4">
-          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-accent text-lg font-bold text-fg">
-            {spotterName(null).charAt(0).toUpperCase()}
+        <button
+          onClick={() => navigate(`/u/${spot.user_id}`)}
+          className="flex w-full items-center gap-3 rounded-2xl bg-card p-4 text-left transition-transform active:scale-[0.99]"
+        >
+          <div className="flex h-12 w-12 flex-none items-center justify-center overflow-hidden rounded-full bg-accent text-lg font-bold text-fg">
+            {owner?.avatar ? (
+              <img
+                src={owner.avatar}
+                alt=""
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              (owner?.pseudo || 'Spotter').charAt(0).toUpperCase()
+            )}
           </div>
-          <div>
-            <div className="font-medium">{spotterName(null)}</div>
-            <div className="text-xs text-accent">
-              {level ?? '—'}
+          <div className="min-w-0">
+            <div className="truncate font-medium">
+              {owner?.pseudo || 'Spotter'}
             </div>
+            <div className="text-xs text-accent">{level ?? '—'}</div>
           </div>
-        </div>
+          <ChevronRight className="ml-auto h-5 w-5 flex-none text-fg/30" />
+        </button>
 
         <p className="text-sm text-fg/40">
           Spotté le {formatDateTime(spot.created_at)}
