@@ -2,7 +2,7 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }],
   "crons": [
-    { "path": "/api/fetch-news", "schedule": "0 6 * * *" },
+    { "path": "/api/fetch-news", "schedule": "0 6,10,14,18 * * *" },
     { "path": "/api/cron-notify", "schedule": "0 17 * * *" }
   ]
 }

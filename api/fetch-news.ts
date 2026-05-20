@@ -10,11 +10,33 @@ const MODEL = 'claude-sonnet-4-6'
 // `category` is only a fallback hint — Claude reclassifies every
 // article into exactly F1 | Supercar | Hypercar (strict separation),
 // so an F1 story from a generalist car feed still lands in F1.
+// Feeds with no RSS (Bugatti, Rimac, McLaren auto) are intentionally
+// omitted: they 404 reliably and burn timeout budget on every run.
 const FEEDS: { url: string; source: string; category: string }[] = [
   // — F1 / Motorsport —
   {
     url: 'https://www.formula1.com/content/fom-website/en/latest/all.xml',
     source: 'Formula 1',
+    category: 'F1',
+  },
+  {
+    url: 'https://www.autosport.com/rss/feed/f1',
+    source: 'Autosport',
+    category: 'F1',
+  },
+  {
+    url: 'https://www.racefans.net/feed/',
+    source: 'RaceFans',
+    category: 'F1',
+  },
+  {
+    url: 'https://the-race.com/feed/',
+    source: 'The Race',
+    category: 'F1',
+  },
+  {
+    url: 'https://www.planetf1.com/feed',
+    source: 'PlanetF1',
     category: 'F1',
   },
   {
@@ -24,25 +46,33 @@ const FEEDS: { url: string; source: string; category: string }[] = [
   },
   // — Road cars: marques & magazines —
   {
-    url: 'https://www.autocar.co.uk/rss/cars/supercar',
-    source: 'Autocar',
-    category: 'Supercar',
-  },
-  {
-    url: 'https://www.supercars.net/blog/feed/',
-    source: 'Supercars.net',
-    category: 'Hypercar',
-  },
-  {
     url: 'https://www.ferrari.com/en-EN/rss/news',
     source: 'Ferrari',
     category: 'Hypercar',
   },
-  { url: 'https://www.lamborghini.com/rss', source: 'Lamborghini', category: 'Hypercar' },
-  { url: 'https://www.porsche.com/rss', source: 'Porsche', category: 'Supercar' },
+  {
+    url: 'https://www.lamborghini.com/rss',
+    source: 'Lamborghini',
+    category: 'Hypercar',
+  },
+  {
+    url: 'https://newsroom.porsche.com/en.rss',
+    source: 'Porsche Newsroom',
+    category: 'Supercar',
+  },
   {
     url: 'https://www.autocar.co.uk/rss/cars',
     source: 'Autocar',
+    category: 'Supercar',
+  },
+  {
+    url: 'https://www.autocar.co.uk/rss/cars/supercar',
+    source: 'Autocar Supercar',
+    category: 'Supercar',
+  },
+  {
+    url: 'https://www.evo.co.uk/rss',
+    source: 'Evo',
     category: 'Supercar',
   },
   {
@@ -55,10 +85,19 @@ const FEEDS: { url: string; source: string; category: string }[] = [
     source: 'Car and Driver',
     category: 'Supercar',
   },
-  { url: 'https://jalopnik.com/rss', source: 'Jalopnik', category: 'Supercar' },
   {
     url: 'https://www.motortrend.com/feeds/all/',
     source: 'MotorTrend',
+    category: 'Supercar',
+  },
+  {
+    url: 'https://www.supercars.net/blog/feed/',
+    source: 'Supercars.net',
+    category: 'Hypercar',
+  },
+  {
+    url: 'https://jalopnik.com/rss',
+    source: 'Jalopnik',
     category: 'Supercar',
   },
 ]
@@ -86,13 +125,18 @@ async function fetchWithTimeout(url: string): Promise<Response | null> {
   }
 }
 
-const PER_FEED = 3
-const MAX_TOTAL = 15
+const PER_FEED = 5
+const MAX_TOTAL = 50
 // Articles older than 48h are dropped before they ever reach Claude.
 const MAX_AGE_MS = 48 * 60 * 60 * 1000
+// Article time-to-live in DB (matches the 48h DB default — keeps the
+// feed populated between the 4 daily cron runs).
+const TTL_MS = 48 * 60 * 60 * 1000
 // Public (non-cron) callers can only trigger a real run if the freshest
 // article is older than this — bounds Claude/API cost under load.
 const MIN_REFRESH_MS = 20 * 60 * 1000
+// Quality filter: drop summaries shorter than this once Claude returns.
+const MIN_SUMMARY_LEN = 100
 
 const SYSTEM = `Tu es l'éditeur automobile de l'app REVS. Tu es strict.
 
@@ -142,21 +186,6 @@ function stripHtml(html: string): string {
     .replace(/&quot;/g, '"')
     .replace(/\s+/g, ' ')
     .trim()
-}
-
-// High-quality Unsplash fallbacks (>=1200px) per category, used when
-// the RSS image is missing or known to be < 400px wide.
-const CATEGORY_IMG: Record<string, string> = {
-  F1: 'https://images.unsplash.com/photo-1752959805242-0a7799902ae4?w=1280&q=80',
-  Supercar:
-    'https://images.unsplash.com/photo-1541348263662-e068662d82af?w=1280&q=80',
-  Hypercar:
-    'https://images.unsplash.com/photo-1567808291548-fc3ee04dbcf0?w=1280&q=80',
-  Events:
-    'https://images.unsplash.com/photo-1617060219602-8cbf8f1eff8d?w=1280&q=80',
-}
-function fallbackImg(category: string): string {
-  return CATEGORY_IMG[category] ?? CATEGORY_IMG.Supercar
 }
 
 // Collect every image candidate with its known width (0 = unknown),
@@ -432,14 +461,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const { data: existing } = await admin
     .from('news')
-    .select('url, title')
+    .select('id, url, title, summary')
     .order('created_at', { ascending: false })
-    .limit(500)
-  const existingRows = (existing ?? []) as { url: string; title: string }[]
+    .limit(800)
+  const existingRows = (existing ?? []) as {
+    id: string
+    url: string
+    title: string
+    summary: string | null
+  }[]
   const known = new Set(existingRows.map((r) => r.url))
-  // Recent titles (table only holds <=24h after TTL cleanup) for the
-  // near-duplicate check, plus titles accepted earlier this same run.
-  const seenTitles = existingRows.map((r) => r.title).filter(Boolean)
 
   const perFeed: Record<string, number> = {}
   type Candidate = {
@@ -525,10 +556,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     })),
   )
 
-  // Drop non-automotive articles, then drop near-duplicate titles
-  // (same story already in the table or earlier in this batch).
+  // Quality + dedup pass.
+  //
+  // 1. Drop non-automotive articles (Claude said `relevant: false`).
+  // 2. Drop articles with no RSS image — fallback category illustrations
+  //    look generic and hurt the feed's perceived quality.
+  // 3. Drop articles whose Claude summary is shorter than 100 chars —
+  //    those are usually pure-headline RSS items with no real body.
+  // 4. Smart dedup — when the same story shows up across sources, keep
+  //    only the version with the longest summary (= most complete).
+  //    Applies BOTH within this batch and against rows already in DB:
+  //    if the incoming version is more complete, the existing one is
+  //    deleted and the new one inserted in its place.
   let dedupSkipped = 0
-  const rows: {
+  let qualitySkipped = 0
+  type ReadyRow = {
     title: string
     summary: string
     source: string
@@ -537,33 +579,86 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     image_url: string | null
     published_at: string | null
     expires_at: string
-  }[] = []
-  for (const { c, relevant, category, title, summary } of summarized) {
+  }
+  const accepted: ReadyRow[] = []
+  // Existing DB rows to delete because an incoming candidate is more
+  // complete than them — replaced rather than skipped.
+  const replacedIds = new Set<string>()
+
+  // Process longest-summary-first so the first survivor of a duplicate
+  // cluster is the most complete one (others get dropped).
+  const ordered = [...summarized].sort(
+    (a, b) => (b.summary?.length ?? 0) - (a.summary?.length ?? 0),
+  )
+
+  for (const { c, relevant, category, title, summary } of ordered) {
     if (!relevant) continue
-    const isDup = seenTitles.some(
-      (t) => titleSimilarity(t, title) >= DUP_THRESHOLD,
+
+    // (2) Image: skip if there's no real RSS image at all. We want every
+    // displayed card to have a story-specific image, not a fallback.
+    if (!c.image_url) {
+      qualitySkipped += 1
+      continue
+    }
+
+    // (3) Summary length floor — headline-only items are not useful.
+    if (summary.length < MIN_SUMMARY_LEN) {
+      qualitySkipped += 1
+      continue
+    }
+
+    // (4a) Dedup against already-accepted items in this batch.
+    const dupInBatch = accepted.find(
+      (k) => titleSimilarity(k.title, title) >= DUP_THRESHOLD,
     )
-    if (isDup) {
+    if (dupInBatch) {
+      // Ordered desc by length — the kept one is at least as long.
       dedupSkipped += 1
       continue
     }
-    seenTitles.push(title)
+
+    // (4b) Dedup against the live DB. If incoming is longer, replace
+    // the existing row; if shorter, drop incoming.
+    const dupInDb = existingRows.find(
+      (e) => titleSimilarity(e.title, title) >= DUP_THRESHOLD,
+    )
+    if (dupInDb) {
+      const existingLen = (dupInDb.summary ?? '').length
+      if (summary.length > existingLen) {
+        replacedIds.add(dupInDb.id)
+      } else {
+        dedupSkipped += 1
+        continue
+      }
+    }
+
     perFeed[c.source] += 1
     const base = c.published_at ? new Date(c.published_at) : new Date()
-    rows.push({
+    accepted.push({
       title,
       summary,
       source: c.source,
       // Claude's strict classification, not the feed hint.
       category,
       url: c.url,
-      // Real RSS image if good enough, else a high-res category image.
-      image_url: c.image_url ?? fallbackImg(category),
+      image_url: c.image_url,
       published_at: c.published_at,
-      expires_at: new Date(
-        base.getTime() + 24 * 60 * 60 * 1000,
-      ).toISOString(),
+      expires_at: new Date(base.getTime() + TTL_MS).toISOString(),
     })
+  }
+
+  const rows = accepted
+
+  // Delete the inferior duplicates before inserting their replacements
+  // so the unique (url) constraint never trips on the dedup transition.
+  let replaced = 0
+  if (replacedIds.size > 0) {
+    const { error, count } = await admin
+      .from('news')
+      .delete({ count: 'exact' })
+      .in('id', [...replacedIds])
+    if (error) console.error('news dedup replace failed:', error)
+    else replaced = count ?? 0
   }
 
   let upsertError: string | null = null
@@ -585,6 +680,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     purged,
     expired,
     dedupSkipped,
+    qualitySkipped,
+    replaced,
     processed: rows.length,
     perFeed,
     upsertError,
