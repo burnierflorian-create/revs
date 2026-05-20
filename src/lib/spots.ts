@@ -20,6 +20,18 @@ export function categoryLabel(c: string): string {
   return CATEGORIES.find((x) => x.value === c)?.label ?? 'Autre'
 }
 
+export type CarInfo = {
+  name: string
+  engine: string
+  horsepower: string
+  torque: string
+  zero_to_100: string
+  top_speed: string
+  msrp_eur: string
+  production: string
+  history: string
+}
+
 export type Spot = {
   id: string
   user_id: string
@@ -32,6 +44,7 @@ export type Spot = {
   photo_url: string | null
   confidence: number | null
   estimated_price: number | null
+  car_info: CarInfo | null
   lat: number
   lng: number
   expires_at: string

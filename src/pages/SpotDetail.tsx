@@ -10,6 +10,9 @@ import {
   Share2,
   Send,
   ChevronRight,
+  ChevronDown,
+  Info,
+  Loader2,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import {
@@ -18,6 +21,7 @@ import {
   spotterLevel,
   timeAgo,
   xpForPrice,
+  type CarInfo,
   type Spot,
 } from '../lib/spots'
 import LikeButton from '../components/LikeButton'
@@ -56,6 +60,51 @@ export default function SpotDetail() {
     pseudo: string | null
     avatar: string | null
   } | null>(null)
+  const [aboutOpen, setAboutOpen] = useState(false)
+  const [carInfo, setCarInfo] = useState<CarInfo | null>(null)
+  const [infoBusy, setInfoBusy] = useState(false)
+  const [infoErr, setInfoErr] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (spot?.car_info) setCarInfo(spot.car_info)
+  }, [spot?.car_info])
+
+  async function toggleAbout() {
+    if (aboutOpen) {
+      setAboutOpen(false)
+      return
+    }
+    setAboutOpen(true)
+    if (carInfo || !spot || infoBusy) return
+    setInfoBusy(true)
+    setInfoErr(null)
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+      const token = session?.access_token
+      if (!token) throw new Error('Non authentifié')
+      const res = await fetch('/api/car-info', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ spot_id: spot.id }),
+      })
+      const data = (await res.json()) as {
+        car_info?: CarInfo
+        error?: string
+      }
+      if (!res.ok || !data.car_info)
+        throw new Error(data.error || 'Échec de la recherche')
+      setCarInfo(data.car_info)
+    } catch (e) {
+      setInfoErr(e instanceof Error ? e.message : 'Erreur')
+    } finally {
+      setInfoBusy(false)
+    }
+  }
   const [comments, setComments] = useState<
     {
       id: string
@@ -343,6 +392,63 @@ export default function SpotDetail() {
             </div>
           ))}
         </div>
+
+        <section className="overflow-hidden rounded-2xl bg-card">
+          <button
+            onClick={toggleAbout}
+            className="flex w-full items-center justify-between gap-3 px-5 py-4 text-left"
+          >
+            <span className="flex items-center gap-2 font-semibold">
+              <Info className="h-5 w-5 text-accent" />À propos de cette voiture
+            </span>
+            <ChevronDown
+              className={`h-5 w-5 text-fg/40 transition-transform ${
+                aboutOpen ? 'rotate-180' : ''
+              }`}
+            />
+          </button>
+          {aboutOpen && (
+            <div className="border-t border-white/5 px-5 py-4">
+              {infoBusy ? (
+                <div className="flex items-center gap-2 text-sm text-fg/50">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Recherche des specs sur le web…
+                </div>
+              ) : infoErr ? (
+                <p className="text-sm text-accent">{infoErr}</p>
+              ) : carInfo ? (
+                <div className="space-y-4 text-sm">
+                  <p className="font-display text-lg font-bold text-fg">
+                    {carInfo.name}
+                  </p>
+                  <dl className="grid grid-cols-2 gap-x-4 gap-y-3">
+                    {(
+                      [
+                        ['Moteur', carInfo.engine],
+                        ['Puissance', carInfo.horsepower],
+                        ['Couple', carInfo.torque],
+                        ['0-100 km/h', carInfo.zero_to_100],
+                        ['Vitesse max', carInfo.top_speed],
+                        ['Prix neuf', carInfo.msrp_eur],
+                        ['Production', carInfo.production],
+                      ] as [string, string][]
+                    ).map(([k, v]) => (
+                      <div key={k}>
+                        <dt className="text-[11px] uppercase tracking-widest text-fg/40">
+                          {k}
+                        </dt>
+                        <dd className="mt-0.5 font-medium text-fg">{v}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                  <p className="border-t border-white/5 pt-3 text-fg/70">
+                    {carInfo.history}
+                  </p>
+                </div>
+              ) : null}
+            </div>
+          )}
+        </section>
 
         <button
           onClick={() => openNavigation(spot.lat, spot.lng)}
