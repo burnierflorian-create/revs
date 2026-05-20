@@ -945,7 +945,7 @@ export default function MapPage() {
     <div className="fixed inset-0">
       <div
         ref={containerRef}
-        style={{ width: '100%', height: '100vh', backgroundColor: '#F5F0E8' }}
+        style={{ width: '100%', height: '100dvh', backgroundColor: '#F5F0E8' }}
       />
 
       {!mapReady && !error && <SkeletonMap />}

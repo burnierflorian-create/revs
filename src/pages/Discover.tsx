@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Flag, CarFront, Newspaper, CalendarDays, Users } from 'lucide-react'
 import News from './News'
 import Meets from '../components/Meets'
@@ -17,6 +17,16 @@ export default function Discover({ initial }: { initial?: 'events' }) {
   const [carsSub, setCarsSub] = useState<'actu' | 'events'>(
     initial === 'events' ? 'events' : 'actu',
   )
+
+  // Discover is kept alive across /discover ↔ /events ↔ /actu — sync to
+  // the route prop so navigating to /events from another tab correctly
+  // switches the inner state instead of showing whatever was last open.
+  useEffect(() => {
+    if (initial === 'events') {
+      setUniverse('cars')
+      setCarsSub('events')
+    }
+  }, [initial])
 
   const isF1 = universe === 'f1'
   const color = isF1 ? RED : ORANGE

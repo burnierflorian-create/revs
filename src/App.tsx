@@ -3,24 +3,16 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './hooks/useAuth'
 import MainLayout from './layouts/MainLayout'
 import Auth from './pages/Auth'
-import Home from './pages/Home'
-// Lazy: keeps mapbox-gl (~1MB) out of the initial app bundle — only
-// downloaded when the user navigates to /map.
-const MapPage = lazy(() => import('./pages/Map'))
-import { SkeletonMap } from './components/Skeleton'
-import Feed from './pages/Feed'
 import NewSpot from './pages/NewSpot'
 import NewEvent from './pages/NewEvent'
-import Profile from './pages/Profile'
 import Premium from './pages/Premium'
 import Settings from './pages/Settings'
 import LegalMentions from './pages/LegalMentions'
 import LegalPrivacy from './pages/LegalPrivacy'
 import LegalTerms from './pages/LegalTerms'
-// Lazy too: SpotDetail pulls mapbox-gl for its mini-map, so keep it
-// out of the initial bundle.
+// Lazy: SpotDetail pulls mapbox-gl for its mini-map; keep it out of
+// the initial bundle.
 const SpotDetail = lazy(() => import('./pages/SpotDetail'))
-import Discover from './pages/Discover'
 import GrandPrixDetail from './pages/GrandPrixDetail'
 import Leaderboard from './pages/Leaderboard'
 import MyBrands from './pages/MyBrands'
@@ -49,16 +41,19 @@ export default function App() {
         <Route
           element={session ? <MainLayout /> : <Navigate to="/auth" replace />}
         >
-          <Route path="/" element={<Home />} />
-          <Route
-            path="/map"
-            element={
-              <Suspense fallback={<SkeletonMap />}>
-                <MapPage />
-              </Suspense>
-            }
-          />
-          <Route path="/feed" element={<Feed />} />
+          {/* Tab routes — the actual UI is rendered by <TabsContainer />
+              inside MainLayout (kept-alive). These routes only exist so
+              the router accepts the URLs and so MainLayout can read the
+              active path. */}
+          <Route path="/" element={null} />
+          <Route path="/map" element={null} />
+          <Route path="/feed" element={null} />
+          <Route path="/discover" element={null} />
+          <Route path="/actu" element={null} />
+          <Route path="/events" element={null} />
+          <Route path="/profile" element={null} />
+
+          {/* Stack routes — render via <Outlet /> on top of the tabs. */}
           <Route
             path="/spot/:id"
             element={
@@ -68,12 +63,8 @@ export default function App() {
             }
           />
           <Route path="/new-spot" element={<NewSpot />} />
-          <Route path="/discover" element={<Discover />} />
-          <Route path="/actu" element={<Discover />} />
-          <Route path="/events" element={<Discover initial="events" />} />
           <Route path="/f1/:round" element={<GrandPrixDetail />} />
           <Route path="/new-event" element={<NewEvent />} />
-          <Route path="/profile" element={<Profile />} />
           <Route path="/classement" element={<Leaderboard />} />
           <Route path="/mes-marques" element={<MyBrands />} />
           <Route path="/ma-galerie" element={<MyGallery />} />

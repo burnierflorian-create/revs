@@ -19,6 +19,47 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   overscroll-behavior-y: none;
+  /* Kill the 300 ms tap delay on Android Chrome + iOS Safari and stop
+     double-tap zoom. We never need pinch-zoom inside the app surface. */
+  touch-action: manipulation;
+}
+
+/* Tab pane: one of the 5 always-mounted tabs. They overlay each other
+   (absolute inset:0) so only the active one is visible — crossfade
+   driven by opacity + pointer-events. Each pane gets its own internal
+   vertical scroll, with the bottom inset reserved for the fixed nav. */
+.tab-pane {
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+  background: var(--color-bg);
+  padding-bottom: calc(5rem + env(safe-area-inset-bottom));
+  transition: opacity 150ms ease-out;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+}
+
+/* Stack route (spot detail, new-spot, etc.) — slides in over the
+   kept-alive tabs. Same 150 ms fade, with a subtle upward slide. */
+.stack-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  overflow-y: auto;
+  background: var(--color-bg);
+  animation: stackEnter 150ms ease-out both;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+}
+@keyframes stackEnter {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 8px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
 }
 
 h1,
@@ -39,13 +80,9 @@ h4 {
 
 /* Safe areas — encoche Android + home indicator iPhone.
    La barre de nav fixe réserve sa propre hauteur + l'inset bas ;
-   le contenu principal réserve l'équivalent pour ne pas passer dessous. */
+   le contenu (panes & stack overlay) gère son propre padding-bottom. */
 .app-nav {
   padding-bottom: env(safe-area-inset-bottom);
-}
-
-.app-main {
-  padding-bottom: calc(5rem + env(safe-area-inset-bottom));
 }
 
 * {
