@@ -1,9 +1,13 @@
+import { Suspense, lazy } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './hooks/useAuth'
 import MainLayout from './layouts/MainLayout'
 import Auth from './pages/Auth'
 import Home from './pages/Home'
-import MapPage from './pages/Map'
+// Lazy: keeps mapbox-gl (~1MB) out of the initial app bundle — only
+// downloaded when the user navigates to /map.
+const MapPage = lazy(() => import('./pages/Map'))
+import { SkeletonMap } from './components/Skeleton'
 import Feed from './pages/Feed'
 import NewSpot from './pages/NewSpot'
 import NewEvent from './pages/NewEvent'
@@ -13,7 +17,9 @@ import Settings from './pages/Settings'
 import LegalMentions from './pages/LegalMentions'
 import LegalPrivacy from './pages/LegalPrivacy'
 import LegalTerms from './pages/LegalTerms'
-import SpotDetail from './pages/SpotDetail'
+// Lazy too: SpotDetail pulls mapbox-gl for its mini-map, so keep it
+// out of the initial bundle.
+const SpotDetail = lazy(() => import('./pages/SpotDetail'))
 import Discover from './pages/Discover'
 import GrandPrixDetail from './pages/GrandPrixDetail'
 import Leaderboard from './pages/Leaderboard'
@@ -44,9 +50,23 @@ export default function App() {
           element={session ? <MainLayout /> : <Navigate to="/auth" replace />}
         >
           <Route path="/" element={<Home />} />
-          <Route path="/map" element={<MapPage />} />
+          <Route
+            path="/map"
+            element={
+              <Suspense fallback={<SkeletonMap />}>
+                <MapPage />
+              </Suspense>
+            }
+          />
           <Route path="/feed" element={<Feed />} />
-          <Route path="/spot/:id" element={<SpotDetail />} />
+          <Route
+            path="/spot/:id"
+            element={
+              <Suspense fallback={<div className="min-h-screen bg-bg" />}>
+                <SpotDetail />
+              </Suspense>
+            }
+          />
           <Route path="/new-spot" element={<NewSpot />} />
           <Route path="/discover" element={<Discover />} />
           <Route path="/actu" element={<Discover />} />

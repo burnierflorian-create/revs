@@ -657,23 +657,40 @@ export default function MapPage() {
       lastSig = '' // force the next sync to rebuild this marker
     }
 
-    async function fetchSpots() {
+    // Only fetch spots inside the current viewport + a ~500 m buffer.
+    // Don't clear allSpots between fetches — merging keeps panning back
+    // instant (no re-roundtrip for what we just saw).
+    async function fetchSpotsInBounds(b: mapboxgl.LngLatBounds | null) {
+      const bufLat = 0.0045 // ~500 m
+      const minLat = b ? b.getSouth() - bufLat : -90
+      const maxLat = b ? b.getNorth() + bufLat : 90
+      const centerLat = b ? (minLat + maxLat) / 2 : 0
+      const bufLng =
+        bufLat / Math.max(0.1, Math.cos((centerLat * Math.PI) / 180))
+      const minLng = b ? b.getWest() - bufLng : -180
+      const maxLng = b ? b.getEast() + bufLng : 180
+
       const { data } = await supabase
         .from('spots')
         .select('*')
         .gt('expires_at', new Date().toISOString())
+        .gte('lat', minLat)
+        .lte('lat', maxLat)
+        .gte('lng', minLng)
+        .lte('lng', maxLng)
         .order('created_at', { ascending: false })
-        .limit(200)
+        .limit(500)
       const spots = (data ?? []) as Spot[]
-      allSpots.clear()
       for (const sp of spots) allSpots.set(sp.id, sp)
 
-      const ids = [...new Set(spots.map((s) => s.user_id))]
-      if (ids.length) {
+      const need = [
+        ...new Set(spots.map((s) => s.user_id).filter((id) => !names.has(id))),
+      ]
+      if (need.length) {
         const { data: profs } = await supabase
           .from('profiles')
           .select('user_id, pseudo')
-          .in('user_id', ids)
+          .in('user_id', need)
         for (const p of (profs ?? []) as {
           user_id: string
           pseudo: string | null
@@ -808,7 +825,7 @@ export default function MapPage() {
       applySnapStyle(map)
       setMapReady(true)
 
-      await fetchSpots()
+      await fetchSpotsInBounds(map.getBounds())
 
       map.addSource('spots', {
         type: 'geojson',
@@ -848,9 +865,19 @@ export default function MapPage() {
       })
       scheduleSync()
 
-      // Re-poll so freshly-expired spots drop and extended ones return.
+      // Fetch new spots when the viewport changes (debounced).
+      let fetchTimer: ReturnType<typeof setTimeout> | null = null
+      map.on('moveend', () => {
+        if (fetchTimer) clearTimeout(fetchTimer)
+        fetchTimer = setTimeout(() => {
+          void fetchSpotsInBounds(map.getBounds())
+        }, 400)
+      })
+
+      // Re-poll so freshly-expired spots drop and extended ones return,
+      // always scoped to the current viewport.
       pollId = setInterval(() => {
-        void fetchSpots()
+        void fetchSpotsInBounds(map.getBounds())
       }, POLL_MS)
     })
 
