@@ -567,6 +567,134 @@ async function handleDailyChallenge(
   }
 }
 
+// ─────────────────────── Card-back specs branch ───────────────────────
+// Per-model cached specs surfaced on the back of a collector card.
+// Five fields only — narrower than the legacy per-spot CarInfo and
+// keyed by (brand, model, year) so one Claude call serves every user
+// who ever spotted the same model.
+
+const CARD_SPECS_FIELDS = [
+  'horsepower',
+  'zero_to_100',
+  'top_speed',
+  'torque',
+  'fun_fact',
+] as const
+type CardSpec = (typeof CARD_SPECS_FIELDS)[number]
+type CardSpecs = Record<CardSpec, string>
+
+const CARD_SPECS_SYSTEM = `Tu es un expert automobile. Pour la voiture demandée, recherche les specs officielles via l'outil web_search. Règles :
+
+- Tu DOIS utiliser web_search au moins une fois ; n'invente jamais.
+- Si une donnée est introuvable ou incertaine, mets exactement "N/A".
+- Réponds en français, unités lisibles ("ch", "Nm", "s", "km/h").
+- "fun_fact" : UNE seule phrase courte (max 100 caractères) — un détail croustillant que les passionnés trouvent intéressant. Ex : "Seulement 750 exemplaires produits.", "Le V8 biturbo développe 562 ch grâce au système 48V."
+
+Réponds UNIQUEMENT par un JSON valide, sans markdown, conforme à :
+{
+  "horsepower": "562 ch" | "N/A",
+  "zero_to_100": "3,2 s" | "N/A",
+  "top_speed": "320 km/h" | "N/A",
+  "torque": "750 Nm" | "N/A",
+  "fun_fact": "phrase courte." | "N/A"
+}`
+
+function normalizeCardSpecs(raw: unknown): CardSpecs {
+  const o = (raw ?? {}) as Record<string, unknown>
+  const out = {} as CardSpecs
+  for (const k of CARD_SPECS_FIELDS) {
+    const v = o[k]
+    out[k] = typeof v === 'string' && v.trim() ? v.trim() : 'N/A'
+  }
+  return out
+}
+
+function cardSpecsSlug(brand: string, model: string, year: number | null): string {
+  const n = (s: string) =>
+    s
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+  return `${n(brand)}|${n(model)}|${year ?? 'na'}`
+}
+
+async function handleCardSpecs(
+  req: VercelRequest,
+  res: VercelResponse,
+  admin: SupabaseClient,
+) {
+  const body =
+    typeof req.body === 'string' ? JSON.parse(req.body) : req.body || {}
+  const brand = String((body as { brand?: string }).brand ?? '').trim()
+  const model = String((body as { model?: string }).model ?? '').trim()
+  const yearRaw = (body as { year?: number | null }).year
+  const year =
+    typeof yearRaw === 'number' && Number.isFinite(yearRaw) ? yearRaw : null
+
+  if (!brand || !model) {
+    res.status(400).json({ error: 'Marque/modèle manquants.' })
+    return
+  }
+
+  const slug = cardSpecsSlug(brand, model, year)
+
+  const { data: cached } = await admin
+    .from('car_specs')
+    .select('data')
+    .eq('slug', slug)
+    .maybeSingle()
+  if (cached?.data) {
+    res.status(200).json({ specs: cached.data, cached: true })
+    return
+  }
+
+  const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+  const yearPart = year ? ` (${year})` : ''
+  const userMsg = `Voiture : ${brand} ${model}${yearPart}.`
+
+  try {
+    const r = await anthropic.messages.create({
+      model: MODEL,
+      max_tokens: 800,
+      system: [
+        {
+          type: 'text',
+          text: CARD_SPECS_SYSTEM,
+          cache_control: { type: 'ephemeral' },
+        },
+      ],
+      messages: [{ role: 'user', content: userMsg }],
+      tools: [
+        {
+          type: 'web_search_20250305',
+          name: 'web_search',
+          max_uses: 3,
+        },
+      ] as unknown as Anthropic.Messages.ToolUnion[],
+    })
+
+    const textBlocks = r.content.filter(
+      (b): b is Anthropic.Messages.TextBlock => b.type === 'text',
+    )
+    const last = textBlocks[textBlocks.length - 1]
+    const parsed = last ? extractJSON(last.text) : null
+    if (!parsed) {
+      console.error('[card-specs] JSON parse failed, raw:', last?.text ?? '')
+      res.status(502).json({ error: 'Specs indisponibles — réessaie.' })
+      return
+    }
+    const specs = normalizeCardSpecs(parsed)
+
+    await admin
+      .from('car_specs')
+      .upsert({ slug, brand, model, year, data: specs }, { onConflict: 'slug' })
+    res.status(200).json({ specs, cached: false })
+  } catch (e) {
+    console.error('[card-specs] failed:', e)
+    res.status(500).json({ error: 'Specs indisponibles — réessaie.' })
+  }
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Méthode non autorisée.' })
@@ -601,6 +729,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
   if (req.query.action === 'daily-challenge') {
     return handleDailyChallenge(req, res, admin, u.user.id)
+  }
+  if (req.query.action === 'card-specs') {
+    return handleCardSpecs(req, res, admin)
   }
 
   const body =
