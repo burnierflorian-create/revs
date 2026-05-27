@@ -256,31 +256,48 @@ html[data-tier='vip'] {
 }
 
 /* ─────────────────────── Collector cards ───────────────────────
-   Three animations dedicated to the user's collector card grid:
-   - holo-shimmer: gold/rainbow gradient drift used on rarity chips
-     and as the holographic overlay layer for ultra_rare + unique cards.
+   Card grid in the profile's Collection tab.
+   - holo-shimmer: gradient-position drift used by the rarity chip
+     of LÉGENDAIRE cards.
+   - holo-overlay-drift: pan-and-tilt of the holographic rainbow
+     overlay layered on top of the photo for ultra_rare + unique.
+   - legendary-frame-shimmer: animates the gold gradient that fills
+     the 2px outer frame of LÉGENDAIRE cards.
    - collector-enter: spring-physics scale+fade entry, staggered per
      card via animation-delay set inline.
-   - collector-modal-in: same spring used when the detail modal opens. */
+   - collector-flip / .is-flipped: 3D Y-axis flip. Parent owns the
+     perspective; .collector-flip-inner is the rotating layer; the
+     two faces hide their back via backface-visibility:hidden. */
 
 @keyframes holo-shimmer {
   0%   { background-position: 0% 50%; }
   100% { background-position: 200% 50%; }
 }
 
-.collector-holo {
+@keyframes holo-overlay-drift {
+  0%   { background-position:   0% 50%; transform: translateX(-2%); }
+  100% { background-position: 200% 50%; transform: translateX(2%); }
+}
+
+.collector-holo-overlay {
   background: linear-gradient(
     115deg,
-    transparent 0%,
-    rgba(255, 0, 128, 0.18) 20%,
-    rgba(0, 200, 255, 0.18) 38%,
-    rgba(255, 255, 0, 0.18) 56%,
-    rgba(120, 255, 80, 0.18) 74%,
-    transparent 100%
+    rgba(255, 0, 128, 0.0) 0%,
+    rgba(255, 0, 128, 0.30) 18%,
+    rgba(0, 200, 255, 0.30) 36%,
+    rgba(255, 255, 0, 0.30) 54%,
+    rgba(120, 255, 80, 0.30) 72%,
+    rgba(255, 0, 128, 0.0) 100%
   );
   background-size: 250% 250%;
+  opacity: 0.25;
   mix-blend-mode: screen;
-  animation: holo-shimmer 3.6s linear infinite;
+  animation: holo-overlay-drift 4.2s linear infinite alternate;
+}
+
+@keyframes legendary-frame-shimmer {
+  0%   { background-position:   0% 50%; }
+  100% { background-position: 250% 50%; }
 }
 
 @keyframes collector-enter-kf {
@@ -292,9 +309,33 @@ html[data-tier='vip'] {
   animation: collector-enter-kf 520ms var(--ease-spring) both;
 }
 
-@keyframes collector-modal-in {
-  0%   { opacity: 0; transform: scale(0.85); }
-  100% { opacity: 1; transform: scale(1); }
+/* 3D flip — parent owns the perspective so the child rotation feels
+   like a real card flipping rather than a flat 2D rotation. The
+   wrapper button stretches to fill its rarity-frame container. */
+.collector-flip {
+  perspective: 1200px;
+  background: transparent;
+  border: 0;
+  padding: 0;
+}
+.collector-flip-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  transition: transform 720ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.collector-flip-inner.is-flipped {
+  transform: rotateY(180deg);
+}
+.collector-face {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+.collector-face-back {
+  transform: rotateY(180deg);
 }
 
 @keyframes fade-in {
