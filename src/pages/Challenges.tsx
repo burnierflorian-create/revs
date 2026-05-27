@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, Target, Check, Zap } from 'lucide-react'
+import { ArrowLeft, Target, Check } from 'lucide-react'
 import {
   challengePct,
-  claimChallenge,
   fetchActiveChallenges,
   type Challenge,
 } from '../lib/challenges'
@@ -22,12 +21,6 @@ function endsAtLabel(iso: string): string {
 export default function Challenges() {
   const navigate = useNavigate()
   const [items, setItems] = useState<Challenge[] | null>(null)
-  const [busy, setBusy] = useState<string | null>(null)
-  const [celebrate, setCelebrate] = useState<string | null>(null)
-
-  async function refresh() {
-    setItems(await fetchActiveChallenges())
-  }
 
   useEffect(() => {
     let active = true
@@ -38,20 +31,6 @@ export default function Challenges() {
       active = false
     }
   }, [])
-
-  async function onClaim(c: Challenge) {
-    if (c.claimed || !c.completed || busy) return
-    setBusy(c.id)
-    const ok = await claimChallenge(c.id)
-    setBusy(null)
-    if (ok) {
-      setCelebrate(c.id)
-      const { floatXp } = await import('../components/XpFloater')
-      floatXp(c.xp_reward)
-      setTimeout(() => setCelebrate(null), 2200)
-      await refresh()
-    }
-  }
 
   return (
     <div className="min-h-screen bg-bg px-4 pt-[max(1rem,env(safe-area-inset-top))] text-fg">
@@ -94,21 +73,19 @@ export default function Challenges() {
         <div className="space-y-3 pb-12">
           {items.map((c) => {
             const pct = challengePct(c)
-            const cel = celebrate === c.id
+            // `claimed` is now driven by the auto_claim trigger on
+            // spots; `completed && !claimed` is a transient post-
+            // insert window that the next page refresh clears.
+            const done = c.claimed || c.completed
             return (
               <div
                 key={c.id}
-                className={`relative overflow-hidden rounded-3xl bg-card p-5 transition-all ${
-                  cel ? 'animate-pulse ring-2 ring-accent' : ''
-                }`}
+                className="relative overflow-hidden rounded-3xl bg-card p-5"
                 style={{
-                  border: c.claimed
+                  border: done
                     ? '1px solid rgba(34,197,94,0.35)'
                     : '1px solid var(--color-border)',
-                  background: c.claimed ? 'rgba(34,197,94,0.06)' : undefined,
-                  boxShadow: c.completed && !c.claimed
-                    ? '0 0 22px rgba(232,32,58,0.18)'
-                    : undefined,
+                  background: done ? 'rgba(34,197,94,0.06)' : undefined,
                 }}
               >
                 <div className="flex items-start justify-between gap-3">
@@ -126,7 +103,7 @@ export default function Challenges() {
                 <div className="mt-4 h-1.5 w-full overflow-hidden rounded-full bg-white/[0.08]">
                   <div
                     className={`h-full rounded-full transition-all duration-500 ${
-                      c.completed ? 'bg-green-500' : 'bg-accent'
+                      done ? 'bg-green-500' : 'bg-accent'
                     }`}
                     style={{ width: `${pct}%` }}
                   />
@@ -136,7 +113,7 @@ export default function Challenges() {
                   <span className="label-up text-[10px] text-fg2">
                     {c.progress}/{c.target_value} · {endsAtLabel(c.ends_at)}
                   </span>
-                  {c.claimed && (
+                  {done && (
                     <span className="flex items-center gap-1 text-[11px] font-extrabold tracking-wider text-green-400">
                       <Check className="h-3.5 w-3.5" />
                       COMPLÉTÉ
@@ -144,20 +121,7 @@ export default function Challenges() {
                   )}
                 </div>
 
-                {c.completed && !c.claimed && (
-                  <button
-                    onClick={() => onClaim(c)}
-                    disabled={busy === c.id}
-                    className="tappable mt-4 flex w-full items-center justify-center gap-2 rounded-full bg-accent py-3.5 text-sm font-extrabold tracking-wider text-fg disabled:opacity-40"
-                    style={{ boxShadow: '0 8px 24px rgba(232,32,58,0.45)' }}
-                  >
-                    <Zap className="h-4 w-4" />
-                    {busy === c.id
-                      ? 'RÉCUPÉRATION…'
-                      : `RÉCLAMER +${c.xp_reward} XP`}
-                  </button>
-                )}
-                {!c.completed && (
+                {!done && (
                   <button
                     onClick={() => navigate('/new-spot')}
                     className="tappable mt-4 w-full rounded-full bg-white/[0.06] py-3 text-sm font-bold tracking-wide text-fg/80 hover:bg-white/[0.10]"

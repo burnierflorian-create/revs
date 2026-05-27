@@ -34,8 +34,6 @@ import {
   type RarestSpot,
   type SpotScore,
 } from '../lib/spotPredictions'
-import type { DailyChallengeContext } from '../lib/dailyChallenge'
-import DailyChallengeCard from '../components/DailyChallengeCard'
 
 type CommunityStats = {
   spots_today: number
@@ -79,8 +77,6 @@ export default function Home() {
   const [prediction, setPrediction] = useState<PredictionResult | null>(null)
   const [predictionLoading, setPredictionLoading] = useState(false)
   const [rarest, setRarest] = useState<RarestSpot | null>(null)
-  const [spotterContext, setSpotterContext] =
-    useState<DailyChallengeContext | null>(null)
   const [now, setNow] = useState(() => Date.now())
 
   useEffect(() => {
@@ -193,22 +189,19 @@ export default function Home() {
         const lastCar = recentList[0]
           ? `${recentList[0].brand ?? ''} ${recentList[0].model ?? ''}`.trim()
           : undefined
-        const ctx = {
-          pseudo,
-          city: ville || undefined,
-          spot_count: spotCount ?? recentList.length,
-          top_brands: topBrands,
-          level: xpLevel((xpRes.data as number | null) ?? 0).name,
-          last_car: lastCar,
-        }
         if (!active) return
-        setSpotterContext(ctx)
 
         // Spotting prediction — only fires once per day per city thanks
         // to the server cache. Skip when the user hasn't set their city.
         if (ville) {
           setPredictionLoading(true)
-          const p = await fetchSpottingPrediction(ville, ctx)
+          const p = await fetchSpottingPrediction(ville, {
+            pseudo,
+            spot_count: spotCount ?? recentList.length,
+            top_brands: topBrands,
+            level: xpLevel((xpRes.data as number | null) ?? 0).name,
+            last_car: lastCar,
+          })
           if (!active) return
           setPrediction(p)
           setPredictionLoading(false)
@@ -355,9 +348,6 @@ export default function Home() {
           rarest={rarest}
           onOpenSpot={(id) => navigate(`/spot/${id}`)}
         />
-
-        {/* DAILY CHALLENGE — sits right under the prediction/rare card. */}
-        {spotterContext && <DailyChallengeCard context={spotterContext} />}
 
         {/* COMMUNITY STATS — single horizontal pill, ultra-light footprint. */}
         {community && (

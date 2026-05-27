@@ -25,18 +25,6 @@ export async function fetchActiveChallenges(): Promise<Challenge[]> {
   return (data ?? []) as Challenge[]
 }
 
-/** Claims a completed challenge. Returns true on first successful claim. */
-export async function claimChallenge(challengeId: string): Promise<boolean> {
-  const { data, error } = await supabase.rpc('claim_challenge', {
-    p_challenge_id: challengeId,
-  })
-  if (error) {
-    console.warn('[challenges] claim failed:', error.message)
-    return false
-  }
-  return data === true
-}
-
 export function challengePct(c: Challenge): number {
   if (c.target_value <= 0) return 0
   return Math.min(100, Math.round((c.progress / c.target_value) * 100))
