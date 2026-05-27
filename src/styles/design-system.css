@@ -440,3 +440,18 @@ html[data-tier='vip'] {
   60%  { transform: scale(1.04); }
   100% { transform: scale(1); }
 }
+
+/* Puff of smoke around the wheels at GO. Two of these fire side-by-
+   side per car; the staggered animation-delay is set inline. */
+@keyframes race-launch-smoke {
+  0%   { transform: scale(0.4) translateY(0); opacity: 0.85; }
+  60%  { transform: scale(1.4) translateY(6px); opacity: 0.45; }
+  100% { transform: scale(2.0) translateY(14px); opacity: 0; }
+}
+
+/* Subtle lean to suggest the top-down car is taking a slight curve.
+   Pure rotate; doesn't move the car laterally. */
+@keyframes race-car-lean {
+  0%, 100% { transform: rotate(-3deg); }
+  50%      { transform: rotate(3deg); }
+}

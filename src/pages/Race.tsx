@@ -19,6 +19,8 @@ import {
   type RaceResult,
   type RaceStake,
 } from '../lib/race'
+import { bodyTypeFor } from '../lib/car-body-type'
+import type { BodyType } from '../components/CarSilhouettes'
 import { Skeleton } from '../components/Skeleton'
 import { floatXp } from '../components/XpFloater'
 import Confetti from '../components/Confetti'
@@ -66,6 +68,73 @@ const WIN_CONFETTI = ['#E8203A', '#FFD700', '#FFA500', '#FFF6C8']
 /** Top-speed estimate for the HUD gauge — cosmetic only. */
 function topSpeedFromHp(hp: number): number {
   return Math.max(180, Math.min(330, Math.round(150 + hp * 0.25)))
+}
+
+/** Maps `spot.color` (free-form text from the AI ID pipeline, in FR/EN)
+ *  into a hex used by the top-down car SVG. Returns the brand red as a
+ *  safe default so unrecognised colour strings still render a car. */
+const COLOR_MAP: Array<{ test: RegExp; hex: string }> = [
+  { test: /\b(red|rouge|crimson|carmin)\b/i,                hex: '#E8203A' },
+  { test: /\b(black|noir|onyx|jet)\b/i,                     hex: '#1a1a1a' },
+  { test: /\b(white|blanc|pearl|ivoire)\b/i,                hex: '#ECECEC' },
+  { test: /\b(silver|argent|aluminium|aluminum)\b/i,        hex: '#C5C5C5' },
+  { test: /\b(gray|grey|gris|graphite|anthracite)\b/i,      hex: '#7a7a7a' },
+  { test: /\b(blue|bleu|navy|azur|cobalt)\b/i,              hex: '#3B82F6' },
+  { test: /\b(yellow|jaune|gold|or\b|dor)\b/i,              hex: '#F2C033' },
+  { test: /\b(green|vert|emerald|smaragd|british)\b/i,      hex: '#22C55E' },
+  { test: /\b(orange|cuivre|copper)\b/i,                    hex: '#F97316' },
+  { test: /\b(purple|violet|mauve|aubergine)\b/i,           hex: '#A855F7' },
+  { test: /\b(brown|marron|tobacco|cognac|brun)\b/i,        hex: '#7B4A1F' },
+  { test: /\b(beige|sable|champagne|cream)\b/i,             hex: '#D6B98C' },
+]
+function colorFromSpot(colorStr: string | null | undefined): string {
+  if (!colorStr) return '#E8203A'
+  for (const c of COLOR_MAP) if (c.test.test(colorStr)) return c.hex
+  return '#E8203A'
+}
+
+/** Picks a paint colour for the AI opponent that contrasts with the
+ *  player's. If we draw the same hex, shift to a fixed alternate so
+ *  the two cars stay visually distinct on the track. */
+function opponentColor(playerHex: string, opponentColorStr: string | null | undefined): string {
+  const c = colorFromSpot(opponentColorStr)
+  if (c.toLowerCase() !== playerHex.toLowerCase()) return c
+  // Pick something far from the player hue.
+  const alt = playerHex.toLowerCase() === '#3b82f6' ? '#F2C033' : '#3B82F6'
+  return alt
+}
+
+/** Coarse-grained top-down silhouette family. The race-screen SVG
+ *  cars come in three shapes; we collapse the detailed `bodyTypeFor`
+ *  result into one of them. */
+type TopDownClass = 'supercar' | 'sedan' | 'suv'
+const SUPERCAR_TYPES: ReadonlySet<BodyType> = new Set<BodyType>([
+  'supercar',
+  'hypercar',
+  'jdm-sport',
+  'porsche-911',
+  'ferrari-berlinetta',
+  'lambo-wedge',
+  'mclaren',
+  'bugatti',
+  'audi-tt-rs',
+  'mercedes-amg-gt-roadster',
+  'toyota-gt86',
+])
+const SUV_TYPES: ReadonlySet<BodyType> = new Set<BodyType>([
+  'suv',
+  'suv-coupe',
+  'mini-suv',
+  'porsche-cayenne-coupe',
+  'mercedes-gle-coupe',
+  'range-rover',
+  'nissan-juke',
+])
+function topDownClassFor(brand: string, model: string, category: string | null): TopDownClass {
+  const bt = bodyTypeFor(brand, model, category ?? undefined)
+  if (SUPERCAR_TYPES.has(bt)) return 'supercar'
+  if (SUV_TYPES.has(bt)) return 'suv'
+  return 'sedan'
 }
 
 /** Best-effort haptic feedback. iOS Safari has no Vibration API; the
@@ -876,7 +945,7 @@ function PhotoFallback({ brand, color }: { brand: string; color: string }) {
   )
 }
 
-// ─────────────────────────────── COUNTDOWN ───────────────────────────────
+// ─────────────────────────────── COUNTDOWN (F1 lights) ───────────────────────────────
 
 function CountdownPhase({
   spot,
@@ -894,16 +963,30 @@ function CountdownPhase({
   showGoFlash: boolean
 }) {
   const isGo = goAt != null
-  const playerRarity = (spot.rarity ?? 'commun') as Rarity
+  // Map the existing 3-2-1-0 countdown ticks (driven by the main page
+  // hook) into how many F1 lights are still LIT. Spec: start with
+  // all 5 lit, then go out one by one. GO = no lights remain.
+  //   countdown=3 → 5 lit  (just entered phase)
+  //   countdown=2 → 4 lit
+  //   countdown=1 → 3 lit
+  //   countdown=0 (pre-GO) → 0 lit → GO
+  // We interpolate two more "ghost" steps in between via a local
+  // sub-tick to land the full 5→0 sequence cleanly.
+  const lightsLit = useF1LightSequence(countdown, isGo)
+
+  const playerColor = colorFromSpot(spot.color)
+  const oppColor = opponentColor(playerColor, null) // AI has no .color → contrast
+  const playerClass = topDownClassFor(spot.brand, spot.model, spot.category)
+  const oppClass = topDownClassFor(opponent.brand, opponent.model, null)
+
   return (
     <div
       className="relative flex h-screen flex-col"
       style={{
         background:
-          'radial-gradient(circle at 50% 40%, #16080a 0%, #050505 60%, #000 100%)',
+          'radial-gradient(circle at 50% 30%, #1a1a1c 0%, #0c0c0d 70%, #050505 100%)',
       }}
     >
-      {/* GO white flash */}
       {showGoFlash && (
         <div
           className="pointer-events-none absolute inset-0 z-40 bg-white"
@@ -911,46 +994,27 @@ function CountdownPhase({
         />
       )}
 
-      {/* Cars at the start line — real photos for both */}
-      <div className="flex flex-1 items-center justify-center px-4 pt-8">
-        <div className="grid w-full grid-cols-2 gap-3">
-          <StartCar
-            photoUrl={spot.photo_url}
-            brand={spot.brand}
-            label={spot.model}
-            rarity={playerRarity}
-            isPlayer
+      {/* Top-down circuit fills the full screen — cars sit on the
+          start grid; no scroll yet. */}
+      <div className="absolute inset-0">
+        <TopDownCircuit scrolling={false} slowMo={false}>
+          <StartGridCars
+            playerClass={playerClass}
+            playerColor={playerColor}
+            oppClass={oppClass}
+            oppColor={oppColor}
+            isGo={isGo}
           />
-          <StartCar
-            photoUrl={opponent.photo_url}
-            brand={opponent.brand}
-            label={opponent.model}
-            rarity={opponent.rarity}
-            isPlayer={false}
-          />
-        </div>
+        </TopDownCircuit>
       </div>
 
-      <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-        <span
-          key={`${countdown}-${isGo}`}
-          className="font-display font-extrabold tracking-tighter"
-          style={{
-            fontSize: isGo ? '170px' : '190px',
-            lineHeight: 1,
-            color: isGo ? '#22C55E' : '#fff',
-            textShadow: isGo
-              ? '0 0 60px rgba(34,197,94,0.85)'
-              : '0 0 60px rgba(232,32,58,0.55)',
-            animation: 'race-pop 320ms var(--ease-spring) both',
-          }}
-        >
-          {isGo ? 'GO!' : countdown}
-        </span>
+      {/* F1 light gantry overlay */}
+      <div className="relative z-20 mt-12 flex justify-center">
+        <F1Lights lit={lightsLit} />
       </div>
 
-      <div
-        className="px-4 pt-3"
+      {/* BOOST button at the bottom */}
+      <div className="relative z-20 mt-auto px-4 pt-3"
         style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}
       >
         <button
@@ -974,65 +1038,132 @@ function CountdownPhase({
           }}
         >
           <Zap className="h-5 w-5" fill="currentColor" />
-          {isGo ? 'BOOST' : 'ATTENDS LE GO'}
+          {isGo ? 'BOOST' : 'ATTENDS LES FEUX'}
         </button>
       </div>
     </div>
   )
 }
 
-function StartCar({
-  photoUrl,
-  brand,
-  label,
-  rarity,
-  isPlayer,
-}: {
-  photoUrl: string | null
-  brand: string
-  label: string
-  rarity: Rarity
-  isPlayer: boolean
-}) {
+/** Five F1-style red lights laid out horizontally. Each `lit` step
+ *  removes one light from the right-most position so the visual
+ *  reads as 'extinguishing one by one' per the brief. */
+function F1Lights({ lit }: { lit: number }) {
   return (
     <div
-      className="relative overflow-hidden rounded-2xl"
+      className="flex items-center gap-3 rounded-2xl px-5 py-3"
       style={{
-        aspectRatio: '4 / 3',
-        border: `2px solid ${RARITY_COLOR[rarity]}`,
-        boxShadow: `0 14px 30px ${RARITY_COLOR[rarity]}55`,
+        background: 'linear-gradient(to bottom, #1a1a1a 0%, #0a0a0a 100%)',
+        border: '1px solid rgba(255,255,255,0.10)',
+        boxShadow: '0 14px 32px rgba(0,0,0,0.55)',
       }}
     >
-      {photoUrl ? (
-        <img
-          src={photoUrl}
-          alt={`${brand} ${label}`}
-          className="absolute inset-0 h-full w-full object-cover"
-          draggable={false}
-        />
-      ) : (
-        <PhotoFallback brand={brand} color={RARITY_COLOR[rarity]} />
-      )}
-      <div
-        className="absolute inset-x-0 bottom-0 px-2 py-1.5 text-white"
-        style={{
-          background: 'linear-gradient(to top, rgba(0,0,0,0.92), transparent)',
-        }}
-      >
-        <p
-          className="text-[7.5px] uppercase tracking-widest"
-          style={{ color: RARITY_COLOR[rarity] }}
-        >
-          {isPlayer ? 'TOI' : 'ADVERSAIRE'}
-        </p>
-        <p
-          className="truncate font-display font-extrabold tracking-tight"
-          style={{ fontSize: '11px' }}
-        >
-          {label}
-        </p>
-      </div>
+      {[5, 4, 3, 2, 1].map((i) => {
+        const on = i <= lit
+        return (
+          <div
+            key={i}
+            className="rounded-full"
+            style={{
+              width: 26,
+              height: 26,
+              background: on ? '#E8203A' : 'rgba(255,255,255,0.06)',
+              border: on
+                ? '2px solid rgba(255,255,255,0.55)'
+                : '2px solid rgba(255,255,255,0.10)',
+              boxShadow: on
+                ? '0 0 18px rgba(232,32,58,0.85), inset 0 0 8px rgba(255,255,255,0.18)'
+                : 'inset 0 0 6px rgba(0,0,0,0.55)',
+              transition: 'all 180ms ease',
+            }}
+          />
+        )
+      })}
     </div>
+  )
+}
+
+/** Bridges the existing 3-2-1-0 countdown state into the 5-light
+ *  sequence. We add intermediate transitions so the lights still
+ *  visibly walk down from 5 → 0 across the same 3-second window. */
+function useF1LightSequence(countdown: number, isGo: boolean): number {
+  const [extra, setExtra] = useState(0)
+  // Reset whenever the host countdown re-enters phase 3.
+  useEffect(() => {
+    if (countdown === 3) setExtra(0)
+  }, [countdown])
+  // After each tick (3,2,1) we also advance the half-step ~500ms
+  // later so the light sequence lands smoothly.
+  useEffect(() => {
+    if (countdown >= 1) {
+      const t = window.setTimeout(() => setExtra((e) => Math.min(2, e + 1)), 500)
+      return () => clearTimeout(t)
+    }
+  }, [countdown])
+  if (isGo) return 0
+  // Base: 3→5 lit, 2→4, 1→3, 0→0 — boosted by `extra` half-steps.
+  const base = countdown === 3 ? 5 : countdown === 2 ? 4 : countdown === 1 ? 3 : 0
+  if (countdown === 0) return 0
+  return Math.max(0, base - extra)
+}
+
+/** Two cars positioned on the start grid (no scrolling yet). Sits
+ *  inside <TopDownCircuit>, which provides the asphalt + grandstands.
+ *  At GO we layer puffs of smoke around the wheels for the launch. */
+function StartGridCars({
+  playerClass,
+  playerColor,
+  oppClass,
+  oppColor,
+  isGo,
+}: {
+  playerClass: TopDownClass
+  playerColor: string
+  oppClass: TopDownClass
+  oppColor: string
+  isGo: boolean
+}) {
+  return (
+    <>
+      <div
+        className="absolute"
+        style={{ left: '24%', bottom: '22%', width: 64 }}
+      >
+        <TopDownCar bodyClass={playerClass} color={playerColor} />
+        {isGo && <LaunchSmoke />}
+      </div>
+      <div
+        className="absolute"
+        style={{ left: '60%', bottom: '22%', width: 64 }}
+      >
+        <TopDownCar bodyClass={oppClass} color={oppColor} />
+        {isGo && <LaunchSmoke />}
+      </div>
+    </>
+  )
+}
+
+function LaunchSmoke() {
+  return (
+    <>
+      {[-1, 1].map((side) => (
+        <div
+          key={side}
+          className="pointer-events-none absolute"
+          style={{
+            bottom: -4,
+            left: side === -1 ? -2 : 'auto',
+            right: side === 1 ? -2 : 'auto',
+            width: 22,
+            height: 22,
+            borderRadius: '50%',
+            background:
+              'radial-gradient(circle, rgba(255,255,255,0.85) 0%, rgba(255,255,255,0) 70%)',
+            animation: 'race-launch-smoke 700ms ease-out forwards',
+          }}
+        />
+      ))}
+    </>
   )
 }
 
@@ -1051,9 +1182,9 @@ function SprintPhase({
   result: RaceResult | null
   slowMo: boolean
 }) {
-  const playerRarity = (spot.rarity ?? 'commun') as Rarity
   const playerTop = topSpeedFromHp(playerHp)
   const [speed, setSpeed] = useState(slowMo ? playerTop - 12 : 0)
+  const [elapsedMs, setElapsedMs] = useState(0)
   const startedAt = useRef<number | null>(null)
 
   useEffect(() => {
@@ -1061,13 +1192,15 @@ function SprintPhase({
     startedAt.current = performance.now()
     const tick = () => {
       const now = performance.now()
-      const t = Math.min(1, (now - (startedAt.current ?? now)) / (slowMo ? 2800 : 4600))
+      const sinceStart = now - (startedAt.current ?? now)
+      const t = Math.min(1, sinceStart / (slowMo ? 2800 : 4600))
       const eased = 1 - Math.pow(1 - t, 3)
       const v = slowMo
         ? playerTop - Math.round(eased * 12)
         : Math.round(eased * playerTop)
       setSpeed(v)
-      if (t < 1) frame = requestAnimationFrame(tick)
+      setElapsedMs(sinceStart)
+      if (t < 1 || slowMo) frame = requestAnimationFrame(tick)
     }
     frame = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(frame)
@@ -1080,30 +1213,105 @@ function SprintPhase({
     return result.player_score / total
   }, [result])
 
+  // Lane-y progress along the circuit. `bottom` is in % from the
+  // start grid (which sits low). Lead car gets visibly further by
+  // the finish phase.
   const playerProgress = slowMo
-    ? Math.min(0.98, 0.62 + (playerLead - 0.5) * 0.85)
-    : Math.min(0.85, 0.40 + (playerLead - 0.5) * 0.70)
+    ? Math.min(0.92, 0.65 + (playerLead - 0.5) * 0.80)
+    : Math.min(0.78, 0.42 + (playerLead - 0.5) * 0.65)
   const oppProgress = slowMo
-    ? Math.min(0.98, 0.62 + ((1 - playerLead) - 0.5) * 0.85)
-    : Math.min(0.85, 0.40 + ((1 - playerLead) - 0.5) * 0.70)
+    ? Math.min(0.92, 0.65 + ((1 - playerLead) - 0.5) * 0.80)
+    : Math.min(0.78, 0.42 + ((1 - playerLead) - 0.5) * 0.65)
+
+  const playerLeading = playerLead >= 0.5
+  const playerColor = colorFromSpot(spot.color)
+  const oppColor = opponentColor(playerColor, null)
+  const playerClass = topDownClassFor(spot.brand, spot.model, spot.category)
+  const oppClass = topDownClassFor(opponent.brand, opponent.model, null)
 
   return (
     <div
       className="relative flex h-screen flex-col overflow-hidden"
       style={{
         background:
-          'radial-gradient(circle at 50% 30%, #1a0a0d 0%, #0a0a0a 70%, #000 100%)',
+          'radial-gradient(circle at 50% 30%, #131316 0%, #0a0a0a 70%, #050505 100%)',
       }}
     >
-      {/* 3D perspective road floor — receding toward horizon. */}
-      <PerspectiveRoad slowMo={slowMo} />
+      <TopDownCircuit scrolling slowMo={slowMo}>
+        {/* Player car — left lane, slight bob to suggest a curve */}
+        <RacingCar
+          side="player"
+          progress={playerProgress}
+          bodyClass={playerClass}
+          color={playerColor}
+          slowMo={slowMo}
+        />
+        <RacingCar
+          side="opponent"
+          progress={oppProgress}
+          bodyClass={oppClass}
+          color={oppColor}
+          slowMo={slowMo}
+        />
+      </TopDownCircuit>
 
-      {/* HUD top */}
-      <div className="z-20 flex items-center justify-between gap-3 px-4 pt-[max(0.75rem,env(safe-area-inset-top))]">
+      {/* HUD top — position pill (center) + race time (right) */}
+      <div
+        className="absolute inset-x-0 z-20 flex items-center justify-between gap-2 px-4"
+        style={{ top: 'max(0.75rem, env(safe-area-inset-top))' }}
+      >
+        <span
+          className="rounded-full px-2.5 py-1 font-extrabold uppercase tracking-widest"
+          style={{
+            background: 'rgba(0,0,0,0.55)',
+            border: '1px solid rgba(255,255,255,0.10)',
+            backdropFilter: 'blur(8px)',
+            color: 'rgba(255,255,255,0.65)',
+            fontSize: '9px',
+          }}
+        >
+          {slowMo ? 'ARRIVÉE' : 'TOUR 1/1'}
+        </span>
+        <div
+          className="rounded-full px-3 py-1 font-extrabold uppercase tracking-widest"
+          style={{
+            background: playerLeading
+              ? 'rgba(34,197,94,0.20)'
+              : 'rgba(232,32,58,0.20)',
+            border: `1px solid ${
+              playerLeading
+                ? 'rgba(34,197,94,0.55)'
+                : 'rgba(232,32,58,0.55)'
+            }`,
+            color: playerLeading ? '#86EFAC' : '#FCA5A5',
+            fontSize: '10px',
+            letterSpacing: '0.12em',
+          }}
+        >
+          {playerLeading ? '1ᵉʳ' : '2ᵉ'} · TOI
+        </div>
+        <span
+          className="rounded-full px-2.5 py-1 font-extrabold tracking-tight tabular-nums text-white"
+          style={{
+            background: 'rgba(0,0,0,0.55)',
+            border: '1px solid rgba(255,255,255,0.10)',
+            backdropFilter: 'blur(8px)',
+            fontSize: '11px',
+          }}
+        >
+          {formatRaceTime(elapsedMs + (slowMo ? 5000 : 0))}
+        </span>
+      </div>
+
+      {/* HUD bottom — speed gauge + boost bar (kept as-is) */}
+      <div
+        className="absolute inset-x-0 z-20 flex items-center justify-between gap-3 px-4"
+        style={{ bottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}
+      >
         <div
           className="flex items-center gap-2 rounded-2xl px-3 py-2"
           style={{
-            background: 'rgba(0,0,0,0.55)',
+            background: 'rgba(0,0,0,0.62)',
             border: '1px solid rgba(232,32,58,0.40)',
             backdropFilter: 'blur(8px)',
           }}
@@ -1140,155 +1348,276 @@ function SprintPhase({
           </div>
         </div>
       </div>
-
-      {/* Lanes */}
-      <div className="z-10 flex flex-1 gap-2 px-3 py-3">
-        <Lane
-          progress={playerProgress}
-          slowMo={slowMo}
-          photoUrl={spot.photo_url}
-          brand={spot.brand}
-          rarity={playerRarity}
-          isPlayer
-        />
-        <Lane
-          progress={oppProgress}
-          slowMo={slowMo}
-          photoUrl={opponent.photo_url}
-          brand={opponent.brand}
-          rarity={opponent.rarity}
-          isPlayer={false}
-        />
-      </div>
-
-      <p
-        className="z-20 mb-3 text-center text-[10px] uppercase tracking-widest text-fg2"
-      >
-        {slowMo ? 'ARRIVÉE…' : 'COURSE EN COURS'}
-      </p>
     </div>
   )
 }
 
-function PerspectiveRoad({ slowMo }: { slowMo: boolean }) {
-  return (
-    <div
-      className="pointer-events-none absolute inset-0 overflow-hidden"
-      style={{ perspective: '700px', perspectiveOrigin: '50% -10%' }}
-    >
-      <div
-        style={{
-          position: 'absolute',
-          inset: 0,
-          background:
-            'repeating-linear-gradient(0deg, transparent 0px, transparent 60px, rgba(255,255,255,0.22) 60px, rgba(255,255,255,0.22) 90px), radial-gradient(ellipse at 50% 100%, #1c1c1c 0%, #050505 80%)',
-          backgroundSize: '100% 150px, 100% 100%',
-          transform: 'rotateX(52deg) scale(1.7)',
-          transformOrigin: '50% 0%',
-          animation: `race-road-scroll ${slowMo ? '700ms' : '220ms'} linear infinite`,
-          opacity: 0.55,
-        }}
-      />
-    </div>
-  )
+function formatRaceTime(ms: number): string {
+  const total = Math.max(0, ms)
+  const m = Math.floor(total / 60000)
+  const s = Math.floor((total % 60000) / 1000)
+  const cs = Math.floor((total % 1000) / 10)
+  return `${m}:${s.toString().padStart(2, '0')}.${cs.toString().padStart(2, '0')}`
 }
 
-function Lane({
-  progress,
+// ─────────────────────────────── TOP-DOWN CIRCUIT ───────────────────────────────
+
+/** Stylised top-down circuit. Provides the scrolling asphalt, lane
+ *  separators and grandstand sides. Children (the cars) layer on
+ *  top via `position: absolute`. */
+function TopDownCircuit({
+  scrolling,
   slowMo,
-  photoUrl,
-  brand,
-  rarity,
-  isPlayer,
+  children,
 }: {
-  progress: number
+  scrolling: boolean
   slowMo: boolean
-  photoUrl: string | null
-  brand: string
-  rarity: Rarity
-  isPlayer: boolean
+  children?: React.ReactNode
 }) {
   return (
+    <div className="absolute inset-0 overflow-hidden">
+      {/* Grandstand fringes on either side */}
+      <div
+        className="absolute inset-y-0 left-0"
+        style={{
+          width: '12%',
+          background:
+            'repeating-linear-gradient(0deg, rgba(232,32,58,0.18) 0px, rgba(232,32,58,0.18) 4px, rgba(0,0,0,0) 4px, rgba(0,0,0,0) 18px), #0e0e10',
+          borderRight: '1px solid rgba(255,255,255,0.06)',
+        }}
+      />
+      <div
+        className="absolute inset-y-0 right-0"
+        style={{
+          width: '12%',
+          background:
+            'repeating-linear-gradient(0deg, rgba(232,32,58,0.18) 0px, rgba(232,32,58,0.18) 4px, rgba(0,0,0,0) 4px, rgba(0,0,0,0) 18px), #0e0e10',
+          borderLeft: '1px solid rgba(255,255,255,0.06)',
+        }}
+      />
+
+      {/* Asphalt + scrolling lane markings */}
+      <div
+        className="absolute inset-y-0"
+        style={{
+          left: '12%',
+          right: '12%',
+          background:
+            // Dashed center line (yellow)
+            'repeating-linear-gradient(0deg, transparent 0px, transparent 28px, rgba(255,200,50,0.55) 28px, rgba(255,200,50,0.55) 44px),' +
+            // Solid asphalt with subtle vertical wear
+            'linear-gradient(90deg, #2a2a2c 0%, #1a1a1c 8%, #1d1d1f 50%, #1a1a1c 92%, #2a2a2c 100%)',
+          backgroundSize: '100% 72px, 100% 100%',
+          backgroundPositionX: 'center',
+          animation: scrolling
+            ? `race-road-scroll ${slowMo ? '700ms' : '220ms'} linear infinite`
+            : undefined,
+        }}
+      />
+
+      {/* Side lane lines (white) at ~24% / ~76% */}
+      <div
+        className="absolute inset-y-0"
+        style={{
+          left: '24%',
+          width: '2px',
+          background:
+            'repeating-linear-gradient(0deg, rgba(255,255,255,0.55) 0px, rgba(255,255,255,0.55) 16px, transparent 16px, transparent 36px)',
+          backgroundSize: '100% 52px',
+          animation: scrolling
+            ? `race-road-scroll ${slowMo ? '700ms' : '220ms'} linear infinite`
+            : undefined,
+        }}
+      />
+      <div
+        className="absolute inset-y-0"
+        style={{
+          right: '24%',
+          width: '2px',
+          background:
+            'repeating-linear-gradient(0deg, rgba(255,255,255,0.55) 0px, rgba(255,255,255,0.55) 16px, transparent 16px, transparent 36px)',
+          backgroundSize: '100% 52px',
+          animation: scrolling
+            ? `race-road-scroll ${slowMo ? '700ms' : '220ms'} linear infinite`
+            : undefined,
+        }}
+      />
+
+      {/* Start/finish line — kerb stripe across the bottom 1/4 (only
+          visible when not scrolling so the start grid reads). */}
+      {!scrolling && (
+        <div
+          className="absolute"
+          style={{
+            left: '12%',
+            right: '12%',
+            bottom: '14%',
+            height: '10px',
+            background:
+              'repeating-linear-gradient(90deg, #fff 0px, #fff 10px, #000 10px, #000 20px)',
+            boxShadow: '0 0 18px rgba(255,255,255,0.40)',
+          }}
+        />
+      )}
+
+      {children}
+    </div>
+  )
+}
+
+/** Top-down racing car. SVG silhouette (no photo, no emoji) coloured
+ *  by `color`. `bodyClass` swaps the underlying shape between three
+ *  archetypes — supercar, sedan, suv. */
+function TopDownCar({
+  bodyClass,
+  color,
+}: {
+  bodyClass: TopDownClass
+  color: string
+}) {
+  // Each variant draws against a 60×100 viewbox. Wheels and cockpit
+  // are shared between shapes; the body path is what changes.
+  const shadow = (
+    <ellipse cx="30" cy="96" rx="22" ry="4" fill="rgba(0,0,0,0.55)" />
+  )
+  const wheels = (
+    <g fill="#0c0c0c" stroke="rgba(255,255,255,0.10)" strokeWidth="0.6">
+      <rect x="4"  y="18" width="6" height="14" rx="2" />
+      <rect x="50" y="18" width="6" height="14" rx="2" />
+      <rect x="4"  y="62" width="6" height="14" rx="2" />
+      <rect x="50" y="62" width="6" height="14" rx="2" />
+    </g>
+  )
+  const highlight = (
+    <path
+      d="M 12 12 Q 30 4 48 12"
+      stroke="rgba(255,255,255,0.30)"
+      strokeWidth="1"
+      fill="none"
+      strokeLinecap="round"
+    />
+  )
+
+  let body: React.ReactNode
+  let cockpit: React.ReactNode
+
+  if (bodyClass === 'supercar') {
+    body = (
+      <path
+        d="M 12 8 Q 30 -2 48 8 L 53 80 Q 30 92 7 80 Z"
+        fill={color}
+        stroke="rgba(0,0,0,0.55)"
+        strokeWidth="1"
+      />
+    )
+    cockpit = (
+      <path
+        d="M 18 26 Q 30 22 42 26 L 42 56 Q 30 60 18 56 Z"
+        fill="rgba(0,0,0,0.62)"
+      />
+    )
+  } else if (bodyClass === 'suv') {
+    body = (
+      <path
+        d="M 8 12 Q 30 6 52 12 L 53 84 Q 30 92 7 84 Z"
+        fill={color}
+        stroke="rgba(0,0,0,0.55)"
+        strokeWidth="1"
+      />
+    )
+    cockpit = (
+      <rect
+        x="14"
+        y="22"
+        width="32"
+        height="40"
+        rx="6"
+        fill="rgba(0,0,0,0.58)"
+      />
+    )
+  } else {
+    // sedan
+    body = (
+      <path
+        d="M 10 10 Q 30 4 50 10 L 52 86 Q 30 92 8 86 Z"
+        fill={color}
+        stroke="rgba(0,0,0,0.55)"
+        strokeWidth="1"
+      />
+    )
+    cockpit = (
+      <path
+        d="M 17 24 Q 30 21 43 24 L 43 58 Q 30 62 17 58 Z"
+        fill="rgba(0,0,0,0.6)"
+      />
+    )
+  }
+
+  return (
+    <svg
+      viewBox="0 0 60 100"
+      width="100%"
+      style={{ display: 'block', overflow: 'visible' }}
+      aria-hidden
+    >
+      {shadow}
+      {body}
+      {cockpit}
+      {wheels}
+      {highlight}
+    </svg>
+  )
+}
+
+/** A car placed on the circuit during the race. Owns the bob/lean
+ *  animation that suggests turning, plus the bottom-position
+ *  transition driven by `progress` (race lead). */
+function RacingCar({
+  side,
+  progress,
+  bodyClass,
+  color,
+  slowMo,
+}: {
+  side: 'player' | 'opponent'
+  progress: number
+  bodyClass: TopDownClass
+  color: string
+  slowMo: boolean
+}) {
+  const leftPct = side === 'player' ? 32 : 60
+  return (
     <div
-      className="relative flex-1 overflow-hidden rounded-2xl"
+      className="absolute"
       style={{
-        background: 'transparent',
-        border: `1.5px solid ${RARITY_COLOR[rarity]}55`,
-        boxShadow: `inset 0 0 36px ${RARITY_COLOR[rarity]}30`,
+        left: `${leftPct}%`,
+        bottom: `${10 + progress * 70}%`,
+        width: 60,
+        transition: slowMo
+          ? 'bottom 1200ms cubic-bezier(0.22, 1, 0.36, 1)'
+          : 'bottom 700ms cubic-bezier(0.22, 1, 0.36, 1)',
       }}
     >
-      {/* Light trail under the car */}
+      {/* Light trail above the car (cars move up → trail behind = below) */}
       <div
         className="pointer-events-none absolute left-1/2 -translate-x-1/2"
         style={{
-          bottom: `${4 + progress * 70}%`,
-          width: '70%',
-          height: '22%',
-          background: `radial-gradient(ellipse at center, ${RARITY_COLOR[rarity]}66 0%, transparent 70%)`,
-          filter: 'blur(10px)',
-          animation: 'race-trail-pulse 600ms ease-in-out infinite',
+          bottom: '-30%',
+          width: '120%',
+          height: '90%',
+          background: `radial-gradient(ellipse at top, ${color}88 0%, transparent 70%)`,
+          filter: 'blur(8px)',
+          opacity: slowMo ? 0.6 : 0.95,
         }}
       />
-
-      {/* The car */}
       <div
-        className="absolute left-1/2 -translate-x-1/2"
         style={{
-          bottom: `${6 + progress * 70}%`,
-          width: '82%',
-          aspectRatio: '4 / 3',
-          transition: slowMo
-            ? 'bottom 1200ms cubic-bezier(0.22, 1, 0.36, 1)'
-            : 'bottom 700ms cubic-bezier(0.22, 1, 0.36, 1)',
+          animation: slowMo
+            ? 'race-car-lean 1.6s ease-in-out infinite'
+            : 'race-car-lean 0.7s ease-in-out infinite',
         }}
       >
-        <div
-          className="h-full w-full overflow-hidden rounded-xl"
-          style={{
-            border: `2px solid ${RARITY_COLOR[rarity]}`,
-            boxShadow: `0 12px 30px ${RARITY_COLOR[rarity]}66`,
-            filter: slowMo ? 'none' : 'blur(0.4px)',
-          }}
-        >
-          {photoUrl ? (
-            <img
-              src={photoUrl}
-              alt={isPlayer ? 'Toi' : 'Adversaire'}
-              className="h-full w-full object-cover"
-              style={{ filter: slowMo ? 'none' : 'saturate(1.1) contrast(1.05)' }}
-              draggable={false}
-            />
-          ) : (
-            <PhotoFallback brand={brand} color={RARITY_COLOR[rarity]} />
-          )}
-        </div>
-      </div>
-
-      {/* Finish line at the top of the lane */}
-      <div
-        className="absolute inset-x-0 top-0 h-3"
-        style={{
-          background:
-            'repeating-linear-gradient(90deg, #fff 0px, #fff 8px, #000 8px, #000 16px)',
-          opacity: slowMo ? 1 : 0.65,
-          boxShadow: slowMo ? '0 0 24px rgba(255,255,255,0.55)' : undefined,
-        }}
-      />
-
-      <div
-        className="absolute left-1/2 -translate-x-1/2 rounded-full px-2 py-0.5"
-        style={{
-          bottom: '8px',
-          background: 'rgba(0,0,0,0.65)',
-          border: `1px solid ${RARITY_COLOR[rarity]}66`,
-          color: RARITY_COLOR[rarity],
-          fontSize: '8.5px',
-          letterSpacing: '0.12em',
-          fontWeight: 800,
-          textTransform: 'uppercase',
-        }}
-      >
-        {isPlayer ? 'TOI' : brand}
+        <TopDownCar bodyClass={bodyClass} color={color} />
       </div>
     </div>
   )
