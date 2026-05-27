@@ -1,20 +1,28 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Car, Settings, Lock, Warehouse, X } from 'lucide-react'
+import {
+  Camera,
+  ChevronRight,
+  Crown,
+  Lock,
+  Settings,
+  Sparkles,
+  Tag,
+  Trophy,
+  Warehouse,
+} from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { categoryLabel, timeAgo, type Spot } from '../lib/spots'
+import { type Spot } from '../lib/spots'
+import { planDisplayName, planInterval, planTier } from '../lib/plans'
+import { allBadges, computeUnlocks } from '../lib/badges'
 import { xpLevel } from '../lib/xp'
+import { translateError } from '../lib/errors'
+import { useMyTier } from '../lib/tier'
 import { Skeleton } from '../components/Skeleton'
+import GarageCard from '../components/GarageCard'
+import CollectionsSection from '../components/CollectionsSection'
+import TitleChip from '../components/TitleChip'
 
-type Badge = {
-  emoji: string
-  name: string
-  desc: string
-  condition: string
-  unlocked: boolean
-  xp?: number
-  gold?: boolean
-}
 
 function memberSince(iso: string | undefined): string {
   if (!iso) return ''
@@ -26,10 +34,12 @@ function memberSince(iso: string | undefined): string {
 
 export default function Profile() {
   const navigate = useNavigate()
+  const tier = useMyTier()
 
   const [loading, setLoading] = useState(true)
   const [pseudo, setPseudo] = useState('Spotter')
   const [ville, setVille] = useState('')
+  const [title, setTitle] = useState<string | null>(null)
   const [avatar, setAvatar] = useState<string | null>(null)
   const [joined, setJoined] = useState('')
   const [spots, setSpots] = useState<Spot[]>([])
@@ -38,12 +48,30 @@ export default function Profile() {
   const [hasEvent, setHasEvent] = useState(false)
   const [xp, setXp] = useState(0)
   const [plan, setPlan] = useState<string | null>(null)
+  const [subStatus, setSubStatus] = useState<string | null>(null)
+  const [renewalAt, setRenewalAt] = useState<string | null>(null)
+  const [hasCustomer, setHasCustomer] = useState(false)
+  const [portalBusy, setPortalBusy] = useState(false)
+  const [portalErr, setPortalErr] = useState<string | null>(null)
   const [earlyAdopter, setEarlyAdopter] = useState(false)
   const [meId, setMeId] = useState<string | null>(null)
   const [followers, setFollowers] = useState(0)
   const [following, setFollowing] = useState(0)
+  const [likesReceived, setLikesReceived] = useState(0)
   const [animPct, setAnimPct] = useState(0)
-  const [openBadge, setOpenBadge] = useState<Badge | null>(null)
+
+  // Cover backdrop: the user's most valuable spot becomes the hero
+  // image, blurred + dimmed. Falls back to the brand red gradient when
+  // the user has no spot with a photo + price. Computed up here (above
+  // the `if (loading) return …` guard) so hook order stays stable
+  // across the loading → ready transition.
+  const bestSpot = useMemo(() => {
+    return spots
+      .filter((s) => s.photo_url && (s.estimated_price ?? 0) > 0)
+      .sort(
+        (a, b) => (b.estimated_price ?? 0) - (a.estimated_price ?? 0),
+      )[0]
+  }, [spots])
 
   useEffect(() => {
     let active = true
@@ -76,12 +104,12 @@ export default function Profile() {
           supabase.rpc('my_xp'),
           supabase
             .from('profiles')
-            .select('pseudo, ville, avatar, created_at')
+            .select('pseudo, ville, avatar, created_at, title')
             .eq('user_id', user.id)
             .maybeSingle(),
           supabase
             .from('subscriptions')
-            .select('plan, status')
+            .select('plan, status, current_period_end, stripe_customer_id')
             .eq('user_id', user.id)
             .maybeSingle(),
           supabase
@@ -129,6 +157,7 @@ export default function Profile() {
           'Spotter',
       )
       setVille(profRes.data?.ville ?? '')
+      setTitle((profRes.data as { title?: string | null } | null)?.title ?? null)
       setAvatar(profRes.data?.avatar ?? null)
       setJoined(memberSince(user.created_at))
       setSpots(mySpots)
@@ -138,17 +167,34 @@ export default function Profile() {
       setRank(rk)
       setHasEvent((eventsRes.count ?? 0) > 0)
       setXp(typeof xpRes.data === 'number' ? xpRes.data : 0)
-      const s = subRes.data as { plan?: string; status?: string } | null
-      setPlan(
-        s && (s.status === 'active' || s.status === 'trialing')
-          ? (s.plan ?? null)
-          : null,
-      )
+      const s = subRes.data as {
+        plan?: string
+        status?: string
+        current_period_end?: string
+        stripe_customer_id?: string
+      } | null
+      const isActiveSub = s?.status === 'active' || s?.status === 'trialing'
+      setPlan(isActiveSub ? (s?.plan ?? null) : null)
+      setSubStatus(isActiveSub ? (s?.status ?? null) : null)
+      setRenewalAt(isActiveSub ? (s?.current_period_end ?? null) : null)
+      setHasCustomer(isActiveSub && !!s?.stripe_customer_id)
       setEarlyAdopter(earlier < 100)
       setMeId(user.id)
       setFollowers(followersRes.count ?? 0)
       setFollowing(followingRes.count ?? 0)
       setLoading(false)
+
+      // Likes-received count drives the "Photographe" badge. Best-
+      // effort follow-up — we don't want to delay the main render on
+      // it, so it sits outside the Promise.all.
+      const myIds = mySpots.map((s) => s.id)
+      if (myIds.length) {
+        const { count: lc } = await supabase
+          .from('spot_likes')
+          .select('spot_id', { count: 'exact', head: true })
+          .in('spot_id', myIds)
+        if (active) setLikesReceived(lc ?? 0)
+      }
     })()
     return () => {
       active = false
@@ -162,6 +208,38 @@ export default function Profile() {
     const id = requestAnimationFrame(() => setAnimPct(level.pct))
     return () => cancelAnimationFrame(id)
   }, [loading, level.pct])
+
+  // Open the Stripe Customer Portal for cancel / update card / etc.
+  // The endpoint resolves stripe_customer_id server-side from the
+  // authenticated user, so we just hand it the session token.
+  async function openPortal() {
+    if (portalBusy) return
+    setPortalErr(null)
+    setPortalBusy(true)
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+      const token = session?.access_token
+      if (!token) throw new Error('Session introuvable')
+      const res = await fetch('/api/create-checkout-session?action=portal', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      })
+      const data = (await res.json()) as { url?: string; error?: string }
+      if (data.url) {
+        window.location.href = data.url
+        return
+      }
+      throw new Error(data.error || 'Portail indisponible')
+    } catch (e) {
+      setPortalErr(translateError(e))
+      setPortalBusy(false)
+    }
+  }
 
   if (loading) {
     return (
@@ -190,173 +268,475 @@ export default function Profile() {
   }
 
   const total = spots.length
-  const has = (pred: (s: Spot) => boolean) => spots.some(pred)
-  const brandHas = (needle: string) =>
-    has((s) => (s.brand ?? '').toLowerCase().includes(needle))
-
-  const priceAtLeast = (min: number) =>
-    spots.filter((s) => (s.estimated_price ?? 0) >= min).length
-  const millionClub = priceAtLeast(1_000_000) >= 1
-
-  const badges: Badge[] = [
-    { emoji: '🚀', name: 'Premier Spot', desc: 'Ton tout premier spot publié.', condition: 'Poste ton premier spot', xp: 5, unlocked: total >= 1 },
-    { emoji: '🔟', name: 'Série de 10', desc: 'Tu prends le rythme.', condition: 'Atteins 10 spots au total', unlocked: total >= 10 },
-    { emoji: '💯', name: 'Centurion', desc: 'Un vrai chasseur.', condition: 'Atteins 100 spots au total', unlocked: total >= 100 },
-    { emoji: '🏎️', name: 'Ferrari Hunter', desc: 'Le Cheval cabré dans ton garage.', condition: 'Spotte une Ferrari', unlocked: brandHas('ferrari') },
-    { emoji: '🐂', name: 'Lambo Spotter', desc: 'Le taureau, capturé.', condition: 'Spotte une Lamborghini', unlocked: brandHas('lamborghini') },
-    { emoji: '🇯🇵', name: 'JDM Fan', desc: 'La culture japonaise de la perf.', condition: 'Spotte une japonaise de performance', unlocked: has((s) => s.category === 'JDM') },
-    { emoji: '📅', name: 'Organisateur', desc: 'Tu fais vivre la communauté.', condition: 'Crée un événement', xp: 20, unlocked: hasEvent },
-    { emoji: '⚡', name: 'Hypercar', desc: 'Tu vises haut de gamme.', condition: 'Spotte une voiture à plus de 200 000 €', xp: 40, unlocked: priceAtLeast(200_000) >= 1 },
-    { emoji: '🔭', name: 'Supercar Spotter', desc: 'Œil de lynx pour les supercars.', condition: '10 voitures à plus de 80 000 €', unlocked: priceAtLeast(80_000) >= 10 },
-    { emoji: '🦅', name: 'Hypercar Hunter', desc: 'Chasseur d’exception.', condition: '5 voitures à plus de 200 000 €', unlocked: priceAtLeast(200_000) >= 5 },
-    { emoji: '💎', name: 'Rare Find', desc: 'Une perle rare.', condition: 'Édition limitée ou plus de 500 000 €', unlocked: priceAtLeast(500_000) >= 1, gold: true },
-    { emoji: '🏆', name: 'Million Club', desc: 'Le club très fermé du million.', condition: 'Spotte une voiture à plus de 1 000 000 €', xp: 100, unlocked: millionClub, gold: true },
-    { emoji: '👑', name: 'Légendaire', desc: 'Badge doré ultra rare.', condition: 'Débloque le Million Club', unlocked: millionClub, gold: true },
-    { emoji: '🤝', name: 'Supporter', desc: 'Tu soutiens REVS.', condition: 'Abonne-toi au plan Starter', unlocked: plan === 'starter', gold: true },
-    { emoji: '✨', name: 'Premium', desc: 'Membre Premium.', condition: 'Abonne-toi au plan Premium', unlocked: plan === 'premium' },
-    { emoji: '👑', name: 'VIP', desc: 'Le statut ultime.', condition: 'Abonne-toi au plan VIP', unlocked: plan === 'vip', gold: true },
-    { emoji: '🌅', name: 'Early Adopter', desc: 'Tu étais là dès le début.', condition: 'Parmi les 100 premiers inscrits', unlocked: earlyAdopter, gold: true },
-  ]
+  const daysWithSpot = new Set(spots.map((s) => s.created_at.slice(0, 10)))
+  const badgeCtx = {
+    spots,
+    hasEvent,
+    plan,
+    rank,
+    followers,
+    likesReceived,
+    daysWithSpot,
+    earlyAdopter,
+  }
+  const badgeCatalogue = allBadges(badgeCtx)
+  const unlocks = computeUnlocks(badgeCtx)
+  // Top row: prefer unlocked badges (most-impressive feel); pad with the
+  // first locked ones so the row is always 4 wide.
+  const unlocked = badgeCatalogue.filter((b) => unlocks.has(b.slug))
+  const locked = badgeCatalogue.filter((b) => !unlocks.has(b.slug))
+  const topBadges = [...unlocked, ...locked].slice(0, 4)
 
   return (
     <div className="min-h-screen bg-bg text-fg">
-      {/* SECTION 1 — Cover + avatar */}
+      {/* SECTION 1 — Cover + avatar. When the user has a spot worth
+          showing off, we use its photo as the immersive backdrop
+          (heavy blur + dim overlay). Falls back to the brand red
+          gradient when the garage is empty. */}
       <div className="relative">
+        {bestSpot?.photo_url ? (
+          <div className="relative h-48 w-full overflow-hidden">
+            <img
+              src={bestSpot.photo_url}
+              alt=""
+              aria-hidden
+              className="absolute inset-0 h-full w-full object-cover"
+              style={{
+                filter: 'blur(20px) brightness(0.45) saturate(1.05)',
+                transform: 'scale(1.15)',
+              }}
+            />
+            <div
+              aria-hidden
+              className="absolute inset-0"
+              style={{
+                background:
+                  'linear-gradient(180deg, rgba(0,0,0,0.30) 0%, rgba(10,10,10,0.55) 70%, var(--color-bg) 100%)',
+              }}
+            />
+          </div>
+        ) : (
+          <div
+            className="h-48 w-full"
+            style={{
+              background:
+                'radial-gradient(ellipse 80% 100% at 50% 0%, rgba(232,32,58,0.35) 0%, transparent 60%), linear-gradient(180deg, #4a0f16 0%, #1a060a 55%, #0a0a0a 100%)',
+            }}
+          />
+        )}
+        {/* Bottom edge softener — blends the cover into the page bg */}
         <div
-          className="h-44 w-full"
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 bottom-0 h-16"
           style={{
             background:
-              'linear-gradient(135deg,#5a1219 0%,#2a0a0d 45%,#0a0a0a 100%)',
+              'linear-gradient(180deg, transparent 0%, var(--color-bg) 100%)',
           }}
         />
         <button
           onClick={() => navigate('/settings')}
           aria-label="Paramètres"
-          className="absolute right-4 top-[max(1rem,env(safe-area-inset-top))] flex h-10 w-10 items-center justify-center rounded-full bg-black/40 text-fg/80 backdrop-blur transition-colors hover:text-fg"
+          className="tappable absolute right-4 top-[max(1rem,env(safe-area-inset-top))] flex h-10 w-10 items-center justify-center rounded-full bg-black/40 text-fg/80 backdrop-blur transition-colors hover:text-fg"
+          style={{ border: '1px solid rgba(255,255,255,0.10)' }}
         >
           <Settings className="h-5 w-5" />
         </button>
-        <div className="absolute inset-x-0 -bottom-12 flex justify-center">
-          <div className="flex h-24 w-24 items-center justify-center overflow-hidden rounded-full bg-card text-4xl font-bold text-fg ring-4 ring-accent">
-            {avatar ? (
-              <img
-                src={avatar}
-                alt=""
-                className="h-full w-full object-cover"
-              />
-            ) : (
-              pseudo.charAt(0).toUpperCase()
+        <div className="absolute inset-x-0 -bottom-14 flex justify-center">
+          {/* Avatar with conic-gradient ring — gold sweep for VIP,
+              accent-red default. Tier badge (⚡/👑) overlays the
+              bottom-right corner when subscribed. */}
+          <div className="relative">
+            <div
+              className="flex h-28 w-28 items-center justify-center rounded-full p-[3px]"
+              style={
+                tier === 'vip'
+                  ? {
+                      background:
+                        'conic-gradient(from 220deg, #FFD700 0%, #B8860B 25%, #5a3f00 55%, #FFD700 100%)',
+                      boxShadow: '0 8px 32px rgba(255,200,50,0.40)',
+                    }
+                  : {
+                      background:
+                        'conic-gradient(from 220deg, #E8203A 0%, #b91528 25%, #4a0f16 55%, #E8203A 100%)',
+                      boxShadow: '0 8px 32px rgba(232,32,58,0.35)',
+                    }
+              }
+            >
+              <div className="flex h-full w-full items-center justify-center overflow-hidden rounded-full bg-card font-display text-4xl font-extrabold tracking-tighter text-fg">
+                {avatar ? (
+                  <img
+                    src={avatar}
+                    alt=""
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  pseudo.charAt(0).toUpperCase()
+                )}
+              </div>
+            </div>
+            {/* Tier badge — gold ⚡ for premium, gold 👑 (slow pulse)
+                for VIP. Discreet enough not to fight the avatar but
+                impossible to miss. */}
+            {tier === 'premium' && (
+              <span
+                className="absolute -bottom-1 -right-1 flex h-9 w-9 items-center justify-center rounded-full text-lg"
+                style={{
+                  background:
+                    'linear-gradient(135deg, #FFD700 0%, #E8B225 50%, #B8860B 100%)',
+                  border: '2px solid var(--color-card)',
+                  boxShadow: '0 4px 14px rgba(255,200,50,0.45)',
+                }}
+                aria-label="Membre Premium"
+              >
+                ⚡
+              </span>
+            )}
+            {tier === 'vip' && (
+              <span
+                className="lvl-glow absolute -bottom-1 -right-1 flex h-9 w-9 items-center justify-center rounded-full text-lg"
+                style={{
+                  background:
+                    'linear-gradient(135deg, #FFE066 0%, #FFD700 45%, #B8860B 100%)',
+                  border: '2px solid var(--color-card)',
+                  boxShadow: '0 6px 18px rgba(255,200,50,0.55)',
+                }}
+                aria-label="Membre VIP"
+              >
+                👑
+              </span>
             )}
           </div>
         </div>
       </div>
 
-      <div className="space-y-7 px-4 pb-10 pt-16">
+      <div className="space-y-7 px-4 pb-10 pt-20">
         {/* Identité */}
         <div className="text-center">
-          <h1 className="font-display text-2xl font-bold">{pseudo}</h1>
-          {ville && <p className="mt-0.5 text-sm text-[#888888]">{ville}</p>}
-          <span className="lvl-glow mt-3 inline-flex items-center gap-1.5 rounded-full bg-accent/15 px-3 py-1 text-xs font-semibold text-accent">
-            {level.name}
-          </span>
+          <h1 className="display-xl text-fg">{pseudo}</h1>
+          <div className="mt-2 flex justify-center">
+            <TitleChip xp={xp} title={title} />
+          </div>
+          {ville && (
+            <p className="mt-1.5 text-sm text-fg2">{ville}</p>
+          )}
+          {/* Subscribers see their plan badge in place of the XP level
+              pill — once you've paid, "Débutant" feels off. Free tier
+              keeps the level pill as before. */}
+          {planTier(plan) === 'vip' ? (
+            <span
+              className="mt-3 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold text-black shadow-md"
+              style={{
+                background:
+                  'linear-gradient(120deg, #d4af37 0%, #ffd700 50%, #b8860b 100%)',
+              }}
+            >
+              VIP 👑
+            </span>
+          ) : planTier(plan) === 'premium' ? (
+            <span className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-accent px-3 py-1 text-xs font-bold text-fg shadow-md">
+              Premium ⚡
+            </span>
+          ) : (
+            <span className="lvl-glow mt-3 inline-flex items-center gap-1.5 rounded-full bg-accent/15 px-3 py-1 text-xs font-semibold text-accent">
+              {level.name}
+            </span>
+          )}
           {joined && (
-            <p className="mt-2 text-xs text-[#888888]">
-              Membre depuis {joined}
-            </p>
+            <p className="mt-2 text-xs text-fg2">Membre depuis {joined}</p>
           )}
           {meId && (
-            <button
-              onClick={() => navigate(`/u/${meId}`)}
-              className="mt-3 text-sm text-fg/70"
-            >
-              <span className="font-bold text-fg">{followers}</span> abonnés
-              {' · '}
-              <span className="font-bold text-fg">{following}</span>{' '}
-              abonnements
-            </button>
+            <div className="mt-4 flex justify-center">
+              <button
+                onClick={() => navigate(`/u/${meId}`)}
+                className="tappable flex items-center gap-5 rounded-2xl bg-card px-5 py-3"
+                style={{ border: '1px solid var(--color-border)' }}
+              >
+                <span className="flex flex-col items-center">
+                  <span className="font-display text-lg font-extrabold tracking-tighter text-fg">
+                    {followers}
+                  </span>
+                  <span className="label-up text-[10px] text-fg2">
+                    Abonnés
+                  </span>
+                </span>
+                <span className="h-7 w-px bg-white/[0.08]" />
+                <span className="flex flex-col items-center">
+                  <span className="font-display text-lg font-extrabold tracking-tighter text-fg">
+                    {following}
+                  </span>
+                  <span className="label-up text-[10px] text-fg2">
+                    Abonnements
+                  </span>
+                </span>
+              </button>
+            </div>
           )}
         </div>
 
         {/* SECTION 2 — XP */}
-        <section className="rounded-2xl border border-white/5 bg-card p-4">
+        <section
+          className="rounded-3xl bg-card p-5"
+          style={{ border: '1px solid var(--color-border)' }}
+        >
           <div className="flex items-baseline justify-between">
-            <span className="text-sm text-[#888888]">
+            <span className="label-up text-[10px] text-fg2">
               Niveau {level.name}
             </span>
-            <span className="font-display text-lg font-bold text-fg">
-              {xp} XP
+            <span className="font-display text-2xl font-extrabold tracking-tighter text-fg">
+              {xp} <span className="text-sm text-fg2">XP</span>
             </span>
           </div>
-          <div className="mt-3 h-2.5 w-full overflow-hidden rounded-full bg-white/10">
+          <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-white/[0.08]">
             <div
               className="h-full rounded-full bg-accent transition-[width] duration-1000 ease-out"
               style={{ width: `${animPct}%` }}
             />
           </div>
-          <p className="mt-2 text-xs text-[#888888]">
+          <p className="mt-2 text-xs text-fg2">
             {level.isMax
               ? 'Niveau maximum atteint 👑'
               : `Plus que ${level.toNext} XP avant ${level.next}`}
           </p>
         </section>
 
-        {/* SECTION 3 — Stats */}
-        <section className="grid grid-cols-3 gap-3">
+        {/* SECTION 3 — Stats (3 cols : Spots / Marques / Rang ; XP est
+            dans la barre Section 2 juste au-dessus) */}
+        <section className="grid grid-cols-3 gap-2.5">
           <Stat
-            value={String(total)}
+            icon={<Camera className="h-4 w-4" />}
+            count={total}
             label="Spots"
             onClick={() => navigate('/ma-galerie')}
           />
           <Stat
-            value={String(uniqueBrands)}
+            icon={<Tag className="h-4 w-4" />}
+            count={uniqueBrands}
             label="Marques"
             onClick={() => navigate('/mes-marques')}
           />
           <Stat
-            value={rank ? `#${rank}` : '—'}
-            label="Rang global"
+            icon={<Trophy className="h-4 w-4" />}
+            display={rank ? `#${rank}` : '—'}
+            label="Rang"
             onClick={() => navigate('/classement')}
           />
         </section>
 
-        {/* SECTION 4 — Badges */}
-        <section>
-          <h2 className="mb-3 font-display text-lg font-bold">Mes badges</h2>
-          <div className="grid grid-cols-4 gap-2">
-            {badges.map((b) => (
-              <button
-                key={b.name}
-                onClick={() => setOpenBadge(b)}
-                className={`relative flex flex-col items-center gap-1.5 rounded-2xl px-1 py-3.5 text-center transition-transform active:scale-95 ${
-                  b.unlocked
-                    ? b.gold
-                      ? 'bg-[#E0B341]/15 ring-1 ring-[#E0B341]/50'
-                      : 'bg-accent/10 ring-1 ring-accent/30'
-                    : 'bg-card'
-                }`}
-              >
-                {b.unlocked ? (
-                  <span className="text-2xl">{b.emoji}</span>
-                ) : (
-                  <span className="flex h-7 items-center justify-center">
-                    <Lock className="h-4 w-4 text-fg/25" />
-                  </span>
-                )}
-                <span
-                  className={`text-[10px] leading-tight ${
-                    b.unlocked
-                      ? b.gold
-                        ? 'font-bold text-[#E0B341]'
-                        : 'text-accent'
-                      : 'text-fg/30'
-                  }`}
-                >
-                  {b.name}
-                </span>
-              </button>
-            ))}
-          </div>
+        {/* SECTION 3.25 — Challenges + Parrainage */}
+        <section className="grid grid-cols-2 gap-3">
+          <button
+            onClick={() => navigate('/challenges')}
+            className="flex flex-col items-start gap-1 rounded-2xl border border-white/5 bg-card p-4 text-left transition-colors hover:bg-white/[0.04]"
+          >
+            <span className="text-xs uppercase tracking-wider text-fg/40">
+              Challenges
+            </span>
+            <span className="font-display text-lg font-bold text-fg">
+              Cette semaine
+            </span>
+            <span className="text-xs text-accent">3 défis actifs →</span>
+          </button>
+          <button
+            onClick={() => navigate('/referral')}
+            className="flex flex-col items-start gap-1 rounded-2xl border border-white/5 bg-card p-4 text-left transition-colors hover:bg-white/[0.04]"
+          >
+            <span className="text-xs uppercase tracking-wider text-fg/40">
+              Parrainage
+            </span>
+            <span className="font-display text-lg font-bold text-fg">
+              Inviter
+            </span>
+            <span className="text-xs text-accent">+50 XP par ami →</span>
+          </button>
         </section>
+
+        {/* SECTION 3.5 — Abonnement (centralised here, removed from Settings) */}
+        {plan ? (
+          <section
+            className="overflow-hidden rounded-2xl p-4"
+            style={
+              planTier(plan) === 'vip'
+                ? {
+                    background:
+                      'linear-gradient(135deg, rgba(212,175,55,0.16) 0%, rgba(255,215,0,0.06) 50%, rgba(15,15,15,0.95) 100%)',
+                    boxShadow:
+                      'inset 0 0 0 1px rgba(212,175,55,0.5), 0 6px 24px rgba(212,175,55,0.12)',
+                  }
+                : {
+                    background:
+                      'linear-gradient(135deg, rgba(230,57,70,0.16) 0%, rgba(230,57,70,0.04) 60%, rgba(15,15,15,0.95) 100%)',
+                    boxShadow:
+                      'inset 0 0 0 1px rgba(230,57,70,0.45), 0 6px 24px rgba(230,57,70,0.10)',
+                  }
+            }
+          >
+            <div className="flex items-start gap-3">
+              <span
+                className="flex h-11 w-11 flex-none items-center justify-center rounded-2xl"
+                style={
+                  planTier(plan) === 'vip'
+                    ? {
+                        background:
+                          'linear-gradient(135deg, #d4af37 0%, #ffd700 100%)',
+                        color: '#000',
+                      }
+                    : { background: 'var(--color-accent)', color: '#fff' }
+                }
+              >
+                {planTier(plan) === 'vip' ? (
+                  <Crown className="h-5 w-5" />
+                ) : (
+                  <Sparkles className="h-5 w-5" />
+                )}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-fg/45">
+                  Mon abonnement
+                </p>
+                <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-1 font-display text-lg font-bold">
+                  <span>
+                    {planDisplayName(plan)}{' '}
+                    {planTier(plan) === 'vip' ? '👑' : '⚡'}
+                  </span>
+                  <span className="text-xs font-medium text-fg/50">
+                    {planInterval(plan) === 'year' ? 'annuel' : 'mensuel'}
+                  </span>
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                      subStatus === 'trialing'
+                        ? 'bg-[#F59E0B]/15 text-[#F59E0B]'
+                        : 'bg-emerald-500/15 text-emerald-400'
+                    }`}
+                  >
+                    {subStatus === 'trialing' ? 'En essai' : 'Actif'}
+                  </span>
+                </p>
+                {renewalAt && (
+                  <p className="mt-1 text-[11px] text-fg/50">
+                    {subStatus === 'trialing' ? 'Fin de l’essai' : 'Prochain renouvellement'}{' '}
+                    : {formatRenewal(renewalAt)}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <button
+              onClick={() => navigate('/radar')}
+              className="mt-4 flex w-full items-center justify-between rounded-full bg-accent/20 px-5 py-3 text-sm font-semibold text-fg transition-colors hover:bg-accent/30"
+            >
+              <span className="flex items-center gap-2">
+                <span className="relative flex h-2 w-2">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent opacity-75" />
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-accent" />
+                </span>
+                Mode Radar
+              </span>
+              <ChevronRight className="h-4 w-4 text-fg/60" />
+            </button>
+
+            <button
+              onClick={openPortal}
+              disabled={portalBusy || !hasCustomer}
+              className="mt-2 flex w-full items-center justify-between rounded-full bg-white/10 px-5 py-3 text-sm font-semibold text-fg backdrop-blur transition-colors hover:bg-white/15 disabled:opacity-50"
+            >
+              <span>
+                {portalBusy ? 'Ouverture…' : 'Gérer mon abonnement'}
+              </span>
+              <ChevronRight className="h-4 w-4 text-fg/60" />
+            </button>
+            {portalErr && (
+              <p className="mt-2 text-center text-xs text-accent">{portalErr}</p>
+            )}
+          </section>
+        ) : (
+          /* Slim Premium tease for free users — discreet line, not a
+             full card. The hero red gradient already carries the
+             aspirational vibe on cover; here we just nudge once. */
+          <button
+            onClick={() => navigate('/premium')}
+            className="tappable flex w-full items-center justify-between gap-2 rounded-full bg-card px-4 py-2.5 text-left"
+            style={{ border: '1px solid var(--color-border)' }}
+          >
+            <span className="flex items-center gap-2 text-[13px] text-fg2">
+              <span className="text-accent">⚡</span>
+              Passe Premium pour débloquer Mode Radar &amp; spots illimités
+            </span>
+            <ChevronRight className="h-4 w-4 flex-none text-fg2" />
+          </button>
+        )}
+
+        {/* SECTION 4 — Badges (top 4 + lien gallery) */}
+        <section>
+          <div className="mb-3 flex items-baseline justify-between">
+            <h2 className="font-display text-lg font-extrabold tracking-tighter text-fg">
+              Mes badges
+            </h2>
+            <span className="label-up text-[10px] text-fg2">
+              {unlocked.length}/{badgeCatalogue.length}
+            </span>
+          </div>
+          <div className="grid grid-cols-4 gap-1.5">
+            {topBadges.map((b) => {
+              const isUnlocked = unlocks.has(b.slug)
+              return (
+                <button
+                  key={b.slug}
+                  onClick={() => navigate(`/badges/${b.slug}`)}
+                  className={`tappable relative flex flex-col items-center gap-1.5 rounded-2xl px-1 py-3 text-center ${
+                    isUnlocked
+                      ? b.gold
+                        ? 'bg-[#E0B341]/12'
+                        : 'bg-accent/8'
+                      : 'bg-card'
+                  }`}
+                  style={{
+                    border: isUnlocked
+                      ? b.gold
+                        ? '1px solid rgba(224,179,65,0.4)'
+                        : '1px solid rgba(232,32,58,0.3)'
+                      : '1px solid var(--color-border)',
+                    boxShadow:
+                      isUnlocked && !b.gold
+                        ? '0 0 20px rgba(232,32,58,0.18)'
+                        : isUnlocked && b.gold
+                          ? '0 0 22px rgba(224,179,65,0.22)'
+                          : undefined,
+                  }}
+                >
+                  {isUnlocked ? (
+                    <span className="text-2xl">{b.emoji}</span>
+                  ) : (
+                    <span className="flex h-7 items-center justify-center">
+                      <Lock className="h-4 w-4 text-fg2/50" />
+                    </span>
+                  )}
+                  <span
+                    className={`text-[10px] font-semibold leading-tight ${
+                      isUnlocked
+                        ? b.gold
+                          ? 'text-[#E0B341]'
+                          : 'text-accent'
+                        : 'text-fg2/60'
+                    }`}
+                  >
+                    {b.name}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+          <button
+            onClick={() => navigate('/badges')}
+            className="tappable mt-3 flex w-full items-center justify-center gap-1 rounded-full bg-card py-2.5 text-sm font-semibold text-fg/80 hover:bg-white/[0.06]"
+            style={{ border: '1px solid var(--color-border)' }}
+          >
+            Voir tous les badges
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        </section>
+
+        {/* SECTION 4.5 — Collections */}
+        <CollectionsSection spots={spots} />
 
         {/* SECTION 5 — Garage */}
         <section>
@@ -382,35 +762,21 @@ export default function Profile() {
               </button>
             </div>
           ) : (
-            <div className="grid grid-cols-3 gap-2.5">
+            <div className="grid grid-cols-2 gap-3">
               {spots.map((s) => (
                 <button
                   key={s.id}
                   onClick={() => navigate(`/spot/${s.id}`)}
-                  className="relative aspect-square overflow-hidden rounded-2xl bg-card text-left ring-1 ring-white/5"
+                  className="tappable relative aspect-[4/3] overflow-hidden rounded-[20px] bg-[#0a0a0a] text-left"
+                  style={{ border: '1px solid var(--color-border)' }}
                 >
-                  {s.photo_url ? (
-                    <img
-                      src={s.photo_url}
-                      alt={`${s.brand} ${s.model}`}
-                      className="h-full w-full object-cover"
-                    />
-                  ) : (
-                    <div className="flex h-full w-full items-center justify-center">
-                      <Car className="h-8 w-8 text-fg/20" />
-                    </div>
-                  )}
-                  <span className="absolute left-1.5 top-1.5 rounded-full bg-black/70 px-2 py-0.5 text-[8px] font-semibold tracking-wide backdrop-blur">
-                    {categoryLabel(s.category).toUpperCase()}
-                  </span>
-                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 to-transparent p-2">
-                    <p className="truncate text-[11px] font-semibold">
-                      {s.brand} {s.model}
-                    </p>
-                    <p className="text-[9px] text-fg/50">
-                      {timeAgo(s.created_at)}
-                    </p>
-                  </div>
+                  <GarageCard
+                    brand={s.brand}
+                    model={s.model}
+                    year={s.year}
+                    category={s.category}
+                    imageUrl={s.garage_image_url}
+                  />
                 </button>
               ))}
             </div>
@@ -418,105 +784,76 @@ export default function Profile() {
         </section>
       </div>
 
-      {openBadge && (
-        <div
-          onClick={() => setOpenBadge(null)}
-          className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 backdrop-blur-sm sm:items-center"
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-sm rounded-t-3xl bg-card p-6 pb-8 text-center sm:rounded-3xl"
-          >
-            <div className="flex justify-end">
-              <button
-                onClick={() => setOpenBadge(null)}
-                aria-label="Fermer"
-                className="text-fg/40 hover:text-fg"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-            <div
-              className={`mx-auto flex h-20 w-20 items-center justify-center rounded-full text-4xl ${
-                openBadge.unlocked
-                  ? openBadge.gold
-                    ? 'bg-[#E0B341]/20 ring-2 ring-[#E0B341]/60'
-                    : 'bg-accent/15 ring-2 ring-accent/40'
-                  : 'bg-white/5'
-              }`}
-            >
-              {openBadge.unlocked ? (
-                openBadge.emoji
-              ) : (
-                <Lock className="h-7 w-7 text-fg/30" />
-              )}
-            </div>
-            <h3
-              className={`mt-4 font-display text-xl font-bold ${
-                openBadge.unlocked && openBadge.gold
-                  ? 'text-[#E0B341]'
-                  : 'text-fg'
-              }`}
-            >
-              {openBadge.name}
-            </h3>
-            <p className="mt-1 text-sm text-fg/60">{openBadge.desc}</p>
-
-            <div className="mt-5 space-y-2 rounded-2xl bg-white/5 p-4 text-left text-sm">
-              <div className="flex items-start justify-between gap-3">
-                <span className="text-fg/40">Comment l'obtenir</span>
-                <span className="text-right font-medium text-fg">
-                  {openBadge.condition}
-                </span>
-              </div>
-              {openBadge.xp != null && (
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-fg/40">XP associé</span>
-                  <span className="font-bold text-accent">
-                    +{openBadge.xp} XP
-                  </span>
-                </div>
-              )}
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-fg/40">Statut</span>
-                <span
-                  className={`font-semibold ${
-                    openBadge.unlocked ? 'text-accent' : 'text-fg/40'
-                  }`}
-                >
-                  {openBadge.unlocked ? 'Obtenu ✓' : 'Verrouillé'}
-                </span>
-              </div>
-            </div>
-
-            {!openBadge.unlocked && (
-              <p className="mt-4 text-xs text-fg/40">
-                Continue à spotter pour le débloquer 💪
-              </p>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   )
 }
 
+// Tiny RAF-based count-up — animates from 0 to `target` in `ms` ms.
+// Pure number animation; the caller decides how to render. Returns the
+// target instantly when `target` is not a finite number.
+function useCountUp(target: number | null, ms = 800): number {
+  const [value, setValue] = useState(0)
+  const startRef = useRef<number | null>(null)
+  useEffect(() => {
+    if (target == null || !Number.isFinite(target)) {
+      setValue(target ?? 0)
+      return
+    }
+    let raf = 0
+    startRef.current = null
+    const tick = (now: number) => {
+      if (startRef.current == null) startRef.current = now
+      const t = Math.min(1, (now - startRef.current) / ms)
+      // ease-out cubic
+      const eased = 1 - Math.pow(1 - t, 3)
+      setValue(Math.round(target * eased))
+      if (t < 1) raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [target, ms])
+  return value
+}
+
 function Stat({
-  value,
+  count,
+  display,
   label,
+  icon,
   onClick,
 }: {
-  value: string
+  // For animated counters pass `count` (number). Static / formatted
+  // labels (e.g. "#12") use `display`.
+  count?: number | null
+  display?: string
   label: string
+  icon: React.ReactNode
   onClick?: () => void
 }) {
+  const animated = useCountUp(count ?? null)
+  const value =
+    display ?? (count == null ? '—' : new Intl.NumberFormat('fr-FR').format(animated))
   return (
     <button
       onClick={onClick}
-      className="w-full rounded-2xl border border-white/5 bg-card px-2 py-4 text-center shadow-[0_2px_10px_rgba(0,0,0,0.4)] transition-transform active:scale-95"
+      className="tappable w-full rounded-3xl bg-card px-2 py-5 text-center shadow-soft"
+      style={{ border: '1px solid rgba(232,32,58,0.15)' }}
     >
-      <div className="font-display text-xl font-bold text-fg">{value}</div>
-      <div className="mt-1 text-[11px] text-[#888888]">{label}</div>
+      <div className="flex justify-center text-accent">{icon}</div>
+      <div className="mt-2 font-display text-2xl font-extrabold tracking-tighter text-accent">
+        {value}
+      </div>
+      <div className="label-up mt-1 text-[10px] text-fg2">{label}</div>
     </button>
   )
+}
+
+function formatRenewal(iso: string): string {
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return ''
+  return new Intl.DateTimeFormat('fr-FR', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  }).format(d)
 }

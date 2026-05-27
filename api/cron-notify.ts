@@ -1,5 +1,5 @@
 import webpush from 'web-push'
-import { createClient } from '@supabase/supabase-js'
+import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 
 const SUPABASE_URL =
@@ -46,7 +46,10 @@ const GP_2026: { name: string; date: string }[] = [
   { name: "GP d'Abu Dhabi", date: '2026-12-06T13:00:00Z' },
 ]
 
-type Admin = ReturnType<typeof createClient>
+// Loose generics — the helper doesn't care about schema specifics, and
+// the strict 5-param form from supabase-js v2.45+ breaks ReturnType
+// inference (overload picks the narrowest defaults).
+type Admin = SupabaseClient<any, any, any>
 
 async function sendToUser(
   admin: Admin,
@@ -91,17 +94,53 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     req.headers.authorization !== `Bearer ${cronSecret}` &&
     req.headers['x-cron-key'] !== cronSecret
   ) {
-    res.status(401).json({ error: 'Unauthorized' })
+    res.status(401).json({ error: 'Non autorisé.' })
     return
   }
-  if (!SUPABASE_URL || !SERVICE_ROLE || !VAPID_PUBLIC || !VAPID_PRIVATE) {
-    res.status(500).json({ error: 'Not configured' })
+  if (!SUPABASE_URL || !SERVICE_ROLE) {
+    res.status(500).json({ error: 'Service indisponible.' })
     return
   }
-  try {
+
   const admin = createClient(SUPABASE_URL, SERVICE_ROLE, {
     auth: { persistSession: false },
   })
+
+  // ─── action=challenges → reseed the weekly pool. Runs Mon 00:00 UTC.
+  // Safe to call any time (idempotent within the same week).
+  if (req.query.action === 'challenges') {
+    try {
+      const { data, error } = await admin.rpc('activate_weekly_challenges')
+      if (error) throw new Error(error.message)
+      res.status(200).json({ activated: Array.isArray(data) ? data.length : 0 })
+    } catch (e) {
+      console.error('[cron-notify:challenges]', e)
+      res.status(500).json({ error: 'challenge rotation failed' })
+    }
+    return
+  }
+
+  // ─── action=stats → refresh the global stats materialized view.
+  // Cheap (a few seconds). Runs hourly.
+  if (req.query.action === 'stats') {
+    try {
+      const { error } = await admin.rpc('refresh_global_stats')
+      if (error) throw new Error(error.message)
+      res.status(200).json({ refreshed: true })
+    } catch (e) {
+      console.error('[cron-notify:stats]', e)
+      res.status(500).json({ error: 'stats refresh failed' })
+    }
+    return
+  }
+
+  // ─── default → daily push notifications (streak + GP reminders).
+  // Falls through to the existing logic below; requires VAPID.
+  if (!VAPID_PUBLIC || !VAPID_PRIVATE) {
+    res.status(500).json({ error: 'VAPID non configuré.' })
+    return
+  }
+  try {
   webpush.setVapidDetails(
     'mailto:contact@revs.app',
     VAPID_PUBLIC,
@@ -183,6 +222,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   } catch (e) {
     const err = e as { message?: string; stack?: string }
     console.error('[cron-notify] crashed:', err)
-    res.status(500).json({ error: err?.message || String(e) })
+    res.status(500).json({ error: 'Tâche planifiée échouée.' })
   }
 }

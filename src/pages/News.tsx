@@ -191,79 +191,94 @@ export default function News({ categories }: { categories: string[] }) {
       {(pull > 0 || refreshing) && (
         <div
           style={{ height: refreshing ? 36 : Math.round(pull / 2) }}
-          className="flex items-center justify-center overflow-hidden text-xs text-fg/50 transition-[height]"
+          className="flex items-center justify-center overflow-hidden text-xs text-fg2 transition-[height]"
         >
-          {refreshing
-            ? 'Actualisation…'
-            : pull >= PULL_THRESHOLD
-              ? 'Relâche pour actualiser'
-              : 'Tire pour actualiser'}
+          {refreshing ? (
+            <span className="font-display font-extrabold tracking-tighter text-accent">
+              REVS
+            </span>
+          ) : pull >= PULL_THRESHOLD ? (
+            'Relâche pour actualiser'
+          ) : (
+            'Tire pour actualiser'
+          )}
         </div>
       )}
-      <div className="px-1 pb-1 pt-1 text-[11px] text-fg/40">
+      <div className="px-1 pb-3 pt-2 label-up text-[10px] text-fg2">
         {items && items.length > 0
           ? `Mis à jour ${timeAgo(newestStamp(items) ?? items[0].created_at)}`
           : ''}
       </div>
 
       {items === null ? (
-        <div className="divide-y divide-white/5">
+        <div className="space-y-4">
           {Array.from({ length: 4 }).map((_, i) => (
             <SkeletonCard key={i} />
           ))}
         </div>
       ) : items.length === 0 ? (
-        <div className="rounded-2xl border border-white/5 bg-card p-6 text-center">
-          <p className="text-sm text-fg/60">Pas d'actu pour le moment.</p>
+        <div
+          className="rounded-3xl bg-card p-6 text-center"
+          style={{ border: '1px solid var(--color-border)' }}
+        >
+          <p className="text-sm text-fg2">Pas d'actu pour le moment.</p>
           <button
             onClick={() => load(false)}
-            className="mt-4 rounded-full bg-accent px-6 py-3 text-sm font-medium text-fg"
+            className="tappable mt-4 rounded-full bg-accent px-6 py-3 text-sm font-extrabold tracking-wider text-fg"
+            style={{ boxShadow: '0 8px 24px rgba(232,32,58,0.45)' }}
           >
             Rafraîchir
           </button>
         </div>
       ) : visible && visible.length === 0 ? (
-        <p className="px-1 py-8 text-center text-sm text-fg/40">
+        <p className="px-1 py-8 text-center text-sm text-fg2">
           Aucun article pour le moment.
         </p>
       ) : (
-        <div className="divide-y divide-white/5">
+        <div className="space-y-4 pb-2">
           {(visible ?? []).map((n) => (
             <a
               key={n.id}
               href={n.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="block py-5"
+              className="tappable block overflow-hidden rounded-3xl bg-card"
+              style={{ border: '1px solid var(--color-border)' }}
             >
               <div className="relative">
                 <img
                   src={n.image_url || fallbackImg(n.category)}
                   alt={n.title}
-                  className="aspect-video w-full rounded-2xl object-cover"
+                  loading="lazy"
+                  className="aspect-video w-full object-cover"
                 />
                 <span
-                  className={`absolute left-3 top-3 rounded-full px-3 py-1 text-[10px] font-semibold tracking-wide text-fg backdrop-blur ${badgeClass(
+                  className={`label-up absolute left-3 top-3 rounded-full px-2.5 py-1 text-[9px] text-fg shadow ${badgeClass(
                     n.category,
                   )}`}
                 >
                   {n.category.toUpperCase()}
                 </span>
                 {isNew(n) && (
-                  <span className="badge-new absolute right-3 top-3 rounded-full bg-accent px-2.5 py-1 text-[10px] font-bold tracking-wide text-fg">
+                  <span className="badge-new label-up absolute right-3 top-3 rounded-full bg-accent px-2.5 py-1 text-[9px] text-fg shadow">
                     NOUVEAU
                   </span>
                 )}
               </div>
 
-              <div className="mt-3">
-                <h2 className="font-semibold text-fg">{n.title}</h2>
+              <div className="p-5">
+                <h2
+                  className="line-clamp-2 font-display leading-tight tracking-tighter text-fg"
+                  style={{ fontSize: '16px', fontWeight: 800 }}
+                >
+                  {n.title}
+                </h2>
                 {n.summary && (
-                  <p className="clamp-3 mt-1 text-sm text-fg/60">
+                  <p className="clamp-3 mt-2 text-sm leading-relaxed text-fg/70">
                     {n.summary}
                   </p>
                 )}
-                <p className="mt-2 text-xs text-fg/30">
+                <p className="label-up mt-3 text-[10px] text-fg2">
                   {[n.source, timeAgo(n.published_at ?? n.created_at)]
                     .filter(Boolean)
                     .join(' · ')}

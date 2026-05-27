@@ -1,10 +1,22 @@
 import { useEffect, useState } from 'react'
-import { Flag, CarFront, Newspaper, CalendarDays, Users } from 'lucide-react'
+import {
+  Flag,
+  CarFront,
+  Newspaper,
+  CalendarDays,
+  Users,
+  Sparkles,
+  Swords,
+  Trophy,
+} from 'lucide-react'
 import News from './News'
 import Meets from '../components/Meets'
 import F1Calendar from '../components/F1Calendar'
+import Brands from './Brands'
+import F1Roster from './F1Roster'
+import SpotWars from '../components/SpotWars'
 
-const RED = '#E63946'
+const RED = '#E8203A'
 const ORANGE = '#F59E0B'
 
 type Universe = 'f1' | 'cars'
@@ -13,10 +25,10 @@ export default function Discover({ initial }: { initial?: 'events' }) {
   const [universe, setUniverse] = useState<Universe>(
     initial === 'events' ? 'cars' : 'f1',
   )
-  const [f1Sub, setF1Sub] = useState<'actu' | 'calendar'>('actu')
-  const [carsSub, setCarsSub] = useState<'actu' | 'events'>(
-    initial === 'events' ? 'events' : 'actu',
-  )
+  const [f1Sub, setF1Sub] = useState<'actu' | 'calendar' | 'roster'>('actu')
+  const [carsSub, setCarsSub] = useState<
+    'actu' | 'events' | 'brands' | 'wars'
+  >(initial === 'events' ? 'events' : 'actu')
 
   // Discover is kept alive across /discover ↔ /events ↔ /actu — sync to
   // the route prop so navigating to /events from another tab correctly
@@ -38,14 +50,18 @@ export default function Discover({ initial }: { initial?: 'events' }) {
     return (
       <button
         onClick={() => setUniverse(u)}
-        className="flex flex-1 items-center justify-center gap-2 rounded-2xl px-3 py-3 text-sm font-bold transition-colors"
+        className="tappable flex flex-1 items-center justify-center gap-2 rounded-3xl px-3 py-3.5 text-sm font-extrabold tracking-wide transition-colors"
         style={
           active
-            ? { backgroundColor: c, color: '#0A0A0A' }
+            ? {
+                backgroundColor: c,
+                color: '#0A0A0A',
+                boxShadow: `0 6px 24px ${c}40`,
+              }
             : {
-                backgroundColor: `${c}1A`,
+                backgroundColor: `${c}14`,
                 color: c,
-                border: `1px solid ${c}55`,
+                border: `1px solid ${c}38`,
               }
         }
       >
@@ -57,29 +73,44 @@ export default function Discover({ initial }: { initial?: 'events' }) {
 
   const subTabs: { key: string; label: string; icon: React.ReactNode }[] = isF1
     ? [
-        { key: 'actu', label: 'Actu F1', icon: <Newspaper className="h-4 w-4" /> },
+        { key: 'actu', label: 'Actu', icon: <Newspaper className="h-4 w-4" /> },
         {
           key: 'calendar',
-          label: 'Calendrier GP',
+          label: 'Calendrier',
           icon: <CalendarDays className="h-4 w-4" />,
+        },
+        {
+          key: 'roster',
+          label: 'Écuries & Pilotes',
+          icon: <Trophy className="h-4 w-4" />,
         },
       ]
     : [
         {
           key: 'actu',
-          label: 'Actu Supercars',
+          label: 'Actu',
           icon: <Newspaper className="h-4 w-4" />,
         },
         {
+          key: 'wars',
+          label: 'Wars',
+          icon: <Swords className="h-4 w-4" />,
+        },
+        {
           key: 'events',
-          label: 'Événements',
+          label: 'Events',
           icon: <Users className="h-4 w-4" />,
+        },
+        {
+          key: 'brands',
+          label: 'Marques',
+          icon: <Sparkles className="h-4 w-4" />,
         },
       ]
 
   function setSub(k: string) {
-    if (isF1) setF1Sub(k as 'actu' | 'calendar')
-    else setCarsSub(k as 'actu' | 'events')
+    if (isF1) setF1Sub(k as 'actu' | 'calendar' | 'roster')
+    else setCarsSub(k as 'actu' | 'events' | 'brands' | 'wars')
   }
 
   return (
@@ -98,46 +129,6 @@ export default function Discover({ initial }: { initial?: 'events' }) {
         )}
       </div>
 
-      {/* Bannière d'ambiance propre à l'univers */}
-      <div className="px-4 pt-3">
-        <div
-          className="flex items-center gap-3 rounded-2xl border p-4"
-          style={{
-            borderColor: `${color}4D`,
-            background: `linear-gradient(135deg, ${color}33, ${color}0D)`,
-          }}
-        >
-          <div
-            className="flex h-11 w-11 flex-none items-center justify-center rounded-full"
-            style={{ backgroundColor: `${color}26`, color }}
-          >
-            {isF1 ? (
-              <Flag className="h-5 w-5" />
-            ) : (
-              <CarFront className="h-5 w-5" />
-            )}
-          </div>
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <span
-                className="rounded-full px-2.5 py-1 text-[10px] font-bold tracking-wide"
-                style={{ backgroundColor: color, color: '#0A0A0A' }}
-              >
-                {isF1 ? 'F1' : 'SPOT'}
-              </span>
-              <h1 className="truncate text-lg font-extrabold text-fg">
-                {isF1 ? 'F1 & Motorsport' : 'CarSpotting'}
-              </h1>
-            </div>
-            <p className="mt-0.5 text-[11px] text-fg/50">
-              {isF1
-                ? 'Le paddock — actus écuries & pilotes, calendrier 2026'
-                : 'La rue & la passion — supercars, hypercars, meets'}
-            </p>
-          </div>
-        </div>
-      </div>
-
       {/* Sous-onglets de l'univers actif */}
       <div className="flex gap-2 px-4 pt-3">
         {subTabs.map((t) => {
@@ -146,15 +137,18 @@ export default function Discover({ initial }: { initial?: 'events' }) {
             <button
               key={t.key}
               onClick={() => setSub(t.key)}
-              className="flex flex-1 items-center justify-center gap-1.5 rounded-full py-2.5 text-sm font-semibold transition-colors"
+              className="tappable flex flex-1 items-center justify-center gap-1.5 rounded-full py-2.5 text-sm font-bold tracking-wide transition-colors"
               style={
                 active
                   ? { backgroundColor: color, color: '#0A0A0A' }
-                  : { backgroundColor: 'var(--color-card, #1A1A1A)' }
+                  : {
+                      backgroundColor: 'var(--color-card)',
+                      border: '1px solid var(--color-border)',
+                    }
               }
             >
               <span style={active ? undefined : { color }}>{t.icon}</span>
-              <span className={active ? '' : 'text-fg/60'}>{t.label}</span>
+              <span className={active ? '' : 'text-fg2'}>{t.label}</span>
             </button>
           )
         })}
@@ -164,15 +158,21 @@ export default function Discover({ initial }: { initial?: 'events' }) {
         {isF1 ? (
           f1Sub === 'actu' ? (
             <News categories={['F1']} />
-          ) : (
+          ) : f1Sub === 'calendar' ? (
             <div className="px-4">
               <F1Calendar />
             </div>
+          ) : (
+            <F1Roster embedded />
           )
         ) : carsSub === 'actu' ? (
           <News categories={['Supercar', 'Hypercar']} />
-        ) : (
+        ) : carsSub === 'wars' ? (
+          <SpotWars />
+        ) : carsSub === 'events' ? (
           <Meets />
+        ) : (
+          <Brands embedded />
         )}
       </div>
     </div>

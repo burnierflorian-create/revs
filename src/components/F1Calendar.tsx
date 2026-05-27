@@ -1,15 +1,50 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ChevronRight } from 'lucide-react'
 import { GP_2026, fmtGpDate } from '../lib/f1'
+import { supabase } from '../lib/supabase'
+
+type CircuitRow = { round: number; url: string }
+type RaceRow = {
+  round: number
+  data: { podium?: { driver: string }[] } | null
+}
 
 export default function F1Calendar() {
   const navigate = useNavigate()
   const [now, setNow] = useState(() => Date.now())
+  const [images, setImages] = useState<Record<number, string>>({})
+  const [winners, setWinners] = useState<Record<number, string>>({})
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000)
     return () => clearInterval(t)
+  }, [])
+
+  // Single shot fetch on mount — both tables are small (24 rows max each)
+  // and public-read so RLS doesn't slow anything down.
+  useEffect(() => {
+    let active = true
+    ;(async () => {
+      const [imgRes, raceRes] = await Promise.all([
+        supabase.from('f1_circuit_images').select('round, url'),
+        supabase.from('f1_race_results').select('round, data'),
+      ])
+      if (!active) return
+      const imgMap: Record<number, string> = {}
+      for (const r of (imgRes.data ?? []) as CircuitRow[]) {
+        imgMap[r.round] = r.url
+      }
+      setImages(imgMap)
+      const winMap: Record<number, string> = {}
+      for (const r of (raceRes.data ?? []) as RaceRow[]) {
+        const w = r.data?.podium?.[0]?.driver
+        if (w && w !== 'N/A') winMap[r.round] = w
+      }
+      setWinners(winMap)
+    })()
+    return () => {
+      active = false
+    }
   }, [])
 
   const nextIndex = GP_2026.findIndex(
@@ -27,53 +62,118 @@ export default function F1Calendar() {
 
   return (
     <section className="pb-2 pt-3">
-      <div className="space-y-2">
+      <div className="space-y-2.5">
         {GP_2026.map((g, i) => {
           const isPast = new Date(g.date).getTime() < now
           const isNext = i === nextIndex
+          const photo = images[g.round]
+          const winner = winners[g.round]
           return (
             <button
               key={g.round}
               onClick={() => navigate(`/f1/${g.round}`)}
-              className={`w-full rounded-2xl border p-4 text-left transition-colors active:scale-[0.99] ${
-                isNext
-                  ? 'border-accent bg-accent/10'
-                  : isPast
-                    ? 'border-white/5 bg-card opacity-40'
-                    : 'border-white/5 bg-card hover:bg-white/5'
-              }`}
+              className="tappable relative block w-full overflow-hidden rounded-2xl text-left"
+              style={{
+                border: isNext
+                  ? '1px solid rgba(232,32,58,0.50)'
+                  : '1px solid var(--color-border)',
+                boxShadow: isNext
+                  ? '0 8px 28px rgba(232,32,58,0.22)'
+                  : undefined,
+              }}
             >
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex min-w-0 items-center gap-2">
-                  <span className="text-xl leading-none">{g.flag}</span>
-                  <span className="truncate font-semibold text-fg">
+              {/* Layer 1 — circuit photo bg (blurred + dimmed), or
+                  fallback to a plain card surface when no image cached
+                  yet. Past GPs are extra dimmed so the visual hierarchy
+                  reads "upcoming > next > done" at a glance. */}
+              {photo ? (
+                <>
+                  <img
+                    src={photo}
+                    alt=""
+                    aria-hidden
+                    loading="lazy"
+                    className="absolute inset-0 h-full w-full object-cover"
+                    style={{
+                      filter: isPast
+                        ? 'blur(10px) brightness(0.30) saturate(0.85)'
+                        : 'blur(10px) brightness(0.50)',
+                      transform: 'scale(1.1)',
+                    }}
+                  />
+                  <div
+                    aria-hidden
+                    className="absolute inset-0"
+                    style={{
+                      background: isNext
+                        ? 'linear-gradient(155deg, rgba(232,32,58,0.32) 0%, rgba(20,20,20,0.85) 60%, rgba(10,10,10,0.95) 100%)'
+                        : 'linear-gradient(155deg, rgba(20,20,20,0.55) 0%, rgba(15,15,15,0.85) 70%, rgba(10,10,10,0.95) 100%)',
+                    }}
+                  />
+                </>
+              ) : (
+                <div
+                  aria-hidden
+                  className="absolute inset-0 bg-card"
+                  style={{
+                    background: isNext
+                      ? 'linear-gradient(155deg, rgba(232,32,58,0.20) 0%, var(--color-card) 70%)'
+                      : 'var(--color-card)',
+                  }}
+                />
+              )}
+
+              {/* Layer 2 — content */}
+              <div className="relative flex items-center gap-3 p-4">
+                <span className="flex-none text-4xl leading-none">
+                  {g.flag}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p
+                    className="truncate font-display leading-tight tracking-tighter text-white"
+                    style={{ fontSize: '16px', fontWeight: 800 }}
+                  >
                     {g.name}
-                  </span>
+                  </p>
+                  <p className="mt-0.5 truncate text-[12px] text-white/55">
+                    {g.circuit}
+                  </p>
+                  <p
+                    className={`mt-1 text-[12px] ${isNext ? 'font-bold text-accent' : 'text-white/55'}`}
+                  >
+                    {fmtGpDate(g.date)}
+                    {isNext && (
+                      <span className="ml-2 font-semibold text-accent">
+                        · {countdown(g.date)}
+                      </span>
+                    )}
+                    {isPast && winner && (
+                      <span className="ml-2 text-white/65">· 🏆 {winner}</span>
+                    )}
+                  </p>
                 </div>
+
                 {isNext ? (
-                  <span className="flex-none rounded-full bg-accent px-2.5 py-1 text-[10px] font-bold tracking-wide text-fg">
+                  <span
+                    className="label-up flex-none rounded-full bg-accent px-2.5 py-1 text-[10px] text-fg"
+                    style={{
+                      boxShadow: '0 0 14px rgba(232,32,58,0.65)',
+                      animation: 'next-gp-pulse 2s ease-in-out infinite',
+                    }}
+                  >
                     PROCHAIN
                   </span>
-                ) : (
-                  <ChevronRight className="h-4 w-4 flex-none text-fg/30" />
-                )}
-              </div>
-
-              <p className="mt-1 text-xs text-fg/50">
-                {g.country} · {g.circuit}
-              </p>
-
-              <div className="mt-2 flex items-center justify-between">
-                <span
-                  className={`text-sm ${isNext ? 'text-accent' : 'text-fg/60'}`}
-                >
-                  {fmtGpDate(g.date)}
-                </span>
-                {isNext && (
-                  <span className="text-sm font-semibold text-accent">
-                    {countdown(g.date)}
+                ) : isPast ? (
+                  <span
+                    className="label-up flex-none rounded-full px-2.5 py-1 text-[10px] text-white/55"
+                    style={{
+                      background: 'rgba(255,255,255,0.06)',
+                      border: '1px solid rgba(255,255,255,0.10)',
+                    }}
+                  >
+                    TERMINÉ
                   </span>
-                )}
+                ) : null}
               </div>
             </button>
           )

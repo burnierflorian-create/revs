@@ -328,6 +328,123 @@ const SUMMARY_SCHEMA = {
   additionalProperties: false,
 }
 
+// Positive English detection: look for English-only stopwords / verb
+// forms that don't exist in French. Aggressive on purpose — a false
+// positive just costs one extra Claude call, a false negative leaks
+// English into the user feed. This is the authoritative gate.
+function looksEnglish(s: string): boolean {
+  if (!s) return false
+  const lower = s.toLowerCase()
+  const en =
+    /\b(the|of|to|is|are|was|were|will|with|for|from|by|on|at|in|as|that|this|these|those|has|have|had|been|being|would|could|should|its|it's|new|all|but|not|than|then|when|where|what|how|why|who|which|about|over|under|after|before|into|onto|out|up|down|reveals?|revealed|revealing|launch(?:ed|es|ing)?|unveils?|unveiled|unveiling|tested|test(?:s|ing)?|reviews?|reviewed|driving|drove|driven|sold|sells|selling|buys?|bought|wins?|won|claims?|claimed|gets?|got|gotten|makes?|making|made|takes?|taking|took|taken|sees?|saw|seen|here's|we've|don't|doesn't|isn't|aren't|won't|can't|you|your|our|their|his|her|he|she|they|we)\b/
+  return en.test(lower)
+}
+
+// Cheap French check — used only to short-circuit the second-pass
+// translation when the content is unambiguously French (no English
+// markers at all and at least one French marker present).
+function looksFrench(s: string): boolean {
+  if (!s) return true
+  const lower = s.toLowerCase()
+  if (/[àâçéèêëîïôûùüÿœæ]/.test(lower)) return true
+  return /\b(le|la|les|un|une|des|du|de|au|aux|et|ou|est|sont|avec|pour|dans|sur|par|son|sa|ses|ce|cette|ces|qui|que|quoi|où|d'|l'|c'|n')\b/.test(
+    lower,
+  )
+}
+
+// "Needs translation" combines both: positive English match always
+// triggers; otherwise fall back to "no French marker" (defensive).
+function needsTranslation(s: string): boolean {
+  if (!s) return false
+  if (looksEnglish(s)) return true
+  return !looksFrench(s)
+}
+
+const TRANSLATE_SCHEMA = {
+  type: 'object',
+  properties: {
+    title: { type: 'string' },
+    summary: { type: 'string' },
+  },
+  required: ['title', 'summary'],
+  additionalProperties: false,
+}
+
+const TRANSLATE_SYSTEM = `Tu traduis des articles automobiles en FRANÇAIS NATUREL.
+
+Règles strictes :
+- Titre : concis, en français, sans guillemets ni point final, sans markdown. Garde les noms propres (marques, modèles, pilotes, circuits, villes) inchangés.
+- Résumé : 2 à 3 phrases en français naturel, ton journalistique, texte brut. Pas de markdown, pas de listes, pas de gras.
+- NE LAISSE AUCUN mot anglais dans le titre ni le résumé, sauf noms propres / sigles (F1, GP, MPG, V8, etc.).
+
+Réponds UNIQUEMENT par un JSON {"title": string, "summary": string}.`
+
+// One Claude translation call. Bulletproof: json_schema enforces well-
+// formed output and 600 tokens leaves room for 3 FR sentences + JSON
+// overhead. Returns `ok: false` on any failure path — callers can
+// retry or DROP the article rather than silently storing English.
+async function translateOnce(
+  client: Anthropic,
+  title: string,
+  description: string,
+): Promise<{ title: string; summary: string; ok: boolean }> {
+  try {
+    const res = await client.messages.create({
+      model: MODEL,
+      max_tokens: 600,
+      system: [
+        {
+          type: 'text',
+          text: TRANSLATE_SYSTEM,
+          cache_control: { type: 'ephemeral' },
+        },
+      ],
+      messages: [
+        {
+          role: 'user',
+          content: `Titre: ${title}\n\nDescription: ${description.slice(0, 1500)}`,
+        },
+      ],
+      output_config: {
+        format: { type: 'json_schema', schema: TRANSLATE_SCHEMA },
+      },
+    })
+    const block = res.content.find((b) => b.type === 'text')
+    const text = block && 'text' in block ? block.text : ''
+    if (!text) return { title, summary: description, ok: false }
+    const parsed = JSON.parse(text) as { title?: string; summary?: string }
+    const outTitle = stripMarkdown(parsed.title ?? '').trim()
+    const outSummary = stripMarkdown(parsed.summary ?? '').trim()
+    if (!outTitle || !outSummary)
+      return { title, summary: description, ok: false }
+    // Last guard: Claude occasionally echoes English back. Treat that
+    // as a failure too — caller will retry or drop.
+    if (looksEnglish(outTitle) || looksEnglish(outSummary))
+      return { title: outTitle, summary: outSummary, ok: false }
+    return { title: outTitle, summary: outSummary, ok: true }
+  } catch (e) {
+    console.error('[translate] failed:', e)
+    return { title, summary: description, ok: false }
+  }
+}
+
+// Wrapper with one retry. Two attempts give the model a chance to
+// recover from transient errors / token truncation without ballooning
+// cost (each failed attempt is one extra Claude call per article).
+async function translateToFrench(
+  client: Anthropic,
+  title: string,
+  description: string,
+): Promise<{ title: string; summary: string; ok: boolean }> {
+  const first = await translateOnce(client, title, description)
+  if (first.ok) return first
+  const second = await translateOnce(client, title, description)
+  if (second.ok) return second
+  // Both attempts failed — return the best we got (often Claude returned
+  // a partial FR translation that just had a couple of English words).
+  return second
+}
+
 async function summarize(
   client: Anthropic,
   title: string,
@@ -340,12 +457,24 @@ async function summarize(
   summary: string
 }> {
   // Fail open on infra/parse errors: keep the (curated, on-topic) feed
-  // content rather than dropping it (original title kept untranslated).
-  const fallback = {
-    relevant: true,
-    category: normCategory(feedCategory, 'Supercar'),
-    title,
-    summary: stripMarkdown(description).slice(0, 300),
+  // content but force a French translation so the feed never shows raw
+  // English from sources like Autocar, Top Gear, Motorsport.
+  const makeFallback = async () => {
+    if (!needsTranslation(title) && !needsTranslation(description)) {
+      return {
+        relevant: true,
+        category: normCategory(feedCategory, 'Supercar'),
+        title,
+        summary: stripMarkdown(description).slice(0, 300),
+      }
+    }
+    const t = await translateToFrench(client, title, description)
+    return {
+      relevant: true,
+      category: normCategory(feedCategory, 'Supercar'),
+      title: t.title,
+      summary: t.summary,
+    }
   }
   try {
     const res = await client.messages.create({
@@ -366,7 +495,7 @@ async function summarize(
     })
     const block = res.content.find((b) => b.type === 'text')
     const text = block && 'text' in block ? block.text : ''
-    if (!text) return fallback
+    if (!text) return await makeFallback()
     const parsed = JSON.parse(text) as {
       relevant?: boolean
       category?: string
@@ -374,18 +503,29 @@ async function summarize(
       summary?: string
     }
     const category = normCategory(parsed.category, feedCategory)
-    const frTitle = stripMarkdown(parsed.title ?? '').trim() || title
-    const summary = stripMarkdown(parsed.summary ?? '')
+    const rawTitle = stripMarkdown(parsed.title ?? '').trim() || title
+    const rawSummary = stripMarkdown(parsed.summary ?? '')
+    // Defensive: structured-output sometimes echoes the original English
+    // back when the input is long. Force a translation pass if EITHER
+    // field still looks English. The feed MUST be 100% FR.
+    let frTitle = rawTitle
+    let summary = rawSummary
+    if (needsTranslation(frTitle) || needsTranslation(summary)) {
+      const t = await translateToFrench(client, frTitle, summary || description)
+      frTitle = t.title
+      summary = t.summary
+    }
     if (parsed.relevant === false)
       return { relevant: false, category, title: frTitle, summary: '' }
+    const fb = await makeFallback()
     return {
       relevant: true,
       category,
       title: frTitle,
-      summary: summary || fallback.summary,
+      summary: summary || fb.summary,
     }
   } catch {
-    return fallback
+    return await makeFallback()
   }
 }
 
@@ -399,7 +539,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const force = req.query.force === '1'
 
   if (!SUPABASE_URL || !SERVICE_ROLE || !process.env.ANTHROPIC_API_KEY) {
-    res.status(500).json({ error: 'Missing env (Supabase service role / Anthropic key)' })
+    res.status(500).json({ error: 'Service indisponible — configuration manquante.' })
     return
   }
 
@@ -426,7 +566,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   // Public client trigger: skip cheaply if the feed is already fresh.
-  if (!isCron && !force && req.query.purge !== '1') {
+  if (
+    !isCron &&
+    !force &&
+    req.query.purge !== '1' &&
+    req.query.purge_en !== '1'
+  ) {
     const { data: latest } = await admin
       .from('news')
       .select('created_at')
@@ -446,10 +591,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
   }
 
-  // Manual maintenance lever: GET /api/fetch-news?purge=1 wipes the table
-  // before repopulating. The scheduled cron calls the path without the
-  // param, so normal runs stay non-destructive.
+  // Manual maintenance levers (cron path stays non-destructive):
+  //   ?purge=1     → wipes the entire news table before repopulating
+  //   ?purge_en=1  → wipes ONLY rows whose title/summary still looks
+  //                  English (recovery after a translation regression
+  //                  without losing French rows that are fine).
   let purged: number | null = null
+  let purgedEn: number | null = null
   if (req.query.purge === '1') {
     const { error, count } = await admin
       .from('news')
@@ -457,6 +605,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .not('id', 'is', null)
     purged = error ? -1 : (count ?? 0)
     if (error) console.error('news purge failed:', error)
+  }
+  if (req.query.purge_en === '1') {
+    const { data: rowsAll } = await admin
+      .from('news')
+      .select('id, title, summary')
+      .limit(2000)
+    const englishIds = ((rowsAll ?? []) as {
+      id: string
+      title: string
+      summary: string | null
+    }[])
+      .filter((r) => looksEnglish(r.title) || looksEnglish(r.summary ?? ''))
+      .map((r) => r.id)
+    if (englishIds.length) {
+      const { error, count } = await admin
+        .from('news')
+        .delete({ count: 'exact' })
+        .in('id', englishIds)
+      purgedEn = error ? -1 : (count ?? 0)
+      if (error) console.error('news purge_en failed:', error)
+    } else {
+      purgedEn = 0
+    }
   }
 
   const { data: existing } = await admin
@@ -570,6 +741,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   //    deleted and the new one inserted in its place.
   let dedupSkipped = 0
   let qualitySkipped = 0
+  let englishDropped = 0
   type ReadyRow = {
     title: string
     summary: string
@@ -585,9 +757,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // complete than them — replaced rather than skipped.
   const replacedIds = new Set<string>()
 
+  // Final language gate BEFORE the dedup loop. Run all the remaining
+  // English→French translation calls in parallel — sequential awaits
+  // inside the dedup loop would blow past the 60s function ceiling
+  // when many articles need a second pass. Only items that still look
+  // English after summarize() pay the extra Claude call.
+  let lateTranslated = 0
+  const relocalized = await Promise.all(
+    summarized.map(async (s) => {
+      if (!s.relevant) return s
+      if (!needsTranslation(s.title) && !needsTranslation(s.summary)) return s
+      const t = await translateToFrench(anthropic, s.title, s.summary)
+      lateTranslated += 1
+      return {
+        ...s,
+        title: t.title || s.title,
+        summary: t.summary || s.summary,
+      }
+    }),
+  )
+
   // Process longest-summary-first so the first survivor of a duplicate
   // cluster is the most complete one (others get dropped).
-  const ordered = [...summarized].sort(
+  const ordered = [...relocalized].sort(
     (a, b) => (b.summary?.length ?? 0) - (a.summary?.length ?? 0),
   )
 
@@ -607,9 +799,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       continue
     }
 
+    // (3b) Hard language gate. After summarize() + the late-translate
+    // pre-pass, anything still flagged as English is a translation
+    // failure — DO NOT insert it. Better to skip than to leak English
+    // into the feed. Logged so we can monitor leakage rate.
+    if (looksEnglish(title) || looksEnglish(summary)) {
+      console.warn(
+        '[fetch-news] dropping English row:',
+        c.source,
+        '|',
+        title.slice(0, 80),
+      )
+      englishDropped += 1
+      continue
+    }
+
+    const frTitle = title
+    const frSummary = summary
+
     // (4a) Dedup against already-accepted items in this batch.
     const dupInBatch = accepted.find(
-      (k) => titleSimilarity(k.title, title) >= DUP_THRESHOLD,
+      (k) => titleSimilarity(k.title, frTitle) >= DUP_THRESHOLD,
     )
     if (dupInBatch) {
       // Ordered desc by length — the kept one is at least as long.
@@ -620,11 +830,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // (4b) Dedup against the live DB. If incoming is longer, replace
     // the existing row; if shorter, drop incoming.
     const dupInDb = existingRows.find(
-      (e) => titleSimilarity(e.title, title) >= DUP_THRESHOLD,
+      (e) => titleSimilarity(e.title, frTitle) >= DUP_THRESHOLD,
     )
     if (dupInDb) {
       const existingLen = (dupInDb.summary ?? '').length
-      if (summary.length > existingLen) {
+      if (frSummary.length > existingLen) {
         replacedIds.add(dupInDb.id)
       } else {
         dedupSkipped += 1
@@ -635,8 +845,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     perFeed[c.source] += 1
     const base = c.published_at ? new Date(c.published_at) : new Date()
     accepted.push({
-      title,
-      summary,
+      title: frTitle,
+      summary: frSummary,
       source: c.source,
       // Claude's strict classification, not the feed hint.
       category,
@@ -678,10 +888,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   res.status(200).json({
     purged,
+    purgedEn,
     expired,
     dedupSkipped,
     qualitySkipped,
+    englishDropped,
     replaced,
+    lateTranslated,
     processed: rows.length,
     perFeed,
     upsertError,

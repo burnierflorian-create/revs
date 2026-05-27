@@ -1,10 +1,13 @@
+// Format names commonly used in French car culture. "Cars & Coffee" is
+// kept as a proper-noun event format ("Cars & Coffee" is the standard
+// French name too). "Track Day" → "Journée circuit".
 export const EVENT_TYPES = [
   'Cars & Coffee',
-  'Meeting',
-  'Track Day',
+  'Rencontre',
+  'Journée circuit',
   'Rallye',
-  'Show',
-  'Drive',
+  'Salon',
+  'Balade',
   'Autre',
 ] as const
 

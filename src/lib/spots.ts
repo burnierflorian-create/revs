@@ -32,6 +32,8 @@ export type CarInfo = {
   history: string
 }
 
+export type Rarity = 'commun' | 'rare' | 'ultra_rare' | 'unique'
+
 export type Spot = {
   id: string
   user_id: string
@@ -49,18 +51,63 @@ export type Spot = {
   lng: number
   expires_at: string
   created_at: string
+  event_id?: string | null
+  garage_image_url?: string | null
+  rarity?: Rarity | null
+  production?: number | null
 }
 
-// XP awarded for a spot, by the car's estimated new price (€).
-// Mirrors the award_xp_spot() SQL trigger — keep both in sync.
-export function xpForPrice(price: number | null | undefined): number {
+// Base XP score from the price tier. Topped at 75 (vs the old 100) so
+// the rarity multiplier has headroom to push exceptional spots toward
+// 300 XP. Mirrors award_xp_spot() SQL — keep both in sync.
+function basePriceScore(price: number | null | undefined): number {
   const p = price ?? 0
-  if (p >= 1_000_000) return 100
-  if (p >= 500_000) return 80
-  if (p >= 200_000) return 40
+  if (p >= 1_000_000) return 75
+  if (p >= 500_000) return 55
+  if (p >= 200_000) return 35
   if (p >= 80_000) return 20
   if (p >= 30_000) return 10
   return 5
+}
+
+function rarityMultiplier(rarity: Rarity | null | undefined): number {
+  switch (rarity) {
+    case 'unique':
+      return 4
+    case 'ultra_rare':
+      return 2.5
+    case 'rare':
+      return 1.5
+    default:
+      return 1
+  }
+}
+
+// Combined XP — price tier × rarity multiplier, rounded to int. Used
+// by the UI for the per-card "+X XP" badges; the actual XP_transaction
+// row is written by the SQL trigger which uses the exact same formula.
+export function xpForSpot(
+  price: number | null | undefined,
+  rarity: Rarity | null | undefined,
+): number {
+  return Math.round(basePriceScore(price) * rarityMultiplier(rarity))
+}
+
+// Backwards-compat alias — some callers still pass price only. Treated
+// as `commun` rarity, which matches the SQL trigger's default.
+export function xpForPrice(price: number | null | undefined): number {
+  return xpForSpot(price, 'commun')
+}
+
+const RARITY_LABEL: Record<Rarity, string> = {
+  commun: 'COMMUN',
+  rare: 'RARE',
+  ultra_rare: 'ULTRA RARE ✨',
+  unique: 'LÉGENDAIRE 👑',
+}
+
+export function rarityLabel(r: Rarity | null | undefined): string {
+  return r && r in RARITY_LABEL ? RARITY_LABEL[r] : RARITY_LABEL.commun
 }
 
 export function formatPrice(price: number | null | undefined): string | null {
@@ -85,6 +132,8 @@ export type IdentifyResult = {
   valid: boolean
   reason: string
   estimated_price: number | null
+  rarity?: Rarity | null
+  production?: number | null
 }
 
 export type PhotoMeta = {
@@ -162,6 +211,144 @@ export function escapeHtml(s: string): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;')
+}
+
+// A normalized 0–1 bounding box, as returned by /api/detect-plate.
+export type BBox = { x: number; y: number; width: number; height: number }
+
+// Apply a heavy gaussian blur on the given normalized regions of a JPEG
+// blob, with naturally feathered edges (no harsh rectangle), then
+// re-encode at the original resolution. Used to anonymise license
+// plates at upload time.
+//
+// Strategy:
+//  1. Draw the source image on a base canvas (sharp everywhere).
+//  2. Build a full-image blurred copy.
+//  3. Build a white-on-black "mask" canvas with one rectangle per
+//     plate region, then blur the MASK itself so its edges feather.
+//  4. `destination-in` composite the blurred image with the feathered
+//     mask → blur only survives where the mask is opaque, fading out
+//     softly at the edges.
+//  5. Paint the masked blur on top of the base canvas.
+//
+// `quality` is the JPEG re-encode quality; `blurPx` is the gaussian
+// radius in image pixels (24 ≈ pixel-perfect plate scrub at 1280 px).
+export async function blurRegions(
+  blob: Blob,
+  regions: BBox[],
+  blurPx = 28,
+  quality = 0.85,
+): Promise<{ blob: Blob; base64: string }> {
+  if (regions.length === 0) return blobToJpegResult(blob, quality)
+
+  const img = await blobToImage(blob)
+  const W = img.naturalWidth || img.width
+  const H = img.naturalHeight || img.height
+
+  const main = document.createElement('canvas')
+  main.width = W
+  main.height = H
+  const mctx = main.getContext('2d')
+  if (!mctx) throw new Error('Canvas non supporté')
+  mctx.drawImage(img, 0, 0)
+
+  // Pre-blurred full image.
+  const blurred = document.createElement('canvas')
+  blurred.width = W
+  blurred.height = H
+  const bctx = blurred.getContext('2d')
+  if (!bctx) throw new Error('Canvas non supporté')
+  bctx.filter = `blur(${blurPx}px)`
+  bctx.drawImage(img, 0, 0)
+  bctx.filter = 'none'
+
+  // Feathered mask: white rectangles slightly inflated, then blurred.
+  // The 0.5× factor on the mask blur keeps the soft edge tight enough
+  // that the plate stays fully covered while the transition feels
+  // natural rather than mechanical.
+  const mask = document.createElement('canvas')
+  mask.width = W
+  mask.height = H
+  const xctx = mask.getContext('2d')
+  if (!xctx) throw new Error('Canvas non supporté')
+  xctx.fillStyle = 'white'
+  for (const r of regions) {
+    const x = clamp(r.x * W, 0, W)
+    const y = clamp(r.y * H, 0, H)
+    const w = clamp(r.width * W, 0, W - x)
+    const h = clamp(r.height * H, 0, H - y)
+    if (w <= 0 || h <= 0) continue
+    // Inflate by ~20% so the feathered edge still fully covers the
+    // sharp plate inside (the blur on the mask eats into its bounds).
+    const padX = w * 0.2
+    const padY = h * 0.2
+    xctx.fillRect(
+      Math.max(0, x - padX),
+      Math.max(0, y - padY),
+      Math.min(W, w + 2 * padX),
+      Math.min(H, h + 2 * padY),
+    )
+  }
+  // Blur the mask itself → soft alpha gradient at the edges.
+  const featheredMask = document.createElement('canvas')
+  featheredMask.width = W
+  featheredMask.height = H
+  const fctx = featheredMask.getContext('2d')
+  if (!fctx) throw new Error('Canvas non supporté')
+  fctx.filter = `blur(${Math.round(blurPx * 0.6)}px)`
+  fctx.drawImage(mask, 0, 0)
+  fctx.filter = 'none'
+
+  // Cut the blurred image to the feathered mask.
+  bctx.globalCompositeOperation = 'destination-in'
+  bctx.drawImage(featheredMask, 0, 0)
+  bctx.globalCompositeOperation = 'source-over'
+
+  // Final compose: masked blur on top of the original sharp image.
+  mctx.drawImage(blurred, 0, 0)
+
+  const out = await new Promise<Blob>((resolve, reject) => {
+    main.toBlob(
+      (b) => (b ? resolve(b) : reject(new Error('Encodage JPEG échoué'))),
+      'image/jpeg',
+      quality,
+    )
+  })
+  return blobToJpegResult(out, quality)
+}
+
+async function blobToImage(blob: Blob): Promise<HTMLImageElement> {
+  const url = URL.createObjectURL(blob)
+  try {
+    return await new Promise<HTMLImageElement>((resolve, reject) => {
+      const el = new Image()
+      el.onload = () => resolve(el)
+      el.onerror = () => reject(new Error('Image illisible'))
+      el.src = url
+    })
+  } finally {
+    URL.revokeObjectURL(url)
+  }
+}
+
+async function blobToJpegResult(
+  blob: Blob,
+  _quality: number,
+): Promise<{ blob: Blob; base64: string }> {
+  const base64 = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onloadend = () => {
+      const result = reader.result as string
+      resolve(result.split(',')[1] ?? '')
+    }
+    reader.onerror = () => reject(new Error('Lecture échouée'))
+    reader.readAsDataURL(blob)
+  })
+  return { blob, base64 }
+}
+
+function clamp(n: number, lo: number, hi: number): number {
+  return Math.max(lo, Math.min(hi, n))
 }
 
 // Phone photos are multi-MB; downscale before sending to the AI / storage.

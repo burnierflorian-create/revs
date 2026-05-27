@@ -1,9 +1,44 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, ChevronRight, Camera } from 'lucide-react'
+import {
+  ArrowLeft,
+  AtSign,
+  Bell,
+  BellRing,
+  Camera,
+  ChevronRight,
+  Cookie,
+  Crown,
+  Eye,
+  Flame,
+  Heart,
+  KeyRound,
+  LogOut,
+  Mail,
+  MapPin,
+  Megaphone,
+  MessageCircle,
+  Radar as RadarIcon,
+  RotateCcw,
+  Scale,
+  Shield,
+  Smartphone,
+  Trash2,
+  UserPlus,
+  Users,
+} from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { resizeImageToJpeg } from '../lib/spots'
 import { enablePush, pushSupported } from '../lib/push'
+import { translateError } from '../lib/errors'
+import {
+  fetchMyRadarPrefs,
+  getCurrentPosition,
+  saveRadarPrefs,
+  type RadarPrefs,
+} from '../lib/radar'
+
+// ─────────────────────── Reusable primitives ───────────────────────
 
 function Section({
   title,
@@ -13,43 +48,76 @@ function Section({
   children: ReactNode
 }) {
   return (
-    <section className="space-y-2">
-      <h2 className="px-1 text-xs font-semibold uppercase tracking-widest text-[#888888]">
-        {title}
-      </h2>
-      <div className="overflow-hidden rounded-2xl bg-[#1c1c1c]">{children}</div>
+    <section className="space-y-2.5">
+      <h2 className="label-up px-1 text-[10px] text-fg2">{title}</h2>
+      <div
+        className="overflow-hidden rounded-3xl bg-card"
+        style={{ border: '1px solid var(--color-border)' }}
+      >
+        {children}
+      </div>
     </section>
   )
 }
 
 function Row({
+  icon,
   label,
   sub,
   onClick,
+  right,
   danger,
   warn,
-  right,
+  noChevron,
 }: {
+  icon?: ReactNode
   label: string
   sub?: string
   onClick?: () => void
+  right?: ReactNode
   danger?: boolean
   warn?: boolean
-  right?: ReactNode
+  noChevron?: boolean
 }) {
+  const interactive = !!onClick
+  const tone = danger ? 'text-accent' : warn ? 'text-[#F59E0B]' : 'text-fg'
   return (
     <button
       onClick={onClick}
-      disabled={!onClick}
-      className={`flex w-full items-center justify-between gap-3 border-b border-white/5 px-4 py-3.5 text-left last:border-0 ${
-        danger ? 'text-accent' : warn ? 'text-[#F59E0B]' : 'text-fg'
-      } ${onClick ? 'transition-colors hover:bg-white/5 active:bg-white/10' : ''}`}
+      disabled={!interactive}
+      className={`flex w-full items-center gap-3 border-b border-white/[0.08] px-4 py-3.5 text-left last:border-0 ${tone} ${
+        interactive
+          ? 'tappable transition-colors hover:bg-white/[0.04]'
+          : ''
+      }`}
     >
-      <span className="min-w-0">
-        <span className="block text-sm">{label}</span>
-        {sub && <span className="mt-0.5 block text-xs text-fg/40">{sub}</span>}
+      {icon && (
+        <span
+          className={`flex h-9 w-9 flex-none items-center justify-center rounded-xl ${
+            danger
+              ? 'bg-accent/15 text-accent'
+              : warn
+                ? 'bg-[#F59E0B]/15 text-[#F59E0B]'
+                : 'bg-white/[0.06] text-fg/85'
+          }`}
+        >
+          {icon}
+        </span>
+      )}
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-[15px] font-medium leading-tight">
+          {label}
+        </span>
+        {sub && (
+          <span className="mt-0.5 block truncate text-xs leading-tight text-fg2">
+            {sub}
+          </span>
+        )}
       </span>
-      {right ?? (onClick ? <ChevronRight className="h-4 w-4 flex-none text-fg/30" /> : null)}
+      {right ??
+        (interactive && !noChevron ? (
+          <ChevronRight className="h-4 w-4 flex-none text-fg2" />
+        ) : null)}
     </button>
   )
 }
@@ -69,18 +137,25 @@ function Toggle({
         e.stopPropagation()
         if (!disabled) onChange?.()
       }}
+      role="switch"
+      aria-checked={checked}
       className={`relative inline-block h-6 w-11 flex-none rounded-full transition-colors ${
         checked ? 'bg-accent' : 'bg-white/15'
       } ${disabled ? 'opacity-50' : 'cursor-pointer'}`}
+      style={
+        checked ? { boxShadow: '0 0 12px rgba(232,32,58,0.35)' } : undefined
+      }
     >
       <span
-        className={`absolute top-0.5 h-5 w-5 rounded-full bg-fg transition-transform ${
+        className={`absolute top-0.5 h-5 w-5 rounded-full bg-fg shadow-soft transition-transform ${
           checked ? 'translate-x-[1.375rem]' : 'translate-x-0.5'
         }`}
       />
     </span>
   )
 }
+
+// ─────────────────────── Page ───────────────────────
 
 export default function Settings() {
   const navigate = useNavigate()
@@ -100,13 +175,33 @@ export default function Settings() {
   const [analytics, setAnalytics] = useState(false)
   const [marketing, setMarketing] = useState(false)
   const [role, setRole] = useState<string>('user')
-  const [plan, setPlan] = useState<string | null>(null)
-  const [subStatus, setSubStatus] = useState<string | null>(null)
 
   const [editOpen, setEditOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
   const [err, setErr] = useState<string | null>(null)
+
+  // E-mail change inline editor.
+  const [emailOpen, setEmailOpen] = useState(false)
+  const [newEmail, setNewEmail] = useState('')
+  const [emailBusy, setEmailBusy] = useState(false)
+  const [emailMsg, setEmailMsg] = useState<string | null>(null)
+  const [emailErr, setEmailErr] = useState<string | null>(null)
+
+  // Password change inline editor (current + new + confirm).
+  const [pwOpen, setPwOpen] = useState(false)
+  const [pwCurrent, setPwCurrent] = useState('')
+  const [pwNew, setPwNew] = useState('')
+  const [pwConfirm, setPwConfirm] = useState('')
+  const [pwBusy, setPwBusy] = useState(false)
+  const [pwMsg, setPwMsg] = useState<string | null>(null)
+  const [pwErr, setPwErr] = useState<string | null>(null)
+
+  // Premium tier + Mode Radar inline section.
+  const [tier, setTier] = useState<'premium' | 'vip' | null>(null)
+  const [radarPrefs, setRadarPrefs] = useState<RadarPrefs | null>(null)
+  const [radarBusy, setRadarBusy] = useState(false)
+  const [radarErr, setRadarErr] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [orgOpen, setOrgOpen] = useState(false)
   const [orgRaison, setOrgRaison] = useState('')
@@ -132,7 +227,7 @@ export default function Settings() {
       setUserId(user.id)
       setEmail(user.email ?? '')
 
-      const [{ data: prof }, { data: orgReq }, { data: sub }, { data: np }] =
+      const [{ data: prof }, { data: orgReq }, { data: np }] =
         await Promise.all([
           supabase
             .from('profiles')
@@ -144,11 +239,6 @@ export default function Settings() {
             .select('id')
             .eq('user_id', user.id)
             .limit(1),
-          supabase
-            .from('subscriptions')
-            .select('plan, status')
-            .eq('user_id', user.id)
-            .maybeSingle(),
           supabase
             .from('notification_prefs')
             .select('likes, comments, followers, nearby, streak')
@@ -172,10 +262,6 @@ export default function Settings() {
           streak: np.streak ?? true,
         })
       if (orgReq && orgReq.length > 0) setOrgSent(true)
-      if (sub) {
-        setPlan((sub.plan as string | undefined) ?? null)
-        setSubStatus((sub.status as string | undefined) ?? null)
-      }
 
       try {
         setNotif(
@@ -203,6 +289,28 @@ export default function Settings() {
       }
       if (!active) return
       setLoading(false)
+
+      // Tier + radar prefs — fetched after first paint so they don't
+      // block the rest of the page. Radar section renders only for
+      // premium/vip; for free users the whole block is hidden.
+      supabase
+        .rpc('user_tier', { p_user: user.id })
+        .then(({ data }) => {
+          if (!active) return
+          setTier(((data as 'premium' | 'vip' | null) ?? null))
+        })
+      fetchMyRadarPrefs().then((p) => {
+        if (!active) return
+        setRadarPrefs(
+          p ?? {
+            enabled: false,
+            radius_km: 10,
+            lat: null,
+            lng: null,
+            updated_at: '',
+          },
+        )
+      })
     })()
     return () => {
       active = false
@@ -249,29 +357,153 @@ export default function Settings() {
       )
       if (error) {
         console.error('profile save failed:', error)
-        setErr(`Échec (${error.code ?? 'err'}): ${error.message}`)
+        setErr(translateError(error))
         return
       }
       setAvatarFile(null)
       setMsg('Profil enregistré ✅')
       setEditOpen(false)
     } catch (e) {
-      const m = e as { message?: string }
       console.error('profile save crashed:', e)
-      setErr(m?.message ?? 'Échec de l’enregistrement')
+      setErr(translateError(e))
     } finally {
       setSaving(false)
     }
   }
 
-  async function changePassword() {
-    setErr(null)
-    setMsg(null)
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/auth`,
+  async function toggleRadar() {
+    if (!radarPrefs || radarBusy) return
+    setRadarErr(null)
+    setRadarBusy(true)
+    try {
+      const next = !radarPrefs.enabled
+      let lat = radarPrefs.lat
+      let lng = radarPrefs.lng
+      // First activation captures the user's position so the fanout
+      // RPC has coordinates to compute distance against.
+      if (next && (lat === null || lng === null)) {
+        try {
+          const pos = await getCurrentPosition()
+          lat = pos.lat
+          lng = pos.lng
+        } catch {
+          setRadarErr('Active la géolocalisation pour utiliser le Mode Radar.')
+          return
+        }
+      }
+      const saved = await saveRadarPrefs({ enabled: next, lat, lng })
+      if (saved) setRadarPrefs(saved)
+    } finally {
+      setRadarBusy(false)
+    }
+  }
+
+  async function setRadarRadius(r: 5 | 10 | 20) {
+    if (!radarPrefs || radarBusy) return
+    setRadarBusy(true)
+    const saved = await saveRadarPrefs({ radius_km: r })
+    if (saved) setRadarPrefs(saved)
+    setRadarBusy(false)
+  }
+
+  async function refreshRadarPosition() {
+    if (radarBusy) return
+    setRadarErr(null)
+    setRadarBusy(true)
+    try {
+      const pos = await getCurrentPosition()
+      const saved = await saveRadarPrefs({ lat: pos.lat, lng: pos.lng })
+      if (saved) setRadarPrefs(saved)
+    } catch {
+      setRadarErr('Impossible de récupérer ta position.')
+    } finally {
+      setRadarBusy(false)
+    }
+  }
+
+  async function submitEmailChange() {
+    setEmailErr(null)
+    setEmailMsg(null)
+    const target = newEmail.trim().toLowerCase()
+    if (!target || !/.+@.+\..+/.test(target)) {
+      setEmailErr('E-mail invalide.')
+      return
+    }
+    if (target === email.toLowerCase()) {
+      setEmailErr("C'est déjà ton adresse actuelle.")
+      return
+    }
+    setEmailBusy(true)
+    const { error } = await supabase.auth.updateUser({ email: target })
+    setEmailBusy(false)
+    if (error) {
+      setEmailErr(translateError(error))
+      return
+    }
+    setEmailMsg(
+      `Un e-mail de confirmation a été envoyé à ${target}. Clique sur le lien pour valider le changement.`,
+    )
+    setNewEmail('')
+  }
+
+  async function submitPasswordChange() {
+    setPwErr(null)
+    setPwMsg(null)
+    if (pwNew.length < 6) {
+      setPwErr('Le nouveau mot de passe doit faire au moins 6 caractères.')
+      return
+    }
+    if (pwNew !== pwConfirm) {
+      setPwErr('La confirmation ne correspond pas au nouveau mot de passe.')
+      return
+    }
+    // Ensure the session is alive before hitting updateUser — Supabase
+    // returns a confusing error otherwise.
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
+    if (!session?.user?.email) {
+      setPwErr('Session expirée. Reconnecte-toi puis réessaie.')
+      return
+    }
+    setPwBusy(true)
+    // Step 1 — verify the current password by re-authenticating. Supabase
+    // doesn't natively re-prompt for the current password on updateUser;
+    // we sign in again (replaces the access token in place) so wrong
+    // input fails fast with a clear message.
+    const { error: signErr } = await supabase.auth.signInWithPassword({
+      email: session.user.email,
+      password: pwCurrent,
     })
-    if (error) setErr(error.message)
-    else setMsg('Email de réinitialisation envoyé 📧')
+    if (signErr) {
+      setPwBusy(false)
+      const m = signErr.message?.toLowerCase() ?? ''
+      if (m.includes('invalid') || m.includes('credential')) {
+        setPwErr('Mot de passe actuel incorrect.')
+      } else {
+        setPwErr(translateError(signErr))
+      }
+      return
+    }
+    // Step 2 — apply the new password.
+    const { error: updErr } = await supabase.auth.updateUser({
+      password: pwNew,
+    })
+    setPwBusy(false)
+    if (updErr) {
+      setPwErr(translateError(updErr))
+      return
+    }
+    setPwMsg('Mot de passe modifié avec succès ✓')
+    setPwCurrent('')
+    setPwNew('')
+    setPwConfirm('')
+    // Auto-close the editor so the user lands back on a clean settings
+    // surface; the success message stays visible for ~2 s in the meantime.
+    setTimeout(() => {
+      setPwOpen(false)
+      setPwMsg(null)
+    }, 2000)
   }
 
   async function toggleNotif() {
@@ -354,7 +586,7 @@ export default function Settings() {
       .upsert({ user_id: userId, is_public: next }, { onConflict: 'user_id' })
     if (error) {
       setIsPublic(!next)
-      setErr(error.message)
+      setErr(translateError(error))
     }
   }
 
@@ -383,8 +615,7 @@ export default function Settings() {
       await supabase.auth.signOut()
       navigate('/auth', { replace: true })
     } catch (e) {
-      const m = e as { message?: string }
-      setErr(m?.message ?? 'Suppression échouée')
+      setErr(translateError(e))
       setSaving(false)
     }
   }
@@ -449,18 +680,16 @@ export default function Settings() {
     setMsg('Demande envoyée — on revient vers toi rapidement.')
   }
 
-  const subscribed = subStatus === 'active' || subStatus === 'trialing'
-  const planLabel = subscribed
-    ? plan
-      ? plan.charAt(0).toUpperCase() + plan.slice(1)
-      : 'Premium'
-    : 'Free'
+  const isOrganizer = role === 'organizer' || role === 'admin'
+
+  // ─────────────────────── Inline profile editor ───────────────────────
 
   const ProfileEditor = (
     <div className="space-y-4 border-b border-white/5 p-4 last:border-0">
       <div className="flex items-center gap-4">
         <button
           onClick={() => fileRef.current?.click()}
+          aria-label="Changer la photo"
           className="relative flex h-16 w-16 flex-none items-center justify-center overflow-hidden rounded-full bg-accent text-2xl font-bold text-fg"
         >
           {avatarUrl ? (
@@ -468,7 +697,7 @@ export default function Settings() {
           ) : (
             (pseudo.charAt(0) || '?').toUpperCase()
           )}
-          <span className="absolute inset-x-0 bottom-0 flex items-center justify-center bg-black/50 py-0.5">
+          <span className="absolute inset-x-0 bottom-0 flex items-center justify-center bg-black/60 py-0.5">
             <Camera className="h-3.5 w-3.5" />
           </span>
         </button>
@@ -508,221 +737,490 @@ export default function Settings() {
       <button
         onClick={saveProfile}
         disabled={saving}
-        className="w-full rounded-full bg-accent py-3 text-sm font-medium disabled:opacity-50"
+        className="w-full rounded-full bg-accent py-3 text-sm font-semibold disabled:opacity-50"
       >
         {saving ? '…' : 'Sauvegarder'}
       </button>
     </div>
   )
 
+  const EmailEditor = (
+    <div className="space-y-3 border-b border-white/5 p-4 last:border-0">
+      <div className="space-y-2">
+        <label className="label-up text-[10px] text-fg2">Nouvel e-mail</label>
+        <input
+          type="email"
+          value={newEmail}
+          onChange={(e) => setNewEmail(e.target.value)}
+          placeholder="nouveau@example.com"
+          autoComplete="email"
+          className="w-full rounded-2xl bg-card px-4 py-3.5 text-fg outline-none placeholder:text-fg2/40 focus:border-accent"
+          style={{ border: '1px solid var(--color-border)' }}
+        />
+      </div>
+      <p className="text-[11px] leading-relaxed text-fg2">
+        Supabase enverra un lien de confirmation sur la nouvelle adresse. Le
+        changement n'est appliqué qu'après clic sur le lien.
+      </p>
+      {emailErr && <p className="text-sm text-accent">{emailErr}</p>}
+      {emailMsg && (
+        <p className="rounded-2xl bg-green-500/10 px-3 py-2 text-sm text-green-300">
+          {emailMsg}
+        </p>
+      )}
+      <button
+        onClick={submitEmailChange}
+        disabled={emailBusy || !newEmail.trim()}
+        className="tappable w-full rounded-full bg-accent py-3 text-sm font-extrabold tracking-wider text-fg disabled:opacity-50"
+        style={{ boxShadow: '0 8px 24px rgba(232,32,58,0.45)' }}
+      >
+        {emailBusy ? '…' : 'ENVOYER LA CONFIRMATION'}
+      </button>
+    </div>
+  )
+
+  const PasswordEditor = (
+    <div className="space-y-3 border-b border-white/5 p-4 last:border-0">
+      <div className="space-y-2">
+        <label className="label-up text-[10px] text-fg2">
+          Mot de passe actuel
+        </label>
+        <input
+          type="password"
+          value={pwCurrent}
+          onChange={(e) => setPwCurrent(e.target.value)}
+          autoComplete="current-password"
+          className="w-full rounded-2xl bg-card px-4 py-3.5 text-fg outline-none focus:border-accent"
+          style={{ border: '1px solid var(--color-border)' }}
+        />
+      </div>
+      <div className="space-y-2">
+        <label className="label-up text-[10px] text-fg2">
+          Nouveau mot de passe
+        </label>
+        <input
+          type="password"
+          value={pwNew}
+          onChange={(e) => setPwNew(e.target.value)}
+          autoComplete="new-password"
+          className="w-full rounded-2xl bg-card px-4 py-3.5 text-fg outline-none focus:border-accent"
+          style={{ border: '1px solid var(--color-border)' }}
+        />
+      </div>
+      <div className="space-y-2">
+        <label className="label-up text-[10px] text-fg2">
+          Confirmer le nouveau mot de passe
+        </label>
+        <input
+          type="password"
+          value={pwConfirm}
+          onChange={(e) => setPwConfirm(e.target.value)}
+          autoComplete="new-password"
+          className="w-full rounded-2xl bg-card px-4 py-3.5 text-fg outline-none focus:border-accent"
+          style={{ border: '1px solid var(--color-border)' }}
+        />
+      </div>
+      {pwErr && <p className="text-sm text-accent">{pwErr}</p>}
+      {pwMsg && (
+        <p className="rounded-2xl bg-green-500/10 px-3 py-2 text-sm text-green-300">
+          {pwMsg}
+        </p>
+      )}
+      <button
+        onClick={submitPasswordChange}
+        disabled={
+          pwBusy || !pwCurrent || !pwNew || !pwConfirm
+        }
+        className="tappable w-full rounded-full bg-accent py-3 text-sm font-extrabold tracking-wider text-fg disabled:opacity-50"
+        style={{ boxShadow: '0 8px 24px rgba(232,32,58,0.45)' }}
+      >
+        {pwBusy ? '…' : 'METTRE À JOUR'}
+      </button>
+    </div>
+  )
+
+  // ─────────────────────── Render ───────────────────────
+
   return (
-    <div className="min-h-screen bg-[#111111] px-4 pt-[max(1rem,env(safe-area-inset-top))] text-fg">
-      <div className="flex items-center gap-4 py-4">
+    <div className="min-h-screen bg-bg px-4 pt-[max(1rem,env(safe-area-inset-top))] text-fg">
+      <div className="flex items-center gap-3 py-4">
         <button
           onClick={() => navigate(-1)}
           aria-label="Retour"
-          className="text-fg/60 transition-colors hover:text-fg"
+          className="tappable -ml-2 flex h-10 w-10 items-center justify-center rounded-full text-fg2 hover:text-fg"
         >
           <ArrowLeft className="h-6 w-6" />
         </button>
-        <h1 className="text-2xl font-bold">Paramètres</h1>
+        <h1 className="display-xl text-fg">Paramètres</h1>
       </div>
 
       {loading ? (
-        <p className="px-1 py-10 text-center text-sm text-fg/40">Chargement…</p>
+        <p className="py-10 text-center text-sm text-fg2">Chargement…</p>
       ) : (
-        <div className="space-y-7 pb-10">
-          {/* Header profil */}
-          <div className="flex flex-col items-center pt-2 text-center">
-            <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-full bg-accent text-3xl font-bold text-fg ring-2 ring-accent/40">
-              {avatarUrl ? (
-                <img
-                  src={avatarUrl}
-                  alt=""
-                  className="h-full w-full object-cover"
-                />
-              ) : (
-                (pseudo.charAt(0) || '?').toUpperCase()
-              )}
-            </div>
-            <p className="mt-3 font-display text-xl font-bold">
-              {pseudo || 'Spotter'}
-            </p>
+        <div className="space-y-8 pb-6">
+          {/* Identité — header avec avatar ring gradient */}
+          <div className="flex flex-col items-center pt-4 text-center">
             <button
               onClick={() => setEditOpen((v) => !v)}
-              className="mt-1 text-sm font-medium text-accent"
+              aria-label="Modifier la photo"
+              className="tappable flex h-24 w-24 items-center justify-center rounded-full p-[3px]"
+              style={{
+                background:
+                  'conic-gradient(from 220deg, #E8203A 0%, #b91528 25%, #4a0f16 55%, #E8203A 100%)',
+                boxShadow: '0 6px 22px rgba(232,32,58,0.32)',
+              }}
             >
-              Modifier le profil
+              <span className="flex h-full w-full items-center justify-center overflow-hidden rounded-full bg-card font-display text-3xl font-extrabold tracking-tighter text-fg">
+                {avatarUrl ? (
+                  <img
+                    src={avatarUrl}
+                    alt=""
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  (pseudo.charAt(0) || '?').toUpperCase()
+                )}
+              </span>
             </button>
+            <p className="mt-3 line-clamp-1 font-display text-xl font-extrabold tracking-tighter text-fg">
+              {pseudo || 'Spotter'}
+            </p>
+            {ville && (
+              <p className="mt-0.5 line-clamp-1 text-sm text-fg2">{ville}</p>
+            )}
           </div>
 
           {(msg || err) && (
             <p
-              className={`rounded-xl px-4 py-3 text-sm ${
-                err ? 'bg-accent/15 text-accent' : 'bg-card text-fg/80'
+              className={`rounded-2xl px-4 py-3 text-sm ${
+                err ? 'bg-accent/15 text-accent' : 'bg-card text-fg/85'
               }`}
+              style={
+                err ? undefined : { border: '1px solid var(--color-border)' }
+              }
             >
               {err ?? msg}
             </p>
           )}
 
-          {/* MON COMPTE */}
+          {/* 1 — MON COMPTE */}
           <Section title="Mon compte">
             <Row
-              label="Modifier le profil"
+              icon={<UserPlus className="h-4 w-4" />}
+              label="Modifier mon profil"
               sub="Pseudo, ville, photo"
               onClick={() => setEditOpen((v) => !v)}
             />
             {editOpen && ProfileEditor}
             <Row
-              label="Email"
-              right={<span className="text-sm text-fg/40">{email}</span>}
+              icon={<AtSign className="h-4 w-4" />}
+              label="Modifier mon e-mail"
+              sub={email}
+              onClick={() => {
+                setEmailErr(null)
+                setEmailMsg(null)
+                setEmailOpen((v) => !v)
+              }}
             />
-            <Row label="Changer mon mot de passe" onClick={changePassword} />
+            {emailOpen && EmailEditor}
             <Row
-              label="Mon abonnement"
-              sub={subscribed ? 'Merci pour ton soutien' : undefined}
-              right={
-                <span
-                  className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${
-                    subscribed
-                      ? 'bg-accent/15 text-accent'
-                      : 'bg-white/10 text-fg/50'
-                  }`}
-                >
-                  {planLabel}
-                </span>
-              }
+              icon={<KeyRound className="h-4 w-4" />}
+              label="Modifier mon mot de passe"
+              onClick={() => {
+                setPwErr(null)
+                setPwMsg(null)
+                setPwOpen((v) => !v)
+              }}
             />
-            {!subscribed && (
-              <div className="p-4">
-                <button
-                  onClick={() => navigate('/premium')}
-                  className="w-full rounded-full bg-accent py-3 text-sm font-semibold text-fg"
-                >
-                  Passer Premium ✨
-                </button>
-              </div>
-            )}
+            {pwOpen && PasswordEditor}
           </Section>
 
-          {/* PRÉFÉRENCES */}
+          {/* 2 — PREMIUM features. Hidden for free users; Mode Radar
+              activation captures the user's home coords on first toggle
+              and persists radius preference. */}
+          {tier && (
+            <Section title="Premium">
+              <div className="px-4 py-4">
+                <div className="flex items-start gap-3">
+                  <div
+                    className="flex h-9 w-9 flex-none items-center justify-center rounded-full text-accent"
+                    style={{
+                      background: 'rgba(232,32,58,0.12)',
+                      border: '1px solid rgba(232,32,58,0.35)',
+                    }}
+                  >
+                    <RadarIcon className="h-4 w-4" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="font-display text-base font-extrabold tracking-tighter text-fg">
+                        Mode Radar 🎯
+                      </p>
+                      <button
+                        onClick={toggleRadar}
+                        disabled={radarBusy || !radarPrefs}
+                        aria-pressed={radarPrefs?.enabled ?? false}
+                        className={`relative h-7 w-12 flex-none rounded-full transition-colors disabled:opacity-50 ${
+                          radarPrefs?.enabled ? 'bg-accent' : 'bg-white/15'
+                        }`}
+                        style={
+                          radarPrefs?.enabled
+                            ? { boxShadow: '0 0 12px rgba(232,32,58,0.45)' }
+                            : undefined
+                        }
+                      >
+                        <span
+                          className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow-soft transition-transform ${
+                            radarPrefs?.enabled
+                              ? 'translate-x-5'
+                              : 'translate-x-0.5'
+                          }`}
+                        />
+                      </button>
+                    </div>
+                    <p className="mt-1 text-xs text-fg2">
+                      Notification push instantanée pour chaque spot dans
+                      ton rayon.
+                    </p>
+                  </div>
+                </div>
+                {radarPrefs?.enabled && (
+                  <>
+                    <div className="mt-4">
+                      <p className="label-up text-[10px] text-fg2">
+                        Rayon de détection
+                      </p>
+                      <div className="mt-2 grid grid-cols-3 gap-2">
+                        {([5, 10, 20] as const).map((r) => (
+                          <button
+                            key={r}
+                            onClick={() => setRadarRadius(r)}
+                            disabled={radarBusy}
+                            className={`tappable rounded-2xl py-2.5 text-sm font-extrabold tracking-wider transition-colors disabled:opacity-50 ${
+                              radarPrefs.radius_km === r
+                                ? 'bg-accent text-fg'
+                                : 'bg-white/[0.04] text-fg2 hover:bg-white/[0.08]'
+                            }`}
+                            style={
+                              radarPrefs.radius_km === r
+                                ? {
+                                    boxShadow:
+                                      '0 6px 18px rgba(232,32,58,0.35)',
+                                  }
+                                : { border: '1px solid var(--color-border)' }
+                            }
+                          >
+                            {r} km
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="mt-3 flex items-center justify-between gap-3 rounded-2xl bg-white/[0.03] px-3 py-2.5">
+                      <div className="min-w-0 text-[11px] text-fg2">
+                        <span className="label-up text-[9px]">
+                          Position de référence
+                        </span>
+                        <p className="mt-0.5 truncate font-mono text-fg/80">
+                          {radarPrefs.lat !== null && radarPrefs.lng !== null
+                            ? `${radarPrefs.lat.toFixed(3)}, ${radarPrefs.lng.toFixed(3)}`
+                            : '—'}
+                        </p>
+                      </div>
+                      <button
+                        onClick={refreshRadarPosition}
+                        disabled={radarBusy}
+                        className="tappable flex-none rounded-full bg-white/[0.06] px-3 py-1.5 text-[11px] font-bold text-fg/80 disabled:opacity-50"
+                        style={{ border: '1px solid var(--color-border)' }}
+                      >
+                        {radarBusy ? '…' : 'Actualiser'}
+                      </button>
+                    </div>
+                  </>
+                )}
+                {radarErr && (
+                  <p className="mt-3 text-xs text-accent">{radarErr}</p>
+                )}
+              </div>
+            </Section>
+          )}
+
+          {/* 3 — PRÉFÉRENCES */}
           <Section title="Préférences">
             <Row
+              icon={<Bell className="h-4 w-4" />}
               label="Notifications"
               sub="Spots près de toi et événements"
               right={<Toggle checked={notif} onChange={toggleNotif} />}
+              noChevron
             />
-            <div className="border-b border-white/5 px-4 py-3.5">
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-sm text-fg">Localisation</span>
-                <Toggle checked={geo} onChange={toggleGeo} />
-              </div>
-              <p className="mt-1 text-xs text-fg/40">
-                Nécessaire pour spotter et voir les voitures près de toi
-              </p>
-              {(!geo || geoDenied) && (
-                <p className="mt-2 text-xs text-accent">
-                  Désactivée — active-la dans Réglages → Confidentialité →
-                  Localisation (iOS) ou Paramètres → Applications → REVS
-                  (Android)
-                </p>
-              )}
-            </div>
             <Row
-              label="Mode sombre"
-              sub="Toujours activé"
-              right={<Toggle checked disabled />}
-            />
-          </Section>
-
-          {/* NOTIFICATIONS */}
-          <Section title="Notifications">
-            <Row
-              label="Activer les notifications sur cet appareil"
-              sub={pushMsg ?? undefined}
+              icon={<Smartphone className="h-4 w-4" />}
+              label="Activer les notifications push"
+              sub={pushMsg ?? "Sur cet appareil"}
               onClick={pushBusy ? undefined : enableDevicePush}
             />
-            {(
-              [
-                ['likes', 'Likes sur mes spots'],
-                ['comments', 'Commentaires'],
-                ['followers', 'Nouveaux abonnés'],
-                ['nearby', 'Spots près de moi'],
-                ['streak', 'Rappel de streak'],
-              ] as [keyof typeof npref, string][]
-            ).map(([k, label]) => (
-              <Row
-                key={k}
-                label={label}
-                right={
-                  <Toggle
-                    checked={npref[k]}
-                    onChange={() => toggleNpref(k)}
-                  />
-                }
-              />
-            ))}
-          </Section>
-
-          {/* CONFIDENTIALITÉ & LÉGAL */}
-          <Section title="Confidentialité & légal">
             <Row
-              label={isPublic ? 'Profil public' : 'Profil privé'}
-              sub="Visibilité de ton profil dans le classement"
-              right={<Toggle checked={isPublic} onChange={togglePrivacy} />}
+              icon={<Heart className="h-4 w-4" />}
+              label="Likes sur mes spots"
+              right={
+                <Toggle
+                  checked={npref.likes}
+                  onChange={() => toggleNpref('likes')}
+                />
+              }
+              noChevron
             />
             <Row
+              icon={<MessageCircle className="h-4 w-4" />}
+              label="Commentaires"
+              right={
+                <Toggle
+                  checked={npref.comments}
+                  onChange={() => toggleNpref('comments')}
+                />
+              }
+              noChevron
+            />
+            <Row
+              icon={<UserPlus className="h-4 w-4" />}
+              label="Nouveaux abonnés"
+              right={
+                <Toggle
+                  checked={npref.followers}
+                  onChange={() => toggleNpref('followers')}
+                />
+              }
+              noChevron
+            />
+            <Row
+              icon={<BellRing className="h-4 w-4" />}
+              label="Spots près de moi"
+              right={
+                <Toggle
+                  checked={npref.nearby}
+                  onChange={() => toggleNpref('nearby')}
+                />
+              }
+              noChevron
+            />
+            <Row
+              icon={<Flame className="h-4 w-4" />}
+              label="Rappel de streak"
+              right={
+                <Toggle
+                  checked={npref.streak}
+                  onChange={() => toggleNpref('streak')}
+                />
+              }
+              noChevron
+            />
+            <Row
+              icon={<MapPin className="h-4 w-4" />}
+              label="Localisation"
+              sub={
+                !geo || geoDenied
+                  ? 'Désactivée — à activer dans les réglages système'
+                  : 'Nécessaire pour spotter et voir les voitures près de toi'
+              }
+              right={<Toggle checked={geo} onChange={toggleGeo} />}
+              noChevron
+            />
+          </Section>
+
+          {/* 4 — CONFIDENTIALITÉ & LÉGAL */}
+          <Section title="Confidentialité & légal">
+            <Row
+              icon={<Eye className="h-4 w-4" />}
+              label={isPublic ? 'Profil public' : 'Profil privé'}
+              sub="Visibilité dans le classement"
+              right={<Toggle checked={isPublic} onChange={togglePrivacy} />}
+              noChevron
+            />
+            <Row
+              icon={<Cookie className="h-4 w-4" />}
               label="Cookies analytiques"
               sub="Mesure d'audience anonyme (RGPD)"
               right={<Toggle checked={analytics} onChange={toggleAnalytics} />}
+              noChevron
             />
             <Row
+              icon={<Megaphone className="h-4 w-4" />}
               label="Communications marketing"
-              sub="Newsletters et offres Premium (RGPD)"
+              sub="Newsletters et offres (RGPD)"
               right={<Toggle checked={marketing} onChange={toggleMarketing} />}
+              noChevron
             />
             <Row
+              icon={<Scale className="h-4 w-4" />}
               label="Mentions légales"
               onClick={() => navigate('/legal/mentions')}
             />
             <Row
+              icon={<Shield className="h-4 w-4" />}
               label="Politique de confidentialité"
               onClick={() => navigate('/legal/privacy')}
             />
             <Row
+              icon={<Scale className="h-4 w-4" />}
               label="Conditions générales d'utilisation"
               onClick={() => navigate('/legal/terms')}
             />
           </Section>
 
-          {/* AVANCÉ */}
-          <Section title="Avancé">
+          {/* 5 — COMMUNAUTÉ */}
+          <Section title="Communauté">
             <Row
-              label="Effacer le cache et relancer l'onboarding"
-              onClick={resetOnboarding}
+              icon={<UserPlus className="h-4 w-4" />}
+              label="Inviter des amis"
+              sub="+50 XP pour toi et ton invité"
+              onClick={() => navigate('/referral')}
             />
-            {role === 'organizer' || role === 'admin' ? (
+            {isOrganizer ? (
               <Row
+                icon={<Crown className="h-4 w-4" />}
                 label="Créer un événement"
-                sub="Organisateur vérifié"
+                sub="Organisateur vérifié ✓"
                 onClick={() => navigate('/new-event')}
               />
             ) : orgSent ? (
               <Row
+                icon={<Users className="h-4 w-4" />}
                 label="Devenir organisateur"
+                sub="Demande envoyée — on revient vers toi rapidement"
                 right={
-                  <span className="text-xs text-fg/40">Demande envoyée</span>
+                  <span className="rounded-full bg-white/[0.06] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-fg/55">
+                    En attente
+                  </span>
                 }
+                noChevron
               />
             ) : !orgOpen ? (
-              <Row
-                label="Devenir organisateur"
-                onClick={() => setOrgOpen(true)}
-              />
+              <div className="space-y-3 p-4">
+                <div className="flex items-start gap-3">
+                  <span className="flex h-9 w-9 flex-none items-center justify-center rounded-xl bg-accent/15 text-accent">
+                    <Users className="h-4 w-4" />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[15px] font-semibold text-fg">
+                      Devenir organisateur
+                    </p>
+                    <p className="mt-1 text-xs leading-relaxed text-fg/55">
+                      Tu organises des Cars &amp; Coffee, des balades, des
+                      rencontres ? Demande ton statut d'organisateur pour
+                      publier des événements sur REVS.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setOrgOpen(true)}
+                  className="w-full rounded-full bg-accent/15 py-2.5 text-sm font-semibold text-accent transition-colors hover:bg-accent/20"
+                >
+                  Faire une demande
+                </button>
+              </div>
             ) : (
               <div className="space-y-3 p-4">
-                <p className="text-xs text-fg/40">
+                <p className="text-xs text-fg/55">
                   Explique pourquoi tu veux organiser des événements (club,
                   marque, association…).
                 </p>
@@ -755,49 +1253,77 @@ export default function Settings() {
             )}
           </Section>
 
-          {/* DANGER ZONE */}
-          <section className="space-y-3 pt-2">
+          {/* 6 — AVANCÉ */}
+          <Section title="Avancé">
+            <Row
+              icon={<RotateCcw className="h-4 w-4" />}
+              label="Effacer le cache et relancer l'onboarding"
+              sub="Réinitialise l'écran d'accueil"
+              onClick={resetOnboarding}
+            />
+          </Section>
+
+          {/* 7 — ZONE SENSIBLE */}
+          <section className="space-y-3 pt-4">
             <div className="h-px bg-white/10" />
-            <h2 className="px-1 text-xs font-semibold uppercase tracking-widest text-accent/70">
-              Danger zone
+            <h2 className="px-1 text-[11px] font-bold uppercase tracking-[0.18em] text-accent/70">
+              Zone sensible
             </h2>
-            <button
-              onClick={logout}
-              className="w-full rounded-full border border-[#F59E0B] py-3 text-sm font-semibold text-[#F59E0B] transition-colors hover:bg-[#F59E0B]/10"
-            >
-              Se déconnecter
-            </button>
-            {!confirmDelete ? (
+            <div className="space-y-3">
               <button
-                onClick={() => setConfirmDelete(true)}
-                className="w-full rounded-full border border-accent py-3 text-sm font-semibold text-accent transition-colors hover:bg-accent/10"
+                onClick={logout}
+                className="flex w-full items-center gap-3 rounded-2xl border border-[#F59E0B]/30 px-4 py-3.5 text-left transition-colors hover:bg-[#F59E0B]/5"
               >
-                Supprimer mon compte
+                <span className="flex h-9 w-9 flex-none items-center justify-center rounded-xl bg-[#F59E0B]/15 text-[#F59E0B]">
+                  <LogOut className="h-4 w-4" />
+                </span>
+                <span className="flex-1 text-[15px] font-semibold text-[#F59E0B]">
+                  Se déconnecter
+                </span>
               </button>
-            ) : (
-              <div className="space-y-3 rounded-2xl border border-accent/40 bg-accent/5 p-4">
-                <p className="text-sm text-accent">
-                  Êtes-vous sûr ? Cette action est définitive et supprime
-                  toutes tes données.
-                </p>
-                <div className="flex gap-3">
-                  <button
-                    onClick={() => setConfirmDelete(false)}
-                    className="flex-1 rounded-full border border-white/15 py-3 text-sm text-fg/70"
-                  >
-                    Annuler
-                  </button>
-                  <button
-                    onClick={deleteAccount}
-                    disabled={saving}
-                    className="flex-1 rounded-full bg-accent py-3 text-sm font-semibold disabled:opacity-50"
-                  >
-                    {saving ? '…' : 'Oui, supprimer'}
-                  </button>
+
+              {!confirmDelete ? (
+                <button
+                  onClick={() => setConfirmDelete(true)}
+                  className="flex w-full items-center gap-3 rounded-2xl border border-accent/40 px-4 py-3.5 text-left transition-colors hover:bg-accent/5"
+                >
+                  <span className="flex h-9 w-9 flex-none items-center justify-center rounded-xl bg-accent/15 text-accent">
+                    <Trash2 className="h-4 w-4" />
+                  </span>
+                  <span className="flex-1 text-[15px] font-semibold text-accent">
+                    Supprimer mon compte
+                  </span>
+                </button>
+              ) : (
+                <div className="space-y-3 rounded-2xl border border-accent/40 bg-accent/5 p-4">
+                  <p className="text-sm text-accent">
+                    Êtes-vous sûr ? Cette action est définitive et supprime
+                    toutes tes données.
+                  </p>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => setConfirmDelete(false)}
+                      className="flex-1 rounded-full border border-white/15 py-3 text-sm text-fg/70"
+                    >
+                      Annuler
+                    </button>
+                    <button
+                      onClick={deleteAccount}
+                      disabled={saving}
+                      className="flex-1 rounded-full bg-accent py-3 text-sm font-semibold disabled:opacity-50"
+                    >
+                      {saving ? '…' : 'Oui, supprimer'}
+                    </button>
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </section>
+
+          <p className="pt-4 text-center text-[10px] text-fg/30">
+            <Mail className="mr-1 inline h-3 w-3" />
+            contact@revs.app
+          </p>
         </div>
       )}
     </div>

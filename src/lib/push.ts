@@ -121,6 +121,13 @@ export async function notifyPush(p: {
     radiusKm?: number
     excludeUserId?: string
   }
+  brand_nearby?: {
+    brand: string
+    lat: number
+    lng: number
+    radiusKm?: number
+    excludeUserId?: string
+  }
 }): Promise<void> {
   try {
     const {

@@ -17,6 +17,7 @@ export default function PublicProfile() {
   const [loading, setLoading] = useState(true)
   const [meId, setMeId] = useState<string | null>(null)
   const [prof, setProf] = useState<Prof | null>(null)
+  const [tier, setTier] = useState<'premium' | 'vip' | null>(null)
   const [xp, setXp] = useState(0)
   const [spots, setSpots] = useState<Spot[]>([])
   const [followers, setFollowers] = useState(0)
@@ -32,7 +33,7 @@ export default function PublicProfile() {
       data: { user },
     } = await supabase.auth.getUser()
     setMeId(user?.id ?? null)
-    const [p, xpRows, sp, fr, fg, mine] = await Promise.all([
+    const [p, xpRows, sp, fr, fg, mine, tierRes] = await Promise.all([
       supabase
         .from('profiles')
         .select('pseudo, ville, avatar')
@@ -61,6 +62,7 @@ export default function PublicProfile() {
             .eq('following_id', id)
             .maybeSingle()
         : Promise.resolve({ data: null }),
+      supabase.rpc('user_tier', { p_user: id }),
     ])
     setProf((p.data as Prof) ?? { pseudo: null, ville: null, avatar: null })
     setXp(
@@ -73,6 +75,10 @@ export default function PublicProfile() {
     setFollowers(fr.count ?? 0)
     setFollowing(fg.count ?? 0)
     setIsFollowing(!!mine.data)
+    const tierRaw = tierRes.data
+    setTier(
+      tierRaw === 'premium' || tierRaw === 'vip' ? tierRaw : null,
+    )
     setLoading(false)
   }, [id])
 
@@ -163,7 +169,21 @@ export default function PublicProfile() {
             name.charAt(0).toUpperCase()
           )}
         </div>
-        <h2 className="mt-3 font-display text-2xl font-bold">{name}</h2>
+        <h2 className="mt-3 flex items-center gap-2 font-display text-2xl font-bold">
+          <span>{name}</span>
+          {tier && (
+            <span
+              className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                tier === 'vip'
+                  ? 'bg-[#FFD700]/15 text-[#FFD700]'
+                  : 'bg-accent/15 text-accent'
+              }`}
+              aria-label={tier === 'vip' ? 'Membre VIP' : 'Membre Premium'}
+            >
+              {tier === 'vip' ? '👑 VIP' : '⚡ Premium'}
+            </span>
+          )}
+        </h2>
         {prof?.ville && (
           <p className="text-sm text-[#888888]">{prof.ville}</p>
         )}

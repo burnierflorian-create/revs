@@ -3,16 +3,19 @@ import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, Camera, MapPin } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import {
+  blurRegions,
   CATEGORIES,
   distanceMeters,
   readPhotoMeta,
   resizeImageToJpeg,
+  type BBox,
   type IdentifyResult,
   type PhotoMeta,
   type SpotCategory,
 } from '../lib/spots'
 import { takePendingPhoto } from '../lib/pendingPhoto'
 import { maybePromptPush, myPseudo, notifyPush } from '../lib/push'
+import { brandSlugFor, getBrand } from '../lib/brands'
 import { Skeleton } from '../components/Skeleton'
 
 type Step = 1 | 2 | 3 | 4
@@ -57,6 +60,8 @@ const EMPTY_RESULT: IdentifyResult = {
   valid: true,
   reason: '',
   estimated_price: null,
+  rarity: 'commun',
+  production: null,
 }
 
 function getPosition(): Promise<GeolocationPosition> {
@@ -221,19 +226,51 @@ export default function NewSpot() {
     if (!image) return
     setStep(2)
     const ctrl = new AbortController()
-    const timer = setTimeout(() => ctrl.abort(), 15000)
-    try {
-      const res = await fetch('/api/identify-car', {
+    // 25 s upper bound: identify-car's prompt ladder + detect-plate's
+    // own retry can each chew ~10-15 s. Below that the abort can take
+    // out the still-running sibling call.
+    const timer = setTimeout(() => ctrl.abort(), 25000)
+    const body = JSON.stringify({
+      imageBase64: image.base64,
+      mimeType: 'image/jpeg',
+    })
+    const fetchJson = (path: string) =>
+      fetch(path, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          imageBase64: image.base64,
-          mimeType: 'image/jpeg',
-        }),
+        body,
         signal: ctrl.signal,
-      })
-      const data = { ...EMPTY_RESULT, ...((await res.json()) as IdentifyResult) }
+      }).then((r) => r.json())
+    try {
+      // Identify the car AND detect license plates in parallel — both
+      // are vision calls of similar latency, no reason to serialise.
+      // Plate detection failing is non-fatal: we just skip the blur.
+      const [carJson, plateJson] = await Promise.all([
+        fetchJson('/api/identify-car') as Promise<IdentifyResult>,
+        (fetchJson('/api/detect-plate') as Promise<{ plates: BBox[] }>).catch(
+          () => ({ plates: [] as BBox[] }),
+        ),
+      ])
       clearTimeout(timer)
+
+      // Apply the plate blur to the in-memory blob BEFORE moving to the
+      // edit step. By the time the user reaches publish(), image.blob
+      // already carries the anonymised version — no race, no extra wait.
+      const plates = plateJson.plates ?? []
+      if (plates.length > 0) {
+        try {
+          const blurred = await blurRegions(image.blob, plates)
+          setImage(blurred)
+          if (previewUrl) URL.revokeObjectURL(previewUrl)
+          setPreviewUrl(URL.createObjectURL(blurred.blob))
+        } catch (e) {
+          // Canvas error → fall through with the original image. Better
+          // a missed plate than blocking the whole publish flow.
+          console.error('[plate blur] failed:', e)
+        }
+      }
+
+      const data = { ...EMPTY_RESULT, ...carJson }
       if (data.valid === false) {
         rejectAndRestart(
           data.reason ||
@@ -311,7 +348,7 @@ export default function NewSpot() {
         if ((cnt?.count ?? 0) >= 5) {
           setLimitReached(true)
           setPubError(
-            "Tu as atteint ta limite de 5 spots aujourd'hui. Passe au plan Starter pour des spots illimités.",
+            "Tu as atteint ta limite de 5 spots aujourd'hui. Passe Premium pour des spots illimités.",
           )
           setPubStatus('')
           return
@@ -329,30 +366,60 @@ export default function NewSpot() {
 
       setPubStatus('Publication…')
       const yearNum = parseInt(year, 10)
-      const { error: insErr } = await supabase.from('spots').insert({
-        user_id: user.id,
-        brand: brand.trim(),
-        model: model.trim(),
-        year: Number.isFinite(yearNum) ? yearNum : null,
-        color: color.trim(),
-        category,
-        description: description.trim() || null,
-        photo_url: pub.publicUrl,
-        confidence: result.confidence,
-        estimated_price: result.estimated_price ?? null,
-        lat: pos.coords.latitude,
-        lng: pos.coords.longitude,
-      })
+
+      // If a live event is within 5km, opt-in to tag this spot to it.
+      // Best-effort lookup; failures fall through silently.
+      let liveEventId: string | null = null
+      try {
+        const { data: live } = await supabase
+          .rpc('nearby_live_event', {
+            p_lat: pos.coords.latitude,
+            p_lng: pos.coords.longitude,
+            p_radius_km: 5,
+          })
+          .maybeSingle()
+        liveEventId = ((live as { id?: string } | null)?.id) ?? null
+      } catch {
+        liveEventId = null
+      }
+
+      const { data: inserted, error: insErr } = await supabase
+        .from('spots')
+        .insert({
+          user_id: user.id,
+          brand: brand.trim(),
+          model: model.trim(),
+          year: Number.isFinite(yearNum) ? yearNum : null,
+          color: color.trim(),
+          category,
+          description: description.trim() || null,
+          photo_url: pub.publicUrl,
+          confidence: result.confidence,
+          estimated_price: result.estimated_price ?? null,
+          rarity: result.rarity ?? 'commun',
+          production: result.production ?? null,
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+          event_id: liveEventId,
+        })
+        .select('id')
+        .single()
       if (insErr) throw supaError('Publication', insErr)
+      const newSpotId = (inserted as { id: string } | null)?.id ?? null
 
       // After the first successful spot: ask for push permission, then
-      // notify nearby subscribers (server filters by ≤10km).
+      // fire two parallel notifications:
+      //  (1) nearby subscribers (≤10km, generic "new spot near you")
+      //  (2) brand followers within ≤50km (only if the spot brand maps
+      //      to one of the catalogued brands in src/lib/brands.ts)
       void (async () => {
         await maybePromptPush()
         const who = await myPseudo()
+        const brandTrim = brand.trim()
+        const modelTrim = model.trim()
         void notifyPush({
           title: '🚗 Nouveau spot',
-          body: `${who} vient de spotter une ${brand.trim()} ${model.trim()} près de toi`,
+          body: `${who} vient de spotter une ${brandTrim} ${modelTrim} près de toi`,
           url: '/map',
           type: 'nearby',
           nearby: {
@@ -362,8 +429,47 @@ export default function NewSpot() {
             excludeUserId: user.id,
           },
         })
+        const slug = brandSlugFor(brandTrim)
+        const brandEntry = slug ? getBrand(slug) : undefined
+        if (slug && brandEntry) {
+          void notifyPush({
+            title: `🔔 Nouvelle ${brandEntry.name} spottée`,
+            body: `${who} vient de spotter une ${brandEntry.name} ${modelTrim} près de toi`,
+            url: `/brand/${slug}`,
+            // Gate on the existing "nearby" pref — brand follows are
+            // proximity-based notifications by design.
+            type: 'nearby',
+            brand_nearby: {
+              brand: slug,
+              lat: pos.coords.latitude,
+              lng: pos.coords.longitude,
+              radiusKm: 50,
+              excludeUserId: user.id,
+            },
+          })
+        }
+        // Premium Radar fanout — bespoke push per target with personalised
+        // distance line. Best-effort; never blocks the publish flow.
+        if (newSpotId) {
+          const { triggerRadarFanout } = await import('../lib/radar')
+          void triggerRadarFanout(newSpotId)
+          // CarImages PNG resolution runs async on the server. The
+          // garage falls back to a silhouette until the URL lands.
+          const { triggerGarageImage } = await import('../lib/garage')
+          void triggerGarageImage(newSpotId)
+        }
       })()
 
+      // Fire the "+N XP" floater so the user sees their reward land.
+      // Same formula as the SQL trigger : basePrice × rarityMultiplier.
+      const { floatXp } = await import('../components/XpFloater')
+      const { xpForSpot } = await import('../lib/spots')
+      floatXp(
+        xpForSpot(
+          result.estimated_price,
+          (result.rarity ?? 'commun') as 'commun' | 'rare' | 'ultra_rare' | 'unique',
+        ),
+      )
       navigate('/map', { state: { toast: 'Spot publié ! 🔥' } })
     } catch (err) {
       console.error('[spot] publish aborted:', err)
@@ -393,7 +499,7 @@ export default function NewSpot() {
 
   if (profileOk === null) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-bg text-sm text-fg/40">
+      <div className="flex min-h-screen items-center justify-center bg-bg text-sm text-fg2">
         Chargement…
       </div>
     )
@@ -406,52 +512,51 @@ export default function NewSpot() {
           <button
             onClick={() => navigate('/')}
             aria-label="Retour"
-            className="text-fg/60 transition-colors hover:text-fg"
+            className="tappable text-fg2 hover:text-fg"
           >
             <ArrowLeft className="h-6 w-6" />
           </button>
         </div>
         <div className="mx-auto mt-6 max-w-sm space-y-5">
           <div>
-            <h1 className="font-display text-2xl font-bold">
+            <h1 className="display-xl text-fg">
               Crée ton pseudo avant de spotter
             </h1>
-            <p className="mt-2 text-sm text-fg/60">
+            <p className="mt-2 text-sm text-fg2">
               Ton pseudo apparaît sur tes spots dans le feed. Pas de spots
               anonymes sur REVS.
             </p>
           </div>
           <div className="space-y-2">
-            <label className="text-[11px] uppercase tracking-widest text-fg/40">
-              Pseudo
-            </label>
+            <label className="label-up text-[10px] text-fg2">Pseudo</label>
             <input
               value={gpPseudo}
               maxLength={24}
               onChange={(e) => setGpPseudo(e.target.value)}
               placeholder="ex : speedhunter_74"
-              className="w-full rounded-lg bg-white/5 px-3 py-3 text-fg outline-none placeholder:text-fg/25 focus:ring-1 focus:ring-accent"
+              className="w-full rounded-2xl bg-card px-4 py-3.5 text-fg outline-none placeholder:text-fg2/40 focus:border-accent"
+              style={{ border: '1px solid var(--color-border)' }}
             />
           </div>
           <div className="space-y-2">
-            <label className="text-[11px] uppercase tracking-widest text-fg/40">
-              Ville
-            </label>
+            <label className="label-up text-[10px] text-fg2">Ville</label>
             <input
               value={gpVille}
               maxLength={48}
               onChange={(e) => setGpVille(e.target.value)}
               placeholder="ex : Annecy"
-              className="w-full rounded-lg bg-white/5 px-3 py-3 text-fg outline-none placeholder:text-fg/25 focus:ring-1 focus:ring-accent"
+              className="w-full rounded-2xl bg-card px-4 py-3.5 text-fg outline-none placeholder:text-fg2/40 focus:border-accent"
+              style={{ border: '1px solid var(--color-border)' }}
             />
           </div>
           {gpErr && <p className="text-sm text-accent">{gpErr}</p>}
           <button
             onClick={saveProfileGate}
             disabled={gpSaving}
-            className="w-full rounded-full bg-accent py-3.5 text-sm font-semibold disabled:opacity-50"
+            className="tappable w-full rounded-full bg-accent py-3.5 text-sm font-extrabold tracking-wider text-fg disabled:opacity-50"
+            style={{ boxShadow: '0 8px 24px rgba(232,32,58,0.45)' }}
           >
-            {gpSaving ? '…' : 'Sauvegarder et spotter'}
+            {gpSaving ? '…' : 'SAUVEGARDER ET SPOTTER'}
           </button>
         </div>
       </div>
@@ -459,13 +564,13 @@ export default function NewSpot() {
   }
 
   return (
-    <div className="min-h-screen animate-slide-up bg-bg text-fg px-6 pt-[max(1rem,env(safe-area-inset-top))]">
+    <div className="min-h-screen bg-bg text-fg px-6 pt-[max(1rem,env(safe-area-inset-top))]">
       {/* Header : retour + progression */}
       <div className="flex items-center gap-4 py-4">
         <button
           onClick={back}
           aria-label="Retour"
-          className="text-fg/60 hover:text-fg transition-colors"
+          className="tappable text-fg2 hover:text-fg"
         >
           <ArrowLeft className="h-6 w-6" />
         </button>
@@ -476,6 +581,11 @@ export default function NewSpot() {
               className={`h-1 flex-1 rounded-full transition-colors ${
                 n <= step ? 'bg-accent' : 'bg-white/10'
               }`}
+              style={
+                n <= step
+                  ? { boxShadow: '0 0 8px rgba(232,32,58,0.55)' }
+                  : undefined
+              }
             />
           ))}
         </div>
@@ -484,7 +594,7 @@ export default function NewSpot() {
       {/* ÉTAPE 1 — PHOTO */}
       {step === 1 && (
         <div className="space-y-6 pb-8">
-          <h1 className="text-2xl font-semibold">Nouveau spot</h1>
+          <h1 className="display-xl text-fg">Nouveau spot</h1>
 
           <input
             ref={cameraRef}
@@ -496,7 +606,13 @@ export default function NewSpot() {
           />
 
           {rejection && (
-            <div className="rounded-2xl border border-accent/40 bg-accent/10 px-4 py-3 text-sm text-accent">
+            <div
+              className="rounded-3xl px-4 py-3 text-sm text-accent"
+              style={{
+                background: 'rgba(232,32,58,0.10)',
+                border: '1px solid rgba(232,32,58,0.40)',
+              }}
+            >
               {rejection}
             </div>
           )}
@@ -506,21 +622,24 @@ export default function NewSpot() {
               <img
                 src={previewUrl}
                 alt="Aperçu"
-                className="w-full max-h-[55vh] object-cover rounded-2xl"
+                className="w-full max-h-[55vh] object-cover rounded-3xl"
+                style={{ border: '1px solid var(--color-border)' }}
               />
               <div className="flex gap-3">
                 <button
                   onClick={() => cameraRef.current?.click()}
-                  className="flex-1 rounded-full border border-white/15 py-3 text-sm text-fg/70 hover:text-fg transition-colors"
+                  className="tappable flex-1 rounded-full py-3 text-sm font-bold tracking-wide text-fg2 hover:text-fg"
+                  style={{ border: '1px solid var(--color-border)' }}
                 >
                   Reprendre
                 </button>
                 <button
                   onClick={analyze}
                   disabled={!image}
-                  className="flex-[2] rounded-full bg-accent py-3 text-sm font-medium disabled:opacity-50"
+                  className="tappable flex-[2] rounded-full bg-accent py-3 text-sm font-extrabold tracking-wider text-fg disabled:opacity-50"
+                  style={{ boxShadow: '0 8px 24px rgba(232,32,58,0.45)' }}
                 >
-                  Analyser
+                  ANALYSER
                 </button>
               </div>
             </div>
@@ -528,10 +647,11 @@ export default function NewSpot() {
             <div className="space-y-4">
               <button
                 onClick={() => cameraRef.current?.click()}
-                className="flex w-full items-center justify-center gap-3 rounded-2xl bg-accent py-6 font-medium"
+                className="tappable flex w-full items-center justify-center gap-3 rounded-3xl bg-accent py-6 text-base font-extrabold tracking-wider text-fg"
+                style={{ boxShadow: '0 12px 36px rgba(232,32,58,0.45)' }}
               >
                 <Camera className="h-6 w-6" />
-                Prendre une photo
+                PRENDRE UNE PHOTO
               </button>
               {pubError && (
                 <p className="text-sm text-accent">{pubError}</p>
@@ -544,13 +664,15 @@ export default function NewSpot() {
       {/* ÉTAPE 2 — ANALYSE IA */}
       {step === 2 && (
         <div className="space-y-6 pb-8">
-          <p className="text-sm text-fg/60">Identification de la voiture…</p>
+          <p className="label-up text-[11px] text-fg2">
+            Identification de la voiture…
+          </p>
           <Skeleton className="h-12 w-full rounded-2xl" />
           <div className="space-y-4">
             {Array.from({ length: 4 }).map((_, i) => (
               <div key={i} className="space-y-2">
                 <Skeleton className="h-3 w-24 rounded" />
-                <Skeleton className="h-11 w-full rounded-lg" />
+                <Skeleton className="h-12 w-full rounded-2xl" />
               </div>
             ))}
           </div>
@@ -561,27 +683,36 @@ export default function NewSpot() {
       {/* ÉTAPE 3 — CONFIRMATION */}
       {step === 3 && (
         <div className="space-y-6 pb-8">
-          {result.confidence > 0 && result.brand ? (
-            <div className="rounded-2xl bg-accent/10 border border-accent/30 px-4 py-3 text-sm">
-              ✨ {result.brand} {result.model} — {result.confidence}%
+          {result.brand === 'Voiture' && result.model === 'Modèle indéterminé' ? (
+            <div
+              className="rounded-3xl bg-card px-4 py-3 text-sm text-fg2"
+              style={{ border: '1px solid var(--color-border)' }}
+            >
+              Identification difficile — complète ou corrige les champs ci-dessous.
             </div>
           ) : (
-            <div className="rounded-2xl bg-white/5 px-4 py-3 text-sm text-fg/60">
-              Voiture non identifiée — remplis les champs à la main.
+            <div
+              className="rounded-3xl px-4 py-3 text-sm font-extrabold tracking-tight text-fg"
+              style={{
+                background: 'rgba(232,32,58,0.10)',
+                border: '1px solid rgba(232,32,58,0.40)',
+                boxShadow: '0 0 16px rgba(232,32,58,0.18)',
+              }}
+            >
+              ✨ {result.brand} {result.model} — {result.confidence}%
             </div>
           )}
 
           {result.alternatives.length > 0 && (
             <div className="space-y-2">
-              <p className="text-xs uppercase tracking-widest text-fg/40">
-                Alternatives
-              </p>
+              <p className="label-up text-[10px] text-fg2">Alternatives</p>
               <div className="flex flex-wrap gap-2">
                 {result.alternatives.slice(0, 2).map((alt, i) => (
                   <button
                     key={i}
                     onClick={() => pickAlternative(alt)}
-                    className="rounded-full border border-white/15 px-4 py-2 text-xs text-fg/80 hover:text-fg transition-colors"
+                    className="tappable rounded-full bg-card px-4 py-2 text-xs font-bold tracking-wide text-fg2 hover:text-fg"
+                    style={{ border: '1px solid var(--color-border)' }}
                   >
                     {alt.brand} {alt.model}
                     {alt.year ? ` (${alt.year})` : ''}
@@ -603,13 +734,12 @@ export default function NewSpot() {
             <Field label="Couleur" value={color} onChange={setColor} />
 
             <div className="space-y-2">
-              <label className="text-[11px] uppercase tracking-widest text-fg/40">
-                Catégorie
-              </label>
+              <label className="label-up text-[10px] text-fg2">Catégorie</label>
               <select
                 value={category}
                 onChange={(e) => setCategory(e.target.value as SpotCategory)}
-                className="w-full appearance-none rounded-lg bg-white/5 px-3 py-3 text-fg outline-none focus:ring-1 focus:ring-accent"
+                className="w-full appearance-none rounded-2xl bg-card px-4 py-3.5 text-fg outline-none focus:border-accent"
+                style={{ border: '1px solid var(--color-border)' }}
               >
                 {CATEGORIES.map((c) => (
                   <option key={c.value} value={c.value} className="bg-bg">
@@ -620,7 +750,7 @@ export default function NewSpot() {
             </div>
 
             <div className="space-y-2">
-              <label className="text-[11px] uppercase tracking-widest text-fg/40">
+              <label className="label-up text-[10px] text-fg2">
                 Description (optionnel)
               </label>
               <textarea
@@ -628,9 +758,10 @@ export default function NewSpot() {
                 maxLength={140}
                 onChange={(e) => setDescription(e.target.value)}
                 rows={3}
-                className="w-full resize-none rounded-lg bg-white/5 px-3 py-3 text-fg outline-none focus:ring-1 focus:ring-accent"
+                className="w-full resize-none rounded-2xl bg-card px-4 py-3.5 text-fg outline-none focus:border-accent"
+                style={{ border: '1px solid var(--color-border)' }}
               />
-              <p className="text-right text-[11px] text-fg/30">
+              <p className="text-right text-[11px] text-fg2/70">
                 {description.length}/140
               </p>
             </div>
@@ -639,9 +770,10 @@ export default function NewSpot() {
           <button
             onClick={() => setStep(4)}
             disabled={!brand.trim() || !model.trim()}
-            className="w-full rounded-full bg-accent py-4 font-medium disabled:opacity-50"
+            className="tappable w-full rounded-full bg-accent py-4 text-sm font-extrabold tracking-wider text-fg disabled:opacity-50"
+            style={{ boxShadow: '0 8px 24px rgba(232,32,58,0.45)' }}
           >
-            Continuer
+            CONTINUER
           </button>
         </div>
       )}
@@ -649,22 +781,33 @@ export default function NewSpot() {
       {/* ÉTAPE 4 — PUBLICATION */}
       {step === 4 && (
         <div className="flex min-h-[60vh] flex-col items-center justify-center gap-6 text-center">
-          <MapPin className="h-10 w-10 text-accent" />
-          <p className="text-sm text-fg/70">
-            📍 Votre position GPS sera enregistrée.
+          <div
+            className="flex h-14 w-14 items-center justify-center rounded-full"
+            style={{
+              background: 'rgba(232,32,58,0.12)',
+              border: '1px solid rgba(232,32,58,0.40)',
+              boxShadow: '0 0 24px rgba(232,32,58,0.30)',
+            }}
+          >
+            <MapPin className="h-7 w-7 text-accent" />
+          </div>
+          <p className="text-sm text-fg2">
+            Votre position GPS sera enregistrée.
           </p>
           {limitReached ? (
-            <div className="max-w-xs space-y-4">
-              <p className="text-sm text-fg/80">{pubError}</p>
+            <div className="w-full max-w-xs space-y-3">
+              <p className="text-sm text-fg/85">{pubError}</p>
               <button
                 onClick={() => navigate('/premium')}
-                className="w-full rounded-full bg-accent px-6 py-3 text-sm font-semibold"
+                className="tappable w-full rounded-full bg-accent px-6 py-3 text-sm font-extrabold tracking-wider text-fg"
+                style={{ boxShadow: '0 8px 24px rgba(232,32,58,0.45)' }}
               >
-                Voir les abonnements
+                VOIR LES ABONNEMENTS
               </button>
               <button
                 onClick={() => navigate('/')}
-                className="w-full rounded-full bg-card px-6 py-3 text-sm font-medium text-fg/70"
+                className="tappable w-full rounded-full bg-card px-6 py-3 text-sm font-bold tracking-wide text-fg2"
+                style={{ border: '1px solid var(--color-border)' }}
               >
                 Plus tard
               </button>
@@ -674,14 +817,17 @@ export default function NewSpot() {
               <p className="text-sm text-accent">{pubError}</p>
               <button
                 onClick={() => publish()}
-                className="rounded-full bg-accent px-6 py-3 text-sm font-medium"
+                className="tappable rounded-full bg-accent px-6 py-3 text-sm font-extrabold tracking-wider text-fg"
+                style={{ boxShadow: '0 8px 24px rgba(232,32,58,0.45)' }}
               >
-                Réessayer
+                RÉESSAYER
               </button>
             </div>
           ) : (
-            <div className="w-56 space-y-3 text-sm text-fg/60">
-              <p>{pubStatus || 'Publication…'}</p>
+            <div className="w-56 space-y-3 text-sm text-fg2">
+              <p className="label-up text-[11px]">
+                {pubStatus || 'Publication…'}
+              </p>
               <Skeleton className="h-2 w-full rounded-full" />
             </div>
           )}
@@ -704,14 +850,13 @@ function Field({
 }) {
   return (
     <div className="space-y-2">
-      <label className="text-[11px] uppercase tracking-widest text-fg/40">
-        {label}
-      </label>
+      <label className="label-up text-[10px] text-fg2">{label}</label>
       <input
         value={value}
         inputMode={inputMode}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-lg bg-white/5 px-3 py-3 text-fg outline-none focus:ring-1 focus:ring-accent"
+        className="w-full rounded-2xl bg-card px-4 py-3.5 text-fg outline-none focus:border-accent"
+        style={{ border: '1px solid var(--color-border)' }}
       />
     </div>
   )

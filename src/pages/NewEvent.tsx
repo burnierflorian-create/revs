@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, Lock } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { EVENT_TYPES, type EventType } from '../lib/events'
+import { translateError } from '../lib/errors'
 
 export default function NewEvent() {
   const navigate = useNavigate()
@@ -12,6 +13,7 @@ export default function NewEvent() {
   const [datetime, setDatetime] = useState('')
   const [location, setLocation] = useState('')
   const [description, setDescription] = useState('')
+  const [isLive, setIsLive] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [allowed, setAllowed] = useState<boolean | null>(null)
@@ -73,6 +75,7 @@ export default function NewEvent() {
         description: description.trim() || null,
         lat: coords?.lat ?? null,
         lng: coords?.lng ?? null,
+        is_live: isLive,
       })
       if (insErr) {
         const o = insErr as {
@@ -92,7 +95,7 @@ export default function NewEvent() {
       navigate('/events')
     } catch (err) {
       console.error('[event] aborted:', err)
-      setError(err instanceof Error ? err.message : 'Échec de la publication')
+      setError(translateError(err))
       setBusy(false)
     }
   }
@@ -100,25 +103,37 @@ export default function NewEvent() {
   if (allowed === false) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-5 bg-bg px-8 text-center text-fg">
-        <div className="flex h-14 w-14 items-center justify-center rounded-full bg-accent/15">
+        <div
+          className="flex h-14 w-14 items-center justify-center rounded-full"
+          style={{
+            background: 'rgba(232,32,58,0.12)',
+            border: '1px solid rgba(232,32,58,0.40)',
+            boxShadow: '0 0 24px rgba(232,32,58,0.25)',
+          }}
+        >
           <Lock className="h-6 w-6 text-accent" />
         </div>
-        <p className="max-w-sm text-sm leading-relaxed text-fg/70">
+        <p className="font-display text-xl font-extrabold tracking-tighter text-fg">
+          Réservé aux organisateurs
+        </p>
+        <p className="-mt-3 max-w-sm text-sm leading-relaxed text-fg2">
           La création d'événements est réservée aux organisateurs officiels.
           Fais une demande via les paramètres.
         </p>
         <div className="flex gap-3">
           <button
             onClick={() => navigate('/events')}
-            className="rounded-full bg-card px-6 py-3 text-sm font-medium text-fg"
+            className="tappable rounded-full bg-card px-6 py-3 text-sm font-bold tracking-wide text-fg2"
+            style={{ border: '1px solid var(--color-border)' }}
           >
             Retour
           </button>
           <button
             onClick={() => navigate('/settings')}
-            className="rounded-full bg-accent px-6 py-3 text-sm font-semibold text-fg"
+            className="tappable rounded-full bg-accent px-6 py-3 text-sm font-extrabold tracking-wider text-fg"
+            style={{ boxShadow: '0 8px 24px rgba(232,32,58,0.45)' }}
           >
-            Devenir organisateur
+            DEVENIR ORGANISATEUR
           </button>
         </div>
       </div>
@@ -127,11 +142,15 @@ export default function NewEvent() {
 
   if (allowed === null) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-bg text-sm text-fg/40">
+      <div className="flex min-h-screen items-center justify-center bg-bg text-sm text-fg2">
         Chargement…
       </div>
     )
   }
+
+  const inputCls =
+    'w-full rounded-2xl bg-card px-4 py-3.5 text-fg outline-none focus:border-accent'
+  const inputStyle = { border: '1px solid var(--color-border)' }
 
   return (
     <div className="min-h-screen bg-bg px-6 pt-[max(1rem,env(safe-area-inset-top))] text-fg">
@@ -139,11 +158,11 @@ export default function NewEvent() {
         <button
           onClick={() => navigate('/events')}
           aria-label="Retour"
-          className="text-fg/60 transition-colors hover:text-fg"
+          className="tappable text-fg2 hover:text-fg"
         >
           <ArrowLeft className="h-6 w-6" />
         </button>
-        <h1 className="text-2xl font-semibold">Nouvel événement</h1>
+        <h1 className="display-xl text-fg">Nouvel événement</h1>
       </div>
 
       <form onSubmit={onSubmit} className="space-y-5 pb-10">
@@ -152,7 +171,8 @@ export default function NewEvent() {
             required
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            className="w-full rounded-lg bg-white/5 px-3 py-3 text-fg outline-none focus:ring-1 focus:ring-accent"
+            className={inputCls}
+            style={inputStyle}
           />
         </Labelled>
 
@@ -160,7 +180,8 @@ export default function NewEvent() {
           <select
             value={type}
             onChange={(e) => setType(e.target.value as EventType)}
-            className="w-full appearance-none rounded-lg bg-white/5 px-3 py-3 text-fg outline-none focus:ring-1 focus:ring-accent"
+            className={`${inputCls} appearance-none`}
+            style={inputStyle}
           >
             {EVENT_TYPES.map((t) => (
               <option key={t} value={t} className="bg-bg">
@@ -176,7 +197,8 @@ export default function NewEvent() {
             type="datetime-local"
             value={datetime}
             onChange={(e) => setDatetime(e.target.value)}
-            className="w-full rounded-lg bg-white/5 px-3 py-3 text-fg outline-none focus:ring-1 focus:ring-accent"
+            className={inputCls}
+            style={inputStyle}
           />
         </Labelled>
 
@@ -185,7 +207,8 @@ export default function NewEvent() {
             required
             value={location}
             onChange={(e) => setLocation(e.target.value)}
-            className="w-full rounded-lg bg-white/5 px-3 py-3 text-fg outline-none focus:ring-1 focus:ring-accent"
+            className={inputCls}
+            style={inputStyle}
           />
         </Labelled>
 
@@ -194,18 +217,71 @@ export default function NewEvent() {
             value={description}
             rows={3}
             onChange={(e) => setDescription(e.target.value)}
-            className="w-full resize-none rounded-lg bg-white/5 px-3 py-3 text-fg outline-none focus:ring-1 focus:ring-accent"
+            className={`${inputCls} resize-none`}
+            style={inputStyle}
           />
         </Labelled>
+
+        <div
+          className="flex items-center justify-between rounded-3xl bg-card p-4"
+          style={{
+            border: isLive
+              ? '1px solid rgba(232,32,58,0.40)'
+              : '1px solid var(--color-border)',
+            boxShadow: isLive ? '0 0 24px rgba(232,32,58,0.16)' : undefined,
+          }}
+        >
+          <div className="min-w-0">
+            <p className="flex items-center gap-2 font-display text-base font-extrabold tracking-tighter text-fg">
+              <span className="relative flex h-2 w-2">
+                <span
+                  className={`absolute inline-flex h-full w-full rounded-full ${
+                    isLive ? 'animate-ping bg-accent opacity-75' : 'bg-fg2/30'
+                  }`}
+                />
+                <span
+                  className={`relative inline-flex h-2 w-2 rounded-full ${
+                    isLive ? 'bg-accent' : 'bg-fg2/40'
+                  }`}
+                />
+              </span>
+              Mode Live
+            </p>
+            <p className="mt-1 text-xs text-fg2">
+              Affiche une bannière LIVE et une mini-carte temps réel
+              pendant l'événement.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsLive((v) => !v)}
+            className={`relative h-7 w-12 flex-none rounded-full transition-colors ${
+              isLive ? 'bg-accent' : 'bg-white/15'
+            }`}
+            aria-pressed={isLive}
+            style={
+              isLive
+                ? { boxShadow: '0 0 12px rgba(232,32,58,0.45)' }
+                : undefined
+            }
+          >
+            <span
+              className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow-soft transition-transform ${
+                isLive ? 'translate-x-5' : 'translate-x-0.5'
+              }`}
+            />
+          </button>
+        </div>
 
         {error && <p className="text-sm text-accent">{error}</p>}
 
         <button
           type="submit"
           disabled={busy}
-          className="w-full rounded-full bg-accent py-4 font-medium disabled:opacity-50"
+          className="tappable w-full rounded-full bg-accent py-4 text-sm font-extrabold tracking-wider text-fg disabled:opacity-50"
+          style={{ boxShadow: '0 8px 24px rgba(232,32,58,0.45)' }}
         >
-          {busy ? '…' : "Publier l'événement"}
+          {busy ? '…' : "PUBLIER L'ÉVÉNEMENT"}
         </button>
       </form>
     </div>
@@ -221,9 +297,7 @@ function Labelled({
 }) {
   return (
     <div className="space-y-2">
-      <label className="text-[11px] uppercase tracking-widest text-fg/40">
-        {label}
-      </label>
+      <label className="label-up text-[10px] text-fg2">{label}</label>
       {children}
     </div>
   )

@@ -40,25 +40,57 @@ body {
 }
 
 /* Stack route (spot detail, new-spot, etc.) — slides in over the
-   kept-alive tabs. Same 150 ms fade, with a subtle upward slide. */
+   kept-alive tabs. The OUTER overlay is just the scroll container; the
+   INNER .stack-page handles the directional transition (push from the
+   right on forward navigation, pop from the left on back). Keyed by
+   pathname so each stack-route change remounts and re-animates.
+   Reserves the fixed-nav height + iOS home-indicator inset at the
+   bottom so the last rows of any stack page can't be hidden behind the
+   bottom navigation (matches .tab-pane). */
 .stack-overlay {
   position: absolute;
   inset: 0;
   z-index: 30;
   overflow-y: auto;
   background: var(--color-bg);
-  animation: stackEnter 150ms ease-out both;
+  padding-bottom: calc(5rem + env(safe-area-inset-bottom));
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-y: contain;
 }
-@keyframes stackEnter {
+.stack-page {
+  min-height: 100%;
+  will-change: transform, opacity;
+}
+.stack-page.push-in {
+  animation: stackPushIn 260ms cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+.stack-page.pop-in {
+  animation: stackPopIn 260ms cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+@keyframes stackPushIn {
   from {
     opacity: 0;
-    transform: translate3d(0, 8px, 0);
+    transform: translate3d(8%, 0, 0);
   }
   to {
     opacity: 1;
     transform: translate3d(0, 0, 0);
+  }
+}
+@keyframes stackPopIn {
+  from {
+    opacity: 0;
+    transform: translate3d(-6%, 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .stack-page.push-in,
+  .stack-page.pop-in {
+    animation: none;
   }
 }
 
@@ -158,6 +190,70 @@ h4 {
 }
 .lvl-glow {
   animation: lvlPulse 2.6s ease-in-out infinite;
+}
+
+/* Confetti pieces for the post-checkout celebration overlay. Each
+   piece sets its own --drift / --dur / --delay via inline style so 30
+   pieces share one animation but feel individually random. */
+@keyframes confettiFall {
+  0% {
+    transform: translate3d(0, -20vh, 0) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translate3d(var(--drift, 0px), 110vh, 0) rotate(720deg);
+    opacity: 0.85;
+  }
+}
+.confetti-piece {
+  position: absolute;
+  top: 0;
+  width: 10px;
+  height: 14px;
+  border-radius: 2px;
+  animation: confettiFall var(--dur, 3.5s) linear var(--delay, 0s) infinite;
+  will-change: transform;
+}
+
+/* Gold sheen sweep for the VIP CTA — slow, classy, not arcade. */
+@keyframes goldShimmer {
+  0% {
+    transform: translateX(-160%) skewX(-12deg);
+  }
+  55%,
+  100% {
+    transform: translateX(220%) skewX(-12deg);
+  }
+}
+.gold-shimmer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    transparent 30%,
+    rgba(255, 255, 255, 0.35) 50%,
+    transparent 70%
+  );
+  transform: translateX(-160%) skewX(-12deg);
+  animation: goldShimmer 4.5s ease-in-out infinite;
+  pointer-events: none;
+}
+
+/* Subtle red pulse for the /premium launch banner — slower and softer
+   than the article "NOUVEAU" pulse so it feels urgent without becoming
+   distracting. */
+@keyframes launchPulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(230, 57, 70, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(230, 57, 70, 0);
+  }
+}
+.launch-pulse {
+  animation: launchPulse 2.6s ease-in-out infinite;
 }
 
 /* Pulsing red "NOUVEAU" badge for articles < 1h old. */

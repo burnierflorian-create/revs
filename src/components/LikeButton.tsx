@@ -137,14 +137,22 @@ export default function LikeButton({
       }}
       aria-label={liked ? 'Retirer le like' : 'Liker'}
       aria-pressed={liked}
-      className={`flex items-center gap-1.5 text-sm ${className}`}
+      className={`tappable flex items-center gap-1.5 text-sm ${className}`}
     >
-      <Heart
-        className={`h-6 w-6 transition-transform duration-200 ${
-          bump ? 'scale-125' : 'scale-100'
-        } ${liked ? 'fill-accent text-accent' : 'text-fg/60'}`}
-      />
-      <span className={liked ? 'text-accent' : 'text-fg/60'}>{count}</span>
+      <span className="relative inline-flex h-6 w-6 items-center justify-center">
+        {bump && liked && (
+          <span
+            aria-hidden
+            className="heart-ring absolute inset-0 rounded-full bg-accent/50"
+          />
+        )}
+        <Heart
+          className={`relative h-6 w-6 transition-colors ${
+            bump ? 'heart-pop' : ''
+          } ${liked ? 'fill-accent text-accent' : 'text-fg2'}`}
+        />
+      </span>
+      <span className={liked ? 'text-accent' : 'text-fg2'}>{count}</span>
     </button>
   )
 }

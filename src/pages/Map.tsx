@@ -3,7 +3,15 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import mapboxgl from 'mapbox-gl'
 import type { DataDrivenPropertyValueSpecification } from 'mapbox-gl'
 import 'mapbox-gl/dist/mapbox-gl.css'
-import { Car, LocateFixed } from 'lucide-react'
+import {
+  Car,
+  LocateFixed,
+  Pause,
+  Play,
+  Rewind,
+  Search as SearchIcon,
+  X,
+} from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { SkeletonMap } from '../components/Skeleton'
 import {
@@ -85,7 +93,7 @@ function spotMarkerEl(p: SpotProps, remainingMs: number): HTMLDivElement {
   arc.setAttribute('cy', String(size / 2))
   arc.setAttribute('r', String(r))
   arc.setAttribute('fill', 'none')
-  arc.setAttribute('stroke', '#E63946')
+  arc.setAttribute('stroke', '#E8203A')
   arc.setAttribute('stroke-width', '3')
   arc.setAttribute('stroke-linecap', 'round')
   arc.style.strokeDasharray = String(c)
@@ -108,14 +116,15 @@ function spotMarkerEl(p: SpotProps, remainingMs: number): HTMLDivElement {
   photo.style.borderRadius = '9999px'
   photo.style.overflow = 'hidden'
   photo.style.border = '2px solid #0A0A0A'
-  photo.style.boxShadow = '0 3px 10px rgba(0,0,0,0.55)'
+  photo.style.boxShadow =
+    '0 4px 14px rgba(0,0,0,0.45), 0 0 0 0.5px rgba(255,255,255,0.05)'
   photo.style.transition = 'transform .15s ease'
   if (p.photo_url) {
     photo.style.backgroundImage = `url("${p.photo_url.replace(/"/g, '%22')}")`
     photo.style.backgroundSize = 'cover'
     photo.style.backgroundPosition = 'center'
   } else {
-    photo.style.background = '#E63946'
+    photo.style.background = '#E8203A'
     photo.style.display = 'flex'
     photo.style.alignItems = 'center'
     photo.style.justifyContent = 'center'
@@ -145,15 +154,18 @@ function clusterMarkerEl(count: number): HTMLDivElement {
   inner.style.width = `${size}px`
   inner.style.height = `${size}px`
   inner.style.borderRadius = '9999px'
-  inner.style.background = '#E63946'
-  inner.style.border = '2px solid rgba(255,255,255,0.85)'
-  inner.style.boxShadow = '0 3px 12px rgba(0,0,0,0.55)'
+  inner.style.background =
+    'radial-gradient(circle at 35% 30%, #ff4d62 0%, #E8203A 70%)'
+  inner.style.border = '1.5px solid rgba(255,255,255,0.9)'
+  inner.style.boxShadow =
+    '0 4px 16px rgba(232,32,58,0.35), 0 2px 6px rgba(0,0,0,0.45)'
   inner.style.display = 'flex'
   inner.style.alignItems = 'center'
   inner.style.justifyContent = 'center'
   inner.style.color = '#fff'
-  inner.style.fontWeight = '700'
+  inner.style.fontWeight = '800'
   inner.style.fontSize = '14px'
+  inner.style.letterSpacing = '-0.3px'
   inner.textContent = String(count)
   outer.appendChild(inner)
   return outer
@@ -172,7 +184,7 @@ function popupInner(p: SpotProps): string {
         <div style="font-weight:800;font-size:15px;color:#111111">${escapeHtml(title)}</div>
         <div style="font-size:12px;color:#555555;margin-top:3px">${escapeHtml(sub || p.spotter)}</div>
         <div style="font-size:11px;color:#777777;margin-top:3px">${escapeHtml(timeAgo(p.created_at))}</div>
-        <div style="font-size:11px;color:#E63946;font-weight:700;margin-top:6px">Voir le détail →</div>
+        <div style="font-size:11px;color:#E8203A;font-weight:700;margin-top:6px">Voir le détail →</div>
       </div>
     </div>`
 }
@@ -197,7 +209,7 @@ const SNAP = {
   building3d: '#D4C5B0',
   roadFill: '#FFFFFF',
   roadCase: '#DCD5C7',
-  roadMajor: '#E63946',
+  roadMajor: '#E8203A',
   outline: '#D8D2C8',
   admin: 'rgba(150,138,116,0.45)',
   street: '#555555',
@@ -426,13 +438,17 @@ export default function MapPage() {
   const markersRef = useRef<Record<string, mapboxgl.Marker>>({})
   const onScreenRef = useRef<Record<string, mapboxgl.Marker>>({})
   const filterRef = useRef<string>('Tous')
+  const searchRef = useRef<string>('')
   const refreshRef = useRef<(() => void) | null>(null)
+  const recomputeHotZonesRef = useRef<(() => void) | null>(null)
+  const clearHotZonesRef = useRef<(() => void) | null>(null)
   const navRef = useRef(navigate)
   navRef.current = navigate
   const posRef = useRef<{ lat: number; lng: number } | null>(null)
 
   const [error, setError] = useState<string | null>(null)
   const [activeFilter, setActiveFilter] = useState<string>('Tous')
+  const [searchQuery, setSearchQuery] = useState<string>('')
   const [toast, setToast] = useState<string | null>(null)
   const [geoError, setGeoError] = useState<string | null>(null)
   const [visibleCount, setVisibleCount] = useState(0)
@@ -441,6 +457,20 @@ export default function MapPage() {
     null,
   )
   const [mapReady, setMapReady] = useState(false)
+
+  // Replay time-lapse state. `idle` hides all replay UI; `playing` ticks
+  // the marker pop animation every 400 ms; `paused` keeps revealed
+  // markers but stops the timer. Refs hold the heavy/non-rendered bits.
+  const [replayState, setReplayState] = useState<'idle' | 'playing' | 'paused'>(
+    'idle',
+  )
+  const [replayIndex, setReplayIndex] = useState(0)
+  const [replayTotal, setReplayTotal] = useState(0)
+  const [replayCurrentTime, setReplayCurrentTime] = useState<string>('')
+  const replaySpotsRef = useRef<Spot[]>([])
+  const replayMarkersRef = useRef<mapboxgl.Marker[]>([])
+  const replayTimerRef = useRef<number | null>(null)
+
   const [mode, setMode] = useState<MapMode>(() => {
     try {
       const v = localStorage.getItem(MODE_KEY)
@@ -480,6 +510,123 @@ export default function MapPage() {
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
     )
   }
+
+  // ──────────────────────── Replay time-lapse ────────────────────────
+  // Fetch today's spots, hide the normal source, then reveal them one
+  // by one with a pop animation. Markers are owned outside the
+  // GeoJSON source so they don't fight the clustering pipeline.
+
+  function fmtSpotTime(iso: string): string {
+    const d = new Date(iso)
+    return new Intl.DateTimeFormat('fr-FR', {
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(d)
+  }
+
+  function replayClearMarkers() {
+    for (const m of replayMarkersRef.current) m.remove()
+    replayMarkersRef.current = []
+  }
+
+  function replayClearTimer() {
+    if (replayTimerRef.current !== null) {
+      window.clearInterval(replayTimerRef.current)
+      replayTimerRef.current = null
+    }
+  }
+
+  function replayStartTimer() {
+    replayClearTimer()
+    replayTimerRef.current = window.setInterval(() => {
+      const map = mapRef.current
+      const spots = replaySpotsRef.current
+      if (!map || spots.length === 0) return
+      setReplayIndex((i) => {
+        if (i >= spots.length) {
+          replayClearTimer()
+          setReplayState('paused')
+          return i
+        }
+        const sp = spots[i]
+        const el = document.createElement('div')
+        el.className = 'replay-pop'
+        el.style.cssText =
+          'width:18px;height:18px;border-radius:50%;background:#E8203A;box-shadow:0 0 22px rgba(232,32,58,0.85);border:2px solid #fff;'
+        const marker = new mapboxgl.Marker({ element: el })
+          .setLngLat([sp.lng, sp.lat])
+          .addTo(map)
+        replayMarkersRef.current.push(marker)
+        setReplayCurrentTime(fmtSpotTime(sp.created_at))
+        return i + 1
+      })
+    }, 400)
+  }
+
+  async function startReplay() {
+    if (replayState === 'playing') return
+    if (replayState === 'paused') {
+      setReplayState('playing')
+      replayStartTimer()
+      return
+    }
+    // Fresh start — fetch today's spots.
+    const startOfDay = new Date()
+    startOfDay.setHours(0, 0, 0, 0)
+    const { data } = await supabase
+      .from('spots')
+      .select('*')
+      .gte('created_at', startOfDay.toISOString())
+      .order('created_at', { ascending: true })
+      .limit(500)
+    const spots = (data ?? []) as Spot[]
+    if (spots.length === 0) {
+      setToast("Aucun spot aujourd'hui à rejouer.")
+      window.setTimeout(() => setToast(null), 2500)
+      return
+    }
+    replaySpotsRef.current = spots
+    setReplayTotal(spots.length)
+    setReplayIndex(0)
+    setReplayCurrentTime('')
+    replayClearMarkers()
+    // Hide the normal spots source while replay is active.
+    const src = mapRef.current?.getSource('spots') as
+      | mapboxgl.GeoJSONSource
+      | undefined
+    src?.setData({ type: 'FeatureCollection', features: [] })
+    // Hide hot zones too — they'd compete visually with the replay pops.
+    clearHotZonesRef.current?.()
+    setReplayState('playing')
+    replayStartTimer()
+  }
+
+  function pauseReplay() {
+    if (replayState !== 'playing') return
+    replayClearTimer()
+    setReplayState('paused')
+  }
+
+  function stopReplay() {
+    replayClearTimer()
+    replayClearMarkers()
+    replaySpotsRef.current = []
+    setReplayState('idle')
+    setReplayIndex(0)
+    setReplayTotal(0)
+    setReplayCurrentTime('')
+    // Restore the regular spots layer + hot zones.
+    refreshRef.current?.()
+    recomputeHotZonesRef.current?.()
+  }
+
+  // Cleanup on unmount.
+  useEffect(() => {
+    return () => {
+      replayClearTimer()
+      replayClearMarkers()
+    }
+  }, [])
 
   function flyToUser() {
     if (!mapRef.current) return
@@ -610,11 +757,17 @@ export default function MapPage() {
 
     function featureCollection(): GeoJSON.FeatureCollection {
       const cat = FILTER_CATEGORY[filterRef.current]
+      const needle = searchRef.current.trim().toLowerCase()
       const feats: GeoJSON.Feature[] = []
       const panel: Spot[] = []
       for (const sp of allSpots.values()) {
         if (!isAlive(sp)) continue
         if (cat != null && sp.category !== cat) continue
+        if (needle) {
+          const hay = `${sp.brand ?? ''} ${sp.model ?? ''} ${sp.category ?? ''}`
+            .toLowerCase()
+          if (!hay.includes(needle)) continue
+        }
         if (cat != null) panel.push(sp)
         feats.push({
           type: 'Feature',
@@ -656,6 +809,103 @@ export default function MapPage() {
       delete markersRef.current[k]
       lastSig = '' // force the next sync to rebuild this marker
     }
+
+    // ──────────────────────── Hot zones ────────────────────────
+    // Cluster recent spots (last 1 h, alive) within 500 m of each
+    // other and render a pulsing red halo on each cluster of ≥2.
+    // Intensity (size + opacity) scales with the cluster count.
+    // Markers are keyed by sorted member-id hash so re-running the
+    // computation preserves the pulse animation for unchanged
+    // clusters and only re-creates markers when membership changes.
+    const HOT_WINDOW_MS = 60 * 60 * 1000
+    const HOT_RADIUS_M = 500
+    const hotZonesByKey = new Map<string, mapboxgl.Marker>()
+
+    function clearHotZones() {
+      for (const m of hotZonesByKey.values()) m.remove()
+      hotZonesByKey.clear()
+    }
+    clearHotZonesRef.current = clearHotZones
+
+    function recomputeHotZones() {
+      const now = Date.now()
+      // 1. Collect alive + recent spots
+      const recent: Spot[] = []
+      for (const sp of allSpots.values()) {
+        if (!isAlive(sp)) continue
+        if (now - new Date(sp.created_at).getTime() > HOT_WINDOW_MS) continue
+        recent.push(sp)
+      }
+      // 2. Greedy clustering — for each spot, attach to the first
+      // cluster whose running centroid is within 500 m; otherwise
+      // start a new cluster. Good enough for ≤200 recent spots.
+      type Cluster = {
+        ids: string[]
+        lat: number
+        lng: number
+        count: number
+      }
+      const clusters: Cluster[] = []
+      for (const sp of recent) {
+        let placed = false
+        for (const c of clusters) {
+          if (
+            distanceMeters(c.lat, c.lng, sp.lat, sp.lng) <= HOT_RADIUS_M
+          ) {
+            c.ids.push(sp.id)
+            c.count += 1
+            c.lat = c.lat + (sp.lat - c.lat) / c.count
+            c.lng = c.lng + (sp.lng - c.lng) / c.count
+            placed = true
+            break
+          }
+        }
+        if (!placed) {
+          clusters.push({ ids: [sp.id], lat: sp.lat, lng: sp.lng, count: 1 })
+        }
+      }
+      // 3. Hot zones = clusters with ≥2 spots
+      const wanted = new Set<string>()
+      for (const c of clusters) {
+        if (c.count < 2) continue
+        const key = c.ids.slice().sort().join('|')
+        wanted.add(key)
+        const intensity = Math.min(1, (c.count - 2) / 4) // 0 at 2 spots → 1 at 6+
+        const size = Math.round(72 + intensity * 60) // 72px → 132px
+        const opacity = (0.45 + intensity * 0.4).toFixed(2) // 0.45 → 0.85
+        const existing = hotZonesByKey.get(key)
+        if (existing) {
+          existing.setLngLat([c.lng, c.lat])
+          continue
+        }
+        const el = document.createElement('div')
+        el.className = 'hot-zone-marker'
+        el.style.setProperty('--hz-size', `${size}px`)
+        el.style.setProperty('--hz-opacity', opacity)
+        el.innerHTML =
+          '<div class="hot-zone-ring"></div>' +
+          '<div class="hot-zone-ring hot-zone-ring-delay"></div>'
+        const marker = new mapboxgl.Marker({
+          element: el,
+          anchor: 'center',
+        })
+          .setLngLat([c.lng, c.lat])
+          .addTo(map)
+        hotZonesByKey.set(key, marker)
+      }
+      // 4. Remove markers for clusters that no longer exist
+      for (const [key, marker] of hotZonesByKey) {
+        if (!wanted.has(key)) {
+          marker.remove()
+          hotZonesByKey.delete(key)
+        }
+      }
+    }
+    recomputeHotZonesRef.current = recomputeHotZones
+
+    // Recompute every minute so spots aging past the 1-hour window
+    // drop out without needing a fresh fetch.
+    const hotZonesInterval = window.setInterval(recomputeHotZones, 60_000)
 
     // Only fetch spots inside the current viewport + a ~500 m buffer.
     // Don't clear allSpots between fetches — merging keeps panning back
@@ -699,6 +949,7 @@ export default function MapPage() {
         }
       }
       refreshSource()
+      recomputeHotZones()
     }
 
     function updateMarkers() {
@@ -891,6 +1142,7 @@ export default function MapPage() {
           if (!sp?.id) return
           allSpots.set(sp.id, sp)
           refreshSource()
+          recomputeHotZones()
         },
       )
       .on(
@@ -908,6 +1160,8 @@ export default function MapPage() {
 
     return () => {
       if (pollId) clearInterval(pollId)
+      window.clearInterval(hotZonesInterval)
+      clearHotZones()
       supabase.removeChannel(channel)
       for (const k in onScreenRef.current) onScreenRef.current[k].remove()
       onScreenRef.current = {}
@@ -915,6 +1169,8 @@ export default function MapPage() {
       allSpots.clear()
       names.clear()
       refreshRef.current = null
+      recomputeHotZonesRef.current = null
+      clearHotZonesRef.current = null
       map.remove()
       mapRef.current = null
       setMapReady(false)
@@ -931,6 +1187,11 @@ export default function MapPage() {
     filterRef.current = activeFilter
     refreshRef.current?.()
   }, [activeFilter])
+
+  useEffect(() => {
+    searchRef.current = searchQuery
+    refreshRef.current?.()
+  }, [searchQuery])
 
   useEffect(() => {
     try {
@@ -974,16 +1235,122 @@ export default function MapPage() {
         </div>
       )}
 
-      <div className="absolute left-0 right-0 top-0 z-10 px-4 pt-[max(4rem,calc(env(safe-area-inset-top)+3rem))]">
-        <div className="mx-auto flex max-w-md gap-1 rounded-full bg-black/60 p-1 backdrop-blur">
+      <div className="absolute left-0 right-0 top-0 z-10 space-y-2 px-4 pt-[max(3rem,calc(env(safe-area-inset-top)+2rem))]">
+        <div
+          className="mx-auto flex max-w-md items-center gap-2 rounded-full px-4 py-2.5"
+          style={{
+            background: 'rgba(10,10,10,0.65)',
+            backdropFilter: 'saturate(160%) blur(20px)',
+            WebkitBackdropFilter: 'saturate(160%) blur(20px)',
+            border: '1px solid rgba(255,255,255,0.10)',
+          }}
+        >
+          <SearchIcon className="h-4 w-4 flex-none text-fg2" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Rechercher une voiture, une marque…"
+            className="flex-1 bg-transparent text-sm text-fg placeholder-fg2 outline-none"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              aria-label="Effacer"
+              className="tappable text-fg2 hover:text-fg"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+
+        {/* Replay row — single pill button while idle, status banner
+            (play/pause + progress + time) while running. Hidden when no
+            search is active so the top bar stays uncluttered. */}
+        {replayState === 'idle' ? (
+          <button
+            onClick={startReplay}
+            className="tappable mx-auto flex items-center gap-2 rounded-full px-4 py-2 text-xs font-extrabold tracking-wider text-fg"
+            style={{
+              background: 'rgba(232,32,58,0.18)',
+              backdropFilter: 'saturate(160%) blur(20px)',
+              WebkitBackdropFilter: 'saturate(160%) blur(20px)',
+              border: '1px solid rgba(232,32,58,0.45)',
+              boxShadow: '0 4px 16px rgba(232,32,58,0.25)',
+            }}
+          >
+            <Rewind className="h-3.5 w-3.5 text-accent" />
+            REPLAY AUJOURD'HUI
+          </button>
+        ) : (
+          <div
+            className="mx-auto flex max-w-md items-center gap-3 rounded-full px-3 py-2"
+            style={{
+              background: 'rgba(10,10,10,0.85)',
+              backdropFilter: 'saturate(160%) blur(20px)',
+              WebkitBackdropFilter: 'saturate(160%) blur(20px)',
+              border: '1px solid rgba(232,32,58,0.45)',
+            }}
+          >
+            <button
+              onClick={replayState === 'playing' ? pauseReplay : startReplay}
+              aria-label={replayState === 'playing' ? 'Pause' : 'Reprendre'}
+              className="tappable flex h-7 w-7 flex-none items-center justify-center rounded-full bg-accent text-fg"
+            >
+              {replayState === 'playing' ? (
+                <Pause className="h-3.5 w-3.5" />
+              ) : (
+                <Play className="h-3.5 w-3.5" />
+              )}
+            </button>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-baseline gap-2 text-[11px] text-fg2">
+                <span className="label-up text-[9px] text-accent">REPLAY</span>
+                <span>
+                  {replayIndex} / {replayTotal}
+                </span>
+                {replayCurrentTime && (
+                  <span className="font-mono text-fg">
+                    · {replayCurrentTime}
+                  </span>
+                )}
+              </div>
+              {/* Progress bar */}
+              <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-white/10">
+                <div
+                  className="h-full rounded-full bg-accent transition-all duration-300"
+                  style={{
+                    width: `${replayTotal === 0 ? 0 : (replayIndex / replayTotal) * 100}%`,
+                  }}
+                />
+              </div>
+            </div>
+            <button
+              onClick={stopReplay}
+              aria-label="Fermer"
+              className="tappable flex h-7 w-7 flex-none items-center justify-center rounded-full text-fg2 hover:text-fg"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )}
+        <div
+          className="mx-auto flex max-w-md gap-1 rounded-full p-1"
+          style={{
+            background: 'rgba(10,10,10,0.65)',
+            backdropFilter: 'saturate(160%) blur(20px)',
+            WebkitBackdropFilter: 'saturate(160%) blur(20px)',
+            border: '1px solid rgba(255,255,255,0.08)',
+          }}
+        >
           {FILTERS.map((f) => (
             <button
               key={f}
               onClick={() => setActiveFilter(f)}
-              className={`flex-1 rounded-full py-2 text-xs font-medium transition-colors ${
+              className={`tappable flex-1 rounded-full py-2 text-xs font-semibold tracking-wide transition-colors ${
                 activeFilter === f
-                  ? 'bg-accent text-fg'
-                  : 'text-fg/50 hover:text-fg'
+                  ? 'bg-accent text-fg shadow-glow'
+                  : 'text-fg2 hover:text-fg'
               }`}
             >
               {f}
@@ -995,18 +1362,26 @@ export default function MapPage() {
       <div
         className="absolute right-4 z-10"
         style={{
-          top: 'calc(max(4rem, env(safe-area-inset-top) + 3rem) + 3.25rem)',
+          top: 'calc(max(3rem, env(safe-area-inset-top) + 2rem) + 6.75rem)',
         }}
       >
-        <div className="flex gap-1 rounded-full bg-black/60 p-1 backdrop-blur">
+        <div
+          className="flex gap-1 rounded-full p-1"
+          style={{
+            background: 'rgba(10,10,10,0.65)',
+            backdropFilter: 'saturate(160%) blur(20px)',
+            WebkitBackdropFilter: 'saturate(160%) blur(20px)',
+            border: '1px solid rgba(255,255,255,0.08)',
+          }}
+        >
           {(['2D', '3D'] as MapMode[]).map((m) => (
             <button
               key={m}
               onClick={() => setMode(m)}
-              className={`rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors ${
+              className={`tappable rounded-full px-3.5 py-1.5 text-xs font-bold tracking-wide transition-colors ${
                 mode === m
                   ? 'bg-accent text-fg'
-                  : 'text-fg/60 hover:text-fg'
+                  : 'text-fg2 hover:text-fg'
               }`}
             >
               {m}
@@ -1079,8 +1454,10 @@ export default function MapPage() {
         aria-label="Me localiser"
         style={{
           bottom: 'calc(env(safe-area-inset-bottom) + 5rem + 0.75rem + 20px)',
+          boxShadow:
+            '0 6px 24px rgba(232,32,58,0.45), 0 0 0 1px rgba(255,255,255,0.06) inset',
         }}
-        className="absolute right-4 z-10 flex h-12 w-12 items-center justify-center rounded-full bg-accent shadow-lg shadow-accent/40 transition-transform active:scale-95"
+        className="tappable absolute right-4 z-10 flex h-12 w-12 items-center justify-center rounded-full bg-accent"
       >
         <LocateFixed className="h-5 w-5 text-fg" />
       </button>

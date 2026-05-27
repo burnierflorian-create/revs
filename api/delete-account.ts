@@ -18,11 +18,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return
   }
   if (req.method !== 'POST') {
-    res.status(405).json({ error: 'Method not allowed' })
+    res.status(405).json({ error: 'Méthode non autorisée.' })
     return
   }
   if (!SUPABASE_URL || !SERVICE_ROLE) {
-    res.status(500).json({ error: 'Server not configured' })
+    res.status(500).json({ error: 'Service indisponible — réessaie plus tard.' })
     return
   }
 
@@ -31,7 +31,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     ? authHeader.slice(7)
     : ''
   if (!token) {
-    res.status(401).json({ error: 'Missing token' })
+    res.status(401).json({ error: 'Session manquante. Reconnecte-toi.' })
     return
   }
 
@@ -43,18 +43,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Verify the caller's token and resolve their user id.
     const { data, error } = await admin.auth.getUser(token)
     if (error || !data.user) {
-      res.status(401).json({ error: 'Invalid token' })
+      res.status(401).json({ error: 'Session invalide. Reconnecte-toi.' })
       return
     }
     // FKs are ON DELETE CASCADE, so spots/events/likes/xp/profile go too.
     const { error: delErr } = await admin.auth.admin.deleteUser(data.user.id)
     if (delErr) {
-      res.status(500).json({ error: delErr.message })
+      console.error('[delete-account] supabase failed:', delErr)
+      res.status(500).json({ error: 'Suppression du compte échouée — réessaie plus tard.' })
       return
     }
     res.status(200).json({ deleted: true })
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Delete failed'
-    res.status(500).json({ error: message })
+    console.error('[delete-account] crashed:', err)
+    res.status(500).json({ error: 'Suppression du compte échouée — réessaie plus tard.' })
   }
 }

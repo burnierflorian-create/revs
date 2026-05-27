@@ -1,15 +1,20 @@
 import { Suspense, lazy, useEffect, useState } from 'react'
 import Home from '../pages/Home'
-import Feed from '../pages/Feed'
-import Profile from '../pages/Profile'
-import Discover from '../pages/Discover'
 import { SkeletonMap } from '../components/Skeleton'
 
-// Keep mapbox-gl out of the initial bundle: only loaded when the user
-// first taps the Carte tab. After that the Map component stays mounted
-// for the lifetime of the session — switching tabs never re-runs its
-// init, geolocation, fetches or realtime subscriptions.
+// Home is eager (default landing route). All other tabs split off into
+// their own chunks: each lands when the user first taps the tab, then
+// stays mounted (kept-alive) for the rest of the session. Mapbox itself
+// is also kept lazy through this — its heavy module graph only loads
+// when /map is visited for the first time.
 const MapPage = lazy(() => import('../pages/Map'))
+const Feed = lazy(() => import('../pages/Feed'))
+const Profile = lazy(() => import('../pages/Profile'))
+const Discover = lazy(() => import('../pages/Discover'))
+
+function TabFallback() {
+  return <div className="min-h-screen bg-bg" />
+}
 
 export type TabKey = 'home' | 'feed' | 'map' | 'discover' | 'profile'
 
@@ -69,7 +74,11 @@ export default function TabsContainer({ activeTab, discoverInitial }: Props) {
         {visited.has('home') && <Home />}
       </TabPane>
       <TabPane active={activeTab === 'feed'}>
-        {visited.has('feed') && <Feed />}
+        {visited.has('feed') && (
+          <Suspense fallback={<TabFallback />}>
+            <Feed />
+          </Suspense>
+        )}
       </TabPane>
       <TabPane active={activeTab === 'map'}>
         {visited.has('map') && (
@@ -79,10 +88,18 @@ export default function TabsContainer({ activeTab, discoverInitial }: Props) {
         )}
       </TabPane>
       <TabPane active={activeTab === 'discover'}>
-        {visited.has('discover') && <Discover initial={discoverInitial} />}
+        {visited.has('discover') && (
+          <Suspense fallback={<TabFallback />}>
+            <Discover initial={discoverInitial} />
+          </Suspense>
+        )}
       </TabPane>
       <TabPane active={activeTab === 'profile'}>
-        {visited.has('profile') && <Profile />}
+        {visited.has('profile') && (
+          <Suspense fallback={<TabFallback />}>
+            <Profile />
+          </Suspense>
+        )}
       </TabPane>
     </>
   )

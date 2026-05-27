@@ -179,47 +179,59 @@ export default function Onboarding() {
             <section
               key={title}
               style={{ width: `${100 / TOTAL}%` }}
-              className="flex h-full shrink-0 flex-col items-center justify-center gap-6 px-10 text-center"
+              className="flex h-full shrink-0 flex-col items-center justify-center gap-7 px-10 text-center"
             >
-              <Icon className="h-20 w-20 text-accent" strokeWidth={1.5} />
-              <h1 className="text-3xl font-bold leading-tight">{title}</h1>
-              <p className="max-w-xs text-base text-fg/60">{subtitle}</p>
+              <div
+                className="flex h-24 w-24 items-center justify-center rounded-full"
+                style={{
+                  background:
+                    'linear-gradient(155deg, rgba(232,32,58,0.22) 0%, rgba(232,32,58,0.06) 70%, rgba(20,20,20,0.95) 100%)',
+                  border: '1px solid rgba(232,32,58,0.40)',
+                  boxShadow: '0 12px 36px rgba(232,32,58,0.30)',
+                }}
+              >
+                <Icon className="h-11 w-11 text-accent" strokeWidth={1.6} />
+              </div>
+              <h1 className="font-display text-[34px] font-extrabold leading-[1.05] tracking-tighter text-fg">
+                {title}
+              </h1>
+              <p className="max-w-xs text-base leading-relaxed text-fg2">
+                {subtitle}
+              </p>
             </section>
           ))}
 
           <section
             style={{ width: `${100 / TOTAL}%` }}
-            className="flex h-full shrink-0 flex-col justify-center gap-6 px-8"
+            className="flex h-full shrink-0 flex-col justify-center gap-7 px-8"
           >
             <div className="space-y-2 text-center">
-              <h1 className="text-2xl font-bold">Crée ton profil</h1>
-              <p className="text-sm text-fg/60">
+              <h1 className="display-xl text-fg">Crée ton profil</h1>
+              <p className="text-sm text-fg2">
                 Ton pseudo et ta ville pour le classement des spotters
               </p>
             </div>
             <div className="space-y-4">
               <div className="space-y-2">
-                <label className="text-[11px] uppercase tracking-widest text-fg/40">
-                  Pseudo
-                </label>
+                <label className="label-up text-[10px] text-fg2">Pseudo</label>
                 <input
                   value={pseudo}
                   onChange={(e) => setPseudo(e.target.value)}
                   maxLength={24}
                   placeholder="ex: speedhunter_75"
-                  className="w-full rounded-lg bg-card px-3 py-3 text-fg outline-none focus:ring-1 focus:ring-accent"
+                  className="w-full rounded-2xl bg-card px-4 py-3.5 text-fg outline-none placeholder:text-fg2/40 focus:border-accent"
+                  style={{ border: '1px solid var(--color-border)' }}
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-[11px] uppercase tracking-widest text-fg/40">
-                  Ville
-                </label>
+                <label className="label-up text-[10px] text-fg2">Ville</label>
                 <input
                   value={ville}
                   onChange={(e) => setVille(e.target.value)}
                   maxLength={48}
                   placeholder="ex: Annecy"
-                  className="w-full rounded-lg bg-card px-3 py-3 text-fg outline-none focus:ring-1 focus:ring-accent"
+                  className="w-full rounded-2xl bg-card px-4 py-3.5 text-fg outline-none placeholder:text-fg2/40 focus:border-accent"
+                  style={{ border: '1px solid var(--color-border)' }}
                 />
               </div>
               {error && <p className="text-sm text-accent">{error}</p>}
@@ -234,8 +246,13 @@ export default function Onboarding() {
             <span
               key={i}
               className={`h-2 rounded-full transition-all duration-300 ${
-                i === slide ? 'w-6 bg-accent' : 'w-2 bg-fg/20'
+                i === slide ? 'w-7 bg-accent' : 'w-2 bg-fg2/30'
               }`}
+              style={
+                i === slide
+                  ? { boxShadow: '0 0 10px rgba(232,32,58,0.55)' }
+                  : undefined
+              }
             />
           ))}
         </div>
@@ -243,9 +260,10 @@ export default function Onboarding() {
         <button
           onClick={next}
           disabled={onForm && (!canFinish || saving)}
-          className="w-full rounded-full bg-accent py-4 font-medium disabled:opacity-50"
+          className="tappable w-full rounded-full bg-accent py-4 text-sm font-extrabold tracking-wider text-fg disabled:opacity-50"
+          style={{ boxShadow: '0 12px 36px rgba(232,32,58,0.45)' }}
         >
-          {onForm ? (saving ? '…' : 'Commencer') : 'Continuer'}
+          {onForm ? (saving ? '…' : 'COMMENCER') : 'CONTINUER'}
         </button>
       </footer>
     </div>

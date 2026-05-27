@@ -3,22 +3,44 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './hooks/useAuth'
 import MainLayout from './layouts/MainLayout'
 import Auth from './pages/Auth'
-import NewSpot from './pages/NewSpot'
-import NewEvent from './pages/NewEvent'
-import Premium from './pages/Premium'
-import Settings from './pages/Settings'
-import LegalMentions from './pages/LegalMentions'
-import LegalPrivacy from './pages/LegalPrivacy'
-import LegalTerms from './pages/LegalTerms'
-// Lazy: SpotDetail pulls mapbox-gl for its mini-map; keep it out of
-// the initial bundle.
-const SpotDetail = lazy(() => import('./pages/SpotDetail'))
-import GrandPrixDetail from './pages/GrandPrixDetail'
-import Leaderboard from './pages/Leaderboard'
-import MyBrands from './pages/MyBrands'
-import MyGallery from './pages/MyGallery'
-import PublicProfile from './pages/PublicProfile'
 import Onboarding from './components/Onboarding'
+
+// Every stack route is lazy: keeps the first paint chunk small. The
+// fallback is a bare bg-bg slab — most routes render their own header
+// + skeletons within ~50 ms, so a flash-free dark frame is enough.
+const NewSpot = lazy(() => import('./pages/NewSpot'))
+const NewEvent = lazy(() => import('./pages/NewEvent'))
+const Premium = lazy(() => import('./pages/Premium'))
+const PremiumCheckout = lazy(() => import('./pages/PremiumCheckout'))
+const Settings = lazy(() => import('./pages/Settings'))
+const LegalMentions = lazy(() => import('./pages/LegalMentions'))
+const LegalPrivacy = lazy(() => import('./pages/LegalPrivacy'))
+const LegalTerms = lazy(() => import('./pages/LegalTerms'))
+const SpotDetail = lazy(() => import('./pages/SpotDetail'))
+const GrandPrixDetail = lazy(() => import('./pages/GrandPrixDetail'))
+const Leaderboard = lazy(() => import('./pages/Leaderboard'))
+const Challenges = lazy(() => import('./pages/Challenges'))
+const Badges = lazy(() => import('./pages/Badges'))
+const BadgeDetail = lazy(() => import('./pages/BadgeDetail'))
+const Referral = lazy(() => import('./pages/Referral'))
+const Radar = lazy(() => import('./pages/Radar'))
+const EventLive = lazy(() => import('./pages/EventLive'))
+const MyBrands = lazy(() => import('./pages/MyBrands'))
+const MyGallery = lazy(() => import('./pages/MyGallery'))
+const Brands = lazy(() => import('./pages/Brands'))
+const BrandDetail = lazy(() => import('./pages/BrandDetail'))
+const F1Roster = lazy(() => import('./pages/F1Roster'))
+const F1TeamDetail = lazy(() => import('./pages/F1TeamDetail'))
+const F1DriverDetail = lazy(() => import('./pages/F1DriverDetail'))
+const PublicProfile = lazy(() => import('./pages/PublicProfile'))
+
+function StackFallback() {
+  return <div className="min-h-screen bg-bg" />
+}
+
+function lazyRoute(node: React.ReactNode) {
+  return <Suspense fallback={<StackFallback />}>{node}</Suspense>
+}
 
 export default function App() {
   const { session, loading } = useAuth()
@@ -54,26 +76,40 @@ export default function App() {
           <Route path="/profile" element={null} />
 
           {/* Stack routes — render via <Outlet /> on top of the tabs. */}
+          <Route path="/spot/:id" element={lazyRoute(<SpotDetail />)} />
+          <Route path="/new-spot" element={lazyRoute(<NewSpot />)} />
+          <Route path="/f1/:round" element={lazyRoute(<GrandPrixDetail />)} />
+          <Route path="/new-event" element={lazyRoute(<NewEvent />)} />
+          <Route path="/classement" element={lazyRoute(<Leaderboard />)} />
+          <Route path="/challenges" element={lazyRoute(<Challenges />)} />
+          <Route path="/badges" element={lazyRoute(<Badges />)} />
+          <Route path="/badges/:slug" element={lazyRoute(<BadgeDetail />)} />
+          <Route path="/referral" element={lazyRoute(<Referral />)} />
+          <Route path="/radar" element={lazyRoute(<Radar />)} />
+          <Route path="/event/:id/live" element={lazyRoute(<EventLive />)} />
+          <Route path="/mes-marques" element={lazyRoute(<MyBrands />)} />
+          <Route path="/brands" element={lazyRoute(<Brands />)} />
+          <Route path="/brand/:slug" element={lazyRoute(<BrandDetail />)} />
+          <Route path="/f1-roster" element={lazyRoute(<F1Roster />)} />
+          <Route path="/f1-team/:slug" element={lazyRoute(<F1TeamDetail />)} />
           <Route
-            path="/spot/:id"
-            element={
-              <Suspense fallback={<div className="min-h-screen bg-bg" />}>
-                <SpotDetail />
-              </Suspense>
-            }
+            path="/f1-driver/:slug"
+            element={lazyRoute(<F1DriverDetail />)}
           />
-          <Route path="/new-spot" element={<NewSpot />} />
-          <Route path="/f1/:round" element={<GrandPrixDetail />} />
-          <Route path="/new-event" element={<NewEvent />} />
-          <Route path="/classement" element={<Leaderboard />} />
-          <Route path="/mes-marques" element={<MyBrands />} />
-          <Route path="/ma-galerie" element={<MyGallery />} />
-          <Route path="/u/:id" element={<PublicProfile />} />
-          <Route path="/settings" element={<Settings />} />
-          <Route path="/legal/mentions" element={<LegalMentions />} />
-          <Route path="/legal/privacy" element={<LegalPrivacy />} />
-          <Route path="/legal/terms" element={<LegalTerms />} />
-          <Route path="/premium" element={<Premium />} />
+          <Route path="/ma-galerie" element={lazyRoute(<MyGallery />)} />
+          <Route path="/u/:id" element={lazyRoute(<PublicProfile />)} />
+          <Route path="/settings" element={lazyRoute(<Settings />)} />
+          <Route
+            path="/legal/mentions"
+            element={lazyRoute(<LegalMentions />)}
+          />
+          <Route path="/legal/privacy" element={lazyRoute(<LegalPrivacy />)} />
+          <Route path="/legal/terms" element={lazyRoute(<LegalTerms />)} />
+          <Route path="/premium" element={lazyRoute(<Premium />)} />
+          <Route
+            path="/premium/checkout/:tier"
+            element={lazyRoute(<PremiumCheckout />)}
+          />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
