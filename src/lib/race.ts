@@ -5,6 +5,11 @@ export type RaceOpponent = {
   model: string
   rarity: 'commun' | 'rare' | 'ultra_rare' | 'unique'
   horsepower: number
+  /** Set when the server found a real spot for the opponent. Null
+   *  on the synthetic fallback (DB has no photo-bearing spots). */
+  photo_url: string | null
+  spot_id: string | null
+  year: number | null
 }
 
 export type RaceStake = {

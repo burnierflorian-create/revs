@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 
-const COLORS = ['#E8203A', '#F59E0B', '#34D399', '#3B82F6', '#A78BFA', '#FFFFFF']
+const DEFAULT_COLORS = ['#E8203A', '#F59E0B', '#34D399', '#3B82F6', '#A78BFA', '#FFFFFF']
 
 type Piece = {
   id: number
@@ -19,13 +19,17 @@ type Piece = {
 export default function Confetti({
   count = 36,
   duration = 2400,
+  colors,
 }: {
   count?: number
   duration?: number
+  /** Optional palette override. Defaults to the multi-colour set. */
+  colors?: string[]
 }) {
   const [pieces, setPieces] = useState<Piece[] | null>(null)
 
   useEffect(() => {
+    const palette = colors && colors.length ? colors : DEFAULT_COLORS
     const list: Piece[] = []
     for (let i = 0; i < count; i += 1) {
       list.push({
@@ -35,14 +39,14 @@ export default function Confetti({
         duration: duration + Math.random() * 600,
         drift: (Math.random() - 0.5) * 240, // -120 → +120 px
         rotation: 360 + Math.random() * 540,
-        color: COLORS[Math.floor(Math.random() * COLORS.length)],
+        color: palette[Math.floor(Math.random() * palette.length)],
         size: 0.7 + Math.random() * 0.7,
       })
     }
     setPieces(list)
     const t = setTimeout(() => setPieces(null), duration + 800)
     return () => clearTimeout(t)
-  }, [count, duration])
+  }, [count, duration, colors])
 
   if (!pieces) return null
 
