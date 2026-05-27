@@ -343,20 +343,100 @@ html[data-tier='vip'] {
   to   { opacity: 1; }
 }
 
-/* ─────────────────────── REVS RACE ───────────────────────
-   - race-pop: scale-in used by the countdown digits (3, 2, 1, GO).
-   - race-zoom: horizontal sprint of the car emojis on the track.
-     The visual distance is fixed; actual winner comes from server
-     scores in resolveRace — the animation is suspense only. */
+/* ─────────────────────── REVS RACE — visual layer ───────────────────────
+   Cinematic phase animations. Logic is unchanged (server RPCs still
+   own scoring + rewards); these keyframes drive the suspense between
+   tap and reveal. */
 
 @keyframes race-pop {
   0%   { transform: scale(0.4); opacity: 0; }
-  60%  { transform: scale(1.08); opacity: 1; }
-  100% { transform: scale(1); opacity: 1; }
+  60%  { transform: scale(1.12); opacity: 1; }
+  100% { transform: scale(1);   opacity: 1; }
 }
 
-@keyframes race-zoom {
-  0%   { left: 4px; }
-  10%  { left: 4px; }
-  100% { left: calc(100% - 44px); }
+/* Floating red particles in the card selector background. Each
+   particle picks its own --x drift and animation-delay via inline
+   style. */
+@keyframes race-particle-float {
+  0%   { transform: translate3d(0, 0, 0) scale(0.6); opacity: 0; }
+  10%  { opacity: 0.6; }
+  100% { transform: translate3d(var(--rx, 20px), -110vh, 0) scale(1); opacity: 0; }
+}
+.race-particle {
+  position: absolute;
+  bottom: -10px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 80, 100, 0.95) 0%, rgba(232, 32, 58, 0.0) 70%);
+  box-shadow: 0 0 16px rgba(232, 32, 58, 0.55);
+  pointer-events: none;
+  animation: race-particle-float linear infinite;
+}
+
+/* "VS" giant in the face-à-face. Slow pulse + glow drift. */
+@keyframes race-vs-pulse {
+  0%, 100% { transform: scale(1);     filter: drop-shadow(0 0 12px rgba(232,32,58,0.55)); }
+  50%      { transform: scale(1.08);  filter: drop-shadow(0 0 24px rgba(232,32,58,0.85)); }
+}
+
+/* Diagonal track lines scrolling behind the face-à-face screen. */
+@keyframes race-track-drift {
+  0%   { background-position:   0% 0%; }
+  100% { background-position: 100% 100%; }
+}
+
+/* GO flash — single full-screen white flash at countdown=0. */
+@keyframes race-go-flash {
+  0%   { opacity: 0.85; }
+  100% { opacity: 0; }
+}
+
+/* Road lane scroll — used by the race track during sprint. The
+   --road-speed CSS var lets us slow the loop during the finish
+   slow-mo without rebuilding the gradient. */
+@keyframes race-road-scroll {
+  0%   { background-position-y: 0; }
+  100% { background-position-y: 80px; }
+}
+
+/* Light trail behind each racing car. Pure scale-x animation on a
+   horizontal gradient. */
+@keyframes race-trail-pulse {
+  0%, 100% { opacity: 0.55; transform: scaleX(1); }
+  50%      { opacity: 0.85; transform: scaleX(1.05); }
+}
+
+/* Winning card spin on the result screen — slow continuous Y-axis
+   rotation that makes the card feel like a trophy. */
+@keyframes race-win-spin {
+  0%   { transform: perspective(1000px) rotateY(-12deg); }
+  50%  { transform: perspective(1000px) rotateY(12deg); }
+  100% { transform: perspective(1000px) rotateY(-12deg); }
+}
+
+/* Loot-box reveal. Shake → burst → reward enters. */
+@keyframes race-loot-shake {
+  0%, 100% { transform: translate(0, 0) rotate(0deg); }
+  20%      { transform: translate(-4px, -2px) rotate(-3deg); }
+  40%      { transform: translate(4px, 1px) rotate(3deg); }
+  60%      { transform: translate(-3px, 2px) rotate(-2deg); }
+  80%      { transform: translate(3px, -1px) rotate(2deg); }
+}
+@keyframes race-loot-burst {
+  0%   { transform: scale(1);   opacity: 1; }
+  60%  { transform: scale(1.6); opacity: 0.6; }
+  100% { transform: scale(2.2); opacity: 0; }
+}
+@keyframes race-reward-rise {
+  0%   { transform: scale(0.2) translateY(20px); opacity: 0; }
+  60%  { transform: scale(1.15) translateY(-4px); opacity: 1; }
+  100% { transform: scale(1) translateY(0);     opacity: 1; }
+}
+
+/* Card scale + glow used when a spot is picked in the selector. */
+@keyframes race-card-pop {
+  0%   { transform: scale(0.97); }
+  60%  { transform: scale(1.04); }
+  100% { transform: scale(1); }
 }
