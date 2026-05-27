@@ -51,7 +51,7 @@ export default function CollectionsSection({ spots }: { spots: Spot[] }) {
     <section>
       <div className="mb-3 flex items-baseline justify-between">
         <h2 className="font-display text-lg font-extrabold tracking-tighter text-fg">
-          Collections
+          Défis Collections
         </h2>
         <span className="label-up text-[10px] text-fg2">
           {progresses.filter((p) => p.claimedAt).length}/{COLLECTIONS.length}

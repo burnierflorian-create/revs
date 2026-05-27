@@ -254,3 +254,50 @@ html[data-tier='vip'] {
   pointer-events: none;
   animation: confetti-fall 2400ms var(--ease-soft) forwards;
 }
+
+/* ─────────────────────── Collector cards ───────────────────────
+   Three animations dedicated to the user's collector card grid:
+   - holo-shimmer: gold/rainbow gradient drift used on rarity chips
+     and as the holographic overlay layer for ultra_rare + unique cards.
+   - collector-enter: spring-physics scale+fade entry, staggered per
+     card via animation-delay set inline.
+   - collector-modal-in: same spring used when the detail modal opens. */
+
+@keyframes holo-shimmer {
+  0%   { background-position: 0% 50%; }
+  100% { background-position: 200% 50%; }
+}
+
+.collector-holo {
+  background: linear-gradient(
+    115deg,
+    transparent 0%,
+    rgba(255, 0, 128, 0.18) 20%,
+    rgba(0, 200, 255, 0.18) 38%,
+    rgba(255, 255, 0, 0.18) 56%,
+    rgba(120, 255, 80, 0.18) 74%,
+    transparent 100%
+  );
+  background-size: 250% 250%;
+  mix-blend-mode: screen;
+  animation: holo-shimmer 3.6s linear infinite;
+}
+
+@keyframes collector-enter-kf {
+  0%   { opacity: 0; transform: translateY(12px) scale(0.92); }
+  60%  { opacity: 1; transform: translateY(-2px) scale(1.02); }
+  100% { opacity: 1; transform: translateY(0)   scale(1); }
+}
+.collector-enter {
+  animation: collector-enter-kf 520ms var(--ease-spring) both;
+}
+
+@keyframes collector-modal-in {
+  0%   { opacity: 0; transform: scale(0.85); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}

@@ -21,6 +21,7 @@ import { useMyTier } from '../lib/tier'
 import { Skeleton } from '../components/Skeleton'
 import GarageCard from '../components/GarageCard'
 import CollectionsSection from '../components/CollectionsSection'
+import MyCollection from '../components/MyCollection'
 import TitleChip from '../components/TitleChip'
 
 
@@ -59,6 +60,9 @@ export default function Profile() {
   const [following, setFollowing] = useState(0)
   const [likesReceived, setLikesReceived] = useState(0)
   const [animPct, setAnimPct] = useState(0)
+  // Local-only UI state: which of the two sub-tabs (Garage vs
+  // Collection) is currently visible at the bottom of the profile.
+  const [garageTab, setGarageTab] = useState<'garage' | 'collection'>('garage')
 
   // Cover backdrop: the user's most valuable spot becomes the hero
   // image, blurred + dimmed. Falls back to the brand red gradient when
@@ -738,48 +742,89 @@ export default function Profile() {
         {/* SECTION 4.5 — Collections */}
         <CollectionsSection spots={spots} />
 
-        {/* SECTION 5 — Garage */}
+        {/* SECTION 5 — Garage / Collection (tabbed). The toggle stays
+            local to Profile; tapping it just swaps which sub-section
+            renders below. Counts shown in the header reflect the
+            active tab — same spots array, two different views. */}
         <section>
-          <h2 className="mb-3 font-display text-lg font-bold">
-            Mon garage{' '}
-            <span className="text-fg/40">
-              ({total} voiture{total > 1 ? 's' : ''})
-            </span>
-          </h2>
-          {total === 0 ? (
-            <div className="flex flex-col items-center rounded-2xl border border-white/5 bg-card px-6 py-12 text-center">
-              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-accent/10">
-                <Warehouse className="h-8 w-8 text-accent/70" />
-              </div>
-              <p className="mt-4 max-w-[15rem] font-medium">
-                Ton garage est vide, pars chasser ta première supercar
-              </p>
-              <button
-                onClick={() => navigate('/new-spot')}
-                className="mt-5 rounded-full bg-accent px-6 py-3 text-sm font-semibold"
-              >
-                Spotter
-              </button>
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 gap-3">
-              {spots.map((s) => (
+          <div className="mb-3 flex items-baseline justify-between">
+            <h2 className="font-display text-lg font-bold">
+              {garageTab === 'garage' ? 'Mon garage' : 'Ma Collection'}{' '}
+              <span className="text-fg/40">
+                ({total}{' '}
+                {garageTab === 'garage'
+                  ? `voiture${total > 1 ? 's' : ''}`
+                  : `carte${total > 1 ? 's' : ''}`}
+                )
+              </span>
+            </h2>
+          </div>
+
+          {/* Tab toggle — segmented control */}
+          <div
+            className="mb-4 grid grid-cols-2 gap-1 rounded-full p-1"
+            style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid var(--color-border)' }}
+            role="tablist"
+          >
+            {(['garage', 'collection'] as const).map((tab) => {
+              const active = garageTab === tab
+              return (
                 <button
-                  key={s.id}
-                  onClick={() => navigate(`/spot/${s.id}`)}
-                  className="tappable relative aspect-[4/3] overflow-hidden rounded-[20px] bg-[#0a0a0a] text-left"
-                  style={{ border: '1px solid var(--color-border)' }}
+                  key={tab}
+                  role="tab"
+                  aria-selected={active}
+                  onClick={() => setGarageTab(tab)}
+                  className="tappable rounded-full py-2 text-[12px] font-extrabold uppercase tracking-wider transition-colors"
+                  style={{
+                    background: active ? 'var(--color-accent)' : 'transparent',
+                    color: active ? '#fff' : 'var(--color-fg-2)',
+                    boxShadow: active ? '0 6px 16px rgba(232,32,58,0.40)' : undefined,
+                  }}
                 >
-                  <GarageCard
-                    brand={s.brand}
-                    model={s.model}
-                    year={s.year}
-                    category={s.category}
-                    imageUrl={s.garage_image_url}
-                  />
+                  {tab === 'garage' ? 'Garage' : 'Collection'}
                 </button>
-              ))}
-            </div>
+              )
+            })}
+          </div>
+
+          {garageTab === 'garage' ? (
+            total === 0 ? (
+              <div className="flex flex-col items-center rounded-2xl border border-white/5 bg-card px-6 py-12 text-center">
+                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-accent/10">
+                  <Warehouse className="h-8 w-8 text-accent/70" />
+                </div>
+                <p className="mt-4 max-w-[15rem] font-medium">
+                  Ton garage est vide, pars chasser ta première supercar
+                </p>
+                <button
+                  onClick={() => navigate('/new-spot')}
+                  className="mt-5 rounded-full bg-accent px-6 py-3 text-sm font-semibold"
+                >
+                  Spotter
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-3">
+                {spots.map((s) => (
+                  <button
+                    key={s.id}
+                    onClick={() => navigate(`/spot/${s.id}`)}
+                    className="tappable relative aspect-[4/3] overflow-hidden rounded-[20px] bg-[#0a0a0a] text-left"
+                    style={{ border: '1px solid var(--color-border)' }}
+                  >
+                    <GarageCard
+                      brand={s.brand}
+                      model={s.model}
+                      year={s.year}
+                      category={s.category}
+                      imageUrl={s.garage_image_url}
+                    />
+                  </button>
+                ))}
+              </div>
+            )
+          ) : (
+            <MyCollection spots={spots} />
           )}
         </section>
       </div>
