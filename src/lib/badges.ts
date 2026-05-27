@@ -102,6 +102,13 @@ export type BadgeContext = {
   likesReceived: number
   daysWithSpot: Set<string>
   earlyAdopter: boolean
+  /** REVS RACE counters. Optional so existing call sites keep working;
+   *  unlocks for race badges no-op when this is absent. */
+  raceStats?: {
+    wins: number
+    losses: number
+    perfectStarts: number
+  }
 }
 
 // ─────────────────────── Catalogue ───────────────────────
@@ -154,6 +161,15 @@ export const BADGES: Badge[] = [
   // Spéciaux
   { slug: 'early-adopter', emoji: '🌅', name: 'Early Adopter', desc: 'Tu étais là dès le début.', condition: 'Parmi les 100 premiers inscrits', category: 'special', order: 1, gold: true },
   { slug: 'legendaire',    emoji: '👑', name: 'Légendaire',    desc: 'Badge doré ultra rare.',     condition: 'Débloque le Million Club',         category: 'special', order: 2, gold: true },
+
+  // REVS RACE
+  { slug: 'race-first-blood',     emoji: '🏁', name: 'First Blood',        desc: 'Première victoire en REVS RACE.',                condition: 'Gagne une course REVS RACE',                              xp: 20,  category: 'special', order: 10 },
+  { slug: 'race-perfect-10',      emoji: '🎯', name: 'Perfect Start',      desc: 'Timing parfait 10 fois.',                       condition: 'Réussis un départ PARFAIT 10 fois',                        xp: 40,  category: 'special', order: 11 },
+  // Phase 2 placeholders — locked until multiplayer + history land.
+  { slug: 'race-underdog',        emoji: '⚡', name: 'Underdog',            desc: 'Gagner contre plus rare que toi.',              condition: 'Phase 2 — bat un adversaire de rareté supérieure',                  category: 'special', order: 12 },
+  { slug: 'race-streak-5',        emoji: '🔥', name: 'Win Streak ×5',       desc: '5 victoires consécutives.',                     condition: 'Phase 2 — gagne 5 courses d’affilée',                              category: 'special', order: 13 },
+  { slug: 'race-champion',        emoji: '👑', name: 'Champion',            desc: '50 victoires totales.',                          condition: 'Gagne 50 courses REVS RACE',                              xp: 100, category: 'special', order: 14, gold: true },
+  { slug: 'race-david-goliath',   emoji: '💀', name: 'David vs Goliath',    desc: 'Bat un score deux fois plus élevé.',            condition: 'Phase 2 — bat une voiture deux fois plus puissante en score',     category: 'special', order: 15 },
 ]
 
 /** Dynamic per-brand fan badges. Generated only for brands the user
@@ -276,6 +292,13 @@ export function computeUnlocks(ctx: BadgeContext): Set<string> {
   // Special
   add('early-adopter',     earlyAdopter)
   add('legendaire',        priceAtLeast(1_000_000) >= 1)
+
+  // REVS RACE — only the two trivially-derivable badges are wired in
+  // Phase 1. Phase 2 (multiplayer + race history) lights up the rest.
+  const rs = ctx.raceStats
+  add('race-first-blood', !!rs && rs.wins >= 1)
+  add('race-perfect-10',  !!rs && rs.perfectStarts >= 10)
+  add('race-champion',    !!rs && rs.wins >= 50)
 
   // Brand fans
   const brandCounts = new Map<string, number>()

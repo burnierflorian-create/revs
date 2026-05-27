@@ -5,6 +5,7 @@ import {
   Car,
   Flame,
   Flag,
+  Gamepad2,
   Target,
   ChevronRight,
   Camera,
@@ -329,13 +330,22 @@ export default function Home() {
             )}
           </div>
         </div>
-        <button
-          onClick={() => navigate('/settings')}
-          aria-label="Réglages"
-          className="tappable flex h-9 w-9 flex-none items-center justify-center rounded-full bg-card text-fg2 transition-colors hover:text-fg"
-        >
-          <Settings className="h-5 w-5" />
-        </button>
+        <div className="flex flex-none items-center gap-2">
+          <button
+            onClick={() => navigate('/games')}
+            aria-label="Jeux REVS"
+            className="tappable flex h-9 w-9 items-center justify-center rounded-full bg-card text-fg2 transition-colors hover:text-fg"
+          >
+            <Gamepad2 className="h-5 w-5" />
+          </button>
+          <button
+            onClick={() => navigate('/settings')}
+            aria-label="Réglages"
+            className="tappable flex h-9 w-9 items-center justify-center rounded-full bg-card text-fg2 transition-colors hover:text-fg"
+          >
+            <Settings className="h-5 w-5" />
+          </button>
+        </div>
       </header>
 
       <div className="space-y-7 pb-10">

@@ -15,6 +15,7 @@ import { supabase } from '../lib/supabase'
 import { type Spot } from '../lib/spots'
 import { planDisplayName, planInterval, planTier } from '../lib/plans'
 import { allBadges, computeUnlocks } from '../lib/badges'
+import { fetchRaceStats } from '../lib/race'
 import { xpLevel } from '../lib/xp'
 import { translateError } from '../lib/errors'
 import { useMyTier } from '../lib/tier'
@@ -63,6 +64,13 @@ export default function Profile() {
   // Local-only UI state: which of the two sub-tabs (Garage vs
   // Collection) is currently visible at the bottom of the profile.
   const [garageTab, setGarageTab] = useState<'garage' | 'collection'>('garage')
+  // REVS RACE counters drive the race-* badges. Fetched once per
+  // mount; absent until the call returns (badges just stay locked).
+  const [raceStats, setRaceStats] = useState<{
+    wins: number
+    losses: number
+    perfectStarts: number
+  } | null>(null)
 
   // Cover backdrop: the user's most valuable spot becomes the hero
   // image, blurred + dimmed. Falls back to the brand red gradient when
@@ -188,6 +196,15 @@ export default function Profile() {
       setFollowing(followingRes.count ?? 0)
       setLoading(false)
 
+      // REVS RACE stats — fire-and-forget, no blocking on render.
+      fetchRaceStats(user.id).then((rs) => {
+        setRaceStats({
+          wins: rs.wins,
+          losses: rs.losses,
+          perfectStarts: rs.perfect_starts,
+        })
+      })
+
       // Likes-received count drives the "Photographe" badge. Best-
       // effort follow-up — we don't want to delay the main render on
       // it, so it sits outside the Promise.all.
@@ -282,6 +299,7 @@ export default function Profile() {
     likesReceived,
     daysWithSpot,
     earlyAdopter,
+    raceStats: raceStats ?? undefined,
   }
   const badgeCatalogue = allBadges(badgeCtx)
   const unlocks = computeUnlocks(badgeCtx)

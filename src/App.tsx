@@ -24,6 +24,8 @@ const Badges = lazy(() => import('./pages/Badges'))
 const BadgeDetail = lazy(() => import('./pages/BadgeDetail'))
 const Referral = lazy(() => import('./pages/Referral'))
 const Radar = lazy(() => import('./pages/Radar'))
+const Games = lazy(() => import('./pages/Games'))
+const Race = lazy(() => import('./pages/Race'))
 const EventLive = lazy(() => import('./pages/EventLive'))
 const MyBrands = lazy(() => import('./pages/MyBrands'))
 const MyGallery = lazy(() => import('./pages/MyGallery'))
@@ -86,6 +88,8 @@ export default function App() {
           <Route path="/badges/:slug" element={lazyRoute(<BadgeDetail />)} />
           <Route path="/referral" element={lazyRoute(<Referral />)} />
           <Route path="/radar" element={lazyRoute(<Radar />)} />
+          <Route path="/games" element={lazyRoute(<Games />)} />
+          <Route path="/race" element={lazyRoute(<Race />)} />
           <Route path="/event/:id/live" element={lazyRoute(<EventLive />)} />
           <Route path="/mes-marques" element={lazyRoute(<MyBrands />)} />
           <Route path="/brands" element={lazyRoute(<Brands />)} />
