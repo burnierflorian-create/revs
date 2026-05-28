@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Settings,
@@ -501,91 +501,17 @@ export default function Home() {
           </section>
         )}
 
-        {/* 6 — CHALLENGES DE LA SEMAINE */}
+        {/* 6 — CHALLENGES DE LA SEMAINE (swipe carousel) */}
         {challenges.length > 0 && (
           <section>
             <SectionTitle
               icon={<Target className="h-[18px] w-[18px]" />}
               label="Challenges de la semaine"
-              action={
-                <button
-                  onClick={() => navigate('/challenges')}
-                  className="flex items-center gap-0.5 text-xs font-medium text-fg/60 hover:text-fg"
-                >
-                  Tout voir
-                  <ChevronRight className="h-3.5 w-3.5" />
-                </button>
-              }
             />
-            <div className="no-scrollbar -mx-5 overflow-x-auto">
-              <div className="flex gap-3 px-5 pb-2">
-                {challenges.map((c) => {
-                  const pct = computeChallengePct(c)
-                  return (
-                    <button
-                      key={c.id}
-                      onClick={() => navigate('/challenges')}
-                      className={`tappable relative flex w-[84%] min-h-[140px] flex-none flex-col rounded-3xl p-5 text-left ${
-                        c.claimed ? 'bg-green-500/8' : ''
-                      }`}
-                      style={{
-                        background: c.claimed
-                          ? undefined
-                          : 'linear-gradient(155deg, #1a1a1d 0%, #141416 60%, #0f0f11 100%)',
-                        border: c.claimed
-                          ? '1px solid rgba(34,197,94,0.35)'
-                          : '1px solid var(--color-border)',
-                      }}
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <p
-                          className="font-display leading-tight tracking-tighter text-fg"
-                          style={{ fontSize: '18px', fontWeight: 800 }}
-                        >
-                          {c.title}
-                        </p>
-                        <span
-                          className="flex flex-none items-center gap-1 rounded-full bg-accent px-3 py-1.5 text-[12px] font-extrabold uppercase tracking-wider text-fg"
-                          style={{
-                            boxShadow: '0 8px 22px rgba(232,32,58,0.50)',
-                          }}
-                        >
-                          <Zap className="h-3.5 w-3.5" />+{c.xp_reward} XP
-                        </span>
-                      </div>
-                      <p className="mt-2 text-[13px] leading-snug text-fg2">
-                        {c.description}
-                      </p>
-                      <div className="mt-auto pt-4">
-                        <div className="h-2 w-full overflow-hidden rounded-full bg-white/[0.07]">
-                          <div
-                            className={`h-full rounded-full transition-[width] duration-700 ease-out ${
-                              c.completed ? 'bg-green-500' : 'bg-accent'
-                            }`}
-                            style={{
-                              width: `${pct}%`,
-                              boxShadow: c.completed
-                                ? undefined
-                                : '0 0 10px rgba(232,32,58,0.55)',
-                            }}
-                          />
-                        </div>
-                        <p className="label-up mt-2 text-[10px] text-fg2">
-                          {c.claimed
-                            ? '✓ COMPLÉTÉ'
-                            : `${c.progress} / ${c.target_value}`}
-                        </p>
-                      </div>
-                    </button>
-                  )
-                })}
-                {challenges.length > 1 && (
-                  <div className="flex w-6 flex-none items-center justify-center self-stretch text-fg2/40">
-                    →
-                  </div>
-                )}
-              </div>
-            </div>
+            <ChallengesCarousel
+              challenges={challenges}
+              onPick={() => navigate('/challenges')}
+            />
           </section>
         )}
 
@@ -757,6 +683,150 @@ function DailyCard({
       {/* BOTTOM — rarest spot, landscape thumb + meta-right layout. */}
       {rarest && <DailyCardSpotRow rarest={rarest} onOpen={onOpenSpot} />}
     </section>
+  )
+}
+
+/** Single-card swipe carousel for the weekly challenges row. Native
+ *  CSS scroll-snap drives the spring-physics-feeling swipe (no JS
+ *  pointer maths needed); a scroll listener tracks which card is
+ *  centered so the dots indicator stays in sync. 15% of the next
+ *  card peeks on the right when one exists. */
+function ChallengesCarousel({
+  challenges,
+  onPick,
+}: {
+  challenges: Challenge[]
+  onPick: () => void
+}) {
+  const scrollerRef = useRef<HTMLDivElement | null>(null)
+  const [idx, setIdx] = useState(0)
+
+  // Translate scrollLeft → centered card index. Each card carries a
+  // fixed flex-basis so cardWidth is deterministic.
+  function onScroll() {
+    const el = scrollerRef.current
+    if (!el) return
+    const card = el.querySelector<HTMLDivElement>('[data-chal-card]')
+    if (!card) return
+    const gap = 12 // matches `gap-3` below
+    const step = card.offsetWidth + gap
+    const next = Math.round(el.scrollLeft / step)
+    if (next !== idx && next >= 0 && next < challenges.length) {
+      setIdx(next)
+    }
+  }
+
+  return (
+    <div>
+      <div
+        ref={scrollerRef}
+        onScroll={onScroll}
+        className="no-scrollbar -mx-5 overflow-x-auto"
+        style={{
+          scrollSnapType: 'x mandatory',
+          scrollBehavior: 'smooth',
+          WebkitOverflowScrolling: 'touch',
+        }}
+      >
+        <div
+          className="flex gap-3 px-5 pb-1"
+          style={{
+            // `scroll-padding-inline` keeps each snap point aligned
+            // with the start of the visible area despite the px-5 pad.
+            scrollPaddingInline: '20px',
+          }}
+        >
+          {challenges.map((c, i) => {
+            const pct = computeChallengePct(c)
+            const done = c.claimed || c.completed
+            return (
+              <button
+                key={c.id}
+                data-chal-card
+                onClick={onPick}
+                className="tappable relative flex min-h-[150px] flex-none flex-col rounded-3xl p-5 text-left"
+                style={{
+                  // 85% of the viewport: leaves ~15% room for the next
+                  // card to peek on the right. Matches the spec.
+                  flexBasis: 'calc(100vw - 60px)',
+                  maxWidth: 'calc(100vw - 60px)',
+                  scrollSnapAlign: 'start',
+                  scrollSnapStop: 'always',
+                  background: done
+                    ? 'linear-gradient(155deg, rgba(34,197,94,0.08) 0%, #141416 70%)'
+                    : 'linear-gradient(155deg, #1a1a1d 0%, #141416 60%, #0f0f11 100%)',
+                  border: done
+                    ? '1px solid rgba(34,197,94,0.35)'
+                    : '1px solid var(--color-border)',
+                }}
+                aria-label={`Challenge ${i + 1} sur ${challenges.length} — ${c.title}`}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <p
+                    className="font-display leading-tight tracking-tighter text-fg"
+                    style={{ fontSize: '20px', fontWeight: 800, letterSpacing: '-0.02em' }}
+                  >
+                    {c.title}
+                  </p>
+                  <span
+                    className="flex flex-none items-center gap-1 rounded-full bg-accent px-3 py-1.5 text-[12px] font-extrabold uppercase tracking-wider text-fg"
+                    style={{ boxShadow: '0 8px 22px rgba(232,32,58,0.50)' }}
+                  >
+                    <Zap className="h-3.5 w-3.5" />+{c.xp_reward} XP
+                  </span>
+                </div>
+                <p className="mt-2 text-[13px] leading-snug text-fg2">
+                  {c.description}
+                </p>
+                <div className="mt-auto pt-5">
+                  <div className="h-2 w-full overflow-hidden rounded-full bg-white/[0.07]">
+                    <div
+                      className={`h-full rounded-full transition-[width] duration-700 ease-out ${
+                        done ? 'bg-green-500' : 'bg-accent'
+                      }`}
+                      style={{
+                        width: `${pct}%`,
+                        boxShadow: done
+                          ? undefined
+                          : '0 0 10px rgba(232,32,58,0.55)',
+                      }}
+                    />
+                  </div>
+                  <p className="label-up mt-2 text-[10px] text-fg2">
+                    {done
+                      ? '✓ COMPLÉTÉ'
+                      : `${c.progress} / ${c.target_value}`}
+                  </p>
+                </div>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Dots indicator — single accent dot for the centered card, rest
+          dimmed. Hidden when there's only one challenge so we don't
+          show a lone dot. */}
+      {challenges.length > 1 && (
+        <div className="mt-3 flex items-center justify-center gap-1.5">
+          {challenges.map((_, i) => {
+            const active = i === idx
+            return (
+              <span
+                key={i}
+                className="rounded-full transition-all"
+                style={{
+                  width: active ? 18 : 6,
+                  height: 6,
+                  background: active ? 'var(--color-accent)' : 'rgba(255,255,255,0.18)',
+                  boxShadow: active ? '0 0 10px rgba(232,32,58,0.60)' : undefined,
+                }}
+              />
+            )
+          })}
+        </div>
+      )}
+    </div>
   )
 }
 
