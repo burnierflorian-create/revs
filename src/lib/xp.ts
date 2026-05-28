@@ -1,11 +1,17 @@
-// XP levels — Débutant 0-99, Chasseur 100-299, Expert 300-699,
-// Élite 700-1499, Légende 1500+. `max` is exclusive; null = top tier.
+// XP levels — full ladder, no upper cap. Each tier's `max` is exclusive
+// (a user with `xp === tier.max` already belongs to the next tier).
+// The top tier (REVS OG) sets `max: null` to signal "no cap".
 const TIERS: { name: string; min: number; max: number | null }[] = [
-  { name: 'Débutant', min: 0, max: 100 },
-  { name: 'Chasseur', min: 100, max: 300 },
-  { name: 'Expert', min: 300, max: 700 },
-  { name: 'Élite', min: 700, max: 1500 },
-  { name: 'Légende', min: 1500, max: null },
+  { name: 'Rookie',         min: 0,      max: 200 },
+  { name: 'Chasseur',       min: 200,    max: 500 },
+  { name: 'Expert',         min: 500,    max: 1000 },
+  { name: 'Élite',          min: 1000,   max: 2000 },
+  { name: 'Maître Spotter', min: 2000,   max: 4000 },
+  { name: 'Légende',        min: 4000,   max: 8000 },
+  { name: 'Icône REVS',     min: 8000,   max: 15000 },
+  { name: 'Fantôme',        min: 15000,  max: 25000 },
+  { name: 'Mythique',       min: 25000,  max: 50000 },
+  { name: 'REVS OG',        min: 50000,  max: null },
 ]
 
 export type XpLevel = {
@@ -33,3 +39,5 @@ export function xpLevel(xp: number): XpLevel {
     next: TIERS[idx + 1]?.name ?? null,
   }
 }
+
+export const XP_LADDER: ReadonlyArray<{ name: string; min: number; max: number | null }> = TIERS
