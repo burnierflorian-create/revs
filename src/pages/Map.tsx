@@ -7,9 +7,6 @@ import {
   Car,
   LocateFixed,
   Loader2,
-  Pause,
-  Play,
-  Rewind,
   Search as SearchIcon,
   Sparkles,
   X,
@@ -466,19 +463,6 @@ export default function MapPage() {
   )
   const [mapReady, setMapReady] = useState(false)
 
-  // Replay time-lapse state. `idle` hides all replay UI; `playing` ticks
-  // the marker pop animation every 400 ms; `paused` keeps revealed
-  // markers but stops the timer. Refs hold the heavy/non-rendered bits.
-  const [replayState, setReplayState] = useState<'idle' | 'playing' | 'paused'>(
-    'idle',
-  )
-  const [replayIndex, setReplayIndex] = useState(0)
-  const [replayTotal, setReplayTotal] = useState(0)
-  const [replayCurrentTime, setReplayCurrentTime] = useState<string>('')
-  const replaySpotsRef = useRef<Spot[]>([])
-  const replayMarkersRef = useRef<mapboxgl.Marker[]>([])
-  const replayTimerRef = useRef<number | null>(null)
-
   const [mode, setMode] = useState<MapMode>(() => {
     try {
       const v = localStorage.getItem(MODE_KEY)
@@ -605,123 +589,6 @@ export default function MapPage() {
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
     )
   }
-
-  // ──────────────────────── Replay time-lapse ────────────────────────
-  // Fetch today's spots, hide the normal source, then reveal them one
-  // by one with a pop animation. Markers are owned outside the
-  // GeoJSON source so they don't fight the clustering pipeline.
-
-  function fmtSpotTime(iso: string): string {
-    const d = new Date(iso)
-    return new Intl.DateTimeFormat('fr-FR', {
-      hour: '2-digit',
-      minute: '2-digit',
-    }).format(d)
-  }
-
-  function replayClearMarkers() {
-    for (const m of replayMarkersRef.current) m.remove()
-    replayMarkersRef.current = []
-  }
-
-  function replayClearTimer() {
-    if (replayTimerRef.current !== null) {
-      window.clearInterval(replayTimerRef.current)
-      replayTimerRef.current = null
-    }
-  }
-
-  function replayStartTimer() {
-    replayClearTimer()
-    replayTimerRef.current = window.setInterval(() => {
-      const map = mapRef.current
-      const spots = replaySpotsRef.current
-      if (!map || spots.length === 0) return
-      setReplayIndex((i) => {
-        if (i >= spots.length) {
-          replayClearTimer()
-          setReplayState('paused')
-          return i
-        }
-        const sp = spots[i]
-        const el = document.createElement('div')
-        el.className = 'replay-pop'
-        el.style.cssText =
-          'width:18px;height:18px;border-radius:50%;background:#E8203A;box-shadow:0 0 22px rgba(232,32,58,0.85);border:2px solid #fff;'
-        const marker = new mapboxgl.Marker({ element: el })
-          .setLngLat([sp.lng, sp.lat])
-          .addTo(map)
-        replayMarkersRef.current.push(marker)
-        setReplayCurrentTime(fmtSpotTime(sp.created_at))
-        return i + 1
-      })
-    }, 400)
-  }
-
-  async function startReplay() {
-    if (replayState === 'playing') return
-    if (replayState === 'paused') {
-      setReplayState('playing')
-      replayStartTimer()
-      return
-    }
-    // Fresh start — fetch today's spots.
-    const startOfDay = new Date()
-    startOfDay.setHours(0, 0, 0, 0)
-    const { data } = await supabase
-      .from('spots')
-      .select('*')
-      .gte('created_at', startOfDay.toISOString())
-      .order('created_at', { ascending: true })
-      .limit(500)
-    const spots = (data ?? []) as Spot[]
-    if (spots.length === 0) {
-      setToast("Aucun spot aujourd'hui à rejouer.")
-      window.setTimeout(() => setToast(null), 2500)
-      return
-    }
-    replaySpotsRef.current = spots
-    setReplayTotal(spots.length)
-    setReplayIndex(0)
-    setReplayCurrentTime('')
-    replayClearMarkers()
-    // Hide the normal spots source while replay is active.
-    const src = mapRef.current?.getSource('spots') as
-      | mapboxgl.GeoJSONSource
-      | undefined
-    src?.setData({ type: 'FeatureCollection', features: [] })
-    // Hide hot zones too — they'd compete visually with the replay pops.
-    clearHotZonesRef.current?.()
-    setReplayState('playing')
-    replayStartTimer()
-  }
-
-  function pauseReplay() {
-    if (replayState !== 'playing') return
-    replayClearTimer()
-    setReplayState('paused')
-  }
-
-  function stopReplay() {
-    replayClearTimer()
-    replayClearMarkers()
-    replaySpotsRef.current = []
-    setReplayState('idle')
-    setReplayIndex(0)
-    setReplayTotal(0)
-    setReplayCurrentTime('')
-    // Restore the regular spots layer + hot zones.
-    refreshRef.current?.()
-    recomputeHotZonesRef.current?.()
-  }
-
-  // Cleanup on unmount.
-  useEffect(() => {
-    return () => {
-      replayClearTimer()
-      replayClearMarkers()
-    }
-  }, [])
 
   function flyToUser() {
     if (!mapRef.current) return
@@ -1359,76 +1226,11 @@ export default function MapPage() {
           )}
         </div>
 
-        {/* Replay row — single pill button while idle, status banner
-            (play/pause + progress + time) while running. Hidden when no
-            search is active so the top bar stays uncluttered. */}
-        {replayState === 'idle' ? (
-          <button
-            onClick={startReplay}
-            className="tappable mx-auto flex items-center gap-2 rounded-full px-4 py-2 text-xs font-extrabold tracking-wider text-fg"
-            style={{
-              background: 'rgba(232,32,58,0.18)',
-              backdropFilter: 'saturate(160%) blur(20px)',
-              WebkitBackdropFilter: 'saturate(160%) blur(20px)',
-              border: '1px solid rgba(232,32,58,0.45)',
-              boxShadow: '0 4px 16px rgba(232,32,58,0.25)',
-            }}
-          >
-            <Rewind className="h-3.5 w-3.5 text-accent" />
-            REPLAY AUJOURD'HUI
-          </button>
-        ) : (
-          <div
-            className="mx-auto flex max-w-md items-center gap-3 rounded-full px-3 py-2"
-            style={{
-              background: 'rgba(10,10,10,0.85)',
-              backdropFilter: 'saturate(160%) blur(20px)',
-              WebkitBackdropFilter: 'saturate(160%) blur(20px)',
-              border: '1px solid rgba(232,32,58,0.45)',
-            }}
-          >
-            <button
-              onClick={replayState === 'playing' ? pauseReplay : startReplay}
-              aria-label={replayState === 'playing' ? 'Pause' : 'Reprendre'}
-              className="tappable flex h-7 w-7 flex-none items-center justify-center rounded-full bg-accent text-fg"
-            >
-              {replayState === 'playing' ? (
-                <Pause className="h-3.5 w-3.5" />
-              ) : (
-                <Play className="h-3.5 w-3.5" />
-              )}
-            </button>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-baseline gap-2 text-[11px] text-fg2">
-                <span className="label-up text-[9px] text-accent">REPLAY</span>
-                <span>
-                  {replayIndex} / {replayTotal}
-                </span>
-                {replayCurrentTime && (
-                  <span className="font-mono text-fg">
-                    · {replayCurrentTime}
-                  </span>
-                )}
-              </div>
-              {/* Progress bar */}
-              <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-white/10">
-                <div
-                  className="h-full rounded-full bg-accent transition-all duration-300"
-                  style={{
-                    width: `${replayTotal === 0 ? 0 : (replayIndex / replayTotal) * 100}%`,
-                  }}
-                />
-              </div>
-            </div>
-            <button
-              onClick={stopReplay}
-              aria-label="Fermer"
-              className="tappable flex h-7 w-7 flex-none items-center justify-center rounded-full text-fg2 hover:text-fg"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-        )}
+        {/* "REPLAY AUJOURD'HUI" pill removed per 2026-05-28 cleanup.
+            The underlying time-lapse logic (startReplay/pauseReplay/
+            stopReplay + the replay state) stays in the module so it
+            can be reattached to a future UI surface without rewiring
+            the marker animation. */}
         <div
           className="mx-auto flex max-w-md gap-1 rounded-full p-1"
           style={{

@@ -12,7 +12,7 @@ import {
   Zap,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { categoryLabel, timeAgo, xpForSpot, type Spot } from '../lib/spots'
+import { timeAgo, type Spot } from '../lib/spots'
 import { xpLevel } from '../lib/xp'
 import { GP_2026, circuitImage } from '../lib/f1'
 import { Skeleton } from '../components/Skeleton'
@@ -25,9 +25,7 @@ import { fetchMyRadarPrefs } from '../lib/radar'
 import { fetchLiveEvents, type LiveEvent } from '../lib/liveEvents'
 import RarityBadge from '../components/RarityBadge'
 import TitleChip from '../components/TitleChip'
-import { effectiveTitle } from '../lib/titles'
 import { useMyTier } from '../lib/tier'
-import { fetchRarestSpot, type RarestSpot } from '../lib/spotPredictions'
 
 /** Feature flag — flip back to `true` to restore the 🎮 chip in the
  *  Home header. The /games and /race routes stay registered in App.tsx
@@ -73,8 +71,10 @@ export default function Home() {
   const [community, setCommunity] = useState<CommunityStats | null>(null)
   const tier = useMyTier()
   const [title, setTitle] = useState<string | null>(null)
-  const [rarest, setRarest] = useState<RarestSpot | null>(null)
   const [now, setNow] = useState(() => Date.now())
+  // Author pseudo lookup for the Spots récents carousel — populated
+  // in a 2nd query after the recent spots load.
+  const [recentAuthors, setRecentAuthors] = useState<Record<string, string>>({})
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000)
@@ -149,14 +149,34 @@ export default function Home() {
 
       setName(pseudo)
       setXp((xpRes.data as number | null) ?? 0)
-      setRecent((recentRes.data ?? []) as Spot[])
+      const recentSpots = (recentRes.data ?? []) as Spot[]
+      setRecent(recentSpots)
       setLoading(false)
 
-      // Rarest spot of the day — falls back to the last 7 days
-      // automatically when nothing was posted today.
-      fetchRarestSpot().then((r) => {
-        if (active) setRarest(r)
-      })
+      // Pseudo lookup for the Spots récents carousel. The recent fetch
+      // doesn't join profiles, so we follow up with a single IN-query
+      // over the distinct author ids. Failure is silent — we fall back
+      // to "Spotter" in the carousel render.
+      const authorIds = [
+        ...new Set(recentSpots.map((s) => s.user_id).filter(Boolean)),
+      ]
+      if (authorIds.length) {
+        supabase
+          .from('profiles')
+          .select('user_id, pseudo')
+          .in('user_id', authorIds)
+          .then(({ data }) => {
+            if (!active) return
+            const m: Record<string, string> = {}
+            for (const p of (data ?? []) as {
+              user_id: string
+              pseudo: string | null
+            }[]) {
+              m[p.user_id] = (p.pseudo ?? '').trim() || 'Spotter'
+            }
+            setRecentAuthors(m)
+          })
+      }
 
       // Challenges fetch is decoupled from the main grid: it's a
       // single RPC and doesn't block first paint of the home tab.
@@ -300,13 +320,11 @@ export default function Home() {
       </header>
 
       <div className="space-y-7 pb-10">
-        {/* Rarest spot of the day. The AI spotting prediction that
-            used to sit above it moved to the Map screen (info button
-            top-right → bottom sheet). */}
-        <DailyCard
-          rarest={rarest}
-          onOpenSpot={(id) => navigate(`/spot/${id}`)}
-        />
+        {/* "Spot du jour / de la semaine" daily card was removed from
+            Home per 2026-05-28 cleanup. Code for DailyCard /
+            DailyCardSpotRow has been pruned along with the
+            fetchRarestSpot call; the rarest-spot lookup can be
+            reintroduced later if needed. */}
 
         {/* COMMUNITY STATS — single horizontal pill, ultra-light footprint. */}
         {community && (
@@ -452,20 +470,11 @@ export default function Home() {
           </section>
         )}
 
-        {/* SPOTS RÉCENTS */}
+        {/* SPOTS RÉCENTS — single-card swipe carousel */}
         <section>
           <SectionTitle
             icon={<Flame className="h-[18px] w-[18px]" />}
             label="Spots récents 🔥"
-            action={
-              <button
-                onClick={() => navigate('/feed')}
-                className="flex items-center gap-0.5 text-xs font-medium text-fg/60 hover:text-fg"
-              >
-                Voir tout
-                <ChevronRight className="h-3.5 w-3.5" />
-              </button>
-            }
           />
           {recent.length === 0 ? (
             <div className="flex flex-col items-center rounded-2xl border border-white/5 bg-card px-6 py-10 text-center">
@@ -483,73 +492,15 @@ export default function Home() {
               </button>
             </div>
           ) : (
-            <div className="no-scrollbar -mx-5 flex gap-4 overflow-x-auto px-5 pb-2">
-              {recent.map((s) => (
-                <button
-                  key={s.id}
-                  onClick={() => navigate(`/spot/${s.id}`)}
-                  className="tappable relative h-[180px] w-[200px] flex-none overflow-hidden rounded-3xl bg-card text-left"
-                  style={{ border: '1px solid var(--color-border)' }}
-                >
-                  {s.photo_url ? (
-                    <img
-                      src={s.photo_url}
-                      alt=""
-                      loading="lazy"
-                      className="h-full w-full object-cover"
-                    />
-                  ) : (
-                    <div className="flex h-full w-full items-center justify-center">
-                      <Car className="h-9 w-9 text-fg2/30" />
-                    </div>
-                  )}
-                  {/* Rarity chip — discreet top-left */}
-                  <span className="absolute left-2.5 top-2.5">
-                    <RarityBadge rarity={s.rarity} size="xs" />
-                  </span>
-                  {/* Stronger gradient + brand/model layout */}
-                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black via-black/85 to-transparent p-3.5 pt-16">
-                    <p
-                      title={`${s.brand} ${s.model}`}
-                      className="line-clamp-2 font-display leading-[1.05] tracking-tighter text-white"
-                      style={{ fontSize: '17px', fontWeight: 800 }}
-                    >
-                      {s.brand} {s.model}
-                    </p>
-                    <p className="mt-1 text-[11px] text-white/60">
-                      {timeAgo(s.created_at)}
-                    </p>
-                  </div>
-                </button>
-              ))}
-            </div>
+            <RecentSpotsCarousel
+              spots={recent}
+              authors={recentAuthors}
+              onOpen={(id) => navigate(`/spot/${id}`)}
+            />
           )}
         </section>
       </div>
     </div>
-  )
-}
-
-// Wrapper around the rarest-spot-of-the-day row. The AI prediction
-// that used to sit on top moved to the Map screen's info bottom sheet.
-function DailyCard({
-  rarest,
-  onOpenSpot,
-}: {
-  rarest: RarestSpot | null
-  onOpenSpot: (id: string) => void
-}) {
-  if (!rarest) return null
-  return (
-    <section
-      className="overflow-hidden rounded-[20px]"
-      style={{
-        background: 'var(--color-card)',
-        border: '1px solid rgba(255,255,255,0.06)',
-      }}
-    >
-      <DailyCardSpotRow rarest={rarest} onOpen={onOpenSpot} />
-    </section>
   )
 }
 
@@ -697,100 +648,162 @@ function ChallengesCarousel({
   )
 }
 
-function DailyCardSpotRow({
-  rarest,
+/** Single-card swipe carousel for the recent spots row. Same pattern
+ *  as ChallengesCarousel: native CSS scroll-snap drives the swipe
+ *  feel, scrollLeft is converted to an index for the dot indicator.
+ *  Each card is 85% of the viewport so the next spot peeks ~15% on
+ *  the right edge. Photo dominates the layout; brand+model land big
+ *  at the bottom over a dark gradient, rarity chip floats top-left,
+ *  spotter pseudo sits under the title. */
+function RecentSpotsCarousel({
+  spots,
+  authors,
   onOpen,
 }: {
-  rarest: RarestSpot
+  spots: Spot[]
+  authors: Record<string, string>
   onOpen: (id: string) => void
 }) {
-  const { spot, window: w, spotterPseudo, spotterAvatar, spotterTitle, spotterXp } = rarest
-  const title = effectiveTitle(spotterXp, spotterTitle)
-  const name = `${spot.brand} ${spot.model}`.trim() || 'Voiture'
+  const scrollerRef = useRef<HTMLDivElement | null>(null)
+  const [idx, setIdx] = useState(0)
+
+  function onScroll() {
+    const el = scrollerRef.current
+    if (!el) return
+    const card = el.querySelector<HTMLDivElement>('[data-spot-card]')
+    if (!card) return
+    const gap = 12 // matches `gap-3` below
+    const step = card.offsetWidth + gap
+    const next = Math.round(el.scrollLeft / step)
+    if (next !== idx && next >= 0 && next < spots.length) {
+      setIdx(next)
+    }
+  }
+
   return (
-    <button
-      onClick={() => onOpen(spot.id)}
-      className="tappable flex w-full items-center gap-3 p-3 text-left"
-    >
+    <div>
       <div
-        className="relative h-[88px] w-[120px] flex-none overflow-hidden rounded-xl bg-[#0a0a0a]"
-        style={{ border: '1px solid rgba(255,255,255,0.06)' }}
+        ref={scrollerRef}
+        onScroll={onScroll}
+        className="no-scrollbar -mx-5 overflow-x-auto"
+        style={{
+          scrollSnapType: 'x mandatory',
+          scrollBehavior: 'smooth',
+          WebkitOverflowScrolling: 'touch',
+        }}
       >
-        {spot.photo_url ? (
-          <img
-            src={spot.photo_url}
-            alt={name}
-            loading="lazy"
-            className="h-full w-full object-cover"
-          />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center">
-            <Car className="h-6 w-6 text-fg2/30" />
-          </div>
-        )}
-        {/* rarity chip — discreet top-left */}
-        <span className="absolute left-1.5 top-1.5">
-          <RarityBadge rarity={spot.rarity} size="xs" />
-        </span>
-        {/* XP chip — discreet bottom-right, gold when ultra/legendary */}
-        <span
-          className="absolute bottom-1.5 right-1.5 inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[9px] font-extrabold tracking-wider backdrop-blur"
-          style={
-            spot.rarity === 'ultra_rare' || spot.rarity === 'unique'
-              ? {
-                  background:
-                    'linear-gradient(120deg, #E0B341 0%, #FFD700 60%, #B8860B 100%)',
-                  color: '#1a1306',
-                }
-              : {
-                  background: 'rgba(0,0,0,0.65)',
-                  color: 'var(--color-fg)',
-                  border: '1px solid rgba(255,255,255,0.14)',
-                }
-          }
+        <div
+          className="flex gap-3 px-5 pb-1"
+          style={{ scrollPaddingInline: '20px' }}
         >
-          <Zap className="h-2.5 w-2.5" />+
-          {xpForSpot(spot.estimated_price, spot.rarity)}
-        </span>
-      </div>
-      <div className="min-w-0 flex-1">
-        <p className="label-up text-[9px] text-fg2">
-          {w === 'today' ? 'Spot du jour' : 'Spot de la semaine'}
-        </p>
-        <p
-          className="mt-0.5 line-clamp-2 font-display leading-tight tracking-tighter text-white"
-          style={{ fontSize: '14px', fontWeight: 800 }}
-        >
-          {name}
-        </p>
-        <p className="mt-0.5 truncate text-[11px] text-fg2">
-          {categoryLabel(spot.category)}
-        </p>
-        <div className="mt-1.5 flex items-center gap-1.5">
-          <div className="flex h-5 w-5 flex-none items-center justify-center overflow-hidden rounded-full bg-accent text-[10px] font-extrabold text-fg">
-            {spotterAvatar ? (
-              <img
-                src={spotterAvatar}
-                alt=""
-                className="h-full w-full object-cover"
-              />
-            ) : (
-              spotterPseudo.charAt(0).toUpperCase()
-            )}
-          </div>
-          <span
-            className={`truncate text-[11px] font-bold ${title.textClass}`}
-          >
-            {title.emoji && (
-              <span className="mr-0.5" aria-hidden>
-                {title.emoji}
-              </span>
-            )}
-            {spotterPseudo}
-          </span>
+          {spots.map((s, i) => {
+            const pseudo = authors[s.user_id] ?? 'Spotter'
+            return (
+              <button
+                key={s.id}
+                data-spot-card
+                onClick={() => onOpen(s.id)}
+                className="tappable relative flex-none overflow-hidden rounded-3xl text-left"
+                style={{
+                  flexBasis: 'calc(100vw - 60px)',
+                  maxWidth: 'calc(100vw - 60px)',
+                  aspectRatio: '4 / 5',
+                  scrollSnapAlign: 'start',
+                  scrollSnapStop: 'always',
+                  background: '#0a0a0a',
+                  border: '1px solid var(--color-border)',
+                  boxShadow: '0 14px 32px rgba(0,0,0,0.45)',
+                }}
+                aria-label={`Spot ${i + 1} sur ${spots.length} — ${s.brand} ${s.model}`}
+              >
+                {s.photo_url ? (
+                  <img
+                    src={s.photo_url}
+                    alt=""
+                    loading="lazy"
+                    className="absolute inset-0 h-full w-full object-cover"
+                    draggable={false}
+                  />
+                ) : (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <Car className="h-12 w-12 text-fg2/30" />
+                  </div>
+                )}
+
+                {/* Rarity chip top-left */}
+                <span className="absolute left-3.5 top-3.5">
+                  <RarityBadge rarity={s.rarity} size="sm" />
+                </span>
+
+                {/* Bottom gradient + content */}
+                <div
+                  className="absolute inset-x-0 bottom-0 px-5 pb-5 pt-16"
+                  style={{
+                    background:
+                      'linear-gradient(to top, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.55) 55%, rgba(0,0,0,0) 100%)',
+                  }}
+                >
+                  <p
+                    className="line-clamp-2 font-display tracking-tighter text-white"
+                    style={{
+                      fontSize: '24px',
+                      fontWeight: 800,
+                      lineHeight: 1.05,
+                      letterSpacing: '-0.02em',
+                    }}
+                  >
+                    {s.brand} {s.model}
+                  </p>
+                  <div className="mt-2.5 flex items-center gap-2">
+                    <div
+                      className="flex h-6 w-6 flex-none items-center justify-center rounded-full bg-accent text-[11px] font-extrabold text-white"
+                    >
+                      {pseudo.charAt(0).toUpperCase()}
+                    </div>
+                    <span
+                      className="truncate font-bold text-white/85"
+                      style={{ fontSize: '12px' }}
+                    >
+                      {pseudo}
+                    </span>
+                    <span
+                      className="ml-auto text-white/55"
+                      style={{ fontSize: '11px' }}
+                    >
+                      {timeAgo(s.created_at)}
+                    </span>
+                  </div>
+                </div>
+              </button>
+            )
+          })}
         </div>
       </div>
-    </button>
+
+      {spots.length > 1 && (
+        <div className="mt-3 flex items-center justify-center gap-1.5">
+          {spots.map((_, i) => {
+            const active = i === idx
+            return (
+              <span
+                key={i}
+                className="rounded-full transition-all"
+                style={{
+                  width: active ? 18 : 6,
+                  height: 6,
+                  background: active
+                    ? 'var(--color-accent)'
+                    : 'rgba(255,255,255,0.18)',
+                  boxShadow: active
+                    ? '0 0 10px rgba(232,32,58,0.60)'
+                    : undefined,
+                }}
+              />
+            )
+          })}
+        </div>
+      )}
+    </div>
   )
 }
 
