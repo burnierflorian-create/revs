@@ -14,6 +14,13 @@ import {
 } from '../lib/plans'
 import { translateError } from '../lib/errors'
 
+/** Feature flag — flip to `true` to surface the VIP tier card on the
+ *  subscription grid again. The card component and all the supporting
+ *  copy / checkout wiring are left intact so re-enabling is a one-line
+ *  change. Existing VIP subscribers keep their perks regardless; this
+ *  only hides the new-signup entry point. */
+const SHOW_VIP_TIER = false
+
 type Tier = 'premium' | 'vip'
 
 export default function Premium() {
@@ -217,14 +224,16 @@ export default function Premium() {
             portalBusy={portalBusy}
             onPick={() => goCheckout('premium')}
           />
-          <VipCard
-            price={interval === 'year' ? YEARLY_PRICES.vip : MONTHLY_PRICES.vip}
-            interval={interval}
-            current={tier === 'vip'}
-            hasActive={hasActive}
-            portalBusy={portalBusy}
-            onPick={() => goCheckout('vip')}
-          />
+          {SHOW_VIP_TIER && (
+            <VipCard
+              price={interval === 'year' ? YEARLY_PRICES.vip : MONTHLY_PRICES.vip}
+              interval={interval}
+              current={tier === 'vip'}
+              hasActive={hasActive}
+              portalBusy={portalBusy}
+              onPick={() => goCheckout('vip')}
+            />
+          )}
         </div>
 
         {/* Nav clearance handled by .stack-overlay CSS; this extra

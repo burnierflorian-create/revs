@@ -36,6 +36,11 @@ import {
   type SpotScore,
 } from '../lib/spotPredictions'
 
+/** Feature flag — flip back to `true` to restore the 🎮 chip in the
+ *  Home header. The /games and /race routes stay registered in App.tsx
+ *  so the feature is reachable by URL meanwhile. */
+const SHOW_GAMES_ENTRY = false
+
 type CommunityStats = {
   spots_today: number
   online_now: number
@@ -331,13 +336,20 @@ export default function Home() {
           </div>
         </div>
         <div className="flex flex-none items-center gap-2">
-          <button
-            onClick={() => navigate('/games')}
-            aria-label="Jeux REVS"
-            className="tappable flex h-9 w-9 items-center justify-center rounded-full bg-card text-fg2 transition-colors hover:text-fg"
-          >
-            <Gamepad2 className="h-5 w-5" />
-          </button>
+          {/* Jeux REVS entry point — temporarily hidden. The /games
+              and /race routes stay live so the feature is reachable
+              for testing via direct URL; we just don't surface it
+              in the header until the multiplayer pass ships. Flip
+              SHOW_GAMES_ENTRY back to true to restore the chip. */}
+          {SHOW_GAMES_ENTRY && (
+            <button
+              onClick={() => navigate('/games')}
+              aria-label="Jeux REVS"
+              className="tappable flex h-9 w-9 items-center justify-center rounded-full bg-card text-fg2 transition-colors hover:text-fg"
+            >
+              <Gamepad2 className="h-5 w-5" />
+            </button>
+          )}
           <button
             onClick={() => navigate('/settings')}
             aria-label="Réglages"
