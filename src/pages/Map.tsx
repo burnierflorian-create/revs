@@ -6,10 +6,12 @@ import 'mapbox-gl/dist/mapbox-gl.css'
 import {
   Car,
   LocateFixed,
+  Loader2,
   Pause,
   Play,
   Rewind,
   Search as SearchIcon,
+  Sparkles,
   X,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
@@ -20,6 +22,12 @@ import {
   timeAgo,
   type Spot,
 } from '../lib/spots'
+import {
+  fetchSpottingPrediction,
+  type PredictionResult,
+  type SpotScore,
+} from '../lib/spotPredictions'
+import { xpLevel } from '../lib/xp'
 
 function fmtDist(m: number): string {
   return m < 1000 ? `${Math.round(m)} m` : `${(m / 1000).toFixed(1)} km`
@@ -480,6 +488,93 @@ export default function MapPage() {
     }
     return '3D'
   })
+
+  // AI prediction bottom-sheet state. The fetch is lazy — first time
+  // the user opens the sheet we hit /api/car-info?action=predict-
+  // spotting, then cache the result for the rest of the session.
+  // The endpoint itself caches per (user, city, date) so even
+  // navigating between Home (legacy spot) and Map would have been
+  // free; this just avoids triggering it for users who never open
+  // the sheet.
+  const [infoSheetOpen, setInfoSheetOpen] = useState(false)
+  const [prediction, setPrediction] = useState<PredictionResult | null>(null)
+  const [predictionLoading, setPredictionLoading] = useState(false)
+  const [predictionTried, setPredictionTried] = useState(false)
+
+  useEffect(() => {
+    if (!infoSheetOpen || predictionTried || predictionLoading) return
+    let alive = true
+    setPredictionLoading(true)
+    ;(async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (!user) {
+        if (alive) {
+          setPredictionLoading(false)
+          setPredictionTried(true)
+        }
+        return
+      }
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('pseudo, ville')
+        .eq('id', user.id)
+        .maybeSingle()
+      const ville = (profile?.ville as string | undefined)?.trim()
+      if (!ville) {
+        if (alive) {
+          setPredictionLoading(false)
+          setPredictionTried(true)
+        }
+        return
+      }
+
+      // Build the same context Home used to send so the AI message
+      // stays personalised (top brands, last car, level).
+      const [{ data: mySpots }, { data: xpRow }] = await Promise.all([
+        supabase
+          .from('spots')
+          .select('brand, model, created_at')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false })
+          .limit(60),
+        supabase.rpc('my_xp'),
+      ])
+      const recentList = (mySpots ?? []) as {
+        brand: string | null
+        model: string | null
+      }[]
+      const counts = new Map<string, number>()
+      for (const r of recentList) {
+        const b = (r.brand ?? '').trim()
+        if (!b) continue
+        counts.set(b, (counts.get(b) ?? 0) + 1)
+      }
+      const topBrands = [...counts.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3)
+        .map(([brand]) => brand)
+      const lastCar = recentList[0]
+        ? `${recentList[0].brand ?? ''} ${recentList[0].model ?? ''}`.trim()
+        : undefined
+
+      const p = await fetchSpottingPrediction(ville, {
+        pseudo: profile?.pseudo as string | undefined,
+        spot_count: recentList.length,
+        top_brands: topBrands,
+        level: xpLevel((xpRow as number | null) ?? 0).name,
+        last_car: lastCar,
+      })
+      if (!alive) return
+      setPrediction(p)
+      setPredictionLoading(false)
+      setPredictionTried(true)
+    })()
+    return () => {
+      alive = false
+    }
+  }, [infoSheetOpen, predictionTried, predictionLoading])
 
   function locate() {
     if (!navigator.geolocation) {
@@ -1359,6 +1454,24 @@ export default function MapPage() {
         </div>
       </div>
 
+      {/* AI prediction info button — discrete 40 px round chip
+          sitting just under the search bar, opens the bottom sheet
+          carrying the personalised weather+spot tip. */}
+      <button
+        onClick={() => setInfoSheetOpen(true)}
+        aria-label="Conseil de spot du jour"
+        className="tappable absolute right-4 z-10 flex h-10 w-10 items-center justify-center rounded-full"
+        style={{
+          top: 'calc(max(3rem, env(safe-area-inset-top) + 2rem) + 3.25rem)',
+          background: '#141414',
+          border: '1px solid rgba(255,255,255,0.10)',
+          boxShadow: '0 8px 22px rgba(0,0,0,0.45)',
+          color: 'var(--color-accent)',
+        }}
+      >
+        <Sparkles className="h-4 w-4" />
+      </button>
+
       <div
         className="absolute right-4 z-10"
         style={{
@@ -1389,6 +1502,14 @@ export default function MapPage() {
           ))}
         </div>
       </div>
+
+      {infoSheetOpen && (
+        <MapPredictionSheet
+          prediction={prediction}
+          loading={predictionLoading}
+          onClose={() => setInfoSheetOpen(false)}
+        />
+      )}
 
       {activeFilter !== 'Tous' && panelSpots.length > 0 && (
         <div
@@ -1472,6 +1593,177 @@ export default function MapPage() {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+// ─────────────────────── AI prediction bottom sheet ───────────────────────
+// Personalised "best time to spot" message lifted off Home into a
+// pull-up sheet on the Map screen. Swipe-down dismisses it; tapping
+// the dimmed backdrop also closes it. Sheet content is purely
+// presentational — fetching is owned by the Map page so the same
+// PredictionResult drives both states.
+
+const PREDICTION_THEME: Record<SpotScore, { background: string; label: string }> = {
+  bon: {
+    background:
+      'linear-gradient(155deg, #5a1018 0%, #2e0a0d 55%, #150708 100%)',
+    label: 'CONDITIONS FAVORABLES',
+  },
+  moyen: {
+    background:
+      'linear-gradient(155deg, #4a2a08 0%, #2e1804 55%, #150b02 100%)',
+    label: 'CONDITIONS MOYENNES',
+  },
+  mauvais: {
+    background:
+      'linear-gradient(155deg, #1e2024 0%, #14161a 55%, #0d0e10 100%)',
+    label: 'PEU FAVORABLE',
+  },
+}
+
+function MapPredictionSheet({
+  prediction,
+  loading,
+  onClose,
+}: {
+  prediction: PredictionResult | null
+  loading: boolean
+  onClose: () => void
+}) {
+  const [drag, setDrag] = useState(0)
+  const [dragging, setDragging] = useState(false)
+  const startY = useRef(0)
+
+  // Lock background scroll while open + close on Escape (desktop).
+  useEffect(() => {
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => {
+      document.body.style.overflow = prev
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [onClose])
+
+  function onPointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    startY.current = e.clientY
+    setDragging(true)
+    e.currentTarget.setPointerCapture(e.pointerId)
+  }
+  function onPointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    if (!dragging) return
+    setDrag(Math.max(0, e.clientY - startY.current))
+  }
+  function onPointerUp(e: React.PointerEvent<HTMLDivElement>) {
+    if (!dragging) return
+    setDragging(false)
+    e.currentTarget.releasePointerCapture?.(e.pointerId)
+    if (drag > 110) {
+      onClose()
+    } else {
+      setDrag(0)
+    }
+  }
+
+  const theme = prediction
+    ? PREDICTION_THEME[prediction.score_conditions]
+    : PREDICTION_THEME.mauvais
+
+  return (
+    <div
+      className="fixed inset-0 z-[80]"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Conseil de spot"
+    >
+      <div
+        className="absolute inset-0 bg-black/55"
+        onClick={onClose}
+        style={{ animation: 'fade-in 220ms ease-out both' }}
+      />
+      <div
+        className="animate-slide-up absolute inset-x-0 bottom-0 overflow-hidden rounded-t-3xl"
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
+        style={{
+          background: 'var(--color-card)',
+          border: '1px solid rgba(255,255,255,0.08)',
+          borderBottom: 'none',
+          paddingBottom: 'max(1.25rem, env(safe-area-inset-bottom))',
+          maxHeight: '70vh',
+          transform: `translateY(${drag}px)`,
+          transition: dragging
+            ? 'none'
+            : 'transform 320ms cubic-bezier(0.34, 1.56, 0.64, 1)',
+          touchAction: 'none',
+        }}
+      >
+        {/* Drag handle */}
+        <div className="flex justify-center pb-1 pt-2.5">
+          <div
+            className="h-1 w-12 rounded-full"
+            style={{ background: 'rgba(255,255,255,0.22)' }}
+          />
+        </div>
+
+        {/* Hero block — themed by the prediction score */}
+        <div className="px-4 pb-4 pt-2">
+          <div
+            className="relative overflow-hidden rounded-2xl px-4 py-4"
+            style={{ background: theme.background }}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <p
+                className="label-up text-[9.5px] text-white/75"
+                style={{ letterSpacing: '0.18em' }}
+              >
+                {prediction ? theme.label : 'CONSEIL DU JOUR'}
+              </p>
+              <span
+                className="inline-flex items-center gap-1 rounded-full bg-black/45 px-2 py-1 text-[9px] font-bold tracking-wider text-white/85 backdrop-blur"
+                style={{ border: '1px solid rgba(255,255,255,0.12)' }}
+              >
+                IA 🎯
+              </span>
+            </div>
+            {loading && !prediction ? (
+              <div className="mt-3 flex items-center gap-2 text-[14px] text-white/80">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Analyse en cours…
+              </div>
+            ) : prediction ? (
+              <p
+                className="mt-3 leading-snug text-white"
+                style={{ fontSize: '17px', fontWeight: 600 }}
+              >
+                {prediction.message}
+              </p>
+            ) : (
+              <p
+                className="mt-3 leading-snug text-white/75"
+                style={{ fontSize: '14px' }}
+              >
+                Ajoute ta ville dans Réglages pour recevoir un conseil
+                personnalisé chaque jour (météo + tendance de spotting).
+              </p>
+            )}
+          </div>
+
+          <p
+            className="mt-3 px-1 text-[11px] leading-snug text-fg2"
+          >
+            Mise à jour une fois par jour. Le conseil tient compte de
+            ta ville, des marques que tu spottes le plus et de la
+            météo locale.
+          </p>
+        </div>
+      </div>
     </div>
   )
 }

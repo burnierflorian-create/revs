@@ -10,7 +10,6 @@ import {
   ChevronRight,
   Camera,
   Zap,
-  Loader2,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { categoryLabel, timeAgo, xpForSpot, type Spot } from '../lib/spots'
@@ -28,13 +27,7 @@ import RarityBadge from '../components/RarityBadge'
 import TitleChip from '../components/TitleChip'
 import { effectiveTitle } from '../lib/titles'
 import { useMyTier } from '../lib/tier'
-import {
-  fetchRarestSpot,
-  fetchSpottingPrediction,
-  type PredictionResult,
-  type RarestSpot,
-  type SpotScore,
-} from '../lib/spotPredictions'
+import { fetchRarestSpot, type RarestSpot } from '../lib/spotPredictions'
 
 /** Feature flag — flip back to `true` to restore the 🎮 chip in the
  *  Home header. The /games and /race routes stay registered in App.tsx
@@ -80,8 +73,6 @@ export default function Home() {
   const [community, setCommunity] = useState<CommunityStats | null>(null)
   const tier = useMyTier()
   const [title, setTitle] = useState<string | null>(null)
-  const [prediction, setPrediction] = useState<PredictionResult | null>(null)
-  const [predictionLoading, setPredictionLoading] = useState(false)
   const [rarest, setRarest] = useState<RarestSpot | null>(null)
   const [now, setNow] = useState(() => Date.now())
 
@@ -138,7 +129,6 @@ export default function Home() {
       const pseudo =
         (profRes.data?.pseudo as string | undefined)?.trim() ||
         (user.email ? user.email.split('@')[0] : 'Spotter')
-      const ville = (profRes.data?.ville as string | undefined)?.trim() ?? ''
       const profTitle =
         (profRes.data?.title as string | undefined)?.trim() || null
       setTitle(profTitle)
@@ -162,57 +152,6 @@ export default function Home() {
       setRecent((recentRes.data ?? []) as Spot[])
       setLoading(false)
 
-      // Build the spotter context once — reused by both the spotting
-      // prediction (city + weather) and the daily challenge (no city
-      // strictly required). Computed asynchronously so the rest of the
-      // page renders without waiting on it.
-      ;(async () => {
-        const { count: spotCount } = await supabase
-          .from('spots')
-          .select('*', { count: 'exact', head: true })
-          .eq('user_id', user.id)
-        const { data: mySpots } = await supabase
-          .from('spots')
-          .select('brand, model, created_at')
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false })
-          .limit(60)
-        const recentList = (mySpots ?? []) as {
-          brand: string | null
-          model: string | null
-          created_at: string
-        }[]
-        const counts = new Map<string, number>()
-        for (const r of recentList) {
-          const b = (r.brand ?? '').trim()
-          if (!b) continue
-          counts.set(b, (counts.get(b) ?? 0) + 1)
-        }
-        const topBrands = [...counts.entries()]
-          .sort((a, b) => b[1] - a[1])
-          .slice(0, 3)
-          .map(([brand]) => brand)
-        const lastCar = recentList[0]
-          ? `${recentList[0].brand ?? ''} ${recentList[0].model ?? ''}`.trim()
-          : undefined
-        if (!active) return
-
-        // Spotting prediction — only fires once per day per city thanks
-        // to the server cache. Skip when the user hasn't set their city.
-        if (ville) {
-          setPredictionLoading(true)
-          const p = await fetchSpottingPrediction(ville, {
-            pseudo,
-            spot_count: spotCount ?? recentList.length,
-            top_brands: topBrands,
-            level: xpLevel((xpRes.data as number | null) ?? 0).name,
-            last_car: lastCar,
-          })
-          if (!active) return
-          setPrediction(p)
-          setPredictionLoading(false)
-        }
-      })()
       // Rarest spot of the day — falls back to the last 7 days
       // automatically when nothing was posted today.
       fetchRarestSpot().then((r) => {
@@ -361,12 +300,10 @@ export default function Home() {
       </header>
 
       <div className="space-y-7 pb-10">
-        {/* UNIFIED daily card — prediction (top) + rarest spot (bottom),
-            joined by a hairline separator. Whole card stays under 220 px
-            so it's fully visible above the fold without scrolling. */}
+        {/* Rarest spot of the day. The AI spotting prediction that
+            used to sit above it moved to the Map screen (info button
+            top-right → bottom sheet). */}
         <DailyCard
-          prediction={prediction}
-          predictionLoading={predictionLoading}
           rarest={rarest}
           onOpenSpot={(id) => navigate(`/spot/${id}`)}
         />
@@ -593,47 +530,16 @@ export default function Home() {
   )
 }
 
-// Per-condition gradient for the top half of the unified card. Plain
-// dark for "mauvais" days so the card doesn't shout when there's
-// nothing happening.
-const PREDICTION_THEME: Record<SpotScore, { background: string }> = {
-  bon: {
-    background:
-      'linear-gradient(155deg, #5a1018 0%, #2e0a0d 55%, #150708 100%)',
-  },
-  moyen: {
-    background:
-      'linear-gradient(155deg, #4a2a08 0%, #2e1804 55%, #150b02 100%)',
-  },
-  mauvais: {
-    background:
-      'linear-gradient(155deg, #1e2024 0%, #14161a 55%, #0d0e10 100%)',
-  },
-}
-
-// One unified card: prediction on top (60 %), rarest spot on bottom
-// (40 %), separated by a 1 px hairline. Capped at ~220 px total so the
-// whole thing fits above the fold without scrolling. Each half is
-// rendered only when its data is available — separator only when both
-// halves are present.
+// Wrapper around the rarest-spot-of-the-day row. The AI prediction
+// that used to sit on top moved to the Map screen's info bottom sheet.
 function DailyCard({
-  prediction,
-  predictionLoading,
   rarest,
   onOpenSpot,
 }: {
-  prediction: PredictionResult | null
-  predictionLoading: boolean
   rarest: RarestSpot | null
   onOpenSpot: (id: string) => void
 }) {
-  const hasPredictionSlot = prediction !== null || predictionLoading
-  if (!hasPredictionSlot && !rarest) return null
-
-  const theme = prediction
-    ? PREDICTION_THEME[prediction.score_conditions]
-    : PREDICTION_THEME.mauvais
-
+  if (!rarest) return null
   return (
     <section
       className="overflow-hidden rounded-[20px]"
@@ -642,46 +548,7 @@ function DailyCard({
         border: '1px solid rgba(255,255,255,0.06)',
       }}
     >
-      {/* TOP — prediction */}
-      {hasPredictionSlot && (
-        <div
-          className="relative px-4 py-3.5"
-          style={{ background: theme.background }}
-        >
-          <div className="pr-14">
-            <span className="label-up text-[9px] text-white/65">
-              Meilleur moment pour spotter
-            </span>
-            {predictionLoading && !prediction ? (
-              <div className="mt-1.5 flex items-center gap-2 text-[13px] text-white/70">
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                Analyse en cours…
-              </div>
-            ) : (
-              <p
-                className="mt-1.5 leading-snug text-white"
-                style={{ fontSize: '16px', fontWeight: 600 }}
-              >
-                {prediction?.message}
-              </p>
-            )}
-          </div>
-          <span
-            className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full bg-black/45 px-2 py-1 text-[9px] font-bold tracking-wider text-white/85 backdrop-blur"
-            style={{ border: '1px solid rgba(255,255,255,0.12)' }}
-          >
-            IA 🎯
-          </span>
-        </div>
-      )}
-
-      {/* Hairline divider — only when both halves render. */}
-      {hasPredictionSlot && rarest && (
-        <div className="h-px" style={{ background: 'rgba(255,255,255,0.08)' }} />
-      )}
-
-      {/* BOTTOM — rarest spot, landscape thumb + meta-right layout. */}
-      {rarest && <DailyCardSpotRow rarest={rarest} onOpen={onOpenSpot} />}
+      <DailyCardSpotRow rarest={rarest} onOpen={onOpenSpot} />
     </section>
   )
 }
