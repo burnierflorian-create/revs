@@ -671,19 +671,71 @@ export default function Profile() {
             )}
           </section>
         ) : (
-          /* Slim Premium tease for free users — discreet line, not a
-             full card. The hero red gradient already carries the
-             aspirational vibe on cover; here we just nudge once. */
+          /* Premium upgrade banner — jet-black gradient with a drifting
+             gold accent line and a thin yellow border. Borrows the
+             founder-shimmer keyframe for the inner highlight so the
+             motion stays consistent with the Fondateur title chip. */
           <button
             onClick={() => navigate('/premium')}
-            className="tappable flex w-full items-center justify-between gap-2 rounded-full bg-card px-4 py-2.5 text-left"
-            style={{ border: '1px solid var(--color-border)' }}
+            className="tappable group relative flex w-full items-center justify-between gap-3 overflow-hidden rounded-2xl px-4 py-4 text-left transition-transform active:scale-[0.99]"
+            style={{
+              background:
+                'linear-gradient(95deg, #050505 0%, #141414 50%, #050505 100%)',
+              border: '1px solid rgba(224, 179, 65, 0.32)',
+              boxShadow:
+                '0 16px 36px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 215, 0, 0.06) inset',
+            }}
           >
-            <span className="flex items-center gap-2 text-[13px] text-fg2">
-              <span className="text-accent">⚡</span>
-              Passe Premium pour débloquer Mode Radar &amp; spots illimités
-            </span>
-            <ChevronRight className="h-4 w-4 flex-none text-fg2" />
+            {/* Gold highlight sweep — uses founder-shimmer (already
+                in design-system.css) for a slow drift across the
+                banner. Sits at z-0; content stays above on z-10. */}
+            <span
+              aria-hidden
+              className="pointer-events-none absolute inset-0"
+              style={{
+                background:
+                  'linear-gradient(95deg, rgba(224, 179, 65, 0) 0%, rgba(255, 215, 0, 0.10) 35%, rgba(255, 246, 200, 0.18) 50%, rgba(255, 215, 0, 0.10) 65%, rgba(184, 134, 11, 0) 100%)',
+                backgroundSize: '220% 100%',
+                animation: 'founder-shimmer 6s linear infinite',
+              }}
+            />
+
+            <div className="relative z-10 flex items-center gap-3">
+              <span
+                className="flex h-10 w-10 flex-none items-center justify-center rounded-xl"
+                style={{
+                  background:
+                    'linear-gradient(135deg, rgba(255, 215, 0, 0.25) 0%, rgba(184, 134, 11, 0.10) 100%)',
+                  border: '1px solid rgba(255, 215, 0, 0.35)',
+                  color: '#FFD700',
+                  fontSize: '18px',
+                }}
+              >
+                ⚡
+              </span>
+              <div className="min-w-0">
+                <p
+                  className="font-display font-extrabold uppercase tracking-widest"
+                  style={{
+                    color: '#FFD700',
+                    fontSize: '11px',
+                    letterSpacing: '0.16em',
+                  }}
+                >
+                  Club REVS Premium
+                </p>
+                <p
+                  className="mt-0.5 text-fg/75"
+                  style={{ fontSize: '12px' }}
+                >
+                  Mode Radar temps réel & spots illimités
+                </p>
+              </div>
+            </div>
+
+            <ChevronRight
+              className="relative z-10 h-5 w-5 flex-none text-fg/55 transition-transform group-hover:translate-x-0.5"
+            />
           </button>
         )}
 

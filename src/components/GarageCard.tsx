@@ -29,11 +29,20 @@ export default function GarageCard({
         className="absolute inset-0"
       />
 
-      {/* Year badge top-right — discreet pill on top of the illustration. */}
+      {/* Year badge top-right — transparent glass chip so the
+          illustration's brand glow still bleeds through, per the
+          launch polish spec (309496.jpg). */}
       {typeof year === 'number' && year > 1900 && (
         <span
-          className="label-up absolute right-2 top-2 rounded-full bg-black/55 px-2 py-0.5 text-[10px] text-white/80 backdrop-blur"
-          style={{ border: '1px solid rgba(255,255,255,0.10)' }}
+          className="label-up absolute right-3 top-3 rounded-md px-2 py-0.5 font-bold text-white/90"
+          style={{
+            background: 'rgba(255, 255, 255, 0.10)',
+            border: '1px solid rgba(255, 255, 255, 0.10)',
+            backdropFilter: 'saturate(150%) blur(12px)',
+            WebkitBackdropFilter: 'saturate(150%) blur(12px)',
+            fontSize: '10px',
+            letterSpacing: '0.06em',
+          }}
         >
           {year}
         </span>

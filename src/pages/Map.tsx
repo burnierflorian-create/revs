@@ -1208,12 +1208,12 @@ export default function MapPage() {
         <div
           className="mx-auto flex max-w-md items-center gap-2 rounded-2xl px-4 py-3"
           style={{
-            // bg-neutral-900/70 + backdrop-blur-md per the polish spec
-            // — slightly more visible glass, less rounded for an Apple
-            // Maps-like feel.
+            // bg-neutral-900/70 + backdrop-blur-xl per the ultimate
+            // polish spec — heavier glass so the bar melts into the
+            // Mapbox terrain underneath like Apple Maps.
             background: 'rgba(23, 23, 23, 0.70)',
-            backdropFilter: 'saturate(160%) blur(14px)',
-            WebkitBackdropFilter: 'saturate(160%) blur(14px)',
+            backdropFilter: 'saturate(170%) blur(24px)',
+            WebkitBackdropFilter: 'saturate(170%) blur(24px)',
             border: '1px solid rgba(255,255,255,0.06)',
             boxShadow: '0 14px 32px rgba(0,0,0,0.30)',
           }}
@@ -1245,10 +1245,11 @@ export default function MapPage() {
         <div
           className="mx-auto flex max-w-md gap-1 rounded-full p-1"
           style={{
-            background: 'rgba(10,10,10,0.65)',
-            backdropFilter: 'saturate(160%) blur(20px)',
-            WebkitBackdropFilter: 'saturate(160%) blur(20px)',
-            border: '1px solid rgba(255,255,255,0.08)',
+            background: 'rgba(10,10,10,0.55)',
+            backdropFilter: 'saturate(170%) blur(24px)',
+            WebkitBackdropFilter: 'saturate(170%) blur(24px)',
+            border: '1px solid rgba(255,255,255,0.06)',
+            boxShadow: '0 10px 26px rgba(0,0,0,0.28)',
           }}
         >
           {FILTERS.map((f) => (
