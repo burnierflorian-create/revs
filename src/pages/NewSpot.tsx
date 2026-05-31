@@ -754,16 +754,31 @@ export default function NewSpot() {
               Identification difficile — complète ou corrige les champs ci-dessous.
             </div>
           ) : (
-            <div
-              className="rounded-3xl px-4 py-3 text-sm font-extrabold tracking-tight text-fg"
-              style={{
-                background: 'rgba(232,32,58,0.10)',
-                border: '1px solid rgba(232,32,58,0.40)',
-                boxShadow: '0 0 16px rgba(232,32,58,0.18)',
-              }}
-            >
-              ✨ {result.brand} {result.model} — {result.confidence}%
-            </div>
+            // 3D corner-flip reveal: the perspective parent gives
+            // the inner card a real depth feel as it scales from
+            // 30% / rotateY 180° to 100% / 0° via the
+            // card-pop-3d keyframe. The white flash overlay below
+            // is a sibling that fires once on mount via its own
+            // keyframe.
+            <>
+              <div className="perspective-1000">
+                <div
+                  className="card-pop-3d rounded-3xl px-4 py-3 text-sm font-extrabold tracking-tight text-fg"
+                  style={{
+                    background: 'rgba(232,32,58,0.10)',
+                    border: '1px solid rgba(232,32,58,0.40)',
+                    boxShadow: '0 0 16px rgba(232,32,58,0.18)',
+                  }}
+                >
+                  ✨ {result.brand} {result.model} — {result.confidence}%
+                </div>
+              </div>
+              {/* Brief full-screen white flash, anchored to the
+                  same conditional render as the success card so it
+                  only fires on a real identification. Pointer-events
+                  none + auto-fade keeps it from blocking taps. */}
+              <span aria-hidden className="card-reveal-flash" />
+            </>
           )}
 
           {result.alternatives.length > 0 && (
