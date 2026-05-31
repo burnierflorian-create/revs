@@ -14,6 +14,7 @@ import {
   type SpotCategory,
 } from '../lib/spots'
 import { takePendingPhoto } from '../lib/pendingPhoto'
+import { getCurrentPositionSafe } from '../lib/geo'
 import { maybePromptPush, myPseudo, notifyPush } from '../lib/push'
 import { brandSlugFor, getBrand } from '../lib/brands'
 import { Skeleton } from '../components/Skeleton'
@@ -64,76 +65,11 @@ const EMPTY_RESULT: IdentifyResult = {
   production: null,
 }
 
-/** Acquires a GeolocationPosition with defensive guarantees:
- *  - Detects unavailable geolocation up front.
- *  - Uses NAMED success/error callbacks (rather than passing
- *    Promise's resolve/reject straight into navigator.geolocation)
- *    so the minifier can't rename them into something the
- *    browser dispatcher mis-binds, which was producing the
- *    "b is not a function" crash on the RÉESSAYER path in prod.
- *  - Wraps the dispatch in try/catch so any synchronous throw
- *    (some iOS Safari versions throw on permission-denied) lands
- *    in the Promise rejection rather than tearing down React.
- *  - Validates `typeof resolve/reject === 'function'` before
- *    every invocation as a last-resort guard against the same
- *    minification footgun, then logs a console.error if either
- *    is somehow missing — that way prod traces tell us exactly
- *    which side failed instead of a generic message. */
-export function getPosition(): Promise<GeolocationPosition> {
-  return new Promise<GeolocationPosition>((resolve, reject) => {
-    const settleError = (msg: string): void => {
-      if (typeof reject === 'function') {
-        reject(new Error(msg))
-      } else {
-        // Shouldn't happen — Promise() guarantees both callbacks.
-        console.error('[gps] reject callback missing:', msg)
-      }
-    }
-
-    if (!navigator.geolocation) {
-      settleError('Géolocalisation non disponible sur cet appareil.')
-      return
-    }
-
-    const onSuccess = (pos: GeolocationPosition): void => {
-      if (typeof resolve === 'function') {
-        resolve(pos)
-      } else {
-        console.error('[gps] resolve callback missing despite valid position')
-      }
-    }
-
-    const onError = (err: GeolocationPositionError): void => {
-      let msg = 'Impossible de récupérer ta position GPS.'
-      if (err && err.code === err.PERMISSION_DENIED) {
-        msg = "Autorise l'accès GPS dans les réglages pour publier ton spot."
-      } else if (err && err.code === err.POSITION_UNAVAILABLE) {
-        msg = 'Position GPS introuvable. Réessaie en extérieur.'
-      } else if (err && err.code === err.TIMEOUT) {
-        msg = 'Le GPS met trop de temps à répondre. Réessaie.'
-      }
-      settleError(msg)
-    }
-
-    try {
-      navigator.geolocation.getCurrentPosition(onSuccess, onError, {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 0,
-      })
-    } catch (e) {
-      // Some Safari builds throw synchronously when permission is
-      // denied — convert to a rejection so the publish() awaiter
-      // can show its error UI instead of crashing.
-      console.error('[gps] getCurrentPosition threw:', e)
-      settleError(
-        e instanceof Error && e.message
-          ? e.message
-          : 'Erreur GPS inattendue. Réessaie dans un instant.',
-      )
-    }
-  })
-}
+// getPosition delegates to the shared lib so every GPS-consuming
+// screen gets the same defensive pattern (named callbacks, typeof
+// guards, try/catch, per-code messages). Local re-export kept so
+// existing callers below don't need to be touched.
+const getPosition = getCurrentPositionSafe
 
 export default function NewSpot() {
   const navigate = useNavigate()

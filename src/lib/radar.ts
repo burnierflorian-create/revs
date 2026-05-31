@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { getCurrentPositionSafe } from './geo'
 
 export type RadarPrefs = {
   enabled: boolean
@@ -43,19 +44,16 @@ export async function saveRadarPrefs(
   return data as RadarPrefs
 }
 
-/** Browser geolocation as a Promise. Rejects if permission denied. */
-export function getCurrentPosition(): Promise<{ lat: number; lng: number }> {
-  return new Promise((resolve, reject) => {
-    if (!navigator.geolocation) {
-      reject(new Error('Geolocation not supported'))
-      return
-    }
-    navigator.geolocation.getCurrentPosition(
-      (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-      (err) => reject(err),
-      { enableHighAccuracy: false, maximumAge: 60_000, timeout: 10_000 },
-    )
+/** Browser geolocation as a Promise. Delegates to the shared
+ *  hardened helper in lib/geo so radar callers get the same
+ *  defensive callbacks + minifier-safe wrappers. */
+export async function getCurrentPosition(): Promise<{ lat: number; lng: number }> {
+  const pos = await getCurrentPositionSafe({
+    highAccuracy: false,
+    timeoutMs: 10_000,
+    maxAgeMs: 60_000,
   })
+  return { lat: pos.coords.latitude, lng: pos.coords.longitude }
 }
 
 /** Fire-and-forget radar fanout after a successful spot insert.

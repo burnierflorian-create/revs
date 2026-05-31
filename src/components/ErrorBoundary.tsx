@@ -29,20 +29,59 @@ export default class ErrorBoundary extends Component<Props, State> {
     }
   }
 
+  // Named handler bound to `this` once at construction time so the
+  // minifier renaming the inline arrow can't strand the click target.
+  private handleReload = (): void => {
+    if (typeof window !== 'undefined') {
+      window.location.reload()
+    }
+  }
+
   render() {
     if (!this.state.hasError) return this.props.children
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-5 bg-bg px-8 text-center text-fg">
-        <h1 className="text-xl font-semibold">Une erreur est survenue</h1>
-        <p className="max-w-xs text-sm text-fg/60">
-          L’app a rencontré un problème. Recharge pour repartir d’une version
-          propre.
+      <div
+        className="flex min-h-screen select-none flex-col items-center justify-center bg-black p-6 text-center"
+        style={{
+          paddingTop: 'max(2rem, env(safe-area-inset-top))',
+          paddingBottom: 'max(2rem, env(safe-area-inset-bottom))',
+        }}
+      >
+        <div
+          className="mb-5 flex h-16 w-16 items-center justify-center rounded-full"
+          style={{
+            background: 'rgba(232, 32, 58, 0.10)',
+            border: '1px solid rgba(232, 32, 58, 0.30)',
+            fontSize: '26px',
+          }}
+        >
+          ⚠️
+        </div>
+        <h1
+          className="font-display font-extrabold tracking-tight text-white"
+          style={{ fontSize: '22px', letterSpacing: '-0.02em' }}
+        >
+          Une petite mise au point est nécessaire
+        </h1>
+        <p
+          className="mx-auto mt-2.5 max-w-[18rem] leading-relaxed text-white/55"
+          style={{ fontSize: '13px' }}
+        >
+          L'application a rencontré une anomalie technique mineure. Pas
+          d'inquiétude, tes données sont en sécurité.
         </p>
         <button
-          onClick={() => window.location.reload()}
-          className="rounded-full bg-accent px-7 py-3 text-sm font-medium"
+          onClick={this.handleReload}
+          className="mt-7 rounded-xl font-bold text-white transition-transform active:scale-95"
+          style={{
+            padding: '12px 24px',
+            fontSize: '13px',
+            background: 'rgba(20, 20, 20, 0.80)',
+            border: '1px solid rgba(255, 255, 255, 0.10)',
+            backdropFilter: 'saturate(160%) blur(12px)',
+          }}
         >
-          Recharger
+          Actualiser REVS
         </button>
       </div>
     )
