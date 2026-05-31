@@ -6,7 +6,6 @@ import {
   CalendarDays,
   Users,
   Sparkles,
-  Swords,
   Trophy,
 } from 'lucide-react'
 import News from './News'
@@ -14,7 +13,10 @@ import Meets from '../components/Meets'
 import F1Calendar from '../components/F1Calendar'
 import Brands from './Brands'
 import F1Roster from './F1Roster'
-import SpotWars from '../components/SpotWars'
+// Spot Wars temporarily pulled from the MVP launch — the component,
+// the 0032-spot-wars.sql migration and the spot_wars_leaderboard RPC
+// stay on the DB so the feature can be re-enabled by re-adding the
+// `wars` tab below + the `<SpotWars />` render branch.
 
 const RED = '#E8203A'
 const ORANGE = '#F59E0B'
@@ -27,7 +29,7 @@ export default function Discover({ initial }: { initial?: 'events' }) {
   )
   const [f1Sub, setF1Sub] = useState<'actu' | 'calendar' | 'roster'>('actu')
   const [carsSub, setCarsSub] = useState<
-    'actu' | 'events' | 'brands' | 'wars'
+    'actu' | 'events' | 'brands'
   >(initial === 'events' ? 'events' : 'actu')
 
   // Discover is kept alive across /discover ↔ /events ↔ /actu — sync to
@@ -92,11 +94,6 @@ export default function Discover({ initial }: { initial?: 'events' }) {
           icon: <Newspaper className="h-4 w-4" />,
         },
         {
-          key: 'wars',
-          label: 'Wars',
-          icon: <Swords className="h-4 w-4" />,
-        },
-        {
           key: 'events',
           label: 'Events',
           icon: <Users className="h-4 w-4" />,
@@ -110,7 +107,7 @@ export default function Discover({ initial }: { initial?: 'events' }) {
 
   function setSub(k: string) {
     if (isF1) setF1Sub(k as 'actu' | 'calendar' | 'roster')
-    else setCarsSub(k as 'actu' | 'events' | 'brands' | 'wars')
+    else setCarsSub(k as 'actu' | 'events' | 'brands')
   }
 
   return (
@@ -167,8 +164,6 @@ export default function Discover({ initial }: { initial?: 'events' }) {
           )
         ) : carsSub === 'actu' ? (
           <News categories={['Supercar', 'Hypercar']} />
-        ) : carsSub === 'wars' ? (
-          <SpotWars />
         ) : carsSub === 'events' ? (
           <Meets />
         ) : (
