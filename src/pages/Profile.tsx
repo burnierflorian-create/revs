@@ -1,26 +1,19 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  Camera,
   ChevronRight,
-  Crown,
   Lock,
   Settings,
-  Sparkles,
-  Tag,
-  Trophy,
   Warehouse,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { type Spot } from '../lib/spots'
-import { planDisplayName, planInterval, planTier } from '../lib/plans'
+import { categoryLabel, type Spot } from '../lib/spots'
+import { planDisplayName, planTier } from '../lib/plans'
 import { allBadges, computeUnlocks } from '../lib/badges'
 import { fetchRaceStats } from '../lib/race'
 import { xpLevel } from '../lib/xp'
-import { translateError } from '../lib/errors'
 import { useMyTier } from '../lib/tier'
 import { Skeleton } from '../components/Skeleton'
-import GarageCard from '../components/GarageCard'
 import CollectionsSection from '../components/CollectionsSection'
 import MyCollection from '../components/MyCollection'
 import TitleChip from '../components/TitleChip'
@@ -50,11 +43,6 @@ export default function Profile() {
   const [hasEvent, setHasEvent] = useState(false)
   const [xp, setXp] = useState(0)
   const [plan, setPlan] = useState<string | null>(null)
-  const [subStatus, setSubStatus] = useState<string | null>(null)
-  const [renewalAt, setRenewalAt] = useState<string | null>(null)
-  const [hasCustomer, setHasCustomer] = useState(false)
-  const [portalBusy, setPortalBusy] = useState(false)
-  const [portalErr, setPortalErr] = useState<string | null>(null)
   const [earlyAdopter, setEarlyAdopter] = useState(false)
   const [meId, setMeId] = useState<string | null>(null)
   const [followers, setFollowers] = useState(0)
@@ -63,7 +51,12 @@ export default function Profile() {
   const [animPct, setAnimPct] = useState(0)
   // Local-only UI state: which of the two sub-tabs (Garage vs
   // Collection) is currently visible at the bottom of the profile.
-  const [garageTab, setGarageTab] = useState<'garage' | 'collection'>('garage')
+  // Single segmented control across the lower half of Profile — replaces
+  // the older flat scroll of Stats / Challenges / Subscription / Badges /
+  // Collections / Garage. Each tab owns its own content block.
+  const [profileTab, setProfileTab] = useState<
+    'collection' | 'garage' | 'rewards'
+  >('collection')
   // REVS RACE counters drive the race-* badges. Fetched once per
   // mount; absent until the call returns (badges just stay locked).
   const [raceStats, setRaceStats] = useState<{
@@ -187,9 +180,6 @@ export default function Profile() {
       } | null
       const isActiveSub = s?.status === 'active' || s?.status === 'trialing'
       setPlan(isActiveSub ? (s?.plan ?? null) : null)
-      setSubStatus(isActiveSub ? (s?.status ?? null) : null)
-      setRenewalAt(isActiveSub ? (s?.current_period_end ?? null) : null)
-      setHasCustomer(isActiveSub && !!s?.stripe_customer_id)
       setEarlyAdopter(earlier < 100)
       setMeId(user.id)
       setFollowers(followersRes.count ?? 0)
@@ -229,38 +219,6 @@ export default function Profile() {
     const id = requestAnimationFrame(() => setAnimPct(level.pct))
     return () => cancelAnimationFrame(id)
   }, [loading, level.pct])
-
-  // Open the Stripe Customer Portal for cancel / update card / etc.
-  // The endpoint resolves stripe_customer_id server-side from the
-  // authenticated user, so we just hand it the session token.
-  async function openPortal() {
-    if (portalBusy) return
-    setPortalErr(null)
-    setPortalBusy(true)
-    try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
-      const token = session?.access_token
-      if (!token) throw new Error('Session introuvable')
-      const res = await fetch('/api/create-checkout-session?action=portal', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-      })
-      const data = (await res.json()) as { url?: string; error?: string }
-      if (data.url) {
-        window.location.href = data.url
-        return
-      }
-      throw new Error(data.error || 'Portail indisponible')
-    } catch (e) {
-      setPortalErr(translateError(e))
-      setPortalBusy(false)
-    }
-  }
 
   if (loading) {
     return (
@@ -541,454 +499,473 @@ export default function Profile() {
           </p>
         </section>
 
-        {/* SECTION 3 — Stats (3 cols : Spots / Marques / Rang ; XP est
-            dans la barre Section 2 juste au-dessus) */}
-        <section className="grid grid-cols-3 gap-2.5">
-          <Stat
-            icon={<Camera className="h-4 w-4" />}
-            count={total}
-            label="Spots"
+        {/* SECTION 3 — Stats single horizontal line (replaces the
+            old 3-column grid). Each block stays tappable, separated
+            by bullet dots, and lives between two hairline rules. */}
+        <section
+          className="flex items-center justify-center gap-5 py-3.5"
+          style={{
+            borderTop: '1px solid rgba(255,255,255,0.05)',
+            borderBottom: '1px solid rgba(255,255,255,0.05)',
+          }}
+        >
+          <ProfileStatInline
+            value={String(total)}
+            label="spots"
             onClick={() => navigate('/ma-galerie')}
           />
-          <Stat
-            icon={<Tag className="h-4 w-4" />}
-            count={uniqueBrands}
-            label="Marques"
+          <span className="h-1 w-1 rounded-full bg-fg2/50" aria-hidden />
+          <ProfileStatInline
+            value={String(uniqueBrands)}
+            label="marques"
             onClick={() => navigate('/mes-marques')}
           />
-          <Stat
-            icon={<Trophy className="h-4 w-4" />}
-            display={rank ? `#${rank}` : '—'}
-            label="Rang"
+          <span className="h-1 w-1 rounded-full bg-fg2/50" aria-hidden />
+          <ProfileStatInline
+            value={rank ? `#${rank}` : '—'}
+            label="rang"
             onClick={() => navigate('/classement')}
           />
         </section>
 
-        {/* SECTION 3.25 — Challenges + Parrainage */}
-        <section className="grid grid-cols-2 gap-3">
-          <button
-            onClick={() => navigate('/challenges')}
-            className="flex flex-col items-start gap-1 rounded-2xl border border-white/5 bg-card p-4 text-left transition-colors hover:bg-white/[0.04]"
-          >
-            <span className="text-xs uppercase tracking-wider text-fg/40">
-              Challenges
-            </span>
-            <span className="font-display text-lg font-bold text-fg">
-              Cette semaine
-            </span>
-            <span className="text-xs text-accent">3 défis actifs →</span>
-          </button>
-          <button
-            onClick={() => navigate('/referral')}
-            className="flex flex-col items-start gap-1 rounded-2xl border border-white/5 bg-card p-4 text-left transition-colors hover:bg-white/[0.04]"
-          >
-            <span className="text-xs uppercase tracking-wider text-fg/40">
-              Parrainage
-            </span>
-            <span className="font-display text-lg font-bold text-fg">
-              Inviter
-            </span>
-            <span className="text-xs text-accent">+50 XP par ami →</span>
-          </button>
-        </section>
+        {/* PREMIUM BANNER (free users only, isolated at top) */}
+        {!plan && <PremiumTopBanner onTap={() => navigate('/premium')} />}
 
-        {/* SECTION 3.5 — Abonnement (centralised here, removed from Settings) */}
-        {plan ? (
-          <section
-            className="overflow-hidden rounded-2xl p-4"
-            style={
-              planTier(plan) === 'vip'
-                ? {
-                    background:
-                      'linear-gradient(135deg, rgba(212,175,55,0.16) 0%, rgba(255,215,0,0.06) 50%, rgba(15,15,15,0.95) 100%)',
-                    boxShadow:
-                      'inset 0 0 0 1px rgba(212,175,55,0.5), 0 6px 24px rgba(212,175,55,0.12)',
-                  }
-                : {
-                    background:
-                      'linear-gradient(135deg, rgba(230,57,70,0.16) 0%, rgba(230,57,70,0.04) 60%, rgba(15,15,15,0.95) 100%)',
-                    boxShadow:
-                      'inset 0 0 0 1px rgba(230,57,70,0.45), 0 6px 24px rgba(230,57,70,0.10)',
-                  }
-            }
-          >
-            <div className="flex items-start gap-3">
-              <span
-                className="flex h-11 w-11 flex-none items-center justify-center rounded-2xl"
-                style={
-                  planTier(plan) === 'vip'
-                    ? {
-                        background:
-                          'linear-gradient(135deg, #d4af37 0%, #ffd700 100%)',
-                        color: '#000',
-                      }
-                    : { background: 'var(--color-accent)', color: '#fff' }
-                }
-              >
-                {planTier(plan) === 'vip' ? (
-                  <Crown className="h-5 w-5" />
-                ) : (
-                  <Sparkles className="h-5 w-5" />
-                )}
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-fg/45">
-                  Mon abonnement
-                </p>
-                <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-1 font-display text-lg font-bold">
-                  <span>
-                    {planDisplayName(plan)}{' '}
-                    {planTier(plan) === 'vip' ? '👑' : '⚡'}
-                  </span>
-                  <span className="text-xs font-medium text-fg/50">
-                    {planInterval(plan) === 'year' ? 'annuel' : 'mensuel'}
-                  </span>
-                  <span
-                    className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
-                      subStatus === 'trialing'
-                        ? 'bg-[#F59E0B]/15 text-[#F59E0B]'
-                        : 'bg-emerald-500/15 text-emerald-400'
-                    }`}
-                  >
-                    {subStatus === 'trialing' ? 'En essai' : 'Actif'}
-                  </span>
-                </p>
-                {renewalAt && (
-                  <p className="mt-1 text-[11px] text-fg/50">
-                    {subStatus === 'trialing' ? 'Fin de l’essai' : 'Prochain renouvellement'}{' '}
-                    : {formatRenewal(renewalAt)}
-                  </p>
-                )}
-              </div>
-            </div>
-
-            <button
-              onClick={() => navigate('/radar')}
-              className="mt-4 flex w-full items-center justify-between rounded-full bg-accent/20 px-5 py-3 text-sm font-semibold text-fg transition-colors hover:bg-accent/30"
-            >
-              <span className="flex items-center gap-2">
-                <span className="relative flex h-2 w-2">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent opacity-75" />
-                  <span className="relative inline-flex h-2 w-2 rounded-full bg-accent" />
-                </span>
-                Mode Radar
-              </span>
-              <ChevronRight className="h-4 w-4 text-fg/60" />
-            </button>
-
-            <button
-              onClick={openPortal}
-              disabled={portalBusy || !hasCustomer}
-              className="mt-2 flex w-full items-center justify-between rounded-full bg-white/10 px-5 py-3 text-sm font-semibold text-fg backdrop-blur transition-colors hover:bg-white/15 disabled:opacity-50"
-            >
-              <span>
-                {portalBusy ? 'Ouverture…' : 'Gérer mon abonnement'}
-              </span>
-              <ChevronRight className="h-4 w-4 text-fg/60" />
-            </button>
-            {portalErr && (
-              <p className="mt-2 text-center text-xs text-accent">{portalErr}</p>
-            )}
-          </section>
-        ) : (
-          /* Premium upgrade banner — jet-black gradient with a drifting
-             gold accent line and a thin yellow border. Borrows the
-             founder-shimmer keyframe for the inner highlight so the
-             motion stays consistent with the Fondateur title chip. */
-          <button
-            onClick={() => navigate('/premium')}
-            className="tappable group relative flex w-full items-center justify-between gap-3 overflow-hidden rounded-2xl px-4 py-4 text-left transition-transform active:scale-[0.99]"
-            style={{
-              background:
-                'linear-gradient(95deg, #050505 0%, #141414 50%, #050505 100%)',
-              border: '1px solid rgba(224, 179, 65, 0.32)',
-              boxShadow:
-                '0 16px 36px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 215, 0, 0.06) inset',
-            }}
-          >
-            {/* Gold highlight sweep — uses founder-shimmer (already
-                in design-system.css) for a slow drift across the
-                banner. Sits at z-0; content stays above on z-10. */}
-            <span
-              aria-hidden
-              className="pointer-events-none absolute inset-0"
-              style={{
-                background:
-                  'linear-gradient(95deg, rgba(224, 179, 65, 0) 0%, rgba(255, 215, 0, 0.10) 35%, rgba(255, 246, 200, 0.18) 50%, rgba(255, 215, 0, 0.10) 65%, rgba(184, 134, 11, 0) 100%)',
-                backgroundSize: '220% 100%',
-                animation: 'founder-shimmer 6s linear infinite',
-              }}
-            />
-
-            <div className="relative z-10 flex items-center gap-3">
-              <span
-                className="flex h-10 w-10 flex-none items-center justify-center rounded-xl"
-                style={{
-                  background:
-                    'linear-gradient(135deg, rgba(255, 215, 0, 0.25) 0%, rgba(184, 134, 11, 0.10) 100%)',
-                  border: '1px solid rgba(255, 215, 0, 0.35)',
-                  color: '#FFD700',
-                  fontSize: '18px',
-                }}
-              >
-                ⚡
-              </span>
-              <div className="min-w-0">
-                <p
-                  className="font-display font-extrabold uppercase tracking-widest"
-                  style={{
-                    color: '#FFD700',
-                    fontSize: '11px',
-                    letterSpacing: '0.16em',
-                  }}
-                >
-                  Club REVS Premium
-                </p>
-                <p
-                  className="mt-0.5 text-fg/75"
-                  style={{ fontSize: '12px' }}
-                >
-                  Mode Radar temps réel & spots illimités
-                </p>
-              </div>
-            </div>
-
-            <ChevronRight
-              className="relative z-10 h-5 w-5 flex-none text-fg/55 transition-transform group-hover:translate-x-0.5"
-            />
-          </button>
-        )}
-
-        {/* SECTION 4 — Badges (top 4 + lien gallery) */}
+        {/* SEGMENTED CONTROL — 3 tabs (Collection / Garage / Récompenses) */}
         <section>
-          <div className="mb-3 flex items-baseline justify-between">
-            <h2 className="font-display text-lg font-extrabold tracking-tighter text-fg">
-              Mes badges
-            </h2>
-            <span className="label-up text-[10px] text-fg2">
-              {unlocked.length}/{badgeCatalogue.length}
-            </span>
-          </div>
-          <div className="grid grid-cols-4 gap-1.5">
-            {topBadges.map((b) => {
-              const isUnlocked = unlocks.has(b.slug)
-              return (
-                <button
-                  key={b.slug}
-                  onClick={() => navigate(`/badges/${b.slug}`)}
-                  className={`tappable relative flex flex-col items-center gap-1.5 rounded-2xl px-1 py-3 text-center ${
-                    isUnlocked
-                      ? b.gold
-                        ? 'bg-[#E0B341]/12'
-                        : 'bg-accent/8'
-                      : 'bg-card'
-                  }`}
-                  style={{
-                    border: isUnlocked
-                      ? b.gold
-                        ? '1px solid rgba(224,179,65,0.4)'
-                        : '1px solid rgba(232,32,58,0.3)'
-                      : '1px solid var(--color-border)',
-                    boxShadow:
-                      isUnlocked && !b.gold
-                        ? '0 0 20px rgba(232,32,58,0.18)'
-                        : isUnlocked && b.gold
-                          ? '0 0 22px rgba(224,179,65,0.22)'
-                          : undefined,
-                  }}
-                >
-                  {isUnlocked ? (
-                    <span className="text-2xl">{b.emoji}</span>
-                  ) : (
-                    <span className="flex h-7 items-center justify-center">
-                      <Lock className="h-4 w-4 text-fg2/50" />
-                    </span>
-                  )}
-                  <span
-                    className={`text-[10px] font-semibold leading-tight ${
-                      isUnlocked
-                        ? b.gold
-                          ? 'text-[#E0B341]'
-                          : 'text-accent'
-                        : 'text-fg2/60'
-                    }`}
-                  >
-                    {b.name}
-                  </span>
-                </button>
-              )
-            })}
-          </div>
-          <button
-            onClick={() => navigate('/badges')}
-            className="tappable mt-3 flex w-full items-center justify-center gap-1 rounded-full bg-card py-2.5 text-sm font-semibold text-fg/80 hover:bg-white/[0.06]"
-            style={{ border: '1px solid var(--color-border)' }}
-          >
-            Voir tous les badges
-            <ChevronRight className="h-4 w-4" />
-          </button>
-        </section>
-
-        {/* SECTION 4.5 — Collections */}
-        <CollectionsSection spots={spots} />
-
-        {/* SECTION 5 — Garage / Collection (tabbed). The toggle stays
-            local to Profile; tapping it just swaps which sub-section
-            renders below. Counts shown in the header reflect the
-            active tab — same spots array, two different views. */}
-        <section>
-          <div className="mb-3 flex items-baseline justify-between">
-            <h2 className="font-display text-lg font-bold">
-              {garageTab === 'garage' ? 'Mon garage' : 'Ma Collection'}{' '}
-              <span className="text-fg/40">
-                ({total}{' '}
-                {garageTab === 'garage'
-                  ? `voiture${total > 1 ? 's' : ''}`
-                  : `carte${total > 1 ? 's' : ''}`}
-                )
-              </span>
-            </h2>
-          </div>
-
-          {/* Tab toggle — segmented control */}
           <div
-            className="mb-4 grid grid-cols-2 gap-1 rounded-full p-1"
-            style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid var(--color-border)' }}
+            className="flex gap-1 rounded-xl p-1"
+            style={{
+              background: 'rgba(10, 10, 10, 0.60)',
+              border: '1px solid rgba(255, 255, 255, 0.05)',
+              backdropFilter: 'saturate(160%) blur(14px)',
+              WebkitBackdropFilter: 'saturate(160%) blur(14px)',
+            }}
             role="tablist"
           >
-            {(['garage', 'collection'] as const).map((tab) => {
-              const active = garageTab === tab
+            {(
+              [
+                { key: 'collection', label: 'Collection', emoji: '🃏' },
+                { key: 'garage', label: 'Garage', emoji: '🏎️' },
+                { key: 'rewards', label: 'Récompenses', emoji: '🏆' },
+              ] as const
+            ).map((t) => {
+              const active = profileTab === t.key
               return (
                 <button
-                  key={tab}
+                  key={t.key}
                   role="tab"
                   aria-selected={active}
-                  onClick={() => setGarageTab(tab)}
-                  className="tappable rounded-full py-2 text-[12px] font-extrabold uppercase tracking-wider transition-colors"
+                  onClick={() => setProfileTab(t.key)}
+                  className="tappable flex-1 rounded-lg py-2 text-xs font-bold transition-all"
                   style={{
-                    background: active ? 'var(--color-accent)' : 'transparent',
-                    color: active ? '#fff' : 'var(--color-fg-2)',
-                    boxShadow: active ? '0 6px 16px rgba(232,32,58,0.40)' : undefined,
+                    background: active
+                      ? 'rgba(255, 255, 255, 0.10)'
+                      : 'transparent',
+                    color: active ? '#fff' : 'rgba(255, 255, 255, 0.45)',
+                    boxShadow: active
+                      ? '0 4px 12px rgba(0, 0, 0, 0.30)'
+                      : undefined,
                   }}
                 >
-                  {tab === 'garage' ? 'Garage' : 'Collection'}
+                  <span className="mr-1" aria-hidden>
+                    {t.emoji}
+                  </span>
+                  {t.label}
                 </button>
               )
             })}
           </div>
 
-          {garageTab === 'garage' ? (
-            total === 0 ? (
-              <div className="flex flex-col items-center rounded-2xl border border-white/5 bg-card px-6 py-12 text-center">
-                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-accent/10">
-                  <Warehouse className="h-8 w-8 text-accent/70" />
-                </div>
-                <p className="mt-4 max-w-[15rem] font-medium">
-                  Ton garage est vide, pars chasser ta première supercar
-                </p>
-                <button
-                  onClick={() => navigate('/new-spot')}
-                  className="mt-5 rounded-full bg-accent px-6 py-3 text-sm font-semibold"
-                >
-                  Spotter
-                </button>
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 gap-3">
-                {spots.map((s) => (
+          <div className="mt-5">
+            {profileTab === 'collection' && <MyCollection spots={spots} />}
+
+            {profileTab === 'garage' &&
+              (total === 0 ? (
+                <div className="flex flex-col items-center rounded-2xl border border-white/5 bg-card px-6 py-12 text-center">
+                  <div className="flex h-16 w-16 items-center justify-center rounded-full bg-accent/10">
+                    <Warehouse className="h-8 w-8 text-accent/70" />
+                  </div>
+                  <p className="mt-4 max-w-[15rem] font-medium">
+                    Ton garage est vide, pars chasser ta première supercar
+                  </p>
                   <button
-                    key={s.id}
-                    onClick={() => navigate(`/spot/${s.id}`)}
-                    className="tappable relative aspect-[4/3] overflow-hidden rounded-[20px] bg-[#0a0a0a] text-left"
+                    onClick={() => navigate('/new-spot')}
+                    className="mt-5 rounded-full bg-accent px-6 py-3 text-sm font-semibold"
+                  >
+                    Spotter
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {spots.map((s) => (
+                    <GarageRow
+                      key={s.id}
+                      spot={s}
+                      onOpen={() => navigate(`/spot/${s.id}`)}
+                    />
+                  ))}
+                </div>
+              ))}
+
+            {profileTab === 'rewards' && (
+              <div className="space-y-6">
+                {/* Quick row: Challenges + Parrainage */}
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    onClick={() => navigate('/challenges')}
+                    className="flex flex-col items-start gap-1 rounded-2xl border border-white/5 bg-card p-4 text-left transition-colors hover:bg-white/[0.04]"
+                  >
+                    <span className="text-xs uppercase tracking-wider text-fg/40">
+                      Challenges
+                    </span>
+                    <span className="font-display text-lg font-bold text-fg">
+                      Cette semaine
+                    </span>
+                    <span className="text-xs text-accent">
+                      3 défis actifs →
+                    </span>
+                  </button>
+                  <button
+                    onClick={() => navigate('/referral')}
+                    className="flex flex-col items-start gap-1 rounded-2xl border border-white/5 bg-card p-4 text-left transition-colors hover:bg-white/[0.04]"
+                  >
+                    <span className="text-xs uppercase tracking-wider text-fg/40">
+                      Parrainage
+                    </span>
+                    <span className="font-display text-lg font-bold text-fg">
+                      Inviter
+                    </span>
+                    <span className="text-xs text-accent">
+                      +50 XP par ami →
+                    </span>
+                  </button>
+                </div>
+
+                {/* Gérer mon abonnement — paid users only */}
+                {plan && (
+                  <button
+                    onClick={() => navigate('/premium')}
+                    className="tappable flex w-full items-center justify-between gap-3 rounded-2xl bg-card px-4 py-3.5 text-left"
+                    style={{
+                      border: '1px solid var(--color-border)',
+                    }}
+                  >
+                    <span className="flex items-center gap-3">
+                      <span
+                        className="flex h-9 w-9 items-center justify-center rounded-xl"
+                        style={{
+                          background:
+                            planTier(plan) === 'vip'
+                              ? 'linear-gradient(135deg, #d4af37 0%, #ffd700 100%)'
+                              : 'var(--color-accent)',
+                          color: planTier(plan) === 'vip' ? '#000' : '#fff',
+                          fontSize: '16px',
+                        }}
+                      >
+                        {planTier(plan) === 'vip' ? '👑' : '⚡'}
+                      </span>
+                      <span className="flex flex-col">
+                        <span className="text-[10px] uppercase tracking-widest text-fg2">
+                          Abonnement
+                        </span>
+                        <span className="font-display text-base font-bold text-fg">
+                          {planDisplayName(plan)}
+                        </span>
+                      </span>
+                    </span>
+                    <span className="text-xs text-fg/55">Gérer →</span>
+                  </button>
+                )}
+
+                {/* Mes Badges */}
+                <section>
+                  <div className="mb-3 flex items-baseline justify-between">
+                    <h2 className="font-display text-lg font-extrabold tracking-tighter text-fg">
+                      Mes badges
+                    </h2>
+                    <span className="label-up text-[10px] text-fg2">
+                      {unlocked.length}/{badgeCatalogue.length}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-4 gap-1.5">
+                    {topBadges.map((b) => {
+                      const isUnlocked = unlocks.has(b.slug)
+                      return (
+                        <button
+                          key={b.slug}
+                          onClick={() => navigate(`/badges/${b.slug}`)}
+                          className={`tappable relative flex flex-col items-center gap-1.5 rounded-2xl px-1 py-3 text-center ${
+                            isUnlocked
+                              ? b.gold
+                                ? 'bg-[#E0B341]/12'
+                                : 'bg-accent/8'
+                              : 'bg-card'
+                          }`}
+                          style={{
+                            border: isUnlocked
+                              ? b.gold
+                                ? '1px solid rgba(224,179,65,0.4)'
+                                : '1px solid rgba(232,32,58,0.3)'
+                              : '1px solid var(--color-border)',
+                            boxShadow:
+                              isUnlocked && !b.gold
+                                ? '0 0 20px rgba(232,32,58,0.18)'
+                                : isUnlocked && b.gold
+                                  ? '0 0 22px rgba(224,179,65,0.22)'
+                                  : undefined,
+                          }}
+                        >
+                          {isUnlocked ? (
+                            <span className="text-2xl">{b.emoji}</span>
+                          ) : (
+                            <span className="flex h-7 items-center justify-center">
+                              <Lock className="h-4 w-4 text-fg2/50" />
+                            </span>
+                          )}
+                          <span
+                            className={`text-[10px] font-semibold leading-tight ${
+                              isUnlocked
+                                ? b.gold
+                                  ? 'text-[#E0B341]'
+                                  : 'text-accent'
+                                : 'text-fg2/60'
+                            }`}
+                          >
+                            {b.name}
+                          </span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <button
+                    onClick={() => navigate('/badges')}
+                    className="tappable mt-3 flex w-full items-center justify-center gap-1 rounded-full bg-card py-2.5 text-sm font-semibold text-fg/80 hover:bg-white/[0.06]"
                     style={{ border: '1px solid var(--color-border)' }}
                   >
-                    <GarageCard
-                      brand={s.brand}
-                      model={s.model}
-                      year={s.year}
-                      category={s.category}
-                      imageUrl={s.garage_image_url}
-                    />
+                    Voir tous les badges
+                    <ChevronRight className="h-4 w-4" />
                   </button>
-                ))}
+                </section>
+
+                {/* Défis Collections (themed: AMG, JDM, Italian Big 3, …) */}
+                <CollectionsSection spots={spots} />
               </div>
-            )
-          ) : (
-            <MyCollection spots={spots} />
-          )}
+            )}
+          </div>
         </section>
+
       </div>
 
     </div>
   )
 }
 
-// Tiny RAF-based count-up — animates from 0 to `target` in `ms` ms.
-// Pure number animation; the caller decides how to render. Returns the
-// target instantly when `target` is not a finite number.
-function useCountUp(target: number | null, ms = 800): number {
-  const [value, setValue] = useState(0)
-  const startRef = useRef<number | null>(null)
-  useEffect(() => {
-    if (target == null || !Number.isFinite(target)) {
-      setValue(target ?? 0)
-      return
-    }
-    let raf = 0
-    startRef.current = null
-    const tick = (now: number) => {
-      if (startRef.current == null) startRef.current = now
-      const t = Math.min(1, (now - startRef.current) / ms)
-      // ease-out cubic
-      const eased = 1 - Math.pow(1 - t, 3)
-      setValue(Math.round(target * eased))
-      if (t < 1) raf = requestAnimationFrame(tick)
-    }
-    raf = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(raf)
-  }, [target, ms])
-  return value
-}
+// ─────────────────────── Profile helpers (post-restructure) ───────────────────────
 
-function Stat({
-  count,
-  display,
+/** Inline stat tappable used by the single-line stats row that
+ *  replaced the old 3-column boxed grid. Big number + tiny label
+ *  sit on the same baseline; dots separate them in the parent. */
+function ProfileStatInline({
+  value,
   label,
-  icon,
   onClick,
 }: {
-  // For animated counters pass `count` (number). Static / formatted
-  // labels (e.g. "#12") use `display`.
-  count?: number | null
-  display?: string
+  value: string
   label: string
-  icon: React.ReactNode
-  onClick?: () => void
+  onClick: () => void
 }) {
-  const animated = useCountUp(count ?? null)
-  const value =
-    display ?? (count == null ? '—' : new Intl.NumberFormat('fr-FR').format(animated))
   return (
     <button
       onClick={onClick}
-      className="tappable w-full rounded-3xl bg-card px-2 py-5 text-center shadow-soft"
-      style={{ border: '1px solid rgba(232,32,58,0.15)' }}
+      className="tappable flex items-baseline gap-1.5"
     >
-      <div className="flex justify-center text-accent">{icon}</div>
-      <div className="mt-2 font-display text-2xl font-extrabold tracking-tighter text-accent">
+      <span
+        className="font-display font-extrabold tracking-tighter text-fg tabular-nums"
+        style={{ fontSize: '17px' }}
+      >
         {value}
-      </div>
-      <div className="label-up mt-1 text-[10px] text-fg2">{label}</div>
+      </span>
+      <span
+        className="font-medium text-fg2 lowercase"
+        style={{ fontSize: '11px' }}
+      >
+        {label}
+      </span>
     </button>
   )
 }
 
-function formatRenewal(iso: string): string {
-  const d = new Date(iso)
-  if (isNaN(d.getTime())) return ''
-  return new Intl.DateTimeFormat('fr-FR', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  }).format(d)
+/** Jet-black banner with a drifting gold sweep that nudges free
+ *  users toward /premium. Lifted from the previous Section 3.5 into
+ *  its own component so the top of Profile stays uncluttered. */
+function PremiumTopBanner({ onTap }: { onTap: () => void }) {
+  return (
+    <button
+      onClick={onTap}
+      className="tappable group relative flex w-full items-center justify-between gap-3 overflow-hidden rounded-2xl px-4 py-4 text-left transition-transform active:scale-[0.99]"
+      style={{
+        background:
+          'linear-gradient(95deg, #050505 0%, #141414 50%, #050505 100%)',
+        border: '1px solid rgba(224, 179, 65, 0.32)',
+        boxShadow:
+          '0 16px 36px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 215, 0, 0.06) inset',
+      }}
+    >
+      <span
+        aria-hidden
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background:
+            'linear-gradient(95deg, rgba(224, 179, 65, 0) 0%, rgba(255, 215, 0, 0.10) 35%, rgba(255, 246, 200, 0.18) 50%, rgba(255, 215, 0, 0.10) 65%, rgba(184, 134, 11, 0) 100%)',
+          backgroundSize: '220% 100%',
+          animation: 'founder-shimmer 6s linear infinite',
+        }}
+      />
+      <div className="relative z-10 flex items-center gap-3">
+        <span
+          className="flex h-10 w-10 flex-none items-center justify-center rounded-xl"
+          style={{
+            background:
+              'linear-gradient(135deg, rgba(255, 215, 0, 0.25) 0%, rgba(184, 134, 11, 0.10) 100%)',
+            border: '1px solid rgba(255, 215, 0, 0.35)',
+            color: '#FFD700',
+            fontSize: '18px',
+          }}
+        >
+          ⚡
+        </span>
+        <div className="min-w-0">
+          <p
+            className="font-display font-extrabold uppercase tracking-widest"
+            style={{
+              color: '#FFD700',
+              fontSize: '11px',
+              letterSpacing: '0.16em',
+            }}
+          >
+            Club REVS Premium
+          </p>
+          <p className="mt-0.5 text-fg/75" style={{ fontSize: '12px' }}>
+            Mode Radar temps réel & spots illimités
+          </p>
+        </div>
+      </div>
+      <ChevronRight
+        className="relative z-10 h-5 w-5 flex-none text-fg/55 transition-transform group-hover:translate-x-0.5"
+      />
+    </button>
+  )
 }
+
+/** Brand-aware glow used as a soft halo on the GarageRow horizontal
+ *  cards. Lowercase substring match against the brand string keeps
+ *  the table small while covering enough variants. Default fallback
+ *  is the REVS accent red. */
+function brandGlow(brand: string | null | undefined): string {
+  const b = (brand ?? '').toLowerCase()
+  if (b.includes('ferrari')) return 'rgba(232, 32, 58, 0.30)'
+  if (b.includes('lamborghini') || b.includes('lambo'))
+    return 'rgba(255, 215, 0, 0.28)'
+  if (b.includes('porsche')) return 'rgba(220, 220, 220, 0.25)'
+  if (b.includes('mclaren')) return 'rgba(255, 138, 0, 0.30)'
+  if (b.includes('audi')) return 'rgba(232, 32, 58, 0.25)'
+  if (b.includes('bmw')) return 'rgba(59, 130, 246, 0.28)'
+  if (b.includes('mercedes')) return 'rgba(220, 220, 220, 0.25)'
+  if (b.includes('bentley')) return 'rgba(34, 139, 34, 0.25)'
+  if (b.includes('aston')) return 'rgba(0, 100, 0, 0.25)'
+  if (b.includes('rolls')) return 'rgba(160, 100, 200, 0.25)'
+  if (b.includes('bugatti')) return 'rgba(20, 70, 180, 0.28)'
+  if (b.includes('koenigsegg')) return 'rgba(255, 255, 255, 0.22)'
+  if (b.includes('pagani')) return 'rgba(255, 0, 128, 0.25)'
+  if (b.includes('toyota') || b.includes('lexus'))
+    return 'rgba(140, 140, 140, 0.22)'
+  if (b.includes('honda') || b.includes('acura'))
+    return 'rgba(220, 220, 220, 0.22)'
+  if (b.includes('nissan') || b.includes('nismo'))
+    return 'rgba(170, 0, 0, 0.25)'
+  if (b.includes('volkswagen') || b.includes('vw'))
+    return 'rgba(40, 90, 170, 0.22)'
+  if (b.includes('volvo')) return 'rgba(30, 90, 130, 0.22)'
+  if (b.includes('mazda')) return 'rgba(200, 0, 0, 0.22)'
+  if (b.includes('subaru')) return 'rgba(0, 100, 200, 0.22)'
+  return 'rgba(232, 32, 58, 0.20)'
+}
+
+/** Horizontal landscape card used by the Garage tab. Replaces the
+ *  old 2-column SVG silhouette grid. Subtle vertical gradient bg +
+ *  a brand-coloured radial halo at the bottom-right corner, with
+ *  brand small caps, model bold, year chip top-right. */
+function GarageRow({
+  spot,
+  onOpen,
+}: {
+  spot: Spot
+  onOpen: () => void
+}) {
+  const glow = brandGlow(spot.brand)
+  return (
+    <button
+      onClick={onOpen}
+      className="tappable group relative w-full overflow-hidden rounded-2xl text-left"
+      style={{
+        height: '128px',
+        background:
+          'linear-gradient(135deg, #1a1a1a 0%, #0c0c0c 60%, #050505 100%)',
+        border: '1px solid rgba(255, 255, 255, 0.05)',
+        boxShadow: '0 18px 38px rgba(0, 0, 0, 0.45)',
+      }}
+    >
+      {/* Brand-colour halo at the lower-right corner. Sits behind
+          the text via z-0; transitions on hover for a subtle pulse. */}
+      <span
+        aria-hidden
+        className="pointer-events-none absolute -bottom-12 -right-12 transition-all group-hover:scale-110"
+        style={{
+          width: '180px',
+          height: '180px',
+          borderRadius: '50%',
+          background: glow,
+          filter: 'blur(48px)',
+        }}
+      />
+
+      <div className="relative z-10 flex h-full flex-col justify-between p-5">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p
+              className="font-bold uppercase text-fg/45"
+              style={{ fontSize: '10px', letterSpacing: '0.18em' }}
+            >
+              {spot.brand}
+            </p>
+            <h3
+              className="mt-1 truncate font-display tracking-tight text-white"
+              style={{ fontSize: '20px', fontWeight: 700, letterSpacing: '-0.02em' }}
+            >
+              {spot.model}
+            </h3>
+          </div>
+          {typeof spot.year === 'number' && spot.year > 1900 && (
+            <span
+              className="flex-none rounded-md px-2 py-0.5 font-bold text-white/85"
+              style={{
+                background: 'rgba(255, 255, 255, 0.05)',
+                border: '1px solid rgba(255, 255, 255, 0.10)',
+                backdropFilter: 'saturate(150%) blur(10px)',
+                WebkitBackdropFilter: 'saturate(150%) blur(10px)',
+                fontSize: '10px',
+              }}
+            >
+              {spot.year}
+            </span>
+          )}
+        </div>
+        <p className="text-xs text-fg/55">
+          {categoryLabel(spot.category)}
+        </p>
+      </div>
+    </button>
+  )
+}
+
