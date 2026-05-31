@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, Camera, MapPin } from 'lucide-react'
 import { supabase } from '../lib/supabase'
@@ -18,6 +18,8 @@ import { getCurrentPositionSafe } from '../lib/geo'
 import { maybePromptPush, myPseudo, notifyPush } from '../lib/push'
 import { brandSlugFor, getBrand } from '../lib/brands'
 import { Skeleton } from '../components/Skeleton'
+import CollectorCard from '../components/CollectorCard'
+import type { Spot } from '../lib/spots'
 
 type Step = 1 | 2 | 3 | 4
 
@@ -106,6 +108,51 @@ export default function NewSpot() {
       if (previewUrl) URL.revokeObjectURL(previewUrl)
     }
   }, [previewUrl])
+
+  /** Synthetic Spot used by the step-3 collector-card preview. The
+   *  CollectorCard component expects a full Spot record from
+   *  supabase.spots, but at this step the row doesn't exist yet
+   *  (it's inserted by publish()). We rebuild the relevant fields
+   *  from the in-memory form so the user sees a live preview that
+   *  updates as they edit. Lat/lng default to 0/0 — the front
+   *  face doesn't surface them; only the back-face GPS chip does. */
+  const previewSpot = useMemo<Spot>(() => {
+    const yearN = Number.parseInt(year, 10)
+    return {
+      id: 'preview-' + Date.now(),
+      user_id: '',
+      brand: brand || result.brand || 'Voiture',
+      model: model || result.model || 'Modèle',
+      year: Number.isFinite(yearN) ? yearN : null,
+      color: color || result.color || '',
+      category: (category || result.category) as SpotCategory,
+      description: description || null,
+      photo_url: previewUrl,
+      confidence: result.confidence ?? null,
+      estimated_price: result.estimated_price ?? null,
+      car_info: null,
+      lat: 0,
+      lng: 0,
+      expires_at: '',
+      created_at: new Date().toISOString(),
+      rarity: result.rarity ?? 'commun',
+    }
+  }, [
+    brand,
+    model,
+    year,
+    color,
+    category,
+    description,
+    previewUrl,
+    result.brand,
+    result.model,
+    result.color,
+    result.category,
+    result.confidence,
+    result.estimated_price,
+    result.rarity,
+  ])
 
   function rejectAndRestart(message: string) {
     if (previewUrl) URL.revokeObjectURL(previewUrl)
@@ -754,31 +801,34 @@ export default function NewSpot() {
               Identification difficile — complète ou corrige les champs ci-dessous.
             </div>
           ) : (
-            // 3D corner-flip reveal: the perspective parent gives
-            // the inner card a real depth feel as it scales from
-            // 30% / rotateY 180° to 100% / 0° via the
-            // card-pop-3d keyframe. The white flash overlay below
-            // is a sibling that fires once on mount via its own
-            // keyframe.
-            <>
-              <div className="perspective-1000">
+            // Hero reveal — full 2:3 CollectorCard preview built
+            // from the in-memory form fields + the captured photo.
+            // The 3D pop animation (perspective parent + card-pop-3d
+            // child) mimics a trading card being flipped into view;
+            // the white flash overlay sibling marks the moment the
+            // card lands.
+            <div className="space-y-3">
+              <div className="perspective-1000 flex justify-center">
                 <div
-                  className="card-pop-3d rounded-3xl px-4 py-3 text-sm font-extrabold tracking-tight text-fg"
-                  style={{
-                    background: 'rgba(232,32,58,0.10)',
-                    border: '1px solid rgba(232,32,58,0.40)',
-                    boxShadow: '0 0 16px rgba(232,32,58,0.18)',
-                  }}
+                  className="card-pop-3d"
+                  style={{ width: '70%', maxWidth: '260px' }}
                 >
-                  ✨ {result.brand} {result.model} — {result.confidence}%
+                  <CollectorCard
+                    spot={previewSpot}
+                    cardNumber={1}
+                    isFirstOnRevs={false}
+                    spotsCount={1}
+                  />
                 </div>
               </div>
-              {/* Brief full-screen white flash, anchored to the
-                  same conditional render as the success card so it
-                  only fires on a real identification. Pointer-events
-                  none + auto-fade keeps it from blocking taps. */}
+              <p
+                className="text-center font-medium uppercase text-fg2"
+                style={{ fontSize: '10px', letterSpacing: '0.18em' }}
+              >
+                IA · {result.confidence}% de confiance
+              </p>
               <span aria-hidden className="card-reveal-flash" />
-            </>
+            </div>
           )}
 
           {result.alternatives.length > 0 && (
