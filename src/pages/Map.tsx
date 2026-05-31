@@ -205,6 +205,12 @@ type MapMode = '2D' | '3D'
 
 const MODE_KEY = 'revs-map-mode'
 
+/** Feature flag — mirrors the same constant in Home.tsx. Gates the
+ *  Sparkles entry button + the MapPredictionSheet render + the lazy
+ *  fetch. Component, lib and bottom-sheet code all stay in place so
+ *  reviving the feature is a one-line flip. */
+const SHOW_WEATHER_IA = false
+
 // Snapchat-soft palette + a REVS red accent on the big roads.
 const SNAP = {
   bg: '#F5F0E8',
@@ -486,6 +492,7 @@ export default function MapPage() {
   const [predictionTried, setPredictionTried] = useState(false)
 
   useEffect(() => {
+    if (!SHOW_WEATHER_IA) return
     if (!infoSheetOpen || predictionTried || predictionLoading) return
     let alive = true
     setPredictionLoading(true)
@@ -1199,12 +1206,16 @@ export default function MapPage() {
 
       <div className="absolute left-0 right-0 top-0 z-10 space-y-2 px-4 pt-[max(3rem,calc(env(safe-area-inset-top)+2rem))]">
         <div
-          className="mx-auto flex max-w-md items-center gap-2 rounded-full px-4 py-2.5"
+          className="mx-auto flex max-w-md items-center gap-2 rounded-2xl px-4 py-3"
           style={{
-            background: 'rgba(10,10,10,0.65)',
-            backdropFilter: 'saturate(160%) blur(20px)',
-            WebkitBackdropFilter: 'saturate(160%) blur(20px)',
-            border: '1px solid rgba(255,255,255,0.10)',
+            // bg-neutral-900/70 + backdrop-blur-md per the polish spec
+            // — slightly more visible glass, less rounded for an Apple
+            // Maps-like feel.
+            background: 'rgba(23, 23, 23, 0.70)',
+            backdropFilter: 'saturate(160%) blur(14px)',
+            WebkitBackdropFilter: 'saturate(160%) blur(14px)',
+            border: '1px solid rgba(255,255,255,0.06)',
+            boxShadow: '0 14px 32px rgba(0,0,0,0.30)',
           }}
         >
           <SearchIcon className="h-4 w-4 flex-none text-fg2" />
@@ -1256,56 +1267,28 @@ export default function MapPage() {
         </div>
       </div>
 
-      {/* AI prediction info button — discrete 40 px round chip
-          sitting just under the search bar, opens the bottom sheet
-          carrying the personalised weather+spot tip. */}
-      <button
-        onClick={() => setInfoSheetOpen(true)}
-        aria-label="Conseil de spot du jour"
-        className="tappable absolute right-4 z-10 flex h-10 w-10 items-center justify-center rounded-full"
-        style={{
-          top: 'calc(max(3rem, env(safe-area-inset-top) + 2rem) + 3.25rem)',
-          background: '#141414',
-          border: '1px solid rgba(255,255,255,0.10)',
-          boxShadow: '0 8px 22px rgba(0,0,0,0.45)',
-          color: 'var(--color-accent)',
-        }}
-      >
-        <Sparkles className="h-4 w-4" />
-      </button>
-
-      <div
-        className="absolute right-4 z-10"
-        style={{
-          top: 'calc(max(3rem, env(safe-area-inset-top) + 2rem) + 6.75rem)',
-        }}
-      >
-        <div
-          className="flex gap-1 rounded-full p-1"
+      {/* AI prediction Sparkles entry button — archived behind
+          SHOW_WEATHER_IA. Both the button and the bottom sheet stay
+          wired so flipping the constant back to true revives the
+          feature without rewiring fetch / state / sheet code. */}
+      {SHOW_WEATHER_IA && (
+        <button
+          onClick={() => setInfoSheetOpen(true)}
+          aria-label="Conseil de spot du jour"
+          className="tappable absolute right-4 z-10 flex h-10 w-10 items-center justify-center rounded-full"
           style={{
-            background: 'rgba(10,10,10,0.65)',
-            backdropFilter: 'saturate(160%) blur(20px)',
-            WebkitBackdropFilter: 'saturate(160%) blur(20px)',
-            border: '1px solid rgba(255,255,255,0.08)',
+            top: 'calc(max(3rem, env(safe-area-inset-top) + 2rem) + 3.25rem)',
+            background: '#141414',
+            border: '1px solid rgba(255,255,255,0.10)',
+            boxShadow: '0 8px 22px rgba(0,0,0,0.45)',
+            color: 'var(--color-accent)',
           }}
         >
-          {(['2D', '3D'] as MapMode[]).map((m) => (
-            <button
-              key={m}
-              onClick={() => setMode(m)}
-              className={`tappable rounded-full px-3.5 py-1.5 text-xs font-bold tracking-wide transition-colors ${
-                mode === m
-                  ? 'bg-accent text-fg'
-                  : 'text-fg2 hover:text-fg'
-              }`}
-            >
-              {m}
-            </button>
-          ))}
-        </div>
-      </div>
+          <Sparkles className="h-4 w-4" />
+        </button>
+      )}
 
-      {infoSheetOpen && (
+      {SHOW_WEATHER_IA && infoSheetOpen && (
         <MapPredictionSheet
           prediction={prediction}
           loading={predictionLoading}
@@ -1372,18 +1355,52 @@ export default function MapPage() {
         </div>
       )}
 
-      <button
-        onClick={flyToUser}
-        aria-label="Me localiser"
-        style={{
-          bottom: 'calc(env(safe-area-inset-bottom) + 5rem + 0.75rem + 20px)',
-          boxShadow:
-            '0 6px 24px rgba(232,32,58,0.45), 0 0 0 1px rgba(255,255,255,0.06) inset',
-        }}
-        className="tappable absolute right-4 z-10 flex h-12 w-12 items-center justify-center rounded-full bg-accent"
+      {/* Bottom-right control stack — slim 2D/3D pill sitting just
+          above the geolocation button. The pill is barely wider than
+          the geo circle so the column reads as a unit. */}
+      <div
+        className="absolute right-4 z-10 flex flex-col items-end gap-3"
+        style={{ bottom: 'calc(env(safe-area-inset-bottom) + 5rem + 0.75rem + 20px)' }}
       >
-        <LocateFixed className="h-5 w-5 text-fg" />
-      </button>
+        <div
+          className="flex gap-0.5 rounded-xl p-0.5"
+          style={{
+            background: 'rgba(20, 20, 20, 0.80)',
+            backdropFilter: 'saturate(160%) blur(14px)',
+            WebkitBackdropFilter: 'saturate(160%) blur(14px)',
+            border: '1px solid rgba(255, 255, 255, 0.06)',
+            boxShadow: '0 10px 24px rgba(0, 0, 0, 0.45)',
+          }}
+        >
+          {(['2D', '3D'] as MapMode[]).map((m) => (
+            <button
+              key={m}
+              onClick={() => setMode(m)}
+              className={`tappable rounded-lg px-2.5 py-1.5 font-extrabold tracking-wide transition-all ${
+                mode === m
+                  ? 'bg-accent text-white shadow-md active:scale-95'
+                  : 'text-fg2 hover:text-fg active:scale-95'
+              }`}
+              style={{ fontSize: '11px' }}
+            >
+              {m}
+            </button>
+          ))}
+        </div>
+
+        <button
+          onClick={flyToUser}
+          aria-label="Me localiser"
+          className="tappable flex h-12 w-12 items-center justify-center rounded-full bg-accent transition-transform active:scale-90"
+          style={{
+            // Softer, two-layer shadow — ambient + tight contact.
+            boxShadow:
+              '0 14px 32px rgba(232, 32, 58, 0.40), 0 4px 12px rgba(0, 0, 0, 0.45), inset 0 0 0 1px rgba(255, 255, 255, 0.08)',
+          }}
+        >
+          <LocateFixed className="h-5 w-5 text-fg" />
+        </button>
+      </div>
 
       {error && (
         <div className="absolute inset-0 z-20 flex items-center justify-center bg-bg px-8">

@@ -39,6 +39,13 @@ import { useMyTier } from '../lib/tier'
  *  so the feature is reachable by URL meanwhile. */
 const SHOW_GAMES_ENTRY = false
 
+/** Feature flag — gates the WeatherCard render AND its underlying
+ *  fetchSpottingPrediction call. Both the component code and the
+ *  client lib stay in place so flipping this back to `true` revives
+ *  the feature without any plumbing work. The Map screen mirrors the
+ *  same constant so neither surface fires a Claude call while hidden. */
+const SHOW_WEATHER_IA = false
+
 type CommunityStats = {
   spots_today: number
   online_now: number
@@ -211,8 +218,9 @@ export default function Home() {
       // AI weather hook — only fires when the user has set their city
       // and isn't blocking the rest of the home grid. The Map sheet
       // hits the same RPC; both share the server cache per
-      // (user, city, date) so it costs nothing twice.
-      if (profVille) {
+      // (user, city, date) so it costs nothing twice. Gated by the
+      // SHOW_WEATHER_IA flag so no Claude call lands while archived.
+      if (SHOW_WEATHER_IA && profVille) {
         setPredictionLoading(true)
         // Reuse the brand-counting context the prediction prompt
         // expects. recentSpots is in scope from above; we don't
@@ -447,10 +455,11 @@ export default function Home() {
         )}
 
         {/* WEATHER / AI HOOK — daily retention card sitting under the
-            stats. Mocks an icon + temperature from the IA's score
-            bucket because we don't ship a weather API; the Claude
-            message itself is the real personalised hook. */}
-        {ville && (prediction || predictionLoading) && (
+            stats. Currently archived behind SHOW_WEATHER_IA — the
+            WeatherCard component, the WEATHER_THEME palette and the
+            prediction lib all stay in place; flipping the flag back
+            to true is the only step needed to revive it. */}
+        {SHOW_WEATHER_IA && ville && (prediction || predictionLoading) && (
           <WeatherCard
             prediction={prediction}
             loading={predictionLoading}
