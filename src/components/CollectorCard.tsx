@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { ArrowLeft, Loader2, MapPin, Trophy } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import type { Spot, Rarity } from '../lib/spots'
@@ -59,13 +59,11 @@ function dateLabel(iso: string): string {
   }).format(new Date(iso))
 }
 
-/** Smart shortening rules applied before any auto-fit work:
- *  - Drop anything in parentheses ("(8S facelift)", "(F30)", …) since
- *    generation codes are noise on a card.
- *  - Drop a single trailing body-type word (Roadster / Coupé / etc.)
- *    when it makes the result fit better.
- *  The auto-fit FitText handles the rest by shrinking the font down
- *  to 11px and wrapping to two lines only as a last resort. */
+/** Smart shortening rules applied before the model name lands in
+ *  the card layout. Pre-2026-05-31 we also passed the result through
+ *  a FitText hook that auto-shrank to 11px and wrapped to 2 lines
+ *  rather than ellipsing — that's been swapped for a plain truncate
+ *  per the launch polish spec. Long names now end in "…". */
 const TRAILING_BODY_WORDS = new Set([
   'roadster',
   'cabriolet',
@@ -102,76 +100,6 @@ function shortModelName(model: string): string {
     }
   }
   return s
-}
-
-/** Auto-shrink a single-line label to fit its container. Starts at
- *  `max` px, steps down to `min` px. If even at `min` the text still
- *  overflows, allows it to wrap (whiteSpace: normal) instead of
- *  ellipsing — the spec is explicit: never truncate with "…". */
-function FitText({
-  text,
-  max = 15,
-  min = 11,
-  className,
-  style,
-}: {
-  text: string
-  max?: number
-  min?: number
-  className?: string
-  style?: React.CSSProperties
-}) {
-  const ref = useRef<HTMLSpanElement | null>(null)
-  const [wrap, setWrap] = useState(false)
-
-  useLayoutEffect(() => {
-    const el = ref.current
-    if (!el) return
-    const fit = () => {
-      // Force single-line during measurement
-      el.style.whiteSpace = 'nowrap'
-      let s = max
-      el.style.fontSize = `${s}px`
-      while (s > min && el.scrollWidth > el.offsetWidth + 0.5) {
-        s -= 1
-        el.style.fontSize = `${s}px`
-      }
-      // If even at min it still overflows, allow wrapping rather
-      // than clipping. React state flip triggers the second render.
-      if (el.scrollWidth > el.offsetWidth + 0.5) {
-        setWrap(true)
-      } else {
-        setWrap(false)
-      }
-    }
-    fit()
-    const ro = new ResizeObserver(fit)
-    if (el.parentElement) ro.observe(el.parentElement)
-    return () => ro.disconnect()
-  }, [text, max, min])
-
-  return (
-    <span
-      ref={ref}
-      className={className}
-      style={{
-        // Use -webkit-box so WebkitLineClamp can cap the wrap fallback
-        // at 2 lines. Harmless when wrap=false (whiteSpace:nowrap +
-        // overflow:hidden govern the single-line measurement instead).
-        display: '-webkit-box',
-        WebkitBoxOrient: 'vertical',
-        WebkitLineClamp: 2,
-        whiteSpace: wrap ? 'normal' : 'nowrap',
-        overflow: 'hidden',
-        textOverflow: 'clip',
-        lineHeight: 1.05,
-        wordBreak: 'break-word',
-        ...style,
-      }}
-    >
-      {text}
-    </span>
-  )
 }
 
 /** Collector card — 2:3 portrait, Pokemon/Panini layout. Tap flips
@@ -332,7 +260,15 @@ function FrontFace({
   shortName: string
 }) {
   return (
-    <div className="relative flex h-full w-full flex-col overflow-hidden rounded-[14px] bg-[#0d0d0d]">
+    <div
+      className="relative flex h-full w-full flex-col overflow-hidden rounded-[14px]"
+      style={{
+        // Subtle vertical gradient per the polish spec — top neutral-900
+        // to bottom neutral-950. Reads as a single tone but feels less
+        // plastic than a flat #0d0d0d.
+        background: 'linear-gradient(180deg, #1a1a1a 0%, #0a0a0a 100%)',
+      }}
+    >
       <div className="flex flex-none items-center justify-between px-2.5 py-1.5">
         <RevsWordmark />
         <RarityChip rarity={rarity} bg={chipBg} fg={chipFg} animated={animatedChip} />
@@ -365,13 +301,12 @@ function FrontFace({
         >
           {spot.brand}
         </p>
-        <FitText
-          text={shortName + (spot.year ? ` · ${spot.year}` : '')}
-          max={15}
-          min={11}
-          className="font-display font-extrabold tracking-tight text-white"
-          style={{ marginTop: '2px' }}
-        />
+        <p
+          className="truncate text-left font-display font-extrabold tracking-tight text-white"
+          style={{ fontSize: '14px', marginTop: '2px', letterSpacing: '-0.01em' }}
+        >
+          {shortName + (spot.year ? ` · ${spot.year}` : '')}
+        </p>
         <div className="mt-2 flex items-center justify-between">
           <span
             className="font-extrabold text-accent"
@@ -443,13 +378,12 @@ function BackFace({
         >
           {spot.brand}
         </p>
-        <FitText
-          text={shortName}
-          max={14}
-          min={11}
-          className="font-display font-extrabold tracking-tight text-white"
-          style={{ marginTop: '2px' }}
-        />
+        <p
+          className="truncate text-left font-display font-extrabold tracking-tight text-white"
+          style={{ fontSize: '13px', marginTop: '2px', letterSpacing: '-0.01em' }}
+        >
+          {shortName}
+        </p>
       </div>
 
       {/* Specs grid — 2x2. "—" while specsLoading is false and specs

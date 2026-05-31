@@ -317,29 +317,31 @@ export default function Profile() {
           gradient when the garage is empty. */}
       <div className="relative">
         {bestSpot?.photo_url ? (
-          <div className="relative h-48 w-full overflow-hidden">
+          <div className="relative h-56 w-full overflow-hidden">
             <img
               src={bestSpot.photo_url}
               alt=""
               aria-hidden
               className="absolute inset-0 h-full w-full object-cover"
               style={{
-                filter: 'blur(20px) brightness(0.45) saturate(1.05)',
+                // Stronger blur per the immersive Apple-style spec; the
+                // photo reads as ambient colour rather than a recognisable
+                // scene. scale(1.15) hides the blur fringe on the edges.
+                filter: 'blur(28px) brightness(0.65) saturate(1.10)',
                 transform: 'scale(1.15)',
               }}
             />
+            {/* Flat 40% black scrim — replaces the layered gradient so
+                the immersive backdrop reads as one tone rather than three. */}
             <div
               aria-hidden
               className="absolute inset-0"
-              style={{
-                background:
-                  'linear-gradient(180deg, rgba(0,0,0,0.30) 0%, rgba(10,10,10,0.55) 70%, var(--color-bg) 100%)',
-              }}
+              style={{ background: 'rgba(0, 0, 0, 0.40)' }}
             />
           </div>
         ) : (
           <div
-            className="h-48 w-full"
+            className="h-56 w-full"
             style={{
               background:
                 'radial-gradient(ellipse 80% 100% at 50% 0%, rgba(232,32,58,0.35) 0%, transparent 60%), linear-gradient(180deg, #4a0f16 0%, #1a060a 55%, #0a0a0a 100%)',
@@ -364,27 +366,25 @@ export default function Profile() {
           <Settings className="h-5 w-5" />
         </button>
         <div className="absolute inset-x-0 -bottom-14 flex justify-center">
-          {/* Avatar with conic-gradient ring — gold sweep for VIP,
-              accent-red default. Tier badge (⚡/👑) overlays the
-              bottom-right corner when subscribed. */}
+          {/* Avatar with thin white liseré — replaces the conic-gradient
+              ring per the immersive header polish. VIP / Premium tier
+              still gets its overlay badge at the corner so paid status
+              stays unmissable. */}
           <div className="relative">
             <div
-              className="flex h-28 w-28 items-center justify-center rounded-full p-[3px]"
-              style={
-                tier === 'vip'
-                  ? {
-                      background:
-                        'conic-gradient(from 220deg, #FFD700 0%, #B8860B 25%, #5a3f00 55%, #FFD700 100%)',
-                      boxShadow: '0 8px 32px rgba(255,200,50,0.40)',
-                    }
-                  : {
-                      background:
-                        'conic-gradient(from 220deg, #E8203A 0%, #b91528 25%, #4a0f16 55%, #E8203A 100%)',
-                      boxShadow: '0 8px 32px rgba(232,32,58,0.35)',
-                    }
-              }
+              className="flex h-28 w-28 items-center justify-center overflow-hidden rounded-full bg-card"
+              style={{
+                border:
+                  tier === 'vip'
+                    ? '2px solid rgba(255, 215, 0, 0.55)'
+                    : '2px solid rgba(255, 255, 255, 0.20)',
+                boxShadow:
+                  tier === 'vip'
+                    ? '0 18px 38px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 215, 0, 0.18)'
+                    : '0 18px 38px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.06)',
+              }}
             >
-              <div className="flex h-full w-full items-center justify-center overflow-hidden rounded-full bg-card font-display text-4xl font-extrabold tracking-tighter text-fg">
+              <div className="flex h-full w-full items-center justify-center overflow-hidden rounded-full font-display text-4xl font-extrabold tracking-tighter text-fg">
                 {avatar ? (
                   <img
                     src={avatar}
@@ -459,15 +459,18 @@ export default function Profile() {
               Premium ⚡
             </span>
           ) : (
-            // Text-only stylised rank — no heavy pill background, per
-            // the launch polish spec (309487.jpg). Sport-red, uppercase,
-            // tracking-wide for the editorial feel.
+            // Editorial rank chip — sport-red uppercase with a barely-
+            // there 5% red wash + matching border, per the immersive
+            // header spec (309487.jpg).
             <span
-              className="mt-3 inline-flex items-center font-semibold uppercase"
+              className="mt-3 inline-flex items-center rounded-md font-extrabold uppercase"
               style={{
                 color: '#EF4444',
-                fontSize: '12px',
-                letterSpacing: '0.14em',
+                background: 'rgba(239, 68, 68, 0.05)',
+                border: '1px solid rgba(239, 68, 68, 0.30)',
+                padding: '2px 10px',
+                fontSize: '11px',
+                letterSpacing: '0.16em',
               }}
             >
               {level.name}
@@ -518,10 +521,17 @@ export default function Profile() {
               {xp} <span className="text-sm text-fg2">XP</span>
             </span>
           </div>
-          <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-white/[0.08]">
+          <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-white/[0.06]">
             <div
               className="h-full rounded-full bg-accent transition-[width] duration-1000 ease-out"
-              style={{ width: `${animPct}%` }}
+              style={{
+                width: `${animPct}%`,
+                // Discreet red glow on the filled segment so the bar
+                // still reads against the dark surface despite the
+                // thinner 1.5px height.
+                boxShadow:
+                  '0 0 8px rgba(232, 32, 58, 0.55), 0 0 1px rgba(232, 32, 58, 0.75) inset',
+              }}
             />
           </div>
           <p className="mt-2 text-xs text-fg2">
