@@ -102,7 +102,7 @@ export default function Challenges() {
 
                 <div className="mt-4 h-1.5 w-full overflow-hidden rounded-full bg-white/[0.08]">
                   <div
-                    className={`h-full rounded-full transition-all duration-500 ${
+                    className={`h-full rounded-full transition-all duration-1000 ease-out ${
                       done ? 'bg-green-500' : 'bg-accent'
                     }`}
                     style={{ width: `${pct}%` }}

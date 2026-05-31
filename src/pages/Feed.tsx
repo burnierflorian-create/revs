@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Car, Filter as FilterIcon, Layers, Loader2, Search as SearchIcon, X, Zap } from 'lucide-react'
+import { Car, Filter as FilterIcon, Heart, Layers, Loader2, Search as SearchIcon, X, Zap } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import {
   categoryLabel,
@@ -213,6 +213,65 @@ export default function Feed() {
   const userPosRef = useRef<{ lat: number; lng: number } | null>(null)
   const profilesRef = useRef<Record<string, Prof>>({})
   const sentinelRef = useRef<HTMLDivElement | null>(null)
+
+  // Double-tap-to-like state. tapStateRef tracks the last click time
+  // and the navigation timer per spot so we can cancel navigation
+  // when a second tap lands within the threshold. heartSpotId drives
+  // the giant heart pop overlay (one at a time across the feed).
+  const tapStateRef = useRef<
+    Map<string, { lastTap: number; navTimer: number | null }>
+  >(new Map())
+  const [heartSpotId, setHeartSpotId] = useState<string | null>(null)
+
+  /** Insert a spot_like row silently. Idempotent because the table's
+   *  (spot_id, user_id) primary key turns a duplicate into a no-op.
+   *  The card's LikeButton picks up the change via its realtime
+   *  subscription, so the chip count + filled heart update on their
+   *  own. */
+  async function likeSilently(spotId: string) {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    if (!user) return
+    try {
+      await supabase
+        .from('spot_likes')
+        .insert({ spot_id: spotId, user_id: user.id })
+    } catch {
+      /* duplicate or transient — ignore */
+    }
+  }
+
+  /** Photo-area onClick handler: navigates on a single tap (after a
+   *  250 ms debounce), but a second tap within the same window cancels
+   *  the navigation and triggers a like + heart-pop overlay instead.
+   *  iOS Instagram pattern. */
+  function onPhotoTap(spotId: string) {
+    const map = tapStateRef.current
+    const entry = map.get(spotId) ?? { lastTap: 0, navTimer: null }
+    const now = Date.now()
+    if (now - entry.lastTap < 300) {
+      // Double-tap: cancel pending navigation, fire like + heart.
+      if (entry.navTimer != null) {
+        clearTimeout(entry.navTimer)
+      }
+      map.set(spotId, { lastTap: 0, navTimer: null })
+      setHeartSpotId(spotId)
+      window.setTimeout(() => {
+        setHeartSpotId((cur) => (cur === spotId ? null : cur))
+      }, 700)
+      void likeSilently(spotId)
+      return
+    }
+    // First tap: schedule navigation; the second tap (if any) will
+    // cancel before this fires.
+    if (entry.navTimer != null) clearTimeout(entry.navTimer)
+    const navTimer = window.setTimeout(() => {
+      navigate(`/spot/${spotId}`)
+      map.set(spotId, { lastTap: 0, navTimer: null })
+    }, 250)
+    map.set(spotId, { lastTap: now, navTimer })
+  }
 
   const mergeProfiles = useCallback(async (list: Spot[]) => {
     const ids = [
@@ -603,7 +662,7 @@ export default function Feed() {
                 style={{ border: '1px solid var(--color-border)' }}
               >
                 <button
-                  onClick={() => navigate(`/spot/${spot.id}`)}
+                  onClick={() => onPhotoTap(spot.id)}
                   className="tappable relative block w-full"
                 >
                   {spot.photo_url ? (
@@ -616,6 +675,18 @@ export default function Feed() {
                   ) : (
                     <div className="flex aspect-[4/3] w-full items-center justify-center bg-white/5">
                       <Car className="h-12 w-12 text-fg2/40" />
+                    </div>
+                  )}
+
+                  {/* Giant heart pop on double-tap. Overlay sits above
+                      the gradient + chips, pointer-events: none so it
+                      doesn't intercept further taps. */}
+                  {heartSpotId === spot.id && (
+                    <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center">
+                      <Heart
+                        className="feed-double-heart h-28 w-28"
+                        style={{ color: '#E8203A', fill: '#E8203A' }}
+                      />
                     </div>
                   )}
                   {/* No badge for `other` — keeps the photo clean when

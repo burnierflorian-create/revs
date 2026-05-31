@@ -582,10 +582,19 @@ export default function Home() {
                       }}
                     >
                       <div
-                        className="font-display leading-none tabular-nums tracking-tight text-white"
-                        style={{ fontSize: '26px', fontWeight: 900 }}
+                        className="overflow-hidden font-display leading-none tabular-nums tracking-tight text-white"
+                        style={{ fontSize: '26px', fontWeight: 900, height: '1em' }}
                       >
-                        {String(u.v).padStart(2, '0')}
+                        {/* key={u.v} re-mounts the span on every tick so
+                            the digit-slide-in-down animation runs once
+                            per value change. Container holds the height
+                            steady to avoid layout shift. */}
+                        <span
+                          key={u.v}
+                          className="digit-slide-in-down"
+                        >
+                          {String(u.v).padStart(2, '0')}
+                        </span>
                       </div>
                       <div
                         className="mt-1.5 font-bold uppercase text-white/45"
@@ -781,7 +790,7 @@ function ChallengesCarousel({
                     }}
                   >
                     <div
-                      className={`h-full rounded-full transition-[width] duration-700 ease-out ${
+                      className={`h-full rounded-full transition-[width] duration-1000 ease-out ${
                         done ? 'bg-green-500' : 'bg-accent'
                       }`}
                       style={{

@@ -450,6 +450,74 @@ html[data-tier='vip'] {
   100% { transform: scale(2.0) translateY(14px); opacity: 0; }
 }
 
+/* ─────────────────────── F1 countdown digit slide ───────────────────────
+   Each countdown unit (jours / heures / min / sec) is keyed on its
+   numeric value. When the value changes, React re-mounts the span
+   and the animation runs once: the new digit slides in from above
+   with a small fade. Container above must be overflow-hidden so the
+   tail of the previous digit (still on screen briefly via React)
+   doesn't leak. */
+@keyframes digit-slide-in-down {
+  0%   { transform: translateY(-90%); opacity: 0; }
+  60%  { transform: translateY(8%);   opacity: 1; }
+  100% { transform: translateY(0);    opacity: 1; }
+}
+.digit-slide-in-down {
+  display: inline-block;
+  animation: digit-slide-in-down 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* ─────────────────────── Hover tilt on rare collector cards ─────────────
+   Desktop hover micro-interaction for ultra_rare and unique cards
+   only. Adds a small perspective tilt + subtle shimmer sweep without
+   touching the underlying flip mechanic (the inner card-flip-inner
+   still owns the rotateY 180° tap-to-flip). On mobile :hover is
+   inert so the tap-to-flip stays the primary interaction. */
+.collector-frame.tilt-hover {
+  transition: transform 280ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+@media (hover: hover) {
+  .collector-frame.tilt-hover:hover {
+    transform: perspective(900px) rotateY(-6deg) rotateX(4deg);
+  }
+  .collector-frame.tilt-hover:hover .collector-tilt-shimmer {
+    opacity: 1;
+    transform: translateX(120%);
+  }
+}
+.collector-tilt-shimmer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    115deg,
+    rgba(255, 255, 255, 0) 30%,
+    rgba(255, 255, 255, 0.18) 50%,
+    rgba(255, 255, 255, 0) 70%
+  );
+  opacity: 0;
+  transform: translateX(-120%);
+  transition: transform 800ms cubic-bezier(0.22, 1, 0.36, 1), opacity 280ms;
+  border-radius: 16px;
+  mix-blend-mode: screen;
+}
+
+/* ─────────────────────── Double-tap heart pop ───────────────────────
+   Giant heart that flashes at the center of a Feed photo when the
+   user double-taps to like. Independent of the small LikeButton pop
+   used by the chip below the card. */
+@keyframes feed-double-heart {
+  0%   { transform: scale(0.30); opacity: 0; }
+  40%  { transform: scale(1.20); opacity: 1; }
+  70%  { transform: scale(0.95); opacity: 1; }
+  100% { transform: scale(1.00); opacity: 0; }
+}
+.feed-double-heart {
+  animation: feed-double-heart 620ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  filter: drop-shadow(0 8px 24px rgba(232, 32, 58, 0.65));
+  pointer-events: none;
+}
+
 /* ─────────────────────── Spot identification reveal ───────────────────────
    Used at step 3 of NewSpot when Claude successfully identifies a
    car. The result chip pops out of the camera-roll-style perspective

@@ -140,9 +140,15 @@ export default function CollectorCard({
   const holo = rarity === 'ultra_rare' || rarity === 'unique'
   const shortName = shortModelName(spot.model)
 
+  // Desktop hover tilt + shimmer sweep only on the two top tiers —
+  // commun and rare stay still so the premium tiers stand out. Mobile
+  // (no hover media) inherits the static class and the tap-flip
+  // mechanic stays primary.
+  const tiltable = rarity === 'ultra_rare' || rarity === 'unique'
+
   return (
     <div
-      className="collector-frame"
+      className={`collector-frame ${tiltable ? 'tilt-hover' : ''}`}
       style={{
         background: v.frame,
         backgroundSize: v.animated ? '250% 100%' : undefined,
@@ -152,8 +158,16 @@ export default function CollectorCard({
         padding: '2px',
         borderRadius: '16px',
         width: '100%',
+        position: 'relative',
       }}
     >
+      {/* Diagonal white shimmer that sweeps across on hover; only
+          rendered for tilt-eligible cards so the DOM stays minimal
+          for commun / rare rows. */}
+      {tiltable && (
+        <span aria-hidden className="collector-tilt-shimmer" />
+      )}
+
       <button
         type="button"
         onClick={() => setFlipped((f) => !f)}
