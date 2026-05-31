@@ -310,7 +310,17 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen bg-bg px-5 pt-[max(1rem,env(safe-area-inset-top))] text-fg">
+    <div
+      className="relative min-h-screen px-5 pt-[max(1rem,env(safe-area-inset-top))] text-fg"
+      style={{
+        // Subtle dark radial wash anchored at the top so the
+        // "Bonjour {name}" block reads against a slight depth
+        // gradient instead of flat black, then falls back to the
+        // app background tone for the rest of the scroll.
+        background:
+          'radial-gradient(ellipse 110% 60% at 50% -10%, #1c1c1f 0%, #0a0a0a 65%, var(--color-bg) 100%)',
+      }}
+    >
       {/* HEADER — compact greeting + identity pills + settings */}
       <header className="flex items-start justify-between pt-5 pb-4">
         <div className="min-w-0">
@@ -559,7 +569,7 @@ export default function Home() {
                   ].map((u) => (
                     <div
                       key={u.l}
-                      className="flex flex-col items-center justify-center rounded-2xl py-3.5 text-center"
+                      className="flex flex-col items-center justify-center rounded-3xl py-3.5 text-center"
                       style={{
                         // Cockpit-glass look — translucent neutral tile
                         // with a thin top hairline, soft blur, and inset

@@ -390,10 +390,10 @@ function BackFace({
           is null (i.e., not yet attempted or failed). Spinner during
           the in-flight fetch. */}
       <div
-        className="mx-3 mt-2 rounded-xl p-2.5"
+        className="mx-3 mt-2 rounded-2xl p-2.5"
         style={{
-          background: 'rgba(255,255,255,0.03)',
-          border: '1px solid rgba(255,255,255,0.06)',
+          background: 'rgba(20, 20, 22, 0.55)',
+          border: '1px solid rgba(255, 255, 255, 0.05)',
         }}
       >
         {specsLoading ? (
@@ -401,7 +401,7 @@ function BackFace({
             <Loader2 className="h-3.5 w-3.5 animate-spin text-fg2" />
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-x-2 gap-y-1.5">
+          <div className="grid grid-cols-2 gap-1.5">
             <Stat label="PUISSANCE" value={dash(specs?.horsepower)} />
             <Stat label="0 → 100" value={dash(specs?.zero_to_100)} />
             <Stat label="V. MAX" value={dash(specs?.top_speed)} />
@@ -429,8 +429,10 @@ function BackFace({
         {spotsCount} spot{spotsCount > 1 ? 's' : ''} de ce modèle sur REVS
       </p>
 
-      {/* Footer: card serial + first-on-REVS trophy + Voir sur la carte */}
-      <div className="mt-auto px-3 pb-3 pt-2">
+      {/* Footer: card serial + first-on-REVS trophy + Voir sur la carte.
+          pb-4 (instead of pb-3) so "Carte #001 · 1er sur REVS" never
+          brushes the rarity frame on long cards. */}
+      <div className="mt-auto px-3 pb-4 pt-2">
         <div
           className="mb-2 flex items-center gap-1.5 text-fg2"
           style={{ fontSize: '9.5px', letterSpacing: '0.06em' }}
@@ -464,17 +466,25 @@ function BackFace({
 }
 
 function Stat({ label, value }: { label: string; value: string }) {
+  // Per-cell glass tile — gives each spec its own mini-frame so the
+  // back face reads as a stat-block rather than a flat 2x2 of text.
   return (
-    <div>
+    <div
+      className="flex flex-col rounded-xl px-2 py-1.5"
+      style={{
+        background: 'rgba(0, 0, 0, 0.40)',
+        border: '1px solid rgba(255, 255, 255, 0.05)',
+      }}
+    >
       <p
-        className="text-fg2"
-        style={{ fontSize: '7.5px', letterSpacing: '0.12em' }}
+        className="font-bold uppercase text-white/50"
+        style={{ fontSize: '8px', letterSpacing: '0.14em' }}
       >
         {label}
       </p>
       <p
-        className="mt-0.5 font-extrabold text-white"
-        style={{ fontSize: '11px' }}
+        className="mt-0.5 font-display tracking-tight text-white"
+        style={{ fontSize: '13px', fontWeight: 900, lineHeight: 1.1 }}
       >
         {value}
       </p>
