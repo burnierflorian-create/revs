@@ -550,7 +550,7 @@ export default function Home() {
                     </p>
                   </div>
                 </div>
-                <div className="mt-5 grid grid-cols-4 gap-2">
+                <div className="mt-5 grid grid-cols-4 gap-2.5">
                   {[
                     { v: cd.d, l: 'JOURS' },
                     { v: cd.h, l: 'HEURES' },
@@ -559,12 +559,28 @@ export default function Home() {
                   ].map((u) => (
                     <div
                       key={u.l}
-                      className="rounded-2xl bg-black/50 py-3.5 text-center backdrop-blur-sm"
+                      className="flex flex-col items-center justify-center rounded-2xl py-3.5 text-center"
+                      style={{
+                        // Cockpit-glass look — translucent neutral tile
+                        // with a thin top hairline, soft blur, and inset
+                        // shadow that suggests a recessed digital read-out.
+                        background: 'rgba(20, 20, 20, 0.40)',
+                        border: '1px solid rgba(255, 255, 255, 0.05)',
+                        backdropFilter: 'saturate(160%) blur(12px)',
+                        WebkitBackdropFilter: 'saturate(160%) blur(12px)',
+                        boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.04)',
+                      }}
                     >
-                      <div className="font-display text-[28px] font-extrabold leading-none tabular-nums tracking-tighter text-fg">
+                      <div
+                        className="font-display leading-none tabular-nums tracking-tight text-white"
+                        style={{ fontSize: '26px', fontWeight: 900 }}
+                      >
                         {String(u.v).padStart(2, '0')}
                       </div>
-                      <div className="mt-1 text-[9px] font-semibold tracking-widest text-fg2">
+                      <div
+                        className="mt-1.5 font-bold uppercase text-white/45"
+                        style={{ fontSize: '9px', letterSpacing: '0.18em' }}
+                      >
                         {u.l}
                       </div>
                     </div>

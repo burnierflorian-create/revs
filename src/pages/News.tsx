@@ -260,7 +260,15 @@ export default function News({ categories }: { categories: string[] }) {
                   {n.category.toUpperCase()}
                 </span>
                 {isNew(n) && (
-                  <span className="badge-new label-up absolute right-3 top-3 rounded-full bg-accent px-2.5 py-1 text-[9px] text-fg shadow">
+                  <span
+                    className="badge-new absolute right-3 top-3 rounded-full px-2.5 py-0.5 font-extrabold uppercase text-white"
+                    style={{
+                      background: '#E8203A',
+                      fontSize: '9px',
+                      letterSpacing: '0.10em',
+                      boxShadow: '0 4px 12px rgba(232, 32, 58, 0.30)',
+                    }}
+                  >
                     NOUVEAU
                   </span>
                 )}

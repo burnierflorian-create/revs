@@ -646,7 +646,7 @@ export default function Feed() {
                       {count}
                     </span>
                   )}
-                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black via-black/65 to-transparent p-4 pt-16 text-left">
+                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent p-4 pt-12 text-left">
                     <div className="flex items-end justify-between gap-3">
                       <div className="min-w-0">
                         <h2

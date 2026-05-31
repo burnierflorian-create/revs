@@ -695,25 +695,26 @@ export default function Profile() {
                         <button
                           key={b.slug}
                           onClick={() => navigate(`/badges/${b.slug}`)}
-                          className={`tappable relative flex flex-col items-center gap-1.5 rounded-2xl px-1 py-3 text-center ${
-                            isUnlocked
-                              ? b.gold
-                                ? 'bg-[#E0B341]/12'
-                                : 'bg-accent/8'
-                              : 'bg-card'
-                          }`}
+                          className="tappable relative flex flex-col items-center gap-2 rounded-2xl p-3 text-center"
                           style={{
+                            // Mini trophy tile — translucent neutral
+                            // surface for all states, accent-tinted
+                            // outline + glow only when unlocked so the
+                            // grid reads as a unified collection.
+                            background: 'rgba(20, 20, 22, 0.50)',
                             border: isUnlocked
                               ? b.gold
-                                ? '1px solid rgba(224,179,65,0.4)'
-                                : '1px solid rgba(232,32,58,0.3)'
-                              : '1px solid var(--color-border)',
+                                ? '1px solid rgba(224,179,65,0.40)'
+                                : '1px solid rgba(232,32,58,0.30)'
+                              : '1px solid rgba(255,255,255,0.05)',
+                            backdropFilter: 'saturate(150%) blur(10px)',
+                            WebkitBackdropFilter: 'saturate(150%) blur(10px)',
                             boxShadow:
                               isUnlocked && !b.gold
-                                ? '0 0 20px rgba(232,32,58,0.18)'
+                                ? '0 8px 22px rgba(232,32,58,0.16)'
                                 : isUnlocked && b.gold
-                                  ? '0 0 22px rgba(224,179,65,0.22)'
-                                  : undefined,
+                                  ? '0 8px 22px rgba(224,179,65,0.20)'
+                                  : 'inset 0 1px 0 rgba(255,255,255,0.03)',
                           }}
                         >
                           {isUnlocked ? (

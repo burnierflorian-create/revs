@@ -1358,10 +1358,12 @@ export default function MapPage() {
 
       {/* Bottom-right control stack — slim 2D/3D pill sitting just
           above the geolocation button. The pill is barely wider than
-          the geo circle so the column reads as a unit. */}
+          the geo circle so the column reads as a unit. Lifted 16px
+          off the tab bar per the launch polish pass so the stack
+          can't be mis-tapped when reaching for the nav. */}
       <div
         className="absolute right-4 z-10 flex flex-col items-end gap-3"
-        style={{ bottom: 'calc(env(safe-area-inset-bottom) + 5rem + 0.75rem + 20px)' }}
+        style={{ bottom: 'calc(env(safe-area-inset-bottom) + 7rem + 0.75rem + 20px)' }}
       >
         <div
           className="flex gap-0.5 rounded-xl p-0.5"
