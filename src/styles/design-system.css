@@ -450,6 +450,28 @@ html[data-tier='vip'] {
   100% { transform: scale(2.0) translateY(14px); opacity: 0; }
 }
 
+/* ─────────────────────── Spot scan IA ───────────────────────
+   Red laser line that sweeps the photo while the Claude pipeline
+   is identifying the car. The line is a thin gradient bar with
+   a wide drop-shadow; the keyframe slides it from off-screen-top
+   to off-screen-bottom in a loop. */
+@keyframes scan-laser-vertical {
+  0%   { top: -8px;   opacity: 0; }
+  10%  { opacity: 1; }
+  90%  { opacity: 1; }
+  100% { top: calc(100% + 8px); opacity: 0; }
+}
+.scan-laser-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent 0%, #E8203A 50%, transparent 100%);
+  box-shadow: 0 0 18px 2px rgba(232, 32, 58, 0.75);
+  animation: scan-laser-vertical 2.2s ease-in-out infinite;
+}
+
 /* Subtle lean to suggest the top-down car is taking a slight curve.
    Pure rotate; doesn't move the car laterally. */
 @keyframes race-car-lean {

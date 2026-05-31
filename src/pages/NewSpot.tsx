@@ -665,22 +665,81 @@ export default function NewSpot() {
         </div>
       )}
 
-      {/* ÉTAPE 2 — ANALYSE IA */}
+      {/* ÉTAPE 2 — ANALYSE IA. Premium "scan" UI: the just-captured
+          photo fills the canvas at 60% opacity, a red laser line
+          sweeps it vertically, and a glass-blur card centered on
+          top displays a spinning red rim + the analysis copy.
+          Falls back to a discreet placeholder when previewUrl is
+          missing (shouldn't happen — the flow enforces a photo
+          before step 2 — but the guard keeps the layout safe). */}
       {step === 2 && (
-        <div className="space-y-6 pb-8">
-          <p className="label-up text-[11px] text-fg2">
-            Identification de la voiture…
-          </p>
-          <Skeleton className="h-12 w-full rounded-2xl" />
-          <div className="space-y-4">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="space-y-2">
-                <Skeleton className="h-3 w-24 rounded" />
-                <Skeleton className="h-12 w-full rounded-2xl" />
+        <div className="relative -mx-4 overflow-hidden rounded-3xl bg-black"
+          style={{ minHeight: '380px' }}
+        >
+          {previewUrl ? (
+            <img
+              src={previewUrl}
+              alt=""
+              aria-hidden
+              className="absolute inset-0 h-full w-full object-cover"
+              style={{ opacity: 0.60 }}
+            />
+          ) : null}
+          {/* Slight dark gradient + edge vignette for legibility */}
+          <div
+            aria-hidden
+            className="absolute inset-0 pointer-events-none"
+            style={{
+              background:
+                'radial-gradient(ellipse at center, rgba(0,0,0,0.25) 0%, rgba(0,0,0,0.70) 100%)',
+            }}
+          />
+          {/* Animated red laser sweep */}
+          <span aria-hidden className="scan-laser-line" />
+
+          {/* Centred premium glass card */}
+          <div className="relative z-10 flex min-h-[380px] items-center justify-center px-6 py-10">
+            <div
+              className="flex max-w-[280px] flex-col items-center gap-4 rounded-3xl px-6 py-6 text-center"
+              style={{
+                background: 'rgba(10, 10, 12, 0.72)',
+                border: '1px solid rgba(255, 255, 255, 0.05)',
+                backdropFilter: 'saturate(170%) blur(22px)',
+                WebkitBackdropFilter: 'saturate(170%) blur(22px)',
+                boxShadow: '0 22px 48px rgba(0, 0, 0, 0.55)',
+              }}
+            >
+              {/* Spinning ring — Tailwind animate-spin on a partial
+                  border gives the classic loading-ring look. */}
+              <div className="relative flex h-12 w-12 items-center justify-center">
+                <span
+                  className="absolute inset-0 rounded-full border-2 animate-spin"
+                  style={{
+                    borderColor:
+                      '#E8203A #E8203A transparent transparent',
+                  }}
+                />
+                <span style={{ fontSize: '14px' }} aria-hidden>
+                  👁️‍🗨️
+                </span>
               </div>
-            ))}
+              <div>
+                <h3
+                  className="font-display font-extrabold tracking-tight text-white"
+                  style={{ fontSize: '16px', letterSpacing: '-0.01em' }}
+                >
+                  Analyse REVS IA en cours
+                </h3>
+                <p
+                  className="mt-1.5 leading-snug text-white/55"
+                  style={{ fontSize: '12px' }}
+                >
+                  Identification des courbes, de la rareté et des
+                  caractéristiques techniques…
+                </p>
+              </div>
+            </div>
           </div>
-          <Skeleton className="h-14 w-full rounded-full" />
         </div>
       )}
 

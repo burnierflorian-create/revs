@@ -636,7 +636,10 @@ export default function Feed() {
                     <span
                       className="absolute right-4 top-4 flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-bold text-white"
                       style={{
-                        background: 'rgba(0, 0, 0, 0.40)',
+                        // Light frosted glass per the launch spec —
+                        // bg-white/10 reads as a brighter pill over
+                        // dark spot photos than the previous black/40.
+                        background: 'rgba(255, 255, 255, 0.10)',
                         border: '1px solid rgba(255, 255, 255, 0.10)',
                         backdropFilter: 'saturate(160%) blur(14px)',
                         WebkitBackdropFilter: 'saturate(160%) blur(14px)',
@@ -646,7 +649,7 @@ export default function Feed() {
                       {count}
                     </span>
                   )}
-                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent p-4 pt-12 text-left">
+                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/95 via-black/40 to-transparent p-4 pt-16 text-left">
                     <div className="flex items-end justify-between gap-3">
                       <div className="min-w-0">
                         <h2
