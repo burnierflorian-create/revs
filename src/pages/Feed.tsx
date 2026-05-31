@@ -622,17 +622,26 @@ export default function Feed() {
                       the category is genuinely undefined. */}
                   {catColor && (
                     <span
-                      className="absolute left-3 top-3 rounded-full px-2.5 py-1 text-[10px] font-extrabold tracking-wider text-white"
+                      className="absolute left-4 top-4 rounded-lg px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wider text-white"
                       style={{
                         backgroundColor: catColor,
-                        boxShadow: `0 6px 16px ${catColor}66`,
+                        boxShadow: `0 6px 16px ${catColor}55`,
+                        letterSpacing: '0.10em',
                       }}
                     >
                       {categoryLabel(spot.category).toUpperCase()}
                     </span>
                   )}
                   {count > 1 && (
-                    <span className="absolute right-3 top-3 flex items-center gap-1 rounded-full bg-black/70 px-2.5 py-1 text-[10px] font-extrabold tracking-wider text-white backdrop-blur">
+                    <span
+                      className="absolute right-4 top-4 flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-bold text-white"
+                      style={{
+                        background: 'rgba(0, 0, 0, 0.40)',
+                        border: '1px solid rgba(255, 255, 255, 0.10)',
+                        backdropFilter: 'saturate(160%) blur(14px)',
+                        WebkitBackdropFilter: 'saturate(160%) blur(14px)',
+                      }}
+                    >
                       <Layers className="h-3 w-3" />
                       {count}
                     </span>

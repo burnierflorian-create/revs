@@ -33,7 +33,9 @@ body {
   inset: 0;
   overflow-y: auto;
   background: var(--color-bg);
-  padding-bottom: calc(5rem + env(safe-area-inset-bottom));
+  /* pb-28 equivalent — leaves enough air above the bottom nav so
+     stats blocks / cards never sit flush against the glass strip. */
+  padding-bottom: calc(7rem + env(safe-area-inset-bottom));
   transition: opacity 150ms ease-out;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-y: contain;
@@ -53,7 +55,8 @@ body {
   z-index: 30;
   overflow-y: auto;
   background: var(--color-bg);
-  padding-bottom: calc(5rem + env(safe-area-inset-bottom));
+  /* Mirrors .tab-pane — 7rem of clearance above the bottom nav. */
+  padding-bottom: calc(7rem + env(safe-area-inset-bottom));
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-y: contain;
 }

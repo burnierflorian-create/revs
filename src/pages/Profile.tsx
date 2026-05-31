@@ -459,7 +459,17 @@ export default function Profile() {
               Premium ⚡
             </span>
           ) : (
-            <span className="lvl-glow mt-3 inline-flex items-center gap-1.5 rounded-full bg-accent/15 px-3 py-1 text-xs font-semibold text-accent">
+            // Text-only stylised rank — no heavy pill background, per
+            // the launch polish spec (309487.jpg). Sport-red, uppercase,
+            // tracking-wide for the editorial feel.
+            <span
+              className="mt-3 inline-flex items-center font-semibold uppercase"
+              style={{
+                color: '#EF4444',
+                fontSize: '12px',
+                letterSpacing: '0.14em',
+              }}
+            >
               {level.name}
             </span>
           )}
@@ -470,8 +480,8 @@ export default function Profile() {
             <div className="mt-4 flex justify-center">
               <button
                 onClick={() => navigate(`/u/${meId}`)}
-                className="tappable flex items-center gap-5 rounded-2xl bg-card px-5 py-3"
-                style={{ border: '1px solid var(--color-border)' }}
+                className="tappable grid grid-cols-[1fr_1px_1fr] items-center gap-x-5 rounded-2xl bg-card px-6 py-3"
+                style={{ border: '1px solid var(--color-border)', minWidth: '220px' }}
               >
                 <span className="flex flex-col items-center">
                   <span className="font-display text-lg font-extrabold tracking-tighter text-fg">
@@ -481,7 +491,7 @@ export default function Profile() {
                     Abonnés
                   </span>
                 </span>
-                <span className="h-7 w-px bg-white/[0.08]" />
+                <span className="h-7 w-px bg-white/[0.08] justify-self-center" />
                 <span className="flex flex-col items-center">
                   <span className="font-display text-lg font-extrabold tracking-tighter text-fg">
                     {following}

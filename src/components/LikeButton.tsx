@@ -139,7 +139,7 @@ export default function LikeButton({
       aria-pressed={liked}
       className={`tappable flex items-center gap-1.5 text-sm ${className}`}
     >
-      <span className="relative inline-flex h-6 w-6 items-center justify-center">
+      <span className="relative inline-flex h-7 w-7 items-center justify-center">
         {bump && liked && (
           <span
             aria-hidden
@@ -147,7 +147,7 @@ export default function LikeButton({
           />
         )}
         <Heart
-          className={`relative h-6 w-6 transition-colors ${
+          className={`relative h-7 w-7 transition-colors ${
             bump ? 'heart-pop' : ''
           } ${liked ? 'fill-accent text-accent' : 'text-fg2'}`}
         />

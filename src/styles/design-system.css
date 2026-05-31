@@ -58,14 +58,15 @@ html[data-tier='vip'] {
   transform: scale(0.97);
 }
 
-/* Liquid Glass effect — used for the bottom nav. Heavy blur + high
-   saturation pushes background colours through while text behind is
-   abstracted enough that nothing reads as "leaked content". */
+/* Liquid Glass effect — used for the bottom nav. Bumped to 92% alpha
+   + xl blur during the launch polish pass so page content can never
+   "leak through" the nav (the previous 0.75 alpha let stats blocks
+   read through). The top hairline matches the new launch spec. */
 .glass {
-  background: rgba(10, 10, 10, 0.75);
-  backdrop-filter: saturate(180%) blur(20px);
-  -webkit-backdrop-filter: saturate(180%) blur(20px);
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(10, 10, 10, 0.92);
+  backdrop-filter: saturate(180%) blur(24px);
+  -webkit-backdrop-filter: saturate(180%) blur(24px);
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 /* Display headlines — Inter 800, tightest letter-spacing. Use for the
