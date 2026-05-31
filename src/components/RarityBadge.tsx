@@ -1,32 +1,44 @@
 import { type Rarity } from '../lib/spots'
 
-const STYLE: Record<Rarity, { label: string; chip: string; text: string; glow?: boolean }> = {
+/** Visual style per rarity. Each ships a subtle radial-or-linear
+ *  gradient (rather than a flat tint) so the chips read as small
+ *  jewels — Apple-style refinement called out in the May 2026 home
+ *  polish pass. `glow` keeps the légendaire chip on a slow pulse. */
+const STYLE: Record<
+  Rarity,
+  { label: string; bg: string; ring: string; color: string; glow?: boolean }
+> = {
   commun: {
     label: 'COMMUN',
-    chip: 'bg-white/10 ring-1 ring-white/15',
-    text: 'text-fg/70',
+    bg:
+      'linear-gradient(135deg, rgba(190, 220, 196, 0.16) 0%, rgba(120, 180, 140, 0.08) 100%)',
+    ring: '1px solid rgba(180, 220, 196, 0.32)',
+    color: '#C8E6CC',
   },
   rare: {
     label: 'RARE',
-    chip: 'bg-[#3B82F6]/18 ring-1 ring-[#3B82F6]/45',
-    text: 'text-[#8AB4F8]',
+    bg:
+      'linear-gradient(135deg, rgba(59, 130, 246, 0.24) 0%, rgba(59, 130, 246, 0.10) 100%)',
+    ring: '1px solid rgba(59, 130, 246, 0.55)',
+    color: '#BFDBFE',
   },
   ultra_rare: {
     label: 'ULTRA RARE ✨',
-    chip: 'bg-[#A78BFA]/20 ring-1 ring-[#A78BFA]/50',
-    text: 'text-[#C4B5FD]',
+    bg:
+      'linear-gradient(135deg, rgba(167, 139, 250, 0.28) 0%, rgba(167, 139, 250, 0.10) 100%)',
+    ring: '1px solid rgba(167, 139, 250, 0.60)',
+    color: '#E9D5FF',
   },
   unique: {
     label: 'LÉGENDAIRE 👑',
-    chip: 'bg-gradient-to-r from-[#E0B341]/30 to-[#B8860B]/15 ring-1 ring-[#E0B341]/60',
-    text: 'text-[#E0B341]',
+    bg:
+      'linear-gradient(120deg, rgba(224, 179, 65, 0.36) 0%, rgba(255, 215, 0, 0.20) 45%, rgba(184, 134, 11, 0.20) 100%)',
+    ring: '1px solid rgba(224, 179, 65, 0.70)',
+    color: '#FFE38A',
     glow: true,
   },
 }
 
-/** Renders the rarity chip for a spot (commun → grey, rare → blue,
- *  ultra_rare → purple, unique → animated gold). Unknown / null rarity
- *  falls back to "COMMUN". */
 export default function RarityBadge({
   rarity,
   size = 'sm',
@@ -44,9 +56,15 @@ export default function RarityBadge({
         : 'px-2.5 py-1 text-xs'
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded-full font-bold tracking-wider ${pad} ${s.chip} ${s.text} ${
+      className={`inline-flex items-center gap-1 rounded-full font-bold tracking-wider ${pad} ${
         s.glow ? 'animate-pulse-soft' : ''
       }`}
+      style={{
+        background: s.bg,
+        border: s.ring,
+        color: s.color,
+        boxShadow: s.glow ? '0 6px 18px rgba(224, 179, 65, 0.25)' : undefined,
+      }}
     >
       {s.label}
     </span>

@@ -3,10 +3,13 @@ import { useNavigate } from 'react-router-dom'
 import {
   Settings,
   Car,
+  Cloud,
+  CloudRain,
   Flame,
   Flag,
   Gamepad2,
-  Target,
+  Sun,
+  Trophy,
   ChevronRight,
   Camera,
   Zap,
@@ -23,6 +26,10 @@ import {
 } from '../lib/challenges'
 import { fetchMyRadarPrefs } from '../lib/radar'
 import { fetchLiveEvents, type LiveEvent } from '../lib/liveEvents'
+import {
+  fetchSpottingPrediction,
+  type PredictionResult,
+} from '../lib/spotPredictions'
 import RarityBadge from '../components/RarityBadge'
 import TitleChip from '../components/TitleChip'
 import { useMyTier } from '../lib/tier'
@@ -42,15 +49,27 @@ function SectionTitle({
   icon,
   label,
   action,
+  size = 'md',
 }: {
   icon: ReactNode
   label: string
   action?: ReactNode
+  /** `lg` bumps the title to a bigger, tighter-tracking display style
+   *  used by the post-polish home sections (Challenges, Spots récents). */
+  size?: 'md' | 'lg'
 }) {
+  const isLarge = size === 'lg'
   return (
-    <div className="mb-3 flex items-center justify-between">
-      <h2 className="flex items-center gap-2 font-display text-base font-bold text-fg">
-        <span className="text-accent">{icon}</span>
+    <div className={`flex items-center justify-between ${isLarge ? 'mb-4' : 'mb-3'}`}>
+      <h2
+        className="flex items-center gap-2 font-display font-extrabold text-fg"
+        style={
+          isLarge
+            ? { fontSize: '22px', letterSpacing: '-0.02em', lineHeight: 1.1 }
+            : { fontSize: '16px' }
+        }
+      >
+        <span className={isLarge ? '' : 'text-accent'}>{icon}</span>
         {label}
       </h2>
       {action}
@@ -71,10 +90,18 @@ export default function Home() {
   const [community, setCommunity] = useState<CommunityStats | null>(null)
   const tier = useMyTier()
   const [title, setTitle] = useState<string | null>(null)
+  const [ville, setVille] = useState<string>('')
   const [now, setNow] = useState(() => Date.now())
   // Author pseudo lookup for the Spots récents carousel — populated
   // in a 2nd query after the recent spots load.
   const [recentAuthors, setRecentAuthors] = useState<Record<string, string>>({})
+  // Weather-style AI hook card under the community stats. Re-introduces
+  // the prediction fetch I'd ripped from Home in commit e8f035b — the
+  // new card has a different shape (icon + temp + concise message) and
+  // sits under the stats. The Map bottom sheet still uses the same
+  // server-cached prediction so cost is paid once per day either way.
+  const [prediction, setPrediction] = useState<PredictionResult | null>(null)
+  const [predictionLoading, setPredictionLoading] = useState(false)
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000)
@@ -129,9 +156,12 @@ export default function Home() {
       const pseudo =
         (profRes.data?.pseudo as string | undefined)?.trim() ||
         (user.email ? user.email.split('@')[0] : 'Spotter')
+      const profVille =
+        (profRes.data?.ville as string | undefined)?.trim() ?? ''
       const profTitle =
         (profRes.data?.title as string | undefined)?.trim() || null
       setTitle(profTitle)
+      setVille(profVille)
 
       const days = new Set(
         ((streakRes.data ?? []) as { date: string }[]).map((r) => r.date),
@@ -176,6 +206,41 @@ export default function Home() {
             }
             setRecentAuthors(m)
           })
+      }
+
+      // AI weather hook — only fires when the user has set their city
+      // and isn't blocking the rest of the home grid. The Map sheet
+      // hits the same RPC; both share the server cache per
+      // (user, city, date) so it costs nothing twice.
+      if (profVille) {
+        setPredictionLoading(true)
+        // Reuse the brand-counting context the prediction prompt
+        // expects. recentSpots is in scope from above; we don't
+        // re-query for it.
+        const counts = new Map<string, number>()
+        for (const s of recentSpots) {
+          const b = (s.brand ?? '').trim()
+          if (!b) continue
+          counts.set(b, (counts.get(b) ?? 0) + 1)
+        }
+        const topBrands = [...counts.entries()]
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 3)
+          .map(([brand]) => brand)
+        const lastCar = recentSpots[0]
+          ? `${recentSpots[0].brand ?? ''} ${recentSpots[0].model ?? ''}`.trim()
+          : undefined
+        fetchSpottingPrediction(profVille, {
+          pseudo,
+          spot_count: recentSpots.length,
+          top_brands: topBrands,
+          level: xpLevel((xpRes.data as number | null) ?? 0).name,
+          last_car: lastCar,
+        }).then((p) => {
+          if (!active) return
+          setPrediction(p)
+          setPredictionLoading(false)
+        })
       }
 
       // Challenges fetch is decoupled from the main grid: it's a
@@ -239,18 +304,29 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-bg px-5 pt-[max(1rem,env(safe-area-inset-top))] text-fg">
       {/* HEADER — compact greeting + identity pills + settings */}
-      <header className="flex items-start justify-between pt-4 pb-3">
+      <header className="flex items-start justify-between pt-5 pb-4">
         <div className="min-w-0">
-          <h1 className="font-display text-[28px] font-extrabold leading-none tracking-tighter text-fg">
+          <h1
+            className="font-display font-extrabold tracking-tighter text-fg"
+            style={{ fontSize: '34px', lineHeight: 1, letterSpacing: '-0.03em' }}
+          >
             Bonjour {name}
           </h1>
-          <div className="mt-2.5 flex flex-wrap items-center gap-2">
+          <div className="mt-3 flex flex-wrap items-center gap-2">
             {/* Title chip honours profiles.title — Fondateur shows in
-                gold, manual special titles render with their own theme,
-                otherwise the XP-derived ladder takes over. */}
+                gold with an animated shimmer, manual special titles
+                render with their own theme, otherwise the XP-derived
+                ladder takes over. */}
             <TitleChip xp={xp} title={title} size="sm" />
-            <span className="text-[11px] text-fg2">
-              · {level.name} · {new Intl.NumberFormat('fr-FR').format(xp)} XP
+            <span
+              className="inline-flex items-baseline gap-1.5 font-medium text-fg/70"
+              style={{ fontSize: '12px' }}
+            >
+              <span>{level.name}</span>
+              <span className="text-fg/30">·</span>
+              <span className="tabular-nums">
+                {new Intl.NumberFormat('fr-FR').format(xp)} XP
+              </span>
             </span>
             {tier === 'premium' && (
               <span
@@ -275,8 +351,23 @@ export default function Home() {
               </span>
             )}
             {streak > 0 && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-[#F59E0B]/15 px-3 py-1 text-xs font-bold text-[#F59E0B]">
-                🔥 {streak} {streak > 1 ? 'jours' : 'jour'}
+              <span
+                className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold"
+                style={{
+                  background:
+                    'linear-gradient(135deg, rgba(255, 159, 64, 0.22) 0%, rgba(255, 87, 34, 0.12) 100%)',
+                  color: '#FFB766',
+                  border: '1px solid rgba(255, 159, 64, 0.40)',
+                  boxShadow: '0 4px 14px rgba(255, 122, 47, 0.18)',
+                }}
+              >
+                <span
+                  aria-hidden
+                  style={{ animation: 'streak-glow 2.2s ease-in-out infinite' }}
+                >
+                  🔥
+                </span>
+                {streak} {streak > 1 ? 'jours' : 'jour'}
               </span>
             )}
             {radarActive && (
@@ -319,7 +410,7 @@ export default function Home() {
         </div>
       </header>
 
-      <div className="space-y-7 pb-10">
+      <div className="space-y-8 pb-10">
         {/* "Spot du jour / de la semaine" daily card was removed from
             Home per 2026-05-28 cleanup. Code for DailyCard /
             DailyCardSpotRow has been pruned along with the
@@ -329,8 +420,8 @@ export default function Home() {
         {/* COMMUNITY STATS — single horizontal pill, ultra-light footprint. */}
         {community && (
           <section
-            className="flex items-center justify-center gap-2.5 rounded-full bg-card px-4 py-2.5 text-xs"
-            style={{ border: '1px solid var(--color-border)' }}
+            className="home-section-enter flex items-center justify-center gap-2.5 rounded-full bg-card px-4 py-2.5 text-xs"
+            style={{ border: '1px solid var(--color-border)', animationDelay: '0ms' }}
           >
             <span className="flex items-center gap-1.5">
               <span className="relative flex h-2 w-2">
@@ -355,9 +446,25 @@ export default function Home() {
           </section>
         )}
 
+        {/* WEATHER / AI HOOK — daily retention card sitting under the
+            stats. Mocks an icon + temperature from the IA's score
+            bucket because we don't ship a weather API; the Claude
+            message itself is the real personalised hook. */}
+        {ville && (prediction || predictionLoading) && (
+          <WeatherCard
+            prediction={prediction}
+            loading={predictionLoading}
+            ville={ville}
+            delayMs={100}
+          />
+        )}
+
         {/* LIVE EVENTS BANNER */}
         {liveEvents.length > 0 && (
-          <section className="space-y-2">
+          <section
+            className="home-section-enter space-y-2"
+            style={{ animationDelay: '200ms' }}
+          >
             {liveEvents.slice(0, 2).map((ev) => (
               <button
                 key={ev.id}
@@ -392,7 +499,10 @@ export default function Home() {
 
         {/* PROCHAIN GP — circuit image as backdrop + larger countdown. */}
         {nextGp && (
-          <section>
+          <section
+            className="home-section-enter"
+            style={{ animationDelay: '300ms' }}
+          >
             <SectionTitle
               icon={<Flag className="h-[18px] w-[18px]" />}
               label="Prochain GP"
@@ -458,10 +568,14 @@ export default function Home() {
 
         {/* 6 — CHALLENGES DE LA SEMAINE (swipe carousel) */}
         {challenges.length > 0 && (
-          <section>
+          <section
+            className="home-section-enter"
+            style={{ animationDelay: '400ms' }}
+          >
             <SectionTitle
-              icon={<Target className="h-[18px] w-[18px]" />}
+              icon={<Trophy className="h-[20px] w-[20px] text-[#FFD700]" />}
               label="Challenges de la semaine"
+              size="lg"
             />
             <ChallengesCarousel
               challenges={challenges}
@@ -471,10 +585,14 @@ export default function Home() {
         )}
 
         {/* SPOTS RÉCENTS — single-card swipe carousel */}
-        <section>
+        <section
+          className="home-section-enter"
+          style={{ animationDelay: '500ms' }}
+        >
           <SectionTitle
-            icon={<Flame className="h-[18px] w-[18px]" />}
-            label="Spots récents 🔥"
+            icon={<Flame className="h-[20px] w-[20px] text-accent" />}
+            label="Spots récents"
+            size="lg"
           />
           {recent.length === 0 ? (
             <div className="flex flex-col items-center rounded-2xl border border-white/5 bg-card px-6 py-10 text-center">
@@ -562,42 +680,71 @@ function ChallengesCarousel({
                 key={c.id}
                 data-chal-card
                 onClick={onPick}
-                className="tappable relative flex min-h-[150px] flex-none flex-col rounded-3xl p-5 text-left"
+                className="tappable relative flex min-h-[170px] flex-none flex-col rounded-3xl p-6 text-left"
                 style={{
-                  // 85% of the viewport: leaves ~15% room for the next
-                  // card to peek on the right. Matches the spec.
                   flexBasis: 'calc(100vw - 60px)',
                   maxWidth: 'calc(100vw - 60px)',
                   scrollSnapAlign: 'start',
                   scrollSnapStop: 'always',
+                  // Glassmorphism: semi-transparent neutral background
+                  // with backdrop-blur. Falls back gracefully on browsers
+                  // without backdrop-filter.
                   background: done
-                    ? 'linear-gradient(155deg, rgba(34,197,94,0.08) 0%, #141416 70%)'
-                    : 'linear-gradient(155deg, #1a1a1d 0%, #141416 60%, #0f0f11 100%)',
+                    ? 'linear-gradient(155deg, rgba(34, 197, 94, 0.10) 0%, rgba(20, 20, 22, 0.55) 100%)'
+                    : 'linear-gradient(155deg, rgba(28, 28, 32, 0.60) 0%, rgba(15, 15, 18, 0.50) 100%)',
+                  backdropFilter: 'saturate(160%) blur(22px)',
+                  WebkitBackdropFilter: 'saturate(160%) blur(22px)',
                   border: done
-                    ? '1px solid rgba(34,197,94,0.35)'
-                    : '1px solid var(--color-border)',
+                    ? '1px solid rgba(34, 197, 94, 0.40)'
+                    : '1px solid rgba(255, 255, 255, 0.08)',
+                  boxShadow:
+                    '0 22px 44px rgba(0, 0, 0, 0.40), inset 0 1px 0 rgba(255, 255, 255, 0.05)',
                 }}
                 aria-label={`Challenge ${i + 1} sur ${challenges.length} — ${c.title}`}
               >
                 <div className="flex items-start justify-between gap-3">
-                  <p
-                    className="font-display leading-tight tracking-tighter text-fg"
-                    style={{ fontSize: '20px', fontWeight: 800, letterSpacing: '-0.02em' }}
-                  >
-                    {c.title}
-                  </p>
+                  <div className="min-w-0 flex-1 space-y-1.5">
+                    <p
+                      className="font-medium uppercase text-white/55"
+                      style={{ fontSize: '10px', letterSpacing: '0.16em' }}
+                    >
+                      Challenge {i + 1}/{challenges.length}
+                    </p>
+                    <p
+                      className="font-display tracking-tighter text-white"
+                      style={{ fontSize: '24px', fontWeight: 800, lineHeight: 1.05, letterSpacing: '-0.025em' }}
+                    >
+                      {c.title}
+                    </p>
+                  </div>
                   <span
-                    className="flex flex-none items-center gap-1 rounded-full bg-accent px-3 py-1.5 text-[12px] font-extrabold uppercase tracking-wider text-fg"
-                    style={{ boxShadow: '0 8px 22px rgba(232,32,58,0.50)' }}
+                    className="flex flex-none items-center gap-1 rounded-2xl px-3 py-1.5 font-extrabold tracking-wider"
+                    style={{
+                      background:
+                        'linear-gradient(135deg, rgba(232,32,58,0.32) 0%, rgba(232,32,58,0.18) 100%)',
+                      border: '1px solid rgba(232,32,58,0.50)',
+                      color: '#FFD9DF',
+                      fontSize: '12px',
+                      boxShadow: '0 8px 22px rgba(232,32,58,0.30)',
+                    }}
                   >
                     <Zap className="h-3.5 w-3.5" />+{c.xp_reward} XP
                   </span>
                 </div>
-                <p className="mt-2 text-[13px] leading-snug text-fg2">
+                <p
+                  className="mt-3 leading-snug text-white/75"
+                  style={{ fontSize: '14px' }}
+                >
                   {c.description}
                 </p>
                 <div className="mt-auto pt-5">
-                  <div className="h-2 w-full overflow-hidden rounded-full bg-white/[0.07]">
+                  <div
+                    className="h-2 w-full overflow-hidden rounded-full"
+                    style={{
+                      background: 'rgba(255, 255, 255, 0.06)',
+                      border: '1px solid rgba(255, 255, 255, 0.05)',
+                    }}
+                  >
                     <div
                       className={`h-full rounded-full transition-[width] duration-700 ease-out ${
                         done ? 'bg-green-500' : 'bg-accent'
@@ -605,12 +752,18 @@ function ChallengesCarousel({
                       style={{
                         width: `${pct}%`,
                         boxShadow: done
-                          ? undefined
-                          : '0 0 10px rgba(232,32,58,0.55)',
+                          ? '0 0 12px rgba(34, 197, 94, 0.55)'
+                          : '0 0 12px rgba(232, 32, 58, 0.65)',
+                        // First-paint reveal — scaleX from 0 to 1, then
+                        // width transitions take over for future updates.
+                        animation: 'progress-fill-in 720ms var(--ease-soft) both',
                       }}
                     />
                   </div>
-                  <p className="label-up mt-2 text-[10px] text-fg2">
+                  <p
+                    className="mt-2 font-medium uppercase text-white/55"
+                    style={{ fontSize: '10px', letterSpacing: '0.14em' }}
+                  >
                     {done
                       ? '✓ COMPLÉTÉ'
                       : `${c.progress} / ${c.target_value}`}
@@ -632,12 +785,22 @@ function ChallengesCarousel({
             return (
               <span
                 key={i}
-                className="rounded-full transition-all"
+                className="rounded-full transition-all duration-300 ease-out"
                 style={{
-                  width: active ? 18 : 6,
+                  width: active ? 22 : 6,
                   height: 6,
-                  background: active ? 'var(--color-accent)' : 'rgba(255,255,255,0.18)',
-                  boxShadow: active ? '0 0 10px rgba(232,32,58,0.60)' : undefined,
+                  background: active
+                    ? 'linear-gradient(90deg, #FF4E68 0%, #E8203A 100%)'
+                    : 'rgba(255,255,255,0.18)',
+                  boxShadow: active
+                    ? '0 0 12px rgba(232, 32, 58, 0.70)'
+                    : undefined,
+                  // Spring-y kick on activation. Re-runs because `key`
+                  // stays — the inline style change retriggers the
+                  // animation when width changes from 6 to 22.
+                  animation: active
+                    ? 'carousel-dot-pop 380ms var(--ease-spring) both'
+                    : undefined,
                 }}
               />
             )
@@ -711,8 +874,11 @@ function RecentSpotsCarousel({
                   scrollSnapAlign: 'start',
                   scrollSnapStop: 'always',
                   background: '#0a0a0a',
-                  border: '1px solid var(--color-border)',
-                  boxShadow: '0 14px 32px rgba(0,0,0,0.45)',
+                  border: '1px solid rgba(255, 255, 255, 0.06)',
+                  // Multi-layer shadow for the "floating above the
+                  // background" Apple feel — soft contact + wide ambient.
+                  boxShadow:
+                    '0 26px 48px rgba(0, 0, 0, 0.55), 0 10px 18px rgba(0, 0, 0, 0.35)',
                 }}
                 aria-label={`Spot ${i + 1} sur ${spots.length} — ${s.brand} ${s.model}`}
               >
@@ -792,10 +958,13 @@ function RecentSpotsCarousel({
                   width: active ? 18 : 6,
                   height: 6,
                   background: active
-                    ? 'var(--color-accent)'
+                    ? 'linear-gradient(90deg, #FF4E68 0%, #E8203A 100%)'
                     : 'rgba(255,255,255,0.18)',
                   boxShadow: active
-                    ? '0 0 10px rgba(232,32,58,0.60)'
+                    ? '0 0 12px rgba(232, 32, 58, 0.70)'
+                    : undefined,
+                  animation: active
+                    ? 'carousel-dot-pop 380ms var(--ease-spring) both'
                     : undefined,
                 }}
               />
@@ -804,6 +973,124 @@ function RecentSpotsCarousel({
         </div>
       )}
     </div>
+  )
+}
+
+// ─────────────────────────────── WEATHER CARD ───────────────────────────────
+
+/** Mock weather chip mapped from the AI's spotting score bucket. We
+ *  don't ship a real weather API; the temperature is a plausible
+ *  default per condition and the icon comes from Lucide. The Claude-
+ *  generated message is the real personalised hook — that's the actual
+ *  retention lever, the weather chrome is just packaging. */
+const WEATHER_THEME: Record<
+  'bon' | 'moyen' | 'mauvais',
+  { Icon: typeof Sun; temp: string; bg: string; border: string; iconColor: string }
+> = {
+  bon: {
+    Icon: Sun,
+    temp: '22°',
+    bg: 'linear-gradient(135deg, rgba(255, 184, 92, 0.18) 0%, rgba(232, 32, 58, 0.10) 100%)',
+    border: '1px solid rgba(255, 184, 92, 0.35)',
+    iconColor: '#FFB85C',
+  },
+  moyen: {
+    Icon: Cloud,
+    temp: '16°',
+    bg: 'linear-gradient(135deg, rgba(148, 163, 184, 0.18) 0%, rgba(71, 85, 105, 0.12) 100%)',
+    border: '1px solid rgba(148, 163, 184, 0.30)',
+    iconColor: '#CBD5E1',
+  },
+  mauvais: {
+    Icon: CloudRain,
+    temp: '12°',
+    bg: 'linear-gradient(135deg, rgba(96, 165, 250, 0.18) 0%, rgba(30, 64, 175, 0.12) 100%)',
+    border: '1px solid rgba(96, 165, 250, 0.32)',
+    iconColor: '#93C5FD',
+  },
+}
+
+function WeatherCard({
+  prediction,
+  loading,
+  ville,
+  delayMs,
+}: {
+  prediction: PredictionResult | null
+  loading: boolean
+  ville: string
+  delayMs: number
+}) {
+  const score = prediction?.score_conditions ?? 'moyen'
+  const theme = WEATHER_THEME[score]
+  const { Icon } = theme
+  return (
+    <section
+      className="home-section-enter relative overflow-hidden rounded-3xl px-5 py-4"
+      style={{
+        background: theme.bg,
+        backdropFilter: 'saturate(160%) blur(18px)',
+        WebkitBackdropFilter: 'saturate(160%) blur(18px)',
+        border: theme.border,
+        boxShadow: '0 16px 36px rgba(0, 0, 0, 0.35)',
+        animationDelay: `${delayMs}ms`,
+      }}
+    >
+      <div className="flex items-center gap-4">
+        <div
+          className="flex h-14 w-14 flex-none items-center justify-center rounded-2xl"
+          style={{
+            background: 'rgba(0, 0, 0, 0.30)',
+            border: '1px solid rgba(255, 255, 255, 0.08)',
+          }}
+        >
+          <Icon className="h-7 w-7" style={{ color: theme.iconColor }} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-baseline gap-2">
+            <span
+              className="font-display font-extrabold tracking-tighter text-white"
+              style={{ fontSize: '24px', lineHeight: 1, letterSpacing: '-0.02em' }}
+            >
+              {theme.temp}
+            </span>
+            <span
+              className="truncate text-white/65"
+              style={{ fontSize: '12px', letterSpacing: '0.02em' }}
+            >
+              {ville}
+            </span>
+            <span
+              className="ml-auto flex-none rounded-full px-2 py-0.5 font-bold tracking-wider text-white/85"
+              style={{
+                background: 'rgba(0, 0, 0, 0.35)',
+                border: '1px solid rgba(255, 255, 255, 0.10)',
+                fontSize: '8.5px',
+                letterSpacing: '0.18em',
+              }}
+            >
+              IA 🎯
+            </span>
+          </div>
+          {loading && !prediction ? (
+            <p
+              className="mt-1 leading-snug text-white/65"
+              style={{ fontSize: '13px' }}
+            >
+              Analyse en cours…
+            </p>
+          ) : (
+            <p
+              className="mt-1 leading-snug text-white/90"
+              style={{ fontSize: '14px', fontWeight: 500 }}
+            >
+              {prediction?.message ??
+                'Conditions standards aujourd’hui — sors quand même, on ne sait jamais.'}
+            </p>
+          )}
+        </div>
+      </div>
+    </section>
   )
 }
 

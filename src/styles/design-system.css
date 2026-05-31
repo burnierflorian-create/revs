@@ -455,3 +455,48 @@ html[data-tier='vip'] {
   0%, 100% { transform: rotate(-3deg); }
   50%      { transform: rotate(3deg); }
 }
+
+/* ─────────────────────── Home polish pass ───────────────────────
+   Apple-style entrance + small motion accents used by the Accueil
+   sections. Each is inert (no infinite loops outside of explicitly
+   "shimmer/glow" classes) so they don't fight scroll perf. */
+
+/* Staggered section reveal. Combine with inline animationDelay. */
+@keyframes home-section-enter {
+  0%   { opacity: 0; transform: translateY(10px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+.home-section-enter {
+  animation: home-section-enter 520ms var(--ease-soft) both;
+}
+
+/* Founder badge — slow gold gradient drift around the border to
+   read as a luxury chip. The chip itself ships its own background;
+   this keyframe only animates background-position. */
+@keyframes founder-shimmer {
+  0%   { background-position: 0% 50%; }
+  100% { background-position: 200% 50%; }
+}
+
+/* Streak flame icon — soft drop-shadow pulse. Pairs with the colour
+   bump in Home.tsx so the chip reads "on fire" without flashing. */
+@keyframes streak-glow {
+  0%, 100% { filter: drop-shadow(0 0 6px rgba(255, 159, 64, 0.65)); }
+  50%      { filter: drop-shadow(0 0 12px rgba(255, 184, 92, 0.95)); }
+}
+
+/* Progress-bar fill on first paint. Width is set inline; the
+   keyframe just animates from 0 → that width via clip-path on the
+   indicator. Apply on the inner bar element. */
+@keyframes progress-fill-in {
+  0%   { transform: scaleX(0);    transform-origin: left center; }
+  100% { transform: scaleX(1);    transform-origin: left center; }
+}
+
+/* Active dot zoom — used by the carousel pagination so the active
+   pill lands with a small Spring-y kick instead of a flat resize. */
+@keyframes carousel-dot-pop {
+  0%   { transform: scaleX(0.6); }
+  60%  { transform: scaleX(1.08); }
+  100% { transform: scaleX(1); }
+}

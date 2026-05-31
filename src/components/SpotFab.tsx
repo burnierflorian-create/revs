@@ -87,8 +87,18 @@ export default function SpotFab() {
       <button
         onClick={() => inputRef.current?.click()}
         aria-label="Spotter une voiture"
-        className="pointer-events-auto flex h-14 w-14 animate-pulse-soft items-center justify-center rounded-full bg-accent text-fg shadow-lg shadow-black/40 active:opacity-90"
-        style={{ opacity, transition: 'opacity 200ms ease-out' }}
+        className="pointer-events-auto flex h-14 w-14 animate-pulse-soft items-center justify-center rounded-full text-fg active:opacity-90"
+        style={{
+          opacity,
+          // Bright red on the rim, slightly darker centre — reads as
+          // glowing rather than flat. The double-stacked shadow gives
+          // a proper "lifted above the nav" feel.
+          background:
+            'radial-gradient(circle at 35% 30%, #FF4E68 0%, #E8203A 55%, #B7172A 100%)',
+          boxShadow:
+            '0 18px 38px rgba(232, 32, 58, 0.45), 0 6px 16px rgba(0, 0, 0, 0.55), inset 0 -2px 6px rgba(0, 0, 0, 0.25), inset 0 2px 4px rgba(255, 255, 255, 0.18)',
+          transition: 'opacity 200ms ease-out',
+        }}
       >
         <Camera className="h-7 w-7" />
       </button>
