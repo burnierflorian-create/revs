@@ -7,7 +7,6 @@ import {
   Gamepad2,
   Sun,
   ChevronRight,
-  Camera,
   Target,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
@@ -263,12 +262,31 @@ export default function Home() {
       {/* HEADER — compact greeting + identity pills + settings */}
       <header className="flex items-start justify-between pt-5 pb-4">
         <div className="min-w-0">
-          <h1
-            className="font-display font-extrabold tracking-tighter text-fg"
-            style={{ fontSize: '34px', lineHeight: 1, letterSpacing: '-0.03em' }}
-          >
-            Bonjour {name}
-          </h1>
+          {/* Greeting line — H1 + inline online-status pulse dot.
+              The dot replaces the boxy COMMUNITY STATS pill that
+              used to sit below the header; an emerald ping ring +
+              solid core reads as a single online-indicator glyph
+              without taking any vertical real estate. */}
+          <div className="flex items-center gap-2.5">
+            <h1
+              className="font-display font-extrabold tracking-tighter text-fg"
+              style={{
+                fontSize: '34px',
+                lineHeight: 1,
+                letterSpacing: '-0.03em',
+              }}
+            >
+              Bonjour {name}
+            </h1>
+            <span
+              className="relative flex h-2 w-2 flex-none"
+              style={{ marginTop: '6px' }}
+              aria-label="En ligne"
+            >
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+            </span>
+          </div>
           <div className="mt-3 flex flex-wrap items-center gap-2">
             {/* Title chip honours profiles.title — Fondateur shows in
                 gold with an animated shimmer, manual special titles
@@ -386,34 +404,12 @@ export default function Home() {
             fetchRarestSpot call; the rarest-spot lookup can be
             reintroduced later if needed. */}
 
-        {/* COMMUNITY STATS — single horizontal pill, ultra-light footprint. */}
-        {community && (
-          <section
-            className="home-section-enter flex items-center justify-center gap-2.5 rounded-full bg-card px-4 py-2.5 text-xs"
-            style={{ border: '1px solid var(--color-border)', animationDelay: '0ms' }}
-          >
-            <span className="flex items-center gap-1.5">
-              <span className="relative flex h-2 w-2">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-500 opacity-75" />
-                <span className="relative inline-flex h-2 w-2 rounded-full bg-green-500" />
-              </span>
-              <span className="font-bold text-fg">
-                {new Intl.NumberFormat('fr-FR').format(community.online_now)}
-              </span>
-              <span className="text-fg2">en ligne</span>
-            </span>
-            <span className="text-fg2/40" aria-hidden>
-              ·
-            </span>
-            <span className="flex items-center gap-1.5">
-              <Camera className="h-3 w-3 text-accent" />
-              <span className="font-bold text-fg">
-                {new Intl.NumberFormat('fr-FR').format(community.spots_today)}
-              </span>
-              <span className="text-fg2">aujourd'hui</span>
-            </span>
-          </section>
-        )}
+        {/* COMMUNITY STATS pill removed 2026-06-01 — the live counters
+            now condense into a single green pulse dot next to the
+            greeting (see header). The `community` state is still
+            populated because RevsRadarCard derives its hot-zone
+            count from community.spots_today; only the boxy
+            "X en ligne · Y aujourd'hui" pill is gone. */}
 
         {/* WEATHER / AI HOOK — daily retention card sitting under the
             stats. Currently archived behind SHOW_WEATHER_IA — the

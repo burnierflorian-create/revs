@@ -457,6 +457,18 @@ function BackFace({
         )}
       </div>
 
+      {/* Technical architecture line — mono font, neutral-500, single
+          row. "V8 BiTurbo / Transm. Intégrale" / "Moteur Central
+          Arrière / Propulsion" style. Hidden on loading or N/A. */}
+      {!specsLoading && specs?.architecture && specs.architecture !== 'N/A' && (
+        <p
+          className="mx-3 mt-2 truncate font-mono text-fg2/65"
+          style={{ fontSize: '10px', letterSpacing: '0.02em' }}
+        >
+          {specs.architecture}
+        </p>
+      )}
+
       {/* Fun fact — single short line, italic feel. Hidden when loading
           or when N/A so the layout doesn't carry an empty box. */}
       {!specsLoading && specs?.fun_fact && specs.fun_fact !== 'N/A' && (

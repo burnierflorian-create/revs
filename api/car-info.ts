@@ -578,6 +578,7 @@ const CARD_SPECS_FIELDS = [
   'zero_to_100',
   'top_speed',
   'torque',
+  'architecture',
   'fun_fact',
 ] as const
 type CardSpec = (typeof CARD_SPECS_FIELDS)[number]
@@ -588,6 +589,7 @@ const CARD_SPECS_SYSTEM = `Tu es un expert automobile. Pour la voiture demandée
 - Tu DOIS utiliser web_search au moins une fois ; n'invente jamais.
 - Si une donnée est introuvable ou incertaine, mets exactement "N/A".
 - Réponds en français, unités lisibles ("ch", "Nm", "s", "km/h").
+- "architecture" : UNE ligne très courte (max 50 caractères) au format "<configuration moteur> / <transmission>". Exemples : "V8 BiTurbo / Transm. Intégrale", "Moteur Central Arrière / Propulsion", "L6 BiTurbo / Propulsion", "V12 Atmo / Propulsion". Pas de chevaux ici, juste l'architecture mécanique.
 - "fun_fact" : UNE seule phrase courte (max 100 caractères) — un détail croustillant que les passionnés trouvent intéressant. Ex : "Seulement 750 exemplaires produits.", "Le V8 biturbo développe 562 ch grâce au système 48V."
 
 Réponds UNIQUEMENT par un JSON valide, sans markdown, conforme à :
@@ -596,6 +598,7 @@ Réponds UNIQUEMENT par un JSON valide, sans markdown, conforme à :
   "zero_to_100": "3,2 s" | "N/A",
   "top_speed": "320 km/h" | "N/A",
   "torque": "750 Nm" | "N/A",
+  "architecture": "V8 BiTurbo / Transm. Intégrale" | "N/A",
   "fun_fact": "phrase courte." | "N/A"
 }`
 
@@ -643,7 +646,14 @@ async function handleCardSpecs(
     .select('data')
     .eq('slug', slug)
     .maybeSingle()
-  if (cached?.data) {
+  // Cache-hit only when the stored row already includes the
+  // architecture field (added 2026-06-01). Older rows are silently
+  // refetched once so the back-face line populates without needing
+  // a table truncate.
+  if (
+    cached?.data &&
+    typeof (cached.data as { architecture?: string }).architecture === 'string'
+  ) {
     res.status(200).json({ specs: cached.data, cached: true })
     return
   }

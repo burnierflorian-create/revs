@@ -535,8 +535,10 @@ export default function Profile() {
           </p>
         </section>
 
-        {/* PREMIUM BANNER (free users only, isolated at top) */}
-        {!plan && <PremiumTopBanner onTap={() => navigate('/premium')} />}
+        {/* PREMIUM BANNER moved to the very bottom of the profile
+            page per the 2026-06-01 cleanup so the stats pill flows
+            directly into the segmented control without a paid CTA
+            wedge. See <PremiumTopBanner /> at the end of this block. */}
 
         {/* SEGMENTED CONTROL — 3 tabs (Collection / Garage / Récompenses) */}
         <section>
@@ -740,6 +742,12 @@ export default function Profile() {
             )}
           </div>
         </section>
+
+        {/* PREMIUM BANNER (free users only) — relegated to the very
+            bottom per the 2026-06-01 cleanup. The user lands on a
+            dense identity + stats + tab area first; the paid CTA
+            sits as a soft anchor at the end of the scroll. */}
+        {!plan && <PremiumTopBanner onTap={() => navigate('/premium')} />}
 
       </div>
 

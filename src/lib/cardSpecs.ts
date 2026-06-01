@@ -5,6 +5,11 @@ export type CardSpecs = {
   zero_to_100: string
   top_speed: string
   torque: string
+  /** Engine layout + drivetrain in a single ultra-short label.
+   *  Examples: "V8 BiTurbo / Transm. Intégrale",
+   *            "Moteur Central Arrière / Propulsion".
+   *  Surfaced as a mono fine-print line on the back of the card. */
+  architecture: string
   fun_fact: string
 }
 

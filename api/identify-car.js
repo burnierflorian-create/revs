@@ -369,12 +369,15 @@ async function refineRarityFromWeb(client, brand, model, year) {
     `premium.\n` +
     `- "performance" : sportive pure, dérivée de la même plateforme qu'un modèle ` +
     `civil (ex: Audi TT RS, BMW M2, Porsche 718 Cayman). Sportivité = ADN.\n` +
-    `- "exclusif" : gros SUV sportif ou berline lourde à très forte présence ` +
-    `(ex: Mercedes-AMG GLE 63 S, Porsche Cayenne Coupé, BMW X6 M, Bentley ` +
-    `Bentayga). Volume limité, luxe ostentatoire.\n` +
-    `- "supercar" : exotique de prestige biplace ou 2+2, marque spécialiste ou ` +
-    `flagship (ex: McLaren 570S, Ferrari 488, Lamborghini Huracán, Porsche 911 GT3). ` +
-    `Moins de 5 000 / an typiquement.\n` +
+    `- "exclusif" : SUV de sport ou grosse berline de performance à très ` +
+    `forte présence (ex: Mercedes-AMG GLE 63 S Coupé, Porsche Cayenne Coupé, ` +
+    `BMW X5 M, Audi RS Q8, Bentley Bentayga, Maserati Levante Trofeo). ` +
+    `Carrosserie SUV/grande berline + moteur de sport + 4 places utilisables.\n` +
+    `- "supercar" : voiture de sport exotique à moteur central ou flagship ` +
+    `d'une marque spécialiste, exclusivité radicale (ex: McLaren 570S Spider, ` +
+    `Audi R8 V10, Porsche 911 GT3 RS, Ferrari 488, Lamborghini Huracán). ` +
+    `Biplace ou 2+2, layout typiquement moteur central / propulsion, ` +
+    `moins de 5 000 / an.\n` +
     `- "hypercar" : sommet absolu — top-flagship moteur central, série très limitée ` +
     `ou édition one-off (ex: Mercedes-AMG GT 63 S E Performance flagship, Bugatti ` +
     `Chiron, Pagani Huayra, Koenigsegg, McLaren P1). Souvent < 500 exemplaires.\n\n` +
