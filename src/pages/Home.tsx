@@ -828,13 +828,12 @@ function ChallengeRings({
   return (
     <button
       onClick={onPick}
-      className="tappable flex w-full items-center justify-around rounded-3xl px-3 py-4"
-      style={{
-        background: 'rgba(20, 20, 22, 0.55)',
-        border: '1px solid rgba(255, 255, 255, 0.05)',
-        backdropFilter: 'saturate(160%) blur(14px)',
-        WebkitBackdropFilter: 'saturate(160%) blur(14px)',
-      }}
+      // Glass card removed 2026-06-01 — the 3 rings now float directly
+      // on the page background. The button keeps its tap target (px+py
+      // for touch room) but loses the rgba black tile + border + blur
+      // wrapper, so the section reads cleaner under the new "Objectifs
+      // de la semaine" eyebrow without a heavy container.
+      className="tappable flex w-full items-start justify-around px-3 py-2"
       aria-label={`Voir les ${top.length} défis de la semaine`}
     >
       {top.map((c, i) => (
@@ -905,12 +904,13 @@ function ChallengeRing({
           {challengeEmoji(challenge)}
         </span>
       </div>
+      {/* Label wraps to 2 lines now (line-clamp-2) so long titles like
+          "MARATHON DU WEEKEND" no longer truncate to "MARATHON…". The
+          tracking dropped from wide 0.10em to tight (-0.025em) so the
+          uppercase text still fits the 88px max-width on two rows. */}
       <span
-        className="line-clamp-1 max-w-[80px] font-bold uppercase text-white/55"
-        style={{
-          fontSize: '9px',
-          letterSpacing: '0.10em',
-        }}
+        className="line-clamp-2 max-w-[88px] text-center font-black uppercase leading-tight tracking-tight text-white/65"
+        style={{ fontSize: '9px' }}
       >
         {challenge.title}
       </span>

@@ -1313,29 +1313,30 @@ export default function MapPage() {
         <div
           className="mx-auto flex max-w-md items-center gap-2 rounded-2xl px-4 py-3"
           style={{
-            // bg-neutral-900/70 + backdrop-blur-xl per the ultimate
-            // polish spec — heavier glass so the bar melts into the
-            // Mapbox terrain underneath like Apple Maps.
-            background: 'rgba(23, 23, 23, 0.70)',
+            // Apple-Maps light mode — the Mapbox base layer is the
+            // light-v11 style so the search bar inverts to a white
+            // frosted pill instead of the dark glass we used before.
+            // Reads as a single material with the terrain underneath.
+            background: 'rgba(255, 255, 255, 0.85)',
             backdropFilter: 'saturate(170%) blur(24px)',
             WebkitBackdropFilter: 'saturate(170%) blur(24px)',
-            border: '1px solid rgba(255,255,255,0.06)',
-            boxShadow: '0 14px 32px rgba(0,0,0,0.30)',
+            border: '1px solid rgba(0, 0, 0, 0.05)',
+            boxShadow: '0 12px 28px rgba(0, 0, 0, 0.10)',
           }}
         >
-          <SearchIcon className="h-4 w-4 flex-none text-fg2" />
+          <SearchIcon className="h-4 w-4 flex-none text-neutral-500" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Rechercher une voiture, une marque…"
-            className="flex-1 bg-transparent text-sm text-fg placeholder-fg2 outline-none"
+            className="flex-1 bg-transparent text-sm font-medium text-neutral-900 outline-none placeholder:text-neutral-400"
           />
           {searchQuery && (
             <button
               onClick={() => setSearchQuery('')}
               aria-label="Effacer"
-              className="tappable text-fg2 hover:text-fg"
+              className="tappable text-neutral-500 hover:text-neutral-900"
             >
               <X className="h-4 w-4" />
             </button>
@@ -1350,11 +1351,14 @@ export default function MapPage() {
         <div
           className="mx-auto flex max-w-md gap-1 rounded-full p-1"
           style={{
-            background: 'rgba(10,10,10,0.55)',
+            // White-mode filter pills — same material language as the
+            // search bar above. Active pill keeps the brand-red fill
+            // so the selection still pops against the white track.
+            background: 'rgba(255, 255, 255, 0.80)',
             backdropFilter: 'saturate(170%) blur(24px)',
             WebkitBackdropFilter: 'saturate(170%) blur(24px)',
-            border: '1px solid rgba(255,255,255,0.06)',
-            boxShadow: '0 10px 26px rgba(0,0,0,0.28)',
+            border: '1px solid rgba(0, 0, 0, 0.05)',
+            boxShadow: '0 10px 24px rgba(0, 0, 0, 0.10)',
           }}
         >
           {FILTERS.map((f) => (
@@ -1363,8 +1367,8 @@ export default function MapPage() {
               onClick={() => setActiveFilter(f)}
               className={`tappable flex-1 rounded-full py-2 text-xs font-semibold tracking-wide transition-colors ${
                 activeFilter === f
-                  ? 'bg-accent text-fg shadow-glow'
-                  : 'text-fg2 hover:text-fg'
+                  ? 'bg-accent text-white shadow-glow'
+                  : 'text-neutral-500 hover:text-neutral-900'
               }`}
             >
               {f}

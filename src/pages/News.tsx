@@ -282,7 +282,7 @@ export default function News({ categories }: { categories: string[] }) {
                   {n.title}
                 </h2>
                 {n.summary && (
-                  <p className="clamp-3 mt-2 text-sm leading-relaxed text-fg/70">
+                  <p className="mt-2 line-clamp-2 text-sm leading-relaxed text-fg/70">
                     {n.summary}
                   </p>
                 )}

@@ -693,11 +693,11 @@ export default function Feed() {
                       the category is genuinely undefined. */}
                   {catColor && (
                     <span
-                      className="absolute left-4 top-4 rounded-lg px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wider text-white"
+                      className="absolute left-4 top-4 rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-wider text-black"
                       style={{
                         backgroundColor: catColor,
                         boxShadow: `0 6px 16px ${catColor}55`,
-                        letterSpacing: '0.10em',
+                        letterSpacing: '0.12em',
                       }}
                     >
                       {categoryLabel(spot.category).toUpperCase()}
@@ -705,15 +705,16 @@ export default function Feed() {
                   )}
                   {count > 1 && (
                     <span
-                      className="absolute right-4 top-4 flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-bold text-white"
+                      className="absolute right-4 top-4 flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-bold text-white"
                       style={{
-                        // Light frosted glass per the launch spec —
-                        // bg-white/10 reads as a brighter pill over
-                        // dark spot photos than the previous black/40.
-                        background: 'rgba(255, 255, 255, 0.10)',
+                        // Dark frosted glass per the 2026-06-01 polish —
+                        // bg-black/40 + white/10 border + 12px blur so
+                        // the photo-stack counter reads as a premium
+                        // glyph instead of an opaque chip.
+                        background: 'rgba(0, 0, 0, 0.40)',
                         border: '1px solid rgba(255, 255, 255, 0.10)',
-                        backdropFilter: 'saturate(160%) blur(14px)',
-                        WebkitBackdropFilter: 'saturate(160%) blur(14px)',
+                        backdropFilter: 'saturate(160%) blur(12px)',
+                        WebkitBackdropFilter: 'saturate(160%) blur(12px)',
                       }}
                     >
                       <Layers className="h-3 w-3" />
