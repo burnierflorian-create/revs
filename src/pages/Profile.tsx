@@ -1,15 +1,18 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import {
+  ArrowLeft,
   ChevronRight,
   Lock,
   Settings,
   Warehouse,
+  X,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { categoryLabel, type Spot } from '../lib/spots'
+import { categoryLabel, type Rarity, type Spot } from '../lib/spots'
 import { planDisplayName, planTier } from '../lib/plans'
-import { allBadges, computeUnlocks } from '../lib/badges'
+import { allBadges, computeUnlocks, type Badge } from '../lib/badges'
 import { fetchRaceStats } from '../lib/race'
 import { xpLevel } from '../lib/xp'
 import { useMyTier } from '../lib/tier'
@@ -17,6 +20,7 @@ import { Skeleton } from '../components/Skeleton'
 import CollectionsSection from '../components/CollectionsSection'
 import MyCollection from '../components/MyCollection'
 import TitleChip from '../components/TitleChip'
+import { rarityRank } from '../components/CollectorCard'
 
 
 function memberSince(iso: string | undefined): string {
@@ -48,6 +52,10 @@ export default function Profile() {
   const [followers, setFollowers] = useState(0)
   const [likesReceived, setLikesReceived] = useState(0)
   const [animPct, setAnimPct] = useState(0)
+  // Récompenses: full-badge drawer open state. The 4 featured tiles
+  // stay always-visible; this gate controls the slide-up sheet that
+  // surfaces the remaining N-4 trophies.
+  const [badgesSheetOpen, setBadgesSheetOpen] = useState(false)
   // Local-only UI state: which of the two sub-tabs (Garage vs
   // Collection) is currently visible at the bottom of the profile.
   // Single segmented control across the lower half of Profile — replaces
@@ -573,7 +581,7 @@ export default function Profile() {
               (parent already carries px-4). Gives the 2-col collection
               grid breathing room so cards don't slam the phone edge. */}
           <div className="mt-5 px-2">
-            {profileTab === 'collection' && <MyCollection spots={spots} />}
+            {profileTab === 'collection' && <CollectionDecks spots={spots} />}
 
             {profileTab === 'garage' &&
               (total === 0 ? (
@@ -592,15 +600,10 @@ export default function Profile() {
                   </button>
                 </div>
               ) : (
-                <div className="space-y-3">
-                  {spots.map((s) => (
-                    <GarageRow
-                      key={s.id}
-                      spot={s}
-                      onOpen={() => navigate(`/spot/${s.id}`)}
-                    />
-                  ))}
-                </div>
+                <GarageCoverFlow
+                  spots={spots}
+                  onOpen={(id) => navigate(`/spot/${id}`)}
+                />
               ))}
 
             {profileTab === 'rewards' && (
@@ -734,13 +737,20 @@ export default function Profile() {
                       )
                     })}
                   </div>
+                  {/* Minimalist pill — opens a bottom sheet drawer
+                      with the full badge catalogue instead of nav-
+                      pushing to /badges. Per spec: "Voir les N badges". */}
                   <button
-                    onClick={() => navigate('/badges')}
-                    className="tappable mt-3 flex w-full items-center justify-center gap-1 rounded-full bg-card py-2.5 text-sm font-semibold text-fg/80 hover:bg-white/[0.06]"
-                    style={{ border: '1px solid var(--color-border)' }}
+                    onClick={() => setBadgesSheetOpen(true)}
+                    className="tappable mt-3 flex w-full items-center justify-center gap-1.5 rounded-full py-2.5 text-xs font-bold uppercase tracking-wider text-fg/75 hover:text-fg"
+                    style={{
+                      background: 'rgba(20, 20, 22, 0.50)',
+                      border: '1px solid rgba(255, 255, 255, 0.08)',
+                      letterSpacing: '0.10em',
+                    }}
                   >
-                    Voir tous les badges
-                    <ChevronRight className="h-4 w-4" />
+                    Voir les {badgeCatalogue.length} badges
+                    <ChevronRight className="h-3.5 w-3.5" />
                   </button>
                 </section>
 
@@ -753,6 +763,12 @@ export default function Profile() {
 
       </div>
 
+      <BadgesBottomSheet
+        open={badgesSheetOpen}
+        onClose={() => setBadgesSheetOpen(false)}
+        badges={badgeCatalogue}
+        unlocks={unlocks}
+      />
     </div>
   )
 }
@@ -851,7 +867,7 @@ function PremiumTopBanner({ onTap }: { onTap: () => void }) {
   )
 }
 
-/** Brand-aware glow used as a soft halo on the GarageRow horizontal
+/** Brand-aware glow used as a soft halo on the GarageCoverFlow horizontal
  *  cards. Lowercase substring match against the brand string keeps
  *  the table small while covering enough variants. Default fallback
  *  is the REVS accent red. */
@@ -885,80 +901,513 @@ function brandGlow(brand: string | null | undefined): string {
   return 'rgba(232, 32, 58, 0.20)'
 }
 
-/** Horizontal landscape card used by the Garage tab. Replaces the
- *  old 2-column SVG silhouette grid. Subtle vertical gradient bg +
- *  a brand-coloured radial halo at the bottom-right corner, with
- *  brand small caps, model bold, year chip top-right. */
-function GarageRow({
-  spot,
-  onOpen,
-}: {
-  spot: Spot
-  onOpen: () => void
-}) {
-  const glow = brandGlow(spot.brand)
-  return (
-    <button
-      onClick={onOpen}
-      className="tappable group relative w-full overflow-hidden rounded-2xl text-left"
-      style={{
-        height: '128px',
-        background:
-          'linear-gradient(135deg, #1a1a1a 0%, #0c0c0c 60%, #050505 100%)',
-        border: '1px solid rgba(255, 255, 255, 0.05)',
-        boxShadow: '0 18px 38px rgba(0, 0, 0, 0.45)',
-      }}
-    >
-      {/* Brand-colour halo at the lower-right corner. Sits behind
-          the text via z-0; transitions on hover for a subtle pulse. */}
-      <span
-        aria-hidden
-        className="pointer-events-none absolute -bottom-12 -right-12 transition-all group-hover:scale-110"
-        style={{
-          width: '180px',
-          height: '180px',
-          borderRadius: '50%',
-          background: glow,
-          filter: 'blur(48px)',
-        }}
-      />
+// ─────────────────────────── COLLECTION DECKS ───────────────────────────
 
-      <div className="relative z-10 flex h-full flex-col justify-between p-5">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <p
-              className="font-bold uppercase text-fg/45"
-              style={{ fontSize: '10px', letterSpacing: '0.18em' }}
-            >
-              {spot.brand}
-            </p>
-            <h3
-              className="mt-1 truncate font-display tracking-tight text-white"
-              style={{ fontSize: '20px', fontWeight: 700, letterSpacing: '-0.02em' }}
-            >
-              {spot.model}
-            </h3>
-          </div>
-          {typeof spot.year === 'number' && spot.year > 1900 && (
-            <span
-              className="flex-none rounded-md px-2 py-0.5 font-bold text-white/85"
+/** Rarity-anchored deck headers per the 2026-06-01 showroom refocus.
+ *  The Collection tab no longer dumps every card into a flat 2-col
+ *  grid; instead the user lands on 4 horizontal "deck" rectangles
+ *  (one per rarity that has at least one spot) and drills into a
+ *  filtered grid on tap. Decks ordered high → low so Legendary/Ultra
+ *  Rare lead. */
+type Deck = {
+  rarity: Rarity
+  label: string
+  count: number
+  /** Rarity-tinted accent colour for the eyebrow + glow on the
+   *  deck rectangle. Same palette as the Home recent-spot pills
+   *  (emerald commun, blue rare, violet ultra_rare, gold unique). */
+  tint: string
+  emoji: string
+}
+const DECK_RARITY_ORDER: Rarity[] = ['unique', 'ultra_rare', 'rare', 'commun']
+const DECK_THEME: Record<Rarity, { label: string; tint: string; emoji: string }> = {
+  unique: { label: 'Légendaires', tint: '#FACC15', emoji: '👑' },
+  ultra_rare: { label: 'Ultra Rares', tint: '#C084FC', emoji: '💎' },
+  rare: { label: 'Rares', tint: '#60A5FA', emoji: '⚡' },
+  commun: { label: 'Communs', tint: '#34D399', emoji: '🎯' },
+}
+
+function CollectionDecks({ spots }: { spots: Spot[] }) {
+  const [openRarity, setOpenRarity] = useState<Rarity | null>(null)
+
+  const decks = useMemo<Deck[]>(() => {
+    return DECK_RARITY_ORDER.map((r) => {
+      const count = spots.filter((s) => (s.rarity ?? 'commun') === r).length
+      const t = DECK_THEME[r]
+      return { rarity: r, label: t.label, count, tint: t.tint, emoji: t.emoji }
+    }).filter((d) => d.count > 0)
+  }, [spots])
+
+  if (spots.length === 0) {
+    // Reuse the MyCollection empty state so the message stays
+    // consistent with the rest of the app.
+    return <MyCollection spots={spots} />
+  }
+
+  if (openRarity) {
+    const filtered = spots.filter(
+      (s) => (s.rarity ?? 'commun') === openRarity,
+    )
+    const theme = DECK_THEME[openRarity]
+    return (
+      <div>
+        <button
+          onClick={() => setOpenRarity(null)}
+          className="tappable mb-4 inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold text-fg/80 hover:text-fg"
+          style={{
+            background: 'rgba(20, 20, 22, 0.50)',
+            border: '1px solid rgba(255, 255, 255, 0.08)',
+          }}
+        >
+          <ArrowLeft className="h-3.5 w-3.5" />
+          Tous les decks
+        </button>
+        <div className="mb-3 flex items-baseline justify-between">
+          <h3
+            className="font-display font-extrabold tracking-tight text-white"
+            style={{ fontSize: '18px', letterSpacing: '-0.02em' }}
+          >
+            <span style={{ color: theme.tint }}>{theme.emoji}</span>{' '}
+            {theme.label}
+          </h3>
+          <span className="text-xs text-fg2 font-semibold">
+            {filtered.length} carte{filtered.length > 1 ? 's' : ''}
+          </span>
+        </div>
+        <MyCollection spots={filtered} />
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-3">
+      {decks.map((d) => (
+        <button
+          key={d.rarity}
+          onClick={() => setOpenRarity(d.rarity)}
+          className="tappable flex w-full items-center gap-4 rounded-3xl text-left transition-all duration-200 active:scale-[0.98]"
+          style={{
+            background: 'rgba(20, 20, 22, 0.60)',
+            border: '1px solid rgba(255, 255, 255, 0.05)',
+            padding: '18px 20px',
+            boxShadow: `0 16px 30px rgba(0, 0, 0, 0.35), inset 0 0 0 1px ${d.tint}10`,
+          }}
+        >
+          {/* Stack glyph — three nested tilted squares hinting "deck
+              of cards", tinted in the rarity colour. Pure CSS, no
+              extra fetch. */}
+          <div
+            className="relative flex-none"
+            style={{ width: '44px', height: '44px' }}
+          >
+            <div
+              className="absolute inset-0 rounded-xl"
               style={{
-                background: 'rgba(255, 255, 255, 0.05)',
-                border: '1px solid rgba(255, 255, 255, 0.10)',
-                backdropFilter: 'saturate(150%) blur(10px)',
-                WebkitBackdropFilter: 'saturate(150%) blur(10px)',
-                fontSize: '10px',
+                background: `${d.tint}1A`,
+                border: `1px solid ${d.tint}55`,
+                transform: 'rotate(-10deg) translate(-4px, 4px)',
+              }}
+            />
+            <div
+              className="absolute inset-0 rounded-xl"
+              style={{
+                background: `${d.tint}26`,
+                border: `1px solid ${d.tint}77`,
+                transform: 'rotate(4deg) translate(2px, -2px)',
+              }}
+            />
+            <div
+              className="absolute inset-0 flex items-center justify-center rounded-xl text-lg"
+              style={{
+                background: `${d.tint}33`,
+                border: `1px solid ${d.tint}AA`,
+                boxShadow: `0 4px 14px ${d.tint}33`,
               }}
             >
-              {spot.year}
-            </span>
-          )}
-        </div>
-        <p className="text-xs text-fg/55">
-          {categoryLabel(spot.category)}
-        </p>
+              {d.emoji}
+            </div>
+          </div>
+
+          <div className="min-w-0 flex-1">
+            <p
+              className="font-black uppercase"
+              style={{
+                color: d.tint,
+                fontSize: '10px',
+                letterSpacing: '0.20em',
+              }}
+            >
+              Deck
+            </p>
+            <h4
+              className="mt-0.5 font-display font-extrabold tracking-tight text-white"
+              style={{ fontSize: '16px', letterSpacing: '-0.01em' }}
+            >
+              {d.label}
+            </h4>
+            <p
+              className="mt-0.5 text-fg2 font-semibold"
+              style={{ fontSize: '11px' }}
+            >
+              {d.count} carte{d.count > 1 ? 's' : ''} collectionnée
+              {d.count > 1 ? 's' : ''}
+            </p>
+          </div>
+
+          <ChevronRight className="h-4 w-4 flex-none text-fg2/45" />
+        </button>
+      ))}
+      <p className="pt-2 text-center text-[10px] uppercase tracking-widest text-fg2/40">
+        Decks groupés par rareté
+      </p>
+    </div>
+  )
+}
+
+// ─────────────────────────── GARAGE COVER FLOW ──────────────────────────
+
+/** Horizontal "Cover Flow" carousel for the Garage tab. Dedupes the
+ *  user's spots by (brand, model) keeping the highest-rarity instance
+ *  so the same car never appears twice. CSS scroll-snap drives the
+ *  swipe feel; an IntersectionObserver watches which card is centred
+ *  in the scroller and sets that one to scale-100 / others to
+ *  scale-90 opacity-40 — the classic 3-D depth effect. Tapping the
+ *  active card opens the underlying spot. */
+function GarageCoverFlow({
+  spots,
+  onOpen,
+}: {
+  spots: Spot[]
+  onOpen: (id: string) => void
+}) {
+  const scrollerRef = useRef<HTMLDivElement | null>(null)
+  const [activeIdx, setActiveIdx] = useState(0)
+
+  const cars = useMemo(() => {
+    const map = new Map<string, Spot>()
+    for (const s of spots) {
+      const key = `${(s.brand ?? '').toLowerCase().trim()}|${(s.model ?? '').toLowerCase().trim()}`
+      if (!key.replace('|', '').trim()) continue
+      const cur = map.get(key)
+      if (!cur || rarityRank(s.rarity) > rarityRank(cur.rarity)) {
+        map.set(key, s)
+      }
+    }
+    return [...map.values()].sort(
+      (a, b) => rarityRank(b.rarity) - rarityRank(a.rarity),
+    )
+  }, [spots])
+
+  useEffect(() => {
+    const scroller = scrollerRef.current
+    if (!scroller) return
+    const cards = scroller.querySelectorAll('[data-cover-card]')
+    if (!cards.length) return
+
+    const obs = new IntersectionObserver(
+      (entries) => {
+        let bestIdx = activeIdx
+        let bestRatio = 0
+        entries.forEach((e) => {
+          if (e.intersectionRatio > bestRatio) {
+            bestRatio = e.intersectionRatio
+            bestIdx = Number(e.target.getAttribute('data-idx'))
+          }
+        })
+        if (bestRatio > 0) setActiveIdx(bestIdx)
+      },
+      { root: scroller, threshold: [0.5, 0.7, 0.9, 1.0] },
+    )
+    cards.forEach((c) => obs.observe(c))
+    return () => obs.disconnect()
+    // activeIdx omitted on purpose — observer is idempotent re-runs
+    // would just churn the observation set.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cars.length])
+
+  return (
+    <div className="-mx-2">
+      {/* Negative margin neutralises the parent's px-2 so the carousel
+          can full-bleed under the screen edges; padding inside the
+          scroller restores the breathing room at the actual content. */}
+      <div
+        ref={scrollerRef}
+        className="no-scrollbar flex snap-x snap-mandatory items-stretch gap-4 overflow-x-auto py-4"
+        style={{
+          paddingInline: 'max(env(safe-area-inset-left), 24px)',
+          scrollPaddingInline: '24px',
+          // WebKit needs this for smooth snap recovery on momentum
+          // swipes when the scroller is nested inside another
+          // scrolling container.
+          WebkitOverflowScrolling: 'touch',
+        }}
+      >
+        {cars.map((s, i) => {
+          const active = i === activeIdx
+          const glow = brandGlow(s.brand)
+          return (
+            <button
+              key={s.id}
+              data-cover-card
+              data-idx={i}
+              onClick={() => onOpen(s.id)}
+              className="snap-center flex-shrink-0 overflow-hidden rounded-3xl text-left transition-all duration-300 ease-out"
+              style={{
+                width: '280px',
+                height: '160px',
+                background:
+                  'linear-gradient(135deg, #1a1a1a 0%, #0a0a0a 60%, #050505 100%)',
+                border: active
+                  ? '1px solid rgba(255, 255, 255, 0.10)'
+                  : '1px solid rgba(255, 255, 255, 0.05)',
+                transform: active ? 'scale(1)' : 'scale(0.90)',
+                opacity: active ? 1 : 0.4,
+                boxShadow: active
+                  ? `0 0 30px ${glow.replace('0.22', '0.35')}, 0 20px 40px rgba(0, 0, 0, 0.55)`
+                  : '0 12px 24px rgba(0, 0, 0, 0.40)',
+                willChange: 'transform, opacity',
+              }}
+              aria-label={`${s.brand ?? ''} ${s.model ?? ''}`}
+            >
+              <span
+                aria-hidden
+                className="pointer-events-none absolute"
+                style={{
+                  bottom: '-40px',
+                  right: '-40px',
+                  width: '180px',
+                  height: '180px',
+                  borderRadius: '50%',
+                  background: glow,
+                  filter: 'blur(48px)',
+                  opacity: active ? 1 : 0.6,
+                }}
+              />
+              <div className="relative z-10 flex h-full flex-col justify-between p-5">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p
+                      className="font-black uppercase"
+                      style={{
+                        color: active ? '#EF4444' : 'rgba(115,115,115,1)',
+                        fontSize: '9px',
+                        letterSpacing: '0.20em',
+                      }}
+                    >
+                      {s.brand}
+                    </p>
+                    <h3
+                      className="mt-0.5 truncate font-display font-black tracking-tight text-white"
+                      style={{
+                        fontSize: '18px',
+                        letterSpacing: '-0.02em',
+                      }}
+                    >
+                      {s.model}
+                    </h3>
+                  </div>
+                  {typeof s.year === 'number' && s.year > 1900 && (
+                    <span
+                      className="flex-none rounded-md font-bold text-fg2"
+                      style={{
+                        background: 'rgba(255, 255, 255, 0.05)',
+                        padding: '2px 8px',
+                        fontSize: '9px',
+                      }}
+                    >
+                      {s.year}
+                    </span>
+                  )}
+                </div>
+                <p
+                  className="text-fg2/70"
+                  style={{ fontSize: '11px', fontWeight: 500 }}
+                >
+                  {categoryLabel(s.category)}
+                </p>
+              </div>
+            </button>
+          )
+        })}
       </div>
-    </button>
+
+      {/* Dot indicator — keeps users oriented when many cars are
+          in the garage. Hidden when only one car is present. */}
+      {cars.length > 1 && (
+        <div className="mt-1 flex justify-center gap-1.5">
+          {cars.map((_, i) => (
+            <span
+              key={i}
+              className="rounded-full transition-all duration-200"
+              style={{
+                width: i === activeIdx ? '16px' : '5px',
+                height: '5px',
+                background:
+                  i === activeIdx
+                    ? 'var(--color-accent)'
+                    : 'rgba(255, 255, 255, 0.15)',
+              }}
+              aria-hidden
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ────────────────────────── BADGES BOTTOM SHEET ─────────────────────────
+
+/** Slide-up drawer that surfaces the full badge catalogue from the
+ *  Récompenses tab. The 4 featured tiles remain visible on the main
+ *  surface; opening the sheet swaps the "Voir tous" nav with an
+ *  in-place modal that keeps the user anchored in /profile. Portaled
+ *  to document.body so the scroll-locked layout under the sheet
+ *  doesn't fight with Profile's own overflow rules. */
+function BadgesBottomSheet({
+  open,
+  onClose,
+  badges,
+  unlocks,
+}: {
+  open: boolean
+  onClose: () => void
+  badges: Badge[]
+  unlocks: Set<string>
+}) {
+  // Lock body scroll while the sheet is open. We restore the previous
+  // overflow value on close so nothing the rest of the app set is
+  // accidentally clobbered.
+  useEffect(() => {
+    if (!open) return
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = prev
+    }
+  }, [open])
+
+  if (!open) return null
+
+  return createPortal(
+    <div className="fixed inset-0 z-50" role="dialog" aria-modal="true">
+      <button
+        aria-label="Fermer"
+        onClick={onClose}
+        className="absolute inset-0"
+        style={{
+          background: 'rgba(0, 0, 0, 0.65)',
+          backdropFilter: 'blur(8px)',
+          WebkitBackdropFilter: 'blur(8px)',
+          animation: 'sheet-backdrop-in 220ms ease-out both',
+        }}
+      />
+      <div
+        className="absolute bottom-0 left-0 right-0 overflow-hidden"
+        style={{
+          background: 'rgba(15, 15, 17, 0.96)',
+          borderTopLeftRadius: '28px',
+          borderTopRightRadius: '28px',
+          borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+          maxHeight: '85vh',
+          paddingBottom: 'env(safe-area-inset-bottom)',
+          backdropFilter: 'saturate(160%) blur(22px)',
+          WebkitBackdropFilter: 'saturate(160%) blur(22px)',
+          boxShadow: '0 -24px 60px rgba(0, 0, 0, 0.65)',
+          animation:
+            'sheet-slide-up 280ms cubic-bezier(0.32, 0.72, 0, 1) both',
+        }}
+      >
+        {/* Drag handle pill — iOS-style affordance. Not actually
+            draggable on this MVP (would need pointer-event plumbing),
+            but the visual cue keeps the sheet readable. */}
+        <div className="flex justify-center pt-3">
+          <span
+            className="rounded-full"
+            style={{
+              width: '40px',
+              height: '4px',
+              background: 'rgba(255, 255, 255, 0.18)',
+            }}
+            aria-hidden
+          />
+        </div>
+        <div className="flex items-center justify-between px-5 pb-3 pt-4">
+          <h3
+            className="font-display font-extrabold tracking-tight text-white"
+            style={{ fontSize: '20px', letterSpacing: '-0.02em' }}
+          >
+            Tous les badges
+          </h3>
+          <button
+            onClick={onClose}
+            aria-label="Fermer"
+            className="tappable flex h-9 w-9 items-center justify-center rounded-full text-fg2 hover:text-fg"
+            style={{
+              background: 'rgba(255, 255, 255, 0.06)',
+              border: '1px solid rgba(255, 255, 255, 0.08)',
+            }}
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <div
+          className="overflow-y-auto px-4 pb-6"
+          style={{
+            maxHeight: 'calc(85vh - 100px)',
+            WebkitOverflowScrolling: 'touch',
+          }}
+        >
+          <div className="grid grid-cols-3 gap-2">
+            {badges.map((b) => {
+              const isUnlocked = unlocks.has(b.slug)
+              return (
+                <div
+                  key={b.slug}
+                  className="flex flex-col items-center gap-2 rounded-2xl p-3 text-center"
+                  style={{
+                    background: 'rgba(20, 20, 22, 0.50)',
+                    border: isUnlocked
+                      ? b.gold
+                        ? '1px solid rgba(224,179,65,0.40)'
+                        : '1px solid rgba(232,32,58,0.30)'
+                      : '1px solid rgba(255,255,255,0.05)',
+                    backdropFilter: 'saturate(150%) blur(10px)',
+                    WebkitBackdropFilter: 'saturate(150%) blur(10px)',
+                    boxShadow:
+                      isUnlocked && !b.gold
+                        ? '0 8px 22px rgba(232,32,58,0.16)'
+                        : isUnlocked && b.gold
+                          ? '0 8px 22px rgba(224,179,65,0.20)'
+                          : 'inset 0 1px 0 rgba(255,255,255,0.03)',
+                  }}
+                >
+                  {isUnlocked ? (
+                    <span className="text-2xl">{b.emoji}</span>
+                  ) : (
+                    <span className="flex h-7 items-center justify-center">
+                      <Lock className="h-4 w-4 text-fg2/50" />
+                    </span>
+                  )}
+                  <span
+                    className={`text-[10px] font-semibold leading-tight ${
+                      isUnlocked
+                        ? b.gold
+                          ? 'text-[#E0B341]'
+                          : 'text-accent'
+                        : 'text-fg2/60'
+                    }`}
+                  >
+                    {b.name}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body,
   )
 }
 
