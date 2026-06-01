@@ -34,7 +34,7 @@ const BASE = {
   valid: true,
   reason: '',
   estimated_price: null,
-  rarity: 'commun',
+  rarity: 'standard',
   production: null,
 }
 
@@ -116,7 +116,14 @@ const VALID_CATEGORIES = new Set([
   'JDM',
   'other',
 ])
-const VALID_RARITY = new Set(['commun', 'rare', 'ultra_rare', 'unique'])
+const VALID_RARITY = new Set([
+  'standard',
+  'premium',
+  'performance',
+  'exclusif',
+  'supercar',
+  'hypercar',
+])
 
 function normalizeCategory(c) {
   if (typeof c !== 'string') return 'other'
@@ -228,7 +235,7 @@ function finalize(raw) {
       valid !== false
         ? normalizeInt(o.price_estimate ?? o.estimated_price)
         : null,
-    rarity: VALID_RARITY.has(o.rarity) ? o.rarity : 'commun',
+    rarity: VALID_RARITY.has(o.rarity) ? o.rarity : 'standard',
     production: (() => {
       const v = o.production
       if (typeof v === 'number' && Number.isFinite(v) && v > 0) return Math.floor(v)
@@ -337,12 +344,15 @@ async function refinePriceFromWeb(client, brand, model, year) {
 }
 
 // Third-stage call: web-grounded rarity lookup. Returns
-// { production: int|null, rarity: 'commun'|'rare'|'ultra_rare'|'unique' }
-// — defaults to 'commun' when the answer is missing or unparseable,
-// which is the conservative XP-floor choice.
+// { production: int|null, rarity: <6-tier value> } — defaults to
+// 'standard' when the answer is missing or unparseable, which is the
+// conservative XP-floor choice. The 6-tier scale (standard → hypercar)
+// landed in migration 0040; the prompt mixes positioning and
+// production cues since strict count thresholds alone can't tell a
+// 1000-unit JDM youngtimer apart from a 1000-unit hypercar.
 
 async function refineRarityFromWeb(client, brand, model, year) {
-  if (!brand || !model) return { production: null, rarity: 'commun' }
+  if (!brand || !model) return { production: null, rarity: 'standard' }
   const yearPart = year ? ` ${year}` : ''
   const userMsg =
     `Recherche combien d'exemplaires de la ${brand} ${model}${yearPart} ont été ` +
@@ -350,15 +360,28 @@ async function refineRarityFromWeb(client, brand, model, year) {
     `Wikipedia, presse auto. Si la production est encore en cours, donne le total ` +
     `cumulé connu (sinon une estimation crédible).\n\n` +
     `Réponds UNIQUEMENT par ce JSON, sans markdown :\n` +
-    `{"production": 499, "rarity": "ultra_rare"}\n\n` +
-    `Critères de classification :\n` +
-    `- "commun" : plus de 10 000 exemplaires produits (modèles de série standard)\n` +
-    `- "rare" : 1 000 à 10 000 exemplaires (séries limitées, sportives haut de gamme)\n` +
-    `- "ultra_rare" : moins de 1 000 exemplaires (hypercars, séries très limitées)\n` +
-    `- "unique" : édition spéciale one-off, prototype, voiture unique (< 30 exemplaires)\n\n` +
+    `{"production": 499, "rarity": "supercar"}\n\n` +
+    `Échelle de rareté à 6 niveaux (positionnement segment + volume) :\n` +
+    `- "standard" : voiture de tous les jours, segment de masse (ex: Nissan Juke, ` +
+    `Renault Clio, VW Golf de base). Volume élevé.\n` +
+    `- "premium" : modèle haut de gamme quotidien, finition supérieure (ex: ` +
+    `Mercedes CLA AMG Line, BMW Série 2, Audi A3). Volume élevé mais positionnement ` +
+    `premium.\n` +
+    `- "performance" : sportive pure, dérivée de la même plateforme qu'un modèle ` +
+    `civil (ex: Audi TT RS, BMW M2, Porsche 718 Cayman). Sportivité = ADN.\n` +
+    `- "exclusif" : gros SUV sportif ou berline lourde à très forte présence ` +
+    `(ex: Mercedes-AMG GLE 63 S, Porsche Cayenne Coupé, BMW X6 M, Bentley ` +
+    `Bentayga). Volume limité, luxe ostentatoire.\n` +
+    `- "supercar" : exotique de prestige biplace ou 2+2, marque spécialiste ou ` +
+    `flagship (ex: McLaren 570S, Ferrari 488, Lamborghini Huracán, Porsche 911 GT3). ` +
+    `Moins de 5 000 / an typiquement.\n` +
+    `- "hypercar" : sommet absolu — top-flagship moteur central, série très limitée ` +
+    `ou édition one-off (ex: Mercedes-AMG GT 63 S E Performance flagship, Bugatti ` +
+    `Chiron, Pagani Huayra, Koenigsegg, McLaren P1). Souvent < 500 exemplaires.\n\n` +
     `Si la production exacte est inconnue, mets production: null mais TOUJOURS un rarity ` +
-    `cohérent avec le segment du modèle (un coupé sportif série normale = commun, une ` +
-    `hypercar = ultra_rare, etc.). Aucun texte avant ou après le JSON.`
+    `cohérent avec le positionnement du modèle. En cas de doute, descends d'un cran ` +
+    `(une supercar douteuse = "performance", pas "supercar"). Aucun texte avant ou ` +
+    `après le JSON.`
   try {
     const r = await client.messages.create({
       model: MODEL,
@@ -373,7 +396,7 @@ async function refineRarityFromWeb(client, brand, model, year) {
       .map((b) => b.text)
       .join(' ')
     const parsed = extractJSON(text)
-    const rarity = VALID_RARITY.has(parsed?.rarity) ? parsed.rarity : 'commun'
+    const rarity = VALID_RARITY.has(parsed?.rarity) ? parsed.rarity : 'standard'
     const production = (() => {
       const v = parsed?.production
       if (typeof v === 'number' && Number.isFinite(v) && v > 0) return Math.floor(v)
@@ -386,7 +409,7 @@ async function refineRarityFromWeb(client, brand, model, year) {
     return { production, rarity }
   } catch (e) {
     console.error('[identify-car] rarity refine failed:', e?.message ?? e)
-    return { production: null, rarity: 'commun' }
+    return { production: null, rarity: 'standard' }
   }
 }
 

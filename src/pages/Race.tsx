@@ -34,22 +34,32 @@ type Phase =
   | 'result'
 
 const RARITY_COLOR: Record<Rarity, string> = {
-  commun: '#888888',
-  rare: '#4A9EFF',
-  ultra_rare: '#9B59B6',
-  unique: '#FFD700',
+  standard:    '#888888',
+  premium:     '#4A9EFF',
+  performance: '#EF4444',
+  exclusif:    '#B87333',
+  supercar:    '#9B59B6',
+  hypercar:    '#FFD700',
 }
 const RARITY_LABEL: Record<Rarity, string> = {
-  commun: 'COMMUN',
-  rare: 'RARE',
-  ultra_rare: 'ULTRA RARE',
-  unique: 'LÉGENDAIRE',
+  standard:    'STANDARD',
+  premium:     'PREMIUM',
+  performance: 'PERFORMANCE',
+  exclusif:    'EXCLUSIF',
+  supercar:    'SUPERCAR',
+  hypercar:    'HYPERCAR',
 }
+// Race scoring multiplier per rarity — keeps standard/premium/supercar/
+// hypercar at the same values as the legacy 4-tier scale to avoid
+// disrupting existing player progression; the two new tiers
+// (performance, exclusif) slot in between with smooth deltas.
 const RARITY_MULT: Record<Rarity, number> = {
-  commun: 1.0,
-  rare: 1.5,
-  ultra_rare: 2.5,
-  unique: 4.0,
+  standard:    1.0,
+  premium:     1.5,
+  performance: 2.0,
+  exclusif:    2.5,
+  supercar:    3.0,
+  hypercar:    4.0,
 }
 const TIMING_LABEL: Record<RaceResult['timing_bucket'], string> = {
   perfect: 'DÉPART PARFAIT',
@@ -483,7 +493,7 @@ function SelectCarousel({
   }
 
   const current = spots[idx]
-  const currentRarity = (current?.rarity ?? 'commun') as Rarity
+  const currentRarity = (current?.rarity ?? 'standard') as Rarity
   const estHp = 0 // unknown client-side; we display rarity instead
 
   return (
@@ -648,7 +658,7 @@ function SelectCarousel({
 }
 
 function BigCard({ spot, active }: { spot: Spot; active: boolean }) {
-  const rarity = (spot.rarity ?? 'commun') as Rarity
+  const rarity = (spot.rarity ?? 'standard') as Rarity
   return (
     <div
       className="relative h-full w-full overflow-hidden rounded-3xl"
@@ -724,7 +734,7 @@ function ReadyPhase({
   stake: RaceStake
   onGo: () => void
 }) {
-  const playerRarity = (spot.rarity ?? 'commun') as Rarity
+  const playerRarity = (spot.rarity ?? 'standard') as Rarity
   const playerEst = Math.round(playerHp * RARITY_MULT[playerRarity] * 1.1)
   const oppEst = Math.round(
     opponent.horsepower * RARITY_MULT[opponent.rarity] * 1.1,
@@ -1639,7 +1649,7 @@ function ResultPhase({
   onHome: () => void
 }) {
   const won = result.winner_is_me
-  const playerRarity = (playerSpot.rarity ?? 'commun') as Rarity
+  const playerRarity = (playerSpot.rarity ?? 'standard') as Rarity
   const winnerRarity = won ? playerRarity : opponent.rarity
   const winnerPhoto = won ? playerSpot.photo_url : opponent.photo_url
   const winnerBrand = won ? playerSpot.brand : opponent.brand

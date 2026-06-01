@@ -60,10 +60,12 @@ export async function fetchSpottingPrediction(
 // Rarity → numeric rank for client-side sorting (the SQL enum ordering
 // is alphabetical and useless here).
 const RARITY_RANK: Record<Rarity, number> = {
-  commun: 1,
-  rare: 2,
-  ultra_rare: 3,
-  unique: 4,
+  standard: 1,
+  premium: 2,
+  performance: 3,
+  exclusif: 4,
+  supercar: 5,
+  hypercar: 6,
 }
 
 export type RarestSpot = {
@@ -86,7 +88,7 @@ export async function fetchRarestSpot(): Promise<RarestSpot | null> {
 
   function rank(s: Spot): [number, number, number, number] {
     return [
-      RARITY_RANK[(s.rarity ?? 'commun') as Rarity] ?? 0,
+      RARITY_RANK[(s.rarity ?? 'standard') as Rarity] ?? 0,
       s.estimated_price ?? 0,
       s.confidence ?? 0,
       new Date(s.created_at).getTime(),

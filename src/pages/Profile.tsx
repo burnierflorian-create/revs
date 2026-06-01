@@ -17,10 +17,17 @@ import { fetchRaceStats } from '../lib/race'
 import { xpLevel } from '../lib/xp'
 import { useMyTier } from '../lib/tier'
 import { Skeleton } from '../components/Skeleton'
-import CollectionsSection from '../components/CollectionsSection'
 import MyCollection from '../components/MyCollection'
 import TitleChip from '../components/TitleChip'
 import { rarityRank } from '../components/CollectorCard'
+import {
+  COLLECTIONS,
+  claimCollection,
+  computeProgress,
+  fetchClaimedCollections,
+  type CollectionProgress,
+} from '../lib/collections'
+import { floatXp } from '../components/XpFloater'
 
 
 function memberSince(iso: string | undefined): string {
@@ -607,39 +614,7 @@ export default function Profile() {
               ))}
 
             {profileTab === 'rewards' && (
-              <div className="space-y-6">
-                {/* Quick row: Challenges + Parrainage */}
-                <div className="grid grid-cols-2 gap-3">
-                  <button
-                    onClick={() => navigate('/challenges')}
-                    className="flex flex-col items-start gap-1 rounded-2xl border border-white/5 bg-card p-4 text-left transition-colors hover:bg-white/[0.04]"
-                  >
-                    <span className="text-xs uppercase tracking-wider text-fg/40">
-                      Challenges
-                    </span>
-                    <span className="font-display text-lg font-bold text-fg">
-                      Cette semaine
-                    </span>
-                    <span className="text-xs text-accent">
-                      3 défis actifs →
-                    </span>
-                  </button>
-                  <button
-                    onClick={() => navigate('/referral')}
-                    className="flex flex-col items-start gap-1 rounded-2xl border border-white/5 bg-card p-4 text-left transition-colors hover:bg-white/[0.04]"
-                  >
-                    <span className="text-xs uppercase tracking-wider text-fg/40">
-                      Parrainage
-                    </span>
-                    <span className="font-display text-lg font-bold text-fg">
-                      Inviter
-                    </span>
-                    <span className="text-xs text-accent">
-                      +50 XP par ami →
-                    </span>
-                  </button>
-                </div>
-
+              <div className="space-y-7">
                 {/* Gérer mon abonnement — paid users only */}
                 {plan && (
                   <button
@@ -676,37 +651,49 @@ export default function Profile() {
                   </button>
                 )}
 
-                {/* Mes Badges */}
+                {/* SECTION 1 — Trophées équipés. Horizontal scroll of
+                    the 4 featured badges in 64×64 glass squares, with
+                    a tiny inline "Voir les N" trigger that opens the
+                    BadgesBottomSheet drawer. Replaces the previous
+                    grid-cols-4 + full-width pill layout. */}
                 <section>
-                  <div className="mb-3 flex items-baseline justify-between">
-                    <h2 className="font-display text-lg font-extrabold tracking-tighter text-fg">
-                      Mes badges
-                    </h2>
-                    <span className="label-up text-[10px] text-fg2">
-                      {unlocked.length}/{badgeCatalogue.length}
-                    </span>
+                  <div className="flex items-center justify-between">
+                    <h4
+                      className="font-black uppercase text-fg2/55"
+                      style={{
+                        fontSize: '10px',
+                        letterSpacing: '0.20em',
+                      }}
+                    >
+                      Trophées équipés
+                    </h4>
+                    <button
+                      onClick={() => setBadgesSheetOpen(true)}
+                      className="tappable font-bold text-accent hover:underline"
+                      style={{ fontSize: '10px' }}
+                    >
+                      Voir les {badgeCatalogue.length}
+                    </button>
                   </div>
-                  <div className="grid grid-cols-4 gap-1.5">
+                  <div className="no-scrollbar mt-3 flex gap-3 overflow-x-auto py-1">
                     {topBadges.map((b) => {
                       const isUnlocked = unlocks.has(b.slug)
                       return (
                         <button
                           key={b.slug}
                           onClick={() => navigate(`/badges/${b.slug}`)}
-                          className="tappable relative flex flex-col items-center gap-2 rounded-2xl p-3 text-center"
+                          className="tappable flex flex-shrink-0 flex-col items-center justify-center gap-1.5 rounded-2xl p-2 text-center"
                           style={{
-                            // Mini trophy tile — translucent neutral
-                            // surface for all states, accent-tinted
-                            // outline + glow only when unlocked so the
-                            // grid reads as a unified collection.
-                            background: 'rgba(20, 20, 22, 0.50)',
+                            width: '64px',
+                            height: '64px',
+                            background: 'rgba(20, 20, 22, 0.60)',
                             border: isUnlocked
                               ? b.gold
                                 ? '1px solid rgba(224,179,65,0.40)'
                                 : '1px solid rgba(232,32,58,0.30)'
                               : '1px solid rgba(255,255,255,0.05)',
-                            backdropFilter: 'saturate(150%) blur(10px)',
-                            WebkitBackdropFilter: 'saturate(150%) blur(10px)',
+                            backdropFilter: 'saturate(160%) blur(12px)',
+                            WebkitBackdropFilter: 'saturate(160%) blur(12px)',
                             boxShadow:
                               isUnlocked && !b.gold
                                 ? '0 8px 22px rgba(232,32,58,0.16)'
@@ -714,22 +701,23 @@ export default function Profile() {
                                   ? '0 8px 22px rgba(224,179,65,0.20)'
                                   : 'inset 0 1px 0 rgba(255,255,255,0.03)',
                           }}
+                          aria-label={b.name}
                         >
                           {isUnlocked ? (
-                            <span className="text-2xl">{b.emoji}</span>
+                            <span className="text-xl">{b.emoji}</span>
                           ) : (
-                            <span className="flex h-7 items-center justify-center">
-                              <Lock className="h-4 w-4 text-fg2/50" />
-                            </span>
+                            <Lock className="h-4 w-4 text-fg2/50" />
                           )}
                           <span
-                            className={`text-[10px] font-semibold leading-tight ${
-                              isUnlocked
+                            className="w-full truncate font-bold leading-tight"
+                            style={{
+                              fontSize: '8px',
+                              color: isUnlocked
                                 ? b.gold
-                                  ? 'text-[#E0B341]'
-                                  : 'text-accent'
-                                : 'text-fg2/60'
-                            }`}
+                                  ? '#E0B341'
+                                  : 'var(--color-accent)'
+                                : 'rgba(255,255,255,0.40)',
+                            }}
                           >
                             {b.name}
                           </span>
@@ -737,25 +725,17 @@ export default function Profile() {
                       )
                     })}
                   </div>
-                  {/* Minimalist pill — opens a bottom sheet drawer
-                      with the full badge catalogue instead of nav-
-                      pushing to /badges. Per spec: "Voir les N badges". */}
-                  <button
-                    onClick={() => setBadgesSheetOpen(true)}
-                    className="tappable mt-3 flex w-full items-center justify-center gap-1.5 rounded-full py-2.5 text-xs font-bold uppercase tracking-wider text-fg/75 hover:text-fg"
-                    style={{
-                      background: 'rgba(20, 20, 22, 0.50)',
-                      border: '1px solid rgba(255, 255, 255, 0.08)',
-                      letterSpacing: '0.10em',
-                    }}
-                  >
-                    Voir les {badgeCatalogue.length} badges
-                    <ChevronRight className="h-3.5 w-3.5" />
-                  </button>
                 </section>
 
-                {/* Défis Collections (themed: AMG, JDM, Italian Big 3, …) */}
-                <CollectionsSection spots={spots} />
+                {/* SECTION 2 — Défis en cours. Renders the top 2
+                    collections by completion ratio (claimed ones are
+                    skipped). Compact h-1 progress bar; the RÉCLAMER
+                    button is enabled only at 100%. */}
+                <TopChallenges
+                  spots={spots}
+                  count={2}
+                  onShowAll={() => navigate('/challenges')}
+                />
               </div>
             )}
           </div>
@@ -919,12 +899,24 @@ type Deck = {
   tint: string
   emoji: string
 }
-const DECK_RARITY_ORDER: Rarity[] = ['unique', 'ultra_rare', 'rare', 'commun']
-const DECK_THEME: Record<Rarity, { label: string; tint: string; emoji: string }> = {
-  unique: { label: 'Légendaires', tint: '#FACC15', emoji: '👑' },
-  ultra_rare: { label: 'Ultra Rares', tint: '#C084FC', emoji: '💎' },
-  rare: { label: 'Rares', tint: '#60A5FA', emoji: '⚡' },
-  commun: { label: 'Communs', tint: '#34D399', emoji: '🎯' },
+const DECK_RARITY_ORDER: Rarity[] = [
+  'hypercar',
+  'supercar',
+  'exclusif',
+  'performance',
+  'premium',
+  'standard',
+]
+const DECK_THEME: Record<
+  Rarity,
+  { label: string; tint: string; emoji: string }
+> = {
+  hypercar:    { label: 'Hypercar',    tint: '#FACC15', emoji: '👑' },
+  supercar:    { label: 'Supercar',    tint: '#C084FC', emoji: '✨' },
+  exclusif:    { label: 'Exclusif',    tint: '#B87333', emoji: '💎' },
+  performance: { label: 'Performance', tint: '#EF4444', emoji: '🏁' },
+  premium:     { label: 'Premium',     tint: '#60A5FA', emoji: '⚡' },
+  standard:    { label: 'Standard',    tint: '#9CA3AF', emoji: '🎯' },
 }
 
 function CollectionDecks({ spots }: { spots: Spot[] }) {
@@ -932,7 +924,7 @@ function CollectionDecks({ spots }: { spots: Spot[] }) {
 
   const decks = useMemo<Deck[]>(() => {
     return DECK_RARITY_ORDER.map((r) => {
-      const count = spots.filter((s) => (s.rarity ?? 'commun') === r).length
+      const count = spots.filter((s) => (s.rarity ?? 'standard') === r).length
       const t = DECK_THEME[r]
       return { rarity: r, label: t.label, count, tint: t.tint, emoji: t.emoji }
     }).filter((d) => d.count > 0)
@@ -946,7 +938,7 @@ function CollectionDecks({ spots }: { spots: Spot[] }) {
 
   if (openRarity) {
     const filtered = spots.filter(
-      (s) => (s.rarity ?? 'commun') === openRarity,
+      (s) => (s.rarity ?? 'standard') === openRarity,
     )
     const theme = DECK_THEME[openRarity]
     return (
@@ -1411,3 +1403,202 @@ function BadgesBottomSheet({
   )
 }
 
+
+// ───────────────────────────── TOP CHALLENGES ─────────────────────────────
+
+/** Compact top-N collections list used on the Récompenses tab. Picks
+ *  the N collections (default 2) with the highest completion ratio,
+ *  excluding ones already claimed. Each card surfaces a thin h-1
+ *  progress bar + the RÉCLAMER CTA, which is only enabled when the
+ *  collection has reached 100% completion. Replaces the previous
+ *  full-length CollectionsSection list on this tab — the long list
+ *  is still reachable from /challenges. */
+function TopChallenges({
+  spots,
+  count,
+  onShowAll,
+}: {
+  spots: Spot[]
+  count: number
+  onShowAll: () => void
+}) {
+  const [claimed, setClaimed] = useState<Record<string, string>>({})
+  const [busyId, setBusyId] = useState<string | null>(null)
+
+  useEffect(() => {
+    let active = true
+    fetchClaimedCollections().then((m) => {
+      if (active) setClaimed(m)
+    })
+    return () => {
+      active = false
+    }
+  }, [])
+
+  const top = useMemo<CollectionProgress[]>(() => {
+    const all = COLLECTIONS.map((c) =>
+      computeProgress(c, spots, claimed[c.id] ?? null),
+    )
+    // Unclaimed only, sorted by ratio desc. Ties broken by raw
+    // matchedCount to keep the leaderboard deterministic across re-
+    // renders (Map iteration order is insertion-stable but the spec
+    // here is "highest %, then highest absolute count").
+    return all
+      .filter((p) => p.claimedAt === null)
+      .sort((a, b) => {
+        const ra = a.matchedCount / Math.max(1, a.target)
+        const rb = b.matchedCount / Math.max(1, b.target)
+        if (rb !== ra) return rb - ra
+        return b.matchedCount - a.matchedCount
+      })
+      .slice(0, count)
+  }, [spots, claimed, count])
+
+  async function onClaim(id: string, xpReward: number) {
+    if (busyId) return
+    setBusyId(id)
+    const { ok } = await claimCollection(id)
+    setBusyId(null)
+    if (ok) {
+      floatXp(xpReward)
+      setClaimed((c) => ({ ...c, [id]: new Date().toISOString() }))
+    }
+  }
+
+  return (
+    <section>
+      <div className="mb-3 flex items-center justify-between">
+        <h4
+          className="font-black uppercase text-fg2/55"
+          style={{ fontSize: '10px', letterSpacing: '0.20em' }}
+        >
+          Défis en cours
+        </h4>
+        <button
+          onClick={onShowAll}
+          className="tappable font-bold text-accent hover:underline"
+          style={{ fontSize: '10px' }}
+        >
+          Tous les défis
+        </button>
+      </div>
+      <div className="space-y-3">
+        {top.length === 0 ? (
+          <div
+            className="rounded-2xl p-4 text-center text-xs text-fg2"
+            style={{
+              background: 'rgba(20, 20, 22, 0.40)',
+              border: '1px solid rgba(255, 255, 255, 0.05)',
+            }}
+          >
+            Tous les défis sont déjà réclamés. Bravo 🏁
+          </div>
+        ) : (
+          top.map((p) => (
+            <TopChallengeCard
+              key={p.collection.id}
+              progress={p}
+              busy={busyId === p.collection.id}
+              onClaim={() => onClaim(p.collection.id, p.collection.xpReward)}
+            />
+          ))
+        )}
+      </div>
+    </section>
+  )
+}
+
+function TopChallengeCard({
+  progress,
+  busy,
+  onClaim,
+}: {
+  progress: CollectionProgress
+  busy: boolean
+  onClaim: () => void
+}) {
+  const { collection, matchedCount, target } = progress
+  const pct = Math.min(100, Math.round((matchedCount / target) * 100))
+  const complete = matchedCount >= target
+  return (
+    <div
+      className="flex items-center justify-between gap-4 rounded-2xl p-4"
+      style={{
+        background: 'rgba(20, 20, 22, 0.40)',
+        border: '1px solid rgba(255, 255, 255, 0.05)',
+        backdropFilter: 'saturate(150%) blur(10px)',
+        WebkitBackdropFilter: 'saturate(150%) blur(10px)',
+      }}
+    >
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className="text-base leading-none" aria-hidden>
+            {collection.emoji}
+          </span>
+          <h5
+            className="min-w-0 flex-1 truncate font-display font-black tracking-tight text-white"
+            style={{ fontSize: '13px', letterSpacing: '-0.01em' }}
+          >
+            {collection.title}
+          </h5>
+        </div>
+        {/* Thin h-1 progress bar per spec — accent-red fill, neutral
+            track. Reads as a status strip rather than a chunky
+            achievement gauge. */}
+        <div
+          className="mt-2.5 h-1 w-full overflow-hidden rounded-full"
+          style={{ background: 'rgba(255, 255, 255, 0.06)' }}
+        >
+          <div
+            className="h-full rounded-full bg-accent transition-[width] duration-500 ease-out"
+            style={{
+              width: `${pct}%`,
+              boxShadow: complete
+                ? '0 0 10px rgba(232, 32, 58, 0.50)'
+                : undefined,
+            }}
+          />
+        </div>
+      </div>
+      <div className="flex-shrink-0 text-right">
+        <span
+          className="mb-1 block font-bold text-fg2"
+          style={{ fontSize: '10px' }}
+        >
+          {matchedCount} / {target}
+        </span>
+        {complete ? (
+          <button
+            onClick={onClaim}
+            disabled={busy}
+            className="tappable rounded-lg font-black uppercase tracking-wider text-white shadow-md transition-transform active:scale-[0.97]"
+            style={{
+              background:
+                'linear-gradient(135deg, #EF4444 0%, #B91C1C 100%)',
+              border: '1px solid rgba(255, 255, 255, 0.10)',
+              padding: '6px 12px',
+              fontSize: '9px',
+              letterSpacing: '0.10em',
+              opacity: busy ? 0.6 : 1,
+            }}
+          >
+            {busy ? '…' : 'Réclamer'}
+          </button>
+        ) : (
+          <span
+            className="inline-block cursor-not-allowed rounded-lg font-bold uppercase tracking-wider text-fg2"
+            style={{
+              background: 'rgba(40, 40, 42, 0.60)',
+              border: '1px solid rgba(255, 255, 255, 0.05)',
+              padding: '6px 12px',
+              fontSize: '9px',
+              letterSpacing: '0.10em',
+            }}
+          >
+            En cours
+          </span>
+        )}
+      </div>
+    </div>
+  )
+}

@@ -5,42 +5,64 @@ import type { Spot, Rarity } from '../lib/spots'
 import { xpForSpot } from '../lib/spots'
 import { fetchCardSpecs, type CardSpecs } from '../lib/cardSpecs'
 
-const RARITY_ORDER: Rarity[] = ['commun', 'rare', 'ultra_rare', 'unique']
+const RARITY_ORDER: Rarity[] = [
+  'standard',
+  'premium',
+  'performance',
+  'exclusif',
+  'supercar',
+  'hypercar',
+]
 
 export function rarityRank(r: Rarity | null | undefined): number {
-  return RARITY_ORDER.indexOf((r ?? 'commun') as Rarity)
+  return RARITY_ORDER.indexOf((r ?? 'standard') as Rarity)
 }
 
 const RARITY_LABEL: Record<Rarity, string> = {
-  commun: 'COMMUN',
-  rare: 'RARE',
-  ultra_rare: 'ULTRA RARE',
-  unique: 'LÉGENDAIRE',
+  standard: 'STANDARD',
+  premium: 'PREMIUM',
+  performance: 'PERFORMANCE',
+  exclusif: 'EXCLUSIF',
+  supercar: 'SUPERCAR',
+  hypercar: 'HYPERCAR',
 }
 
 const RARITY_VISUAL: Record<
   Rarity,
   { frame: string; chipBg: string; chipFg: string; glow: string; animated?: boolean }
 > = {
-  commun: {
+  standard: {
     frame: '#888888',
     chipBg: 'rgba(136, 136, 136, 0.22)',
     chipFg: '#E5E7EB',
     glow: '0 14px 32px rgba(0, 0, 0, 0.55)',
   },
-  rare: {
+  premium: {
     frame: '#4A9EFF',
     chipBg: 'rgba(74, 158, 255, 0.22)',
     chipFg: '#BFDBFE',
     glow: '0 14px 34px rgba(74, 158, 255, 0.35)',
   },
-  ultra_rare: {
+  performance: {
+    frame: '#EF4444',
+    chipBg: 'rgba(239, 68, 68, 0.22)',
+    chipFg: '#FECACA',
+    glow: '0 14px 36px rgba(239, 68, 68, 0.40)',
+  },
+  exclusif: {
+    // Brushed bronze — warmer than premium blue, less flashy than gold
+    frame: '#B87333',
+    chipBg: 'rgba(184, 115, 51, 0.24)',
+    chipFg: '#F3D7B0',
+    glow: '0 16px 38px rgba(184, 115, 51, 0.42)',
+  },
+  supercar: {
     frame: '#9B59B6',
     chipBg: 'rgba(155, 89, 182, 0.30)',
     chipFg: '#E9D5FF',
     glow: '0 16px 38px rgba(155, 89, 182, 0.45)',
   },
-  unique: {
+  hypercar: {
     frame:
       'linear-gradient(120deg, #E0B341 0%, #FFD700 25%, #FFF6C8 45%, #FFD700 65%, #B8860B 100%)',
     chipBg:
@@ -134,17 +156,17 @@ export default function CollectorCard({
     })
   }, [flipped, specsTried, specsLoading, spot.brand, spot.model, spot.year])
 
-  const rarity = (spot.rarity ?? 'commun') as Rarity
+  const rarity = (spot.rarity ?? 'standard') as Rarity
   const v = RARITY_VISUAL[rarity]
   const xp = xpForSpot(spot.estimated_price, spot.rarity)
-  const holo = rarity === 'ultra_rare' || rarity === 'unique'
+  const holo = rarity === 'supercar' || rarity === 'hypercar'
   const shortName = shortModelName(spot.model)
 
   // Desktop hover tilt + shimmer sweep only on the two top tiers —
   // commun and rare stay still so the premium tiers stand out. Mobile
   // (no hover media) inherits the static class and the tap-flip
   // mechanic stays primary.
-  const tiltable = rarity === 'ultra_rare' || rarity === 'unique'
+  const tiltable = rarity === 'supercar' || rarity === 'hypercar'
 
   return (
     <div
@@ -244,7 +266,7 @@ function RarityChip({
         backgroundSize: animated ? '200% 100%' : undefined,
         animation: animated ? 'holo-shimmer 3.2s linear infinite' : undefined,
         border:
-          rarity === 'unique'
+          rarity === 'hypercar'
             ? '1px solid rgba(255, 215, 0, 0.55)'
             : '1px solid rgba(255, 255, 255, 0.12)',
       }}

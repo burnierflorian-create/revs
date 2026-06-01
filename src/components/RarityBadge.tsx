@@ -8,29 +8,44 @@ const STYLE: Record<
   Rarity,
   { label: string; bg: string; ring: string; color: string; glow?: boolean }
 > = {
-  commun: {
-    label: 'COMMUN',
+  standard: {
+    label: 'STANDARD',
     bg:
-      'linear-gradient(135deg, rgba(190, 220, 196, 0.16) 0%, rgba(120, 180, 140, 0.08) 100%)',
-    ring: '1px solid rgba(180, 220, 196, 0.32)',
-    color: '#C8E6CC',
+      'linear-gradient(135deg, rgba(180, 180, 180, 0.16) 0%, rgba(120, 120, 120, 0.08) 100%)',
+    ring: '1px solid rgba(180, 180, 180, 0.32)',
+    color: '#E5E7EB',
   },
-  rare: {
-    label: 'RARE',
+  premium: {
+    label: 'PREMIUM',
     bg:
       'linear-gradient(135deg, rgba(59, 130, 246, 0.24) 0%, rgba(59, 130, 246, 0.10) 100%)',
     ring: '1px solid rgba(59, 130, 246, 0.55)',
     color: '#BFDBFE',
   },
-  ultra_rare: {
-    label: 'ULTRA RARE ✨',
+  performance: {
+    label: 'PERFORMANCE',
+    bg:
+      'linear-gradient(135deg, rgba(239, 68, 68, 0.26) 0%, rgba(239, 68, 68, 0.10) 100%)',
+    ring: '1px solid rgba(239, 68, 68, 0.55)',
+    color: '#FECACA',
+  },
+  exclusif: {
+    // Brushed bronze — warmer than blue, less flashy than gold
+    label: 'EXCLUSIF',
+    bg:
+      'linear-gradient(135deg, rgba(184, 115, 51, 0.28) 0%, rgba(184, 115, 51, 0.10) 100%)',
+    ring: '1px solid rgba(184, 115, 51, 0.60)',
+    color: '#F3D7B0',
+  },
+  supercar: {
+    label: 'SUPERCAR ✨',
     bg:
       'linear-gradient(135deg, rgba(167, 139, 250, 0.28) 0%, rgba(167, 139, 250, 0.10) 100%)',
     ring: '1px solid rgba(167, 139, 250, 0.60)',
     color: '#E9D5FF',
   },
-  unique: {
-    label: 'LÉGENDAIRE 👑',
+  hypercar: {
+    label: 'HYPERCAR 👑',
     bg:
       'linear-gradient(120deg, rgba(224, 179, 65, 0.36) 0%, rgba(255, 215, 0, 0.20) 45%, rgba(184, 134, 11, 0.20) 100%)',
     ring: '1px solid rgba(224, 179, 65, 0.70)',
@@ -46,7 +61,7 @@ export default function RarityBadge({
   rarity: Rarity | null | undefined
   size?: 'xs' | 'sm' | 'md'
 }) {
-  const r = (rarity && STYLE[rarity] ? rarity : 'commun') as Rarity
+  const r = (rarity && STYLE[rarity] ? rarity : 'standard') as Rarity
   const s = STYLE[r]
   const pad =
     size === 'xs'

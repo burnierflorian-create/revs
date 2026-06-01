@@ -1,9 +1,10 @@
 import { supabase } from './supabase'
+import { type Rarity } from './spots'
 
 export type RaceOpponent = {
   brand: string
   model: string
-  rarity: 'commun' | 'rare' | 'ultra_rare' | 'unique'
+  rarity: Rarity
   horsepower: number
   /** Set when the server found a real spot for the opponent. Null
    *  on the synthetic fallback (DB has no photo-bearing spots). */

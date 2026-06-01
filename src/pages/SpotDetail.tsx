@@ -443,7 +443,7 @@ export default function SpotDetail() {
 
         {(() => {
           const goldXp =
-            spot.rarity === 'ultra_rare' || spot.rarity === 'unique'
+            spot.rarity === 'supercar' || spot.rarity === 'hypercar'
           return (
             <div
               className="flex items-center justify-between gap-4 rounded-3xl px-5 py-4"

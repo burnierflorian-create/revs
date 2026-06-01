@@ -32,7 +32,18 @@ export type CarInfo = {
   history: string
 }
 
-export type Rarity = 'commun' | 'rare' | 'ultra_rare' | 'unique'
+/** 6-tier rarity scale (2026-06-01 upgrade). Migration 0040 mapped
+ *  the legacy 4-tier vocabulary as: commun → standard, rare →
+ *  premium, ultra_rare → supercar, unique → hypercar. The two new
+ *  tiers — `performance` and `exclusif` — start empty and the AI
+ *  prompt produces them for new spots. */
+export type Rarity =
+  | 'standard'
+  | 'premium'
+  | 'performance'
+  | 'exclusif'
+  | 'supercar'
+  | 'hypercar'
 
 export type Spot = {
   id: string
@@ -57,57 +68,44 @@ export type Spot = {
   production?: number | null
 }
 
-// Base XP score from the price tier. Topped at 75 (vs the old 100) so
-// the rarity multiplier has headroom to push exceptional spots toward
-// 300 XP. Mirrors award_xp_spot() SQL — keep both in sync.
-function basePriceScore(price: number | null | undefined): number {
-  const p = price ?? 0
-  if (p >= 1_000_000) return 75
-  if (p >= 500_000) return 55
-  if (p >= 200_000) return 35
-  if (p >= 80_000) return 20
-  if (p >= 30_000) return 10
-  return 5
+// Flat per-rarity XP ladder — mirrors the 6-tier table in
+// award_xp_spot() (migration 0040). Keep both numbers in sync.
+const XP_BY_RARITY: Record<Rarity, number> = {
+  standard: 10,
+  premium: 25,
+  performance: 50,
+  exclusif: 90,
+  supercar: 150,
+  hypercar: 250,
 }
 
-function rarityMultiplier(rarity: Rarity | null | undefined): number {
-  switch (rarity) {
-    case 'unique':
-      return 4
-    case 'ultra_rare':
-      return 2.5
-    case 'rare':
-      return 1.5
-    default:
-      return 1
-  }
-}
-
-// Combined XP — price tier × rarity multiplier, rounded to int. Used
-// by the UI for the per-card "+X XP" badges; the actual XP_transaction
-// row is written by the SQL trigger which uses the exact same formula.
+/** UI helper for the "+X XP" badges. Returns the flat per-rarity
+ *  amount that the SQL trigger writes to xp_transactions. The legacy
+ *  `price` argument is ignored — kept so callers don't break.  */
 export function xpForSpot(
-  price: number | null | undefined,
+  _price: number | null | undefined,
   rarity: Rarity | null | undefined,
 ): number {
-  return Math.round(basePriceScore(price) * rarityMultiplier(rarity))
+  return XP_BY_RARITY[(rarity ?? 'standard') as Rarity] ?? XP_BY_RARITY.standard
 }
 
 // Backwards-compat alias — some callers still pass price only. Treated
-// as `commun` rarity, which matches the SQL trigger's default.
+// as `standard` rarity, which matches the SQL trigger's default.
 export function xpForPrice(price: number | null | undefined): number {
-  return xpForSpot(price, 'commun')
+  return xpForSpot(price, 'standard')
 }
 
 const RARITY_LABEL: Record<Rarity, string> = {
-  commun: 'COMMUN',
-  rare: 'RARE',
-  ultra_rare: 'ULTRA RARE ✨',
-  unique: 'LÉGENDAIRE 👑',
+  standard: 'STANDARD',
+  premium: 'PREMIUM',
+  performance: 'PERFORMANCE',
+  exclusif: 'EXCLUSIF',
+  supercar: 'SUPERCAR ✨',
+  hypercar: 'HYPERCAR 👑',
 }
 
 export function rarityLabel(r: Rarity | null | undefined): string {
-  return r && r in RARITY_LABEL ? RARITY_LABEL[r] : RARITY_LABEL.commun
+  return r && r in RARITY_LABEL ? RARITY_LABEL[r] : RARITY_LABEL.standard
 }
 
 export function formatPrice(price: number | null | undefined): string | null {

@@ -63,7 +63,7 @@ const EMPTY_RESULT: IdentifyResult = {
   valid: true,
   reason: '',
   estimated_price: null,
-  rarity: 'commun',
+  rarity: 'standard',
   production: null,
 }
 
@@ -135,7 +135,7 @@ export default function NewSpot() {
       lng: 0,
       expires_at: '',
       created_at: new Date().toISOString(),
-      rarity: result.rarity ?? 'commun',
+      rarity: result.rarity ?? 'standard',
     }
   }, [
     brand,
@@ -447,7 +447,7 @@ export default function NewSpot() {
           photo_url: pub.publicUrl,
           confidence: result.confidence,
           estimated_price: result.estimated_price ?? null,
-          rarity: result.rarity ?? 'commun',
+          rarity: result.rarity ?? 'standard',
           production: result.production ?? null,
           lat: pos.coords.latitude,
           lng: pos.coords.longitude,
@@ -518,7 +518,13 @@ export default function NewSpot() {
       floatXp(
         xpForSpot(
           result.estimated_price,
-          (result.rarity ?? 'commun') as 'commun' | 'rare' | 'ultra_rare' | 'unique',
+          (result.rarity ?? 'standard') as
+            | 'standard'
+            | 'premium'
+            | 'performance'
+            | 'exclusif'
+            | 'supercar'
+            | 'hypercar',
         ),
       )
       navigate('/map', { state: { toast: 'Spot publié ! 🔥' } })
