@@ -17,6 +17,7 @@ import {
   distanceMeters,
   escapeHtml,
   timeAgo,
+  type Rarity,
   type Spot,
 } from '../lib/spots'
 import {
@@ -56,6 +57,24 @@ type SpotProps = {
   photo_url: string | null
   spotter: string
   created_at: string
+  /** 2026-06-01 rarity tint upgrade — colours the pin's depletion
+   *  ring + ambient halo so the user can read the rarity layer at a
+   *  glance without opening the popup. Maps to MAP_RARITY_COLOR. */
+  rarity: Rarity
+}
+
+/** Per-rarity pin tint. Mirrors the CollectorCard frame palette so a
+ *  user who learned "gold = hypercar" on Profile reads the same code
+ *  on the map. Includes both a solid hex (used for the ring stroke
+ *  and the photo border on photoless pins) and a glow alpha used for
+ *  the ambient halo behind the pin. */
+const MAP_RARITY_COLOR: Record<Rarity, { stroke: string; glow: string }> = {
+  standard:    { stroke: '#888888', glow: 'rgba(136, 136, 136, 0.55)' },
+  premium:     { stroke: '#4A9EFF', glow: 'rgba(74, 158, 255, 0.55)'  },
+  performance: { stroke: '#EF4444', glow: 'rgba(239, 68, 68, 0.65)'   },
+  exclusif:    { stroke: '#B87333', glow: 'rgba(184, 115, 51, 0.62)'  },
+  supercar:    { stroke: '#9B59B6', glow: 'rgba(155, 89, 182, 0.65)'  },
+  hypercar:    { stroke: '#FFD700', glow: 'rgba(255, 215, 0, 0.70)'   },
 }
 
 // Outer element is positioned by Mapbox (it owns the transform). Inside
@@ -67,6 +86,7 @@ function spotMarkerEl(p: SpotProps, remainingMs: number): HTMLDivElement {
   const r = 21
   const c = 2 * Math.PI * r
   const frac = Math.max(0, Math.min(1, remainingMs / SPOT_TTL_MS))
+  const tint = MAP_RARITY_COLOR[p.rarity] ?? MAP_RARITY_COLOR.standard
 
   const outer = document.createElement('div')
   outer.style.cursor = 'pointer'
@@ -75,6 +95,24 @@ function spotMarkerEl(p: SpotProps, remainingMs: number): HTMLDivElement {
   wrap.style.position = 'relative'
   wrap.style.width = `${size}px`
   wrap.style.height = `${size}px`
+
+  // Rarity halo — soft radial behind the pin, scaled to ~58px so it
+  // bleeds slightly past the depletion ring. Hypercar/Supercar get a
+  // visibly stronger glow; standard stays subtle so the map doesn't
+  // turn into a Christmas tree.
+  const halo = document.createElement('div')
+  halo.style.position = 'absolute'
+  halo.style.left = '50%'
+  halo.style.top = '50%'
+  halo.style.width = '58px'
+  halo.style.height = '58px'
+  halo.style.marginLeft = '-29px'
+  halo.style.marginTop = '-29px'
+  halo.style.borderRadius = '50%'
+  halo.style.background = `radial-gradient(closest-side, ${tint.glow} 0%, rgba(0,0,0,0) 70%)`
+  halo.style.pointerEvents = 'none'
+  halo.style.filter = 'blur(2px)'
+  wrap.appendChild(halo)
 
   const svgns = 'http://www.w3.org/2000/svg'
   const svg = document.createElementNS(svgns, 'svg')
@@ -98,7 +136,7 @@ function spotMarkerEl(p: SpotProps, remainingMs: number): HTMLDivElement {
   arc.setAttribute('cy', String(size / 2))
   arc.setAttribute('r', String(r))
   arc.setAttribute('fill', 'none')
-  arc.setAttribute('stroke', '#E8203A')
+  arc.setAttribute('stroke', tint.stroke)
   arc.setAttribute('stroke-width', '3')
   arc.setAttribute('stroke-linecap', 'round')
   arc.style.strokeDasharray = String(c)
@@ -129,7 +167,9 @@ function spotMarkerEl(p: SpotProps, remainingMs: number): HTMLDivElement {
     photo.style.backgroundSize = 'cover'
     photo.style.backgroundPosition = 'center'
   } else {
-    photo.style.background = '#E8203A'
+    // Photoless pin → tint the fallback car silhouette in the rarity
+    // color so the marker still carries the same visual code.
+    photo.style.background = tint.stroke
     photo.style.display = 'flex'
     photo.style.alignItems = 'center'
     photo.style.justifyContent = 'center'
@@ -750,6 +790,7 @@ export default function MapPage() {
             spotter: names.get(sp.user_id) ?? 'Anonyme',
             created_at: sp.created_at,
             expires_at: sp.expires_at,
+            rarity: sp.rarity ?? 'standard',
           },
         })
       }
@@ -964,6 +1005,13 @@ export default function MapPage() {
               typeof props.photo_url === 'string' ? props.photo_url : null,
             spotter: String(props.spotter ?? 'Anonyme'),
             created_at: String(props.created_at ?? ''),
+            // Coerce to a known rarity bucket; an unknown/legacy value
+            // falls back to standard so the pin still renders with the
+            // neutral grey tint instead of black.
+            rarity: (typeof props.rarity === 'string' &&
+              (props.rarity as string) in MAP_RARITY_COLOR
+              ? (props.rarity as Rarity)
+              : 'standard'),
           }
           key = `s${sp.id}`
           marker = markers[key]
@@ -1161,6 +1209,63 @@ export default function MapPage() {
     searchRef.current = searchQuery
     refreshRef.current?.()
   }, [searchQuery])
+
+  // Search → city geocoding fallback. If the user types a query that
+  // matches zero local spots AND looks like a place name (≥3 chars,
+  // no digits), debounce for 700ms then hit Mapbox geocoding and
+  // flyTo the top hit. Lets "Lyon" zoom to Lyon even when nobody has
+  // spotted there yet. Brand-name queries still hit zero results
+  // and just stay zoomed where the user was — no harm.
+  useEffect(() => {
+    const q = searchQuery.trim()
+    if (q.length < 3) return
+    // Skip if the query already matches at least one local spot —
+    // the user is filtering, not searching.
+    if (visibleCount > 0) return
+    // Skip likely brand+number combos (M3, 911, e63s) — those are
+    // car queries, not place queries.
+    if (/[0-9]/.test(q)) return
+    const map = mapRef.current
+    const token = import.meta.env.VITE_MAPBOX_TOKEN as string | undefined
+    if (!map || !token) return
+
+    const ctl = new AbortController()
+    const t = window.setTimeout(async () => {
+      try {
+        const center = map.getCenter()
+        const proximity = `${center.lng.toFixed(4)},${center.lat.toFixed(4)}`
+        const url =
+          `https://api.mapbox.com/geocoding/v5/mapbox.places/` +
+          `${encodeURIComponent(q)}.json` +
+          `?types=place,locality,neighborhood,region` +
+          `&proximity=${proximity}&limit=1&language=fr` +
+          `&access_token=${token}`
+        const res = await fetch(url, { signal: ctl.signal })
+        if (!res.ok) return
+        const json = (await res.json()) as {
+          features?: { center?: [number, number]; place_name?: string }[]
+        }
+        const hit = json.features?.[0]
+        if (!hit?.center) return
+        map.flyTo({
+          center: hit.center,
+          zoom: 11,
+          speed: 1.4,
+          curve: 1.8,
+          essential: true,
+        })
+        const placeLabel = (hit.place_name ?? q).split(',')[0]
+        setToast(`Vol vers ${placeLabel}`)
+        window.setTimeout(() => setToast(null), 2400)
+      } catch {
+        /* aborted or network — silent */
+      }
+    }, 700)
+    return () => {
+      window.clearTimeout(t)
+      ctl.abort()
+    }
+  }, [searchQuery, visibleCount])
 
   useEffect(() => {
     try {
