@@ -13,7 +13,7 @@ import {
   Camera,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { timeAgo, type Spot } from '../lib/spots'
+import { timeAgo, type Rarity, type Spot } from '../lib/spots'
 import { xpLevel } from '../lib/xp'
 import { GP_2026, circuitImage } from '../lib/f1'
 import { Skeleton } from '../components/Skeleton'
@@ -28,7 +28,6 @@ import {
   fetchSpottingPrediction,
   type PredictionResult,
 } from '../lib/spotPredictions'
-import RarityBadge from '../components/RarityBadge'
 import TitleChip from '../components/TitleChip'
 import { useMyTier } from '../lib/tier'
 
@@ -43,6 +42,23 @@ const SHOW_GAMES_ENTRY = false
  *  the feature without any plumbing work. The Map screen mirrors the
  *  same constant so neither surface fires a Claude call while hidden. */
 const SHOW_WEATHER_IA = false
+
+/** Rarity-tinted text colour for the glass pill that floats over the
+ *  recent-spot photos. Emerald for commun matches the "Apple Sport"
+ *  launch spec; the other tiers borrow the CollectorCard frame
+ *  palette so the badge reads consistent across surfaces. */
+const RARITY_TEXT_COLOR: Record<Rarity, string> = {
+  commun: '#34D399',
+  rare: '#60A5FA',
+  ultra_rare: '#C084FC',
+  unique: '#FACC15',
+}
+const RARITY_PILL_LABEL: Record<Rarity, string> = {
+  commun: 'Commun',
+  rare: 'Rare',
+  ultra_rare: 'Ultra Rare',
+  unique: 'Légendaire',
+}
 
 type CommunityStats = {
   spots_today: number
@@ -713,33 +729,40 @@ function RecentSpotsCarousel({
         >
           {spots.map((s, i) => {
             const pseudo = authors[s.user_id] ?? 'Spotter'
+            const rarityColor = RARITY_TEXT_COLOR[(s.rarity ?? 'commun') as Rarity]
+            const rarityLabel = RARITY_PILL_LABEL[(s.rarity ?? 'commun') as Rarity]
             return (
               <button
                 key={s.id}
                 data-spot-card
                 onClick={() => onOpen(s.id)}
-                className="tappable group relative flex-none text-left"
+                className="tappable flex-none flex-col text-left transition-all duration-300"
                 style={{
                   flexBasis: 'calc(100vw - 60px)',
                   maxWidth: 'calc(100vw - 60px)',
                   scrollSnapAlign: 'start',
                   scrollSnapStop: 'always',
+                  background: 'rgba(20, 20, 22, 0.50)',
+                  border: '1px solid rgba(255, 255, 255, 0.05)',
+                  borderRadius: '28px',
+                  padding: '12px',
+                  backdropFilter: 'saturate(170%) blur(22px)',
+                  WebkitBackdropFilter: 'saturate(170%) blur(22px)',
+                  // shadow-2xl equivalent — big ambient + close contact
+                  boxShadow:
+                    '0 25px 50px rgba(0, 0, 0, 0.50), 0 8px 14px rgba(0, 0, 0, 0.30)',
                 }}
                 aria-label={`Spot ${i + 1} sur ${spots.length} — ${s.brand} ${s.model}`}
               >
-                {/* Floating photo block — isolated container with its
-                    own ambient shadow so the image reads as a print
-                    propped on the page rather than a wallpaper. The
-                    metadata moves OUT of the photo and lands on the
-                    app background below it. */}
+                {/* Inner photo well — rounded-2xl, thin border, neutral
+                    backdrop so the spot photo reads as a framed print
+                    inside the larger glass card. */}
                 <div
-                  className="relative w-full overflow-hidden rounded-3xl"
+                  className="relative w-full overflow-hidden rounded-2xl"
                   style={{
                     aspectRatio: '4 / 5',
-                    background: '#0a0a0a',
+                    background: '#050505',
                     border: '1px solid rgba(255, 255, 255, 0.05)',
-                    boxShadow:
-                      '0 24px 44px rgba(0, 0, 0, 0.55), 0 8px 14px rgba(0, 0, 0, 0.30)',
                   }}
                 >
                   {s.photo_url ? (
@@ -755,38 +778,58 @@ function RecentSpotsCarousel({
                       <Car className="h-12 w-12 text-fg2/30" />
                     </div>
                   )}
-                  <span className="absolute left-3.5 top-3.5">
-                    <RarityBadge rarity={s.rarity} size="sm" />
+
+                  {/* Glass rarity pill — black-50 + white-10 border +
+                      backdrop-blur, with rarity-tinted text colour so
+                      commun reads emerald, rare blue, ultra_rare violet,
+                      unique gold. */}
+                  <span
+                    className="absolute left-3 top-3 rounded-full font-black uppercase"
+                    style={{
+                      background: 'rgba(0, 0, 0, 0.55)',
+                      border: '1px solid rgba(255, 255, 255, 0.10)',
+                      backdropFilter: 'saturate(160%) blur(12px)',
+                      WebkitBackdropFilter: 'saturate(160%) blur(12px)',
+                      padding: '4px 10px',
+                      fontSize: '9px',
+                      letterSpacing: '0.16em',
+                      color: rarityColor,
+                      boxShadow: `0 6px 14px ${rarityColor}26`,
+                    }}
+                  >
+                    {rarityLabel}
                   </span>
                 </div>
 
-                {/* Meta row sits on the app background, no dark gradient
-                    overlay needed. Thin typography + small accent
-                    avatar reads as a magazine caption. */}
-                <div className="mt-3 flex items-center gap-2.5 px-1">
-                  <div
-                    className="flex h-6 w-6 flex-none items-center justify-center rounded-full bg-accent font-extrabold text-white"
-                    style={{ fontSize: '11px' }}
+                {/* Caption block — model on its own row, then a tight
+                    flex of avatar + pseudo + bullet + time. Sits inside
+                    the same glass card as the photo (no app-bg gap). */}
+                <div className="px-1 pb-1 pt-3">
+                  <h4
+                    className="truncate text-white"
+                    style={{
+                      fontSize: '14px',
+                      fontWeight: 900,
+                      letterSpacing: '-0.01em',
+                    }}
                   >
-                    {pseudo.charAt(0).toUpperCase()}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p
-                      className="truncate font-display tracking-tight text-white"
-                      style={{
-                        fontSize: '15px',
-                        fontWeight: 600,
-                        letterSpacing: '-0.01em',
-                      }}
+                    {s.brand} {s.model}
+                  </h4>
+                  <div
+                    className="mt-1.5 flex items-center gap-2 text-fg2"
+                    style={{ fontSize: '11px', fontWeight: 600 }}
+                  >
+                    <div
+                      className="flex h-4 w-4 flex-none items-center justify-center rounded-full bg-accent font-bold text-white"
+                      style={{ fontSize: '9px' }}
                     >
-                      {s.brand} {s.model}
-                    </p>
-                    <p
-                      className="mt-0.5 truncate text-white/45"
-                      style={{ fontSize: '11px' }}
-                    >
-                      {pseudo} · {timeAgo(s.created_at)}
-                    </p>
+                      {pseudo.charAt(0).toUpperCase()}
+                    </div>
+                    <span className="truncate">{pseudo}</span>
+                    <span className="text-fg2/45">•</span>
+                    <span className="truncate text-fg2/65" style={{ fontWeight: 500 }}>
+                      {timeAgo(s.created_at)}
+                    </span>
                   </div>
                 </div>
               </button>
