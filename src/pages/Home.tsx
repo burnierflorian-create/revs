@@ -9,10 +9,8 @@ import {
   Flag,
   Gamepad2,
   Sun,
-  Trophy,
   ChevronRight,
   Camera,
-  Zap,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { timeAgo, type Spot } from '../lib/spots'
@@ -561,51 +559,47 @@ export default function Home() {
                     </p>
                   </div>
                 </div>
-                <div className="mt-5 grid grid-cols-4 gap-2.5">
-                  {[
-                    { v: cd.d, l: 'JOURS' },
-                    { v: cd.h, l: 'HEURES' },
-                    { v: cd.m, l: 'MIN' },
-                    { v: cd.s, l: 'SEC' },
-                  ].map((u) => (
-                    <div
-                      key={u.l}
-                      className="flex flex-col items-center justify-center rounded-2xl py-3.5 text-center"
-                      style={{
-                        // Lighter cockpit-glass per the launch spec —
-                        // bg-black/30 + backdrop-blur-sm reads more
-                        // like a watch face than a recessed read-out,
-                        // matching the rest of the home polish pass.
-                        background: 'rgba(0, 0, 0, 0.30)',
-                        border: '1px solid rgba(255, 255, 255, 0.05)',
-                        backdropFilter: 'saturate(160%) blur(4px)',
-                        WebkitBackdropFilter: 'saturate(160%) blur(4px)',
-                        boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.04)',
-                      }}
+                {/* Single-line digital countdown — "Xd : Yh : Zm" with
+                    mono-spaced font, blinking colons, recessed glass
+                    pill instead of the previous 4-tile grid. Reads as
+                    a stadium scoreboard rather than 4 individual
+                    timers. */}
+                <div className="mt-5 flex justify-end">
+                  <div
+                    className="inline-flex items-baseline gap-1.5 rounded-xl px-4 py-2 font-mono tabular-nums tracking-wider text-white"
+                    style={{
+                      background: 'rgba(0, 0, 0, 0.40)',
+                      border: '1px solid rgba(255, 255, 255, 0.05)',
+                      backdropFilter: 'saturate(160%) blur(8px)',
+                      WebkitBackdropFilter: 'saturate(160%) blur(8px)',
+                      fontSize: '22px',
+                      fontWeight: 900,
+                    }}
+                  >
+                    <span>{String(cd.d).padStart(2, '0')}</span>
+                    <span
+                      className="text-white/55"
+                      style={{ fontSize: '14px' }}
                     >
-                      <div
-                        className="overflow-hidden font-display leading-none tabular-nums tracking-tight text-white"
-                        style={{ fontSize: '26px', fontWeight: 900, height: '1em' }}
-                      >
-                        {/* key={u.v} re-mounts the span on every tick so
-                            the digit-slide-in-down animation runs once
-                            per value change. Container holds the height
-                            steady to avoid layout shift. */}
-                        <span
-                          key={u.v}
-                          className="digit-slide-in-down"
-                        >
-                          {String(u.v).padStart(2, '0')}
-                        </span>
-                      </div>
-                      <div
-                        className="mt-1.5 font-bold uppercase text-white/45"
-                        style={{ fontSize: '9px', letterSpacing: '0.18em' }}
-                      >
-                        {u.l}
-                      </div>
-                    </div>
-                  ))}
+                      d
+                    </span>
+                    <span className="colon-blink text-white/70">:</span>
+                    <span>{String(cd.h).padStart(2, '0')}</span>
+                    <span
+                      className="text-white/55"
+                      style={{ fontSize: '14px' }}
+                    >
+                      h
+                    </span>
+                    <span className="colon-blink text-white/70">:</span>
+                    <span>{String(cd.m).padStart(2, '0')}</span>
+                    <span
+                      className="text-white/55"
+                      style={{ fontSize: '14px' }}
+                    >
+                      m
+                    </span>
+                  </div>
                 </div>
               </div>
             </button>
@@ -618,12 +612,13 @@ export default function Home() {
             className="home-section-enter"
             style={{ animationDelay: '400ms' }}
           >
-            <SectionTitle
-              icon={<Trophy className="h-[20px] w-[20px] text-[#FFD700]" />}
-              label="Challenges de la semaine"
-              size="lg"
-            />
-            <ChallengesCarousel
+            <p
+              className="mb-3 font-extrabold uppercase tracking-widest text-white/45"
+              style={{ fontSize: '11px', letterSpacing: '0.18em' }}
+            >
+              Objectifs de la semaine
+            </p>
+            <ChallengeRings
               challenges={challenges}
               onPick={() => navigate('/challenges')}
             />
@@ -664,195 +659,6 @@ export default function Home() {
           )}
         </section>
       </div>
-    </div>
-  )
-}
-
-/** Single-card swipe carousel for the weekly challenges row. Native
- *  CSS scroll-snap drives the spring-physics-feeling swipe (no JS
- *  pointer maths needed); a scroll listener tracks which card is
- *  centered so the dots indicator stays in sync. 15% of the next
- *  card peeks on the right when one exists. */
-function ChallengesCarousel({
-  challenges,
-  onPick,
-}: {
-  challenges: Challenge[]
-  onPick: () => void
-}) {
-  const scrollerRef = useRef<HTMLDivElement | null>(null)
-  const [idx, setIdx] = useState(0)
-
-  // Translate scrollLeft → centered card index. Each card carries a
-  // fixed flex-basis so cardWidth is deterministic.
-  function onScroll() {
-    const el = scrollerRef.current
-    if (!el) return
-    const card = el.querySelector<HTMLDivElement>('[data-chal-card]')
-    if (!card) return
-    const gap = 12 // matches `gap-3` below
-    const step = card.offsetWidth + gap
-    const next = Math.round(el.scrollLeft / step)
-    if (next !== idx && next >= 0 && next < challenges.length) {
-      setIdx(next)
-    }
-  }
-
-  return (
-    <div>
-      <div
-        ref={scrollerRef}
-        onScroll={onScroll}
-        className="no-scrollbar -mx-5 overflow-x-auto"
-        style={{
-          scrollSnapType: 'x mandatory',
-          scrollBehavior: 'smooth',
-          WebkitOverflowScrolling: 'touch',
-        }}
-      >
-        <div
-          className="flex gap-3 px-5 pb-1"
-          style={{
-            // `scroll-padding-inline` keeps each snap point aligned
-            // with the start of the visible area despite the px-5 pad.
-            scrollPaddingInline: '20px',
-          }}
-        >
-          {challenges.map((c, i) => {
-            const pct = computeChallengePct(c)
-            const done = c.claimed || c.completed
-            return (
-              <button
-                key={c.id}
-                data-chal-card
-                onClick={onPick}
-                className="tappable relative flex min-h-[170px] flex-none flex-col rounded-3xl p-6 text-left"
-                style={{
-                  flexBasis: 'calc(100vw - 60px)',
-                  maxWidth: 'calc(100vw - 60px)',
-                  scrollSnapAlign: 'start',
-                  scrollSnapStop: 'always',
-                  // Glassmorphism: semi-transparent neutral background
-                  // with backdrop-blur. Falls back gracefully on browsers
-                  // without backdrop-filter.
-                  background: done
-                    ? 'linear-gradient(155deg, rgba(34, 197, 94, 0.10) 0%, rgba(20, 20, 22, 0.55) 100%)'
-                    : 'linear-gradient(155deg, rgba(28, 28, 32, 0.60) 0%, rgba(15, 15, 18, 0.50) 100%)',
-                  backdropFilter: 'saturate(160%) blur(22px)',
-                  WebkitBackdropFilter: 'saturate(160%) blur(22px)',
-                  border: done
-                    ? '1px solid rgba(34, 197, 94, 0.40)'
-                    : '1px solid rgba(255, 255, 255, 0.08)',
-                  boxShadow:
-                    '0 22px 44px rgba(0, 0, 0, 0.40), inset 0 1px 0 rgba(255, 255, 255, 0.05)',
-                }}
-                aria-label={`Challenge ${i + 1} sur ${challenges.length} — ${c.title}`}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0 flex-1 space-y-1.5">
-                    <p
-                      className="font-medium uppercase text-white/55"
-                      style={{ fontSize: '10px', letterSpacing: '0.16em' }}
-                    >
-                      Challenge {i + 1}/{challenges.length}
-                    </p>
-                    <p
-                      className="font-display tracking-tighter text-white"
-                      style={{ fontSize: '24px', fontWeight: 800, lineHeight: 1.05, letterSpacing: '-0.025em' }}
-                    >
-                      {c.title}
-                    </p>
-                  </div>
-                  <span
-                    className="flex flex-none items-center gap-1 rounded-2xl px-3 py-1.5 font-extrabold tracking-wider"
-                    style={{
-                      background:
-                        'linear-gradient(135deg, rgba(232,32,58,0.32) 0%, rgba(232,32,58,0.18) 100%)',
-                      border: '1px solid rgba(232,32,58,0.50)',
-                      color: '#FFD9DF',
-                      fontSize: '12px',
-                      boxShadow: '0 8px 22px rgba(232,32,58,0.30)',
-                    }}
-                  >
-                    <Zap className="h-3.5 w-3.5" />+{c.xp_reward} XP
-                  </span>
-                </div>
-                <p
-                  className="mt-3 leading-snug text-white/75"
-                  style={{ fontSize: '14px' }}
-                >
-                  {c.description}
-                </p>
-                <div className="mt-auto pt-5">
-                  <div
-                    className="h-2 w-full overflow-hidden rounded-full"
-                    style={{
-                      background: 'rgba(255, 255, 255, 0.06)',
-                      border: '1px solid rgba(255, 255, 255, 0.05)',
-                    }}
-                  >
-                    <div
-                      className={`h-full rounded-full transition-[width] duration-1000 ease-out ${
-                        done ? 'bg-green-500' : 'bg-accent'
-                      }`}
-                      style={{
-                        width: `${pct}%`,
-                        boxShadow: done
-                          ? '0 0 12px rgba(34, 197, 94, 0.55)'
-                          : '0 0 12px rgba(232, 32, 58, 0.65)',
-                        // First-paint reveal — scaleX from 0 to 1, then
-                        // width transitions take over for future updates.
-                        animation: 'progress-fill-in 720ms var(--ease-soft) both',
-                      }}
-                    />
-                  </div>
-                  <p
-                    className="mt-2 font-medium uppercase text-white/55"
-                    style={{ fontSize: '10px', letterSpacing: '0.14em' }}
-                  >
-                    {done
-                      ? '✓ COMPLÉTÉ'
-                      : `${c.progress} / ${c.target_value}`}
-                  </p>
-                </div>
-              </button>
-            )
-          })}
-        </div>
-      </div>
-
-      {/* Dots indicator — single accent dot for the centered card, rest
-          dimmed. Hidden when there's only one challenge so we don't
-          show a lone dot. */}
-      {challenges.length > 1 && (
-        <div className="mt-3 flex items-center justify-center gap-1.5">
-          {challenges.map((_, i) => {
-            const active = i === idx
-            return (
-              <span
-                key={i}
-                className="rounded-full transition-all duration-300 ease-out"
-                style={{
-                  width: active ? 22 : 6,
-                  height: 6,
-                  background: active
-                    ? 'linear-gradient(90deg, #FF4E68 0%, #E8203A 100%)'
-                    : 'rgba(255,255,255,0.18)',
-                  boxShadow: active
-                    ? '0 0 12px rgba(232, 32, 58, 0.70)'
-                    : undefined,
-                  // Spring-y kick on activation. Re-runs because `key`
-                  // stays — the inline style change retriggers the
-                  // animation when width changes from 6 to 22.
-                  animation: active
-                    ? 'carousel-dot-pop 380ms var(--ease-spring) both'
-                    : undefined,
-                }}
-              />
-            )
-          })}
-        </div>
-      )}
     </div>
   )
 }
@@ -912,78 +718,75 @@ function RecentSpotsCarousel({
                 key={s.id}
                 data-spot-card
                 onClick={() => onOpen(s.id)}
-                className="tappable relative flex-none overflow-hidden rounded-3xl text-left"
+                className="tappable group relative flex-none text-left"
                 style={{
                   flexBasis: 'calc(100vw - 60px)',
                   maxWidth: 'calc(100vw - 60px)',
-                  aspectRatio: '4 / 5',
                   scrollSnapAlign: 'start',
                   scrollSnapStop: 'always',
-                  background: '#0a0a0a',
-                  border: '1px solid rgba(255, 255, 255, 0.06)',
-                  // Multi-layer shadow for the "floating above the
-                  // background" Apple feel — soft contact + wide ambient.
-                  boxShadow:
-                    '0 26px 48px rgba(0, 0, 0, 0.55), 0 10px 18px rgba(0, 0, 0, 0.35)',
                 }}
                 aria-label={`Spot ${i + 1} sur ${spots.length} — ${s.brand} ${s.model}`}
               >
-                {s.photo_url ? (
-                  <img
-                    src={s.photo_url}
-                    alt=""
-                    loading="lazy"
-                    className="absolute inset-0 h-full w-full object-cover"
-                    draggable={false}
-                  />
-                ) : (
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <Car className="h-12 w-12 text-fg2/30" />
-                  </div>
-                )}
-
-                {/* Rarity chip top-left */}
-                <span className="absolute left-3.5 top-3.5">
-                  <RarityBadge rarity={s.rarity} size="sm" />
-                </span>
-
-                {/* Bottom gradient + content */}
+                {/* Floating photo block — isolated container with its
+                    own ambient shadow so the image reads as a print
+                    propped on the page rather than a wallpaper. The
+                    metadata moves OUT of the photo and lands on the
+                    app background below it. */}
                 <div
-                  className="absolute inset-x-0 bottom-0 px-5 pb-5 pt-16"
+                  className="relative w-full overflow-hidden rounded-3xl"
                   style={{
-                    background:
-                      'linear-gradient(to top, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.55) 55%, rgba(0,0,0,0) 100%)',
+                    aspectRatio: '4 / 5',
+                    background: '#0a0a0a',
+                    border: '1px solid rgba(255, 255, 255, 0.05)',
+                    boxShadow:
+                      '0 24px 44px rgba(0, 0, 0, 0.55), 0 8px 14px rgba(0, 0, 0, 0.30)',
                   }}
                 >
-                  <p
-                    className="line-clamp-2 font-display tracking-tighter text-white"
-                    style={{
-                      fontSize: '24px',
-                      fontWeight: 800,
-                      lineHeight: 1.05,
-                      letterSpacing: '-0.02em',
-                    }}
-                  >
-                    {s.brand} {s.model}
-                  </p>
-                  <div className="mt-2.5 flex items-center gap-2">
-                    <div
-                      className="flex h-6 w-6 flex-none items-center justify-center rounded-full bg-accent text-[11px] font-extrabold text-white"
-                    >
-                      {pseudo.charAt(0).toUpperCase()}
+                  {s.photo_url ? (
+                    <img
+                      src={s.photo_url}
+                      alt=""
+                      loading="lazy"
+                      className="absolute inset-0 h-full w-full object-cover"
+                      draggable={false}
+                    />
+                  ) : (
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <Car className="h-12 w-12 text-fg2/30" />
                     </div>
-                    <span
-                      className="truncate font-bold text-white/85"
-                      style={{ fontSize: '12px' }}
+                  )}
+                  <span className="absolute left-3.5 top-3.5">
+                    <RarityBadge rarity={s.rarity} size="sm" />
+                  </span>
+                </div>
+
+                {/* Meta row sits on the app background, no dark gradient
+                    overlay needed. Thin typography + small accent
+                    avatar reads as a magazine caption. */}
+                <div className="mt-3 flex items-center gap-2.5 px-1">
+                  <div
+                    className="flex h-6 w-6 flex-none items-center justify-center rounded-full bg-accent font-extrabold text-white"
+                    style={{ fontSize: '11px' }}
+                  >
+                    {pseudo.charAt(0).toUpperCase()}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p
+                      className="truncate font-display tracking-tight text-white"
+                      style={{
+                        fontSize: '15px',
+                        fontWeight: 600,
+                        letterSpacing: '-0.01em',
+                      }}
                     >
-                      {pseudo}
-                    </span>
-                    <span
-                      className="ml-auto text-white/55"
+                      {s.brand} {s.model}
+                    </p>
+                    <p
+                      className="mt-0.5 truncate text-white/45"
                       style={{ fontSize: '11px' }}
                     >
-                      {timeAgo(s.created_at)}
-                    </span>
+                      {pseudo} · {timeAgo(s.created_at)}
+                    </p>
                   </div>
                 </div>
               </button>
@@ -1137,6 +940,134 @@ function WeatherCard({
         </div>
       </div>
     </section>
+  )
+}
+
+// ─────────────────────────────── CHALLENGE RINGS ───────────────────────────────
+
+/** Replaces the full-width challenge carousel with an Apple-Watch-style
+ *  row of activity rings. Each ring renders the top-3 active challenges
+ *  as an SVG progress circle, colour-cycled red / gold / blue. Tapping
+ *  anywhere on the row jumps to the full /challenges page. */
+const RING_COLORS = ['#E8203A', '#FFD700', '#3B82F6'] as const
+
+function challengeEmoji(c: Challenge): string {
+  // Coarse classifier — enough to read at a glance without per-
+  // challenge metadata. Falls back to 🎯 (target) when nothing fits.
+  const t = c.title.toLowerCase()
+  const b = (c.target_brand ?? '').toLowerCase()
+  const cat = (c.target_category ?? '').toLowerCase()
+  if (b.includes('ferrari')) return '🐎'
+  if (b.includes('lamborghini')) return '🐂'
+  if (b.includes('porsche') || b.includes('audi')) return '🏁'
+  if (b.includes('mercedes')) return '⭐'
+  if (b.includes('bmw')) return '🔵'
+  if (cat.includes('hypercar')) return '👑'
+  if (cat.includes('jdm')) return '🌸'
+  if (cat.includes('youngtimer') || cat.includes('classic')) return '🕰️'
+  if (t.includes('marathon')) return '🏃'
+  if (t.includes('italian')) return '🇮🇹'
+  return '🎯'
+}
+
+function ChallengeRings({
+  challenges,
+  onPick,
+}: {
+  challenges: Challenge[]
+  onPick: () => void
+}) {
+  const top = challenges.slice(0, 3)
+  return (
+    <button
+      onClick={onPick}
+      className="tappable flex w-full items-center justify-around rounded-3xl px-3 py-4"
+      style={{
+        background: 'rgba(20, 20, 22, 0.55)',
+        border: '1px solid rgba(255, 255, 255, 0.05)',
+        backdropFilter: 'saturate(160%) blur(14px)',
+        WebkitBackdropFilter: 'saturate(160%) blur(14px)',
+      }}
+      aria-label={`Voir les ${top.length} défis de la semaine`}
+    >
+      {top.map((c, i) => (
+        <ChallengeRing
+          key={c.id}
+          challenge={c}
+          color={RING_COLORS[i % RING_COLORS.length]}
+        />
+      ))}
+    </button>
+  )
+}
+
+function ChallengeRing({
+  challenge,
+  color,
+}: {
+  challenge: Challenge
+  color: string
+}) {
+  // SVG progress ring: 2πr with r=24 ≈ 150.8. We round-trip to a
+  // clean integer so the stroke-dasharray reads cleanly in DevTools.
+  const r = 24
+  const circ = 2 * Math.PI * r
+  const pct = Math.min(100, Math.max(0, computeChallengePct(challenge)))
+  const offset = circ * (1 - pct / 100)
+  const done = challenge.claimed || challenge.completed
+  const ringColor = done ? '#22C55E' : color
+  return (
+    <div className="flex flex-col items-center gap-2">
+      <div className="relative h-14 w-14">
+        <svg
+          className="h-full w-full"
+          viewBox="0 0 56 56"
+          style={{ transform: 'rotate(-90deg)' }}
+          aria-hidden
+        >
+          <circle
+            cx="28"
+            cy="28"
+            r={r}
+            stroke="rgba(255, 255, 255, 0.08)"
+            strokeWidth="4"
+            fill="transparent"
+          />
+          <circle
+            cx="28"
+            cy="28"
+            r={r}
+            stroke={ringColor}
+            strokeWidth="4"
+            fill="transparent"
+            strokeDasharray={circ.toFixed(2)}
+            strokeDashoffset={offset.toFixed(2)}
+            strokeLinecap="round"
+            style={{
+              transition:
+                'stroke-dashoffset 1000ms cubic-bezier(0.22, 1, 0.36, 1)',
+              filter: `drop-shadow(0 0 6px ${ringColor}88)`,
+            }}
+          />
+        </svg>
+        <span
+          aria-hidden
+          className="absolute inset-0 flex items-center justify-center"
+          style={{ fontSize: '16px' }}
+        >
+          {challengeEmoji(challenge)}
+        </span>
+      </div>
+      <span
+        className="line-clamp-1 max-w-[80px] font-bold uppercase text-white/55"
+        style={{
+          fontSize: '9px',
+          letterSpacing: '0.10em',
+        }}
+      >
+        {challenge.title}
+      </span>
+    </div>
   )
 }
 
