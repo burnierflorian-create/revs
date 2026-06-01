@@ -322,9 +322,20 @@ function FrontFace({
           {shortName + (spot.year ? ` · ${spot.year}` : '')}
         </p>
         <div className="mt-2 flex items-center justify-between">
+          {/* +XP micro-pastille — semi-transparent accent-tinted pill so
+              the gain pops against the neutral card body. Matches the
+              2026-06-01 collection polish: micro-pastilles instead of
+              bare red text. */}
           <span
-            className="font-extrabold text-accent"
-            style={{ fontSize: '11px' }}
+            className="font-black tabular-nums text-accent"
+            style={{
+              background: 'rgba(232, 32, 58, 0.12)',
+              border: '1px solid rgba(232, 32, 58, 0.28)',
+              padding: '2px 8px',
+              borderRadius: '999px',
+              fontSize: '10px',
+              letterSpacing: '0.01em',
+            }}
           >
             +{xp} XP
           </span>

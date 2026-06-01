@@ -46,7 +46,6 @@ export default function Profile() {
   const [earlyAdopter, setEarlyAdopter] = useState(false)
   const [meId, setMeId] = useState<string | null>(null)
   const [followers, setFollowers] = useState(0)
-  const [following, setFollowing] = useState(0)
   const [likesReceived, setLikesReceived] = useState(0)
   const [animPct, setAnimPct] = useState(0)
   // Local-only UI state: which of the two sub-tabs (Garage vs
@@ -94,7 +93,6 @@ export default function Profile() {
         profRes,
         subRes,
         followersRes,
-        followingRes,
       ] = await Promise.all([
           supabase
             .from('spots')
@@ -121,10 +119,6 @@ export default function Profile() {
             .from('followers')
             .select('follower_id', { count: 'exact', head: true })
             .eq('following_id', user.id),
-          supabase
-            .from('followers')
-            .select('following_id', { count: 'exact', head: true })
-            .eq('follower_id', user.id),
         ])
 
       const myCreated =
@@ -183,7 +177,6 @@ export default function Profile() {
       setEarlyAdopter(earlier < 100)
       setMeId(user.id)
       setFollowers(followersRes.count ?? 0)
-      setFollowing(followingRes.count ?? 0)
       setLoading(false)
 
       // REVS RACE stats — fire-and-forget, no blocking on render.
@@ -396,9 +389,6 @@ export default function Profile() {
           <div className="mt-2 flex justify-center">
             <TitleChip xp={xp} title={title} />
           </div>
-          {ville && (
-            <p className="mt-1.5 text-sm text-fg2">{ville}</p>
-          )}
           {/* Subscribers see their plan badge in place of the XP level
               pill — once you've paid, "Débutant" feels off. Free tier
               keeps the level pill as before. */}
@@ -434,36 +424,67 @@ export default function Profile() {
               {level.name}
             </span>
           )}
-          {joined && (
-            <p className="mt-2 text-xs text-fg2">Membre depuis {joined}</p>
+          {/* Single subtitle line — ville • Membre depuis X. Replaces the
+              two previous standalone paragraphs so the identity block
+              reads in three vertical bands instead of five. */}
+          {(ville || joined) && (
+            <p className="mt-2 text-xs font-semibold text-fg2">
+              {ville && <span>{ville}</span>}
+              {ville && joined && (
+                <span className="mx-1.5 text-fg2/40" aria-hidden>
+                  •
+                </span>
+              )}
+              {joined && <span>Membre depuis {joined}</span>}
+            </p>
           )}
-          {meId && (
-            <div className="mt-4 flex justify-center">
-              <button
-                onClick={() => navigate(`/u/${meId}`)}
-                className="tappable grid grid-cols-[1fr_1px_1fr] items-center gap-x-5 rounded-2xl bg-card px-6 py-3"
-                style={{ border: '1px solid var(--color-border)', minWidth: '220px' }}
-              >
-                <span className="flex flex-col items-center">
-                  <span className="font-display text-lg font-extrabold tracking-tighter text-fg">
-                    {followers}
-                  </span>
-                  <span className="label-up text-[10px] text-fg2">
-                    Abonnés
-                  </span>
-                </span>
-                <span className="h-7 w-px bg-white/[0.08] justify-self-center" />
-                <span className="flex flex-col items-center">
-                  <span className="font-display text-lg font-extrabold tracking-tighter text-fg">
-                    {following}
-                  </span>
-                  <span className="label-up text-[10px] text-fg2">
-                    Abonnements
-                  </span>
-                </span>
-              </button>
+          {/* Unified stats pill — replaces both the followers/following
+              card and the section-3 stats row per the 2026-06-01 profile
+              refocus. Four tappable stats on one line (spots, marques,
+              rang, abonnés), separated by tiny dot bullets. Each stat
+              keeps its own deep-link target, the pill is just shared
+              chrome. */}
+          <div className="mt-4 flex justify-center">
+            <div
+              className="inline-flex items-center gap-3.5 rounded-full"
+              style={{
+                background: 'rgba(20, 20, 22, 0.40)',
+                border: '1px solid rgba(255, 255, 255, 0.05)',
+                padding: '8px 16px',
+              }}
+            >
+              <ProfileStatTiny
+                value={String(total)}
+                label="spots"
+                onClick={() => navigate('/ma-galerie')}
+              />
+              <span className="h-1 w-1 rounded-full bg-fg2/40" aria-hidden />
+              <ProfileStatTiny
+                value={String(uniqueBrands)}
+                label="marques"
+                onClick={() => navigate('/mes-marques')}
+              />
+              <span className="h-1 w-1 rounded-full bg-fg2/40" aria-hidden />
+              <ProfileStatTiny
+                value={rank ? `#${rank}` : '—'}
+                label="rang"
+                onClick={() => navigate('/classement')}
+              />
+              {meId && (
+                <>
+                  <span
+                    className="h-1 w-1 rounded-full bg-fg2/40"
+                    aria-hidden
+                  />
+                  <ProfileStatTiny
+                    value={String(followers)}
+                    label={followers === 1 ? 'abonné' : 'abonnés'}
+                    onClick={() => navigate(`/u/${meId}`)}
+                  />
+                </>
+              )}
             </div>
-          )}
+          </div>
         </div>
 
         {/* SECTION 2 — XP */}
@@ -497,35 +518,6 @@ export default function Profile() {
               ? 'Niveau maximum atteint 👑'
               : `Plus que ${level.toNext} XP avant ${level.next}`}
           </p>
-        </section>
-
-        {/* SECTION 3 — Stats single horizontal line (replaces the
-            old 3-column grid). Each block stays tappable, separated
-            by bullet dots, and lives between two hairline rules. */}
-        <section
-          className="flex items-center justify-center gap-5 py-3.5"
-          style={{
-            borderTop: '1px solid rgba(255,255,255,0.05)',
-            borderBottom: '1px solid rgba(255,255,255,0.05)',
-          }}
-        >
-          <ProfileStatInline
-            value={String(total)}
-            label="spots"
-            onClick={() => navigate('/ma-galerie')}
-          />
-          <span className="h-1 w-1 rounded-full bg-fg2/50" aria-hidden />
-          <ProfileStatInline
-            value={String(uniqueBrands)}
-            label="marques"
-            onClick={() => navigate('/mes-marques')}
-          />
-          <span className="h-1 w-1 rounded-full bg-fg2/50" aria-hidden />
-          <ProfileStatInline
-            value={rank ? `#${rank}` : '—'}
-            label="rang"
-            onClick={() => navigate('/classement')}
-          />
         </section>
 
         {/* PREMIUM BANNER (free users only, isolated at top) */}
@@ -577,7 +569,10 @@ export default function Profile() {
             })}
           </div>
 
-          <div className="mt-5">
+          {/* Tab content wrapper — px-2 nets px-6 from the screen edge
+              (parent already carries px-4). Gives the 2-col collection
+              grid breathing room so cards don't slam the phone edge. */}
+          <div className="mt-5 px-2">
             {profileTab === 'collection' && <MyCollection spots={spots} />}
 
             {profileTab === 'garage' &&
@@ -764,10 +759,11 @@ export default function Profile() {
 
 // ─────────────────────── Profile helpers (post-restructure) ───────────────────────
 
-/** Inline stat tappable used by the single-line stats row that
- *  replaced the old 3-column boxed grid. Big number + tiny label
- *  sit on the same baseline; dots separate them in the parent. */
-function ProfileStatInline({
+/** Tiny tappable stat used inside the unified pill that replaced the
+ *  followers/following card AND the old section-3 stats row. Compact
+ *  one-line format — bold white number, semibold neutral label, same
+ *  baseline. Dots between stats are owned by the parent. */
+function ProfileStatTiny({
   value,
   label,
   onClick,
@@ -779,20 +775,16 @@ function ProfileStatInline({
   return (
     <button
       onClick={onClick}
-      className="tappable flex items-baseline gap-1.5"
+      className="tappable inline-flex items-baseline gap-1 text-fg2"
+      style={{ fontSize: '11px', fontWeight: 600 }}
     >
       <span
-        className="font-display font-extrabold tracking-tighter text-fg tabular-nums"
-        style={{ fontSize: '17px' }}
+        className="font-black tabular-nums text-white"
+        style={{ fontSize: '12px' }}
       >
         {value}
       </span>
-      <span
-        className="font-medium text-fg2 lowercase"
-        style={{ fontSize: '11px' }}
-      >
-        {label}
-      </span>
+      <span className="lowercase">{label}</span>
     </button>
   )
 }
