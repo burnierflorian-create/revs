@@ -58,14 +58,16 @@ html[data-tier='vip'] {
   transform: scale(0.97);
 }
 
-/* Liquid Glass effect — used for the bottom nav. Bumped to 92% alpha
-   + xl blur during the launch polish pass so page content can never
-   "leak through" the nav (the previous 0.75 alpha let stats blocks
-   read through). The top hairline matches the new launch spec. */
+/* Liquid Glass effect — used for the bottom nav. Tuned to bg-black/80
+   + backdrop-blur-md per the launch spec so the underlying scroll
+   reads through as soft shapes (a touch of "iOS Maps" feel) instead
+   of being fully opaqued out. The combination with the new
+   calc(9rem + safe-area) tab-pane padding still prevents real text
+   collisions; the bar just feels lighter. */
 .glass {
-  background: rgba(10, 10, 10, 0.92);
-  backdrop-filter: saturate(180%) blur(24px);
-  -webkit-backdrop-filter: saturate(180%) blur(24px);
+  background: rgba(0, 0, 0, 0.80);
+  backdrop-filter: saturate(180%) blur(12px);
+  -webkit-backdrop-filter: saturate(180%) blur(12px);
   border-top: 1px solid rgba(255, 255, 255, 0.05);
 }
 

@@ -313,12 +313,13 @@ export default function Home() {
     <div
       className="relative min-h-screen px-5 pt-[max(1rem,env(safe-area-inset-top))] text-fg"
       style={{
-        // Subtle dark radial wash anchored at the top so the
-        // "Bonjour {name}" block reads against a slight depth
-        // gradient instead of flat black, then falls back to the
-        // app background tone for the rest of the scroll.
+        // Diagonal premium wash per the launch polish spec —
+        // neutral-950 (#0a0a0a) → black → neutral-950 sweep from
+        // top-left to bottom-right. Reads as a single luxury
+        // surface across the whole scroll rather than a top-only
+        // radial pool.
         background:
-          'radial-gradient(ellipse 110% 60% at 50% -10%, #1c1c1f 0%, #0a0a0a 65%, var(--color-bg) 100%)',
+          'linear-gradient(135deg, #0a0a0a 0%, #050505 50%, #0a0a0a 100%)',
       }}
     >
       {/* HEADER — compact greeting + identity pills + settings */}
@@ -569,15 +570,16 @@ export default function Home() {
                   ].map((u) => (
                     <div
                       key={u.l}
-                      className="flex flex-col items-center justify-center rounded-3xl py-3.5 text-center"
+                      className="flex flex-col items-center justify-center rounded-2xl py-3.5 text-center"
                       style={{
-                        // Cockpit-glass look — translucent neutral tile
-                        // with a thin top hairline, soft blur, and inset
-                        // shadow that suggests a recessed digital read-out.
-                        background: 'rgba(20, 20, 20, 0.40)',
+                        // Lighter cockpit-glass per the launch spec —
+                        // bg-black/30 + backdrop-blur-sm reads more
+                        // like a watch face than a recessed read-out,
+                        // matching the rest of the home polish pass.
+                        background: 'rgba(0, 0, 0, 0.30)',
                         border: '1px solid rgba(255, 255, 255, 0.05)',
-                        backdropFilter: 'saturate(160%) blur(12px)',
-                        WebkitBackdropFilter: 'saturate(160%) blur(12px)',
+                        backdropFilter: 'saturate(160%) blur(4px)',
+                        WebkitBackdropFilter: 'saturate(160%) blur(4px)',
                         boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.04)',
                       }}
                     >
