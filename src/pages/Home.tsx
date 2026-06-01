@@ -1,21 +1,19 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Settings,
-  Car,
   Cloud,
   CloudRain,
-  Flame,
-  Flag,
   Gamepad2,
   Sun,
   ChevronRight,
   Camera,
+  Target,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { timeAgo, type Rarity, type Spot } from '../lib/spots'
+import { type Spot } from '../lib/spots'
 import { xpLevel } from '../lib/xp'
-import { GP_2026, circuitImage } from '../lib/f1'
+import { GP_2026 } from '../lib/f1'
 import { Skeleton } from '../components/Skeleton'
 import {
   challengePct as computeChallengePct,
@@ -43,59 +41,10 @@ const SHOW_GAMES_ENTRY = false
  *  same constant so neither surface fires a Claude call while hidden. */
 const SHOW_WEATHER_IA = false
 
-/** Rarity-tinted text colour for the glass pill that floats over the
- *  recent-spot photos. Emerald for commun matches the "Apple Sport"
- *  launch spec; the other tiers borrow the CollectorCard frame
- *  palette so the badge reads consistent across surfaces. */
-const RARITY_TEXT_COLOR: Record<Rarity, string> = {
-  commun: '#34D399',
-  rare: '#60A5FA',
-  ultra_rare: '#C084FC',
-  unique: '#FACC15',
-}
-const RARITY_PILL_LABEL: Record<Rarity, string> = {
-  commun: 'Commun',
-  rare: 'Rare',
-  ultra_rare: 'Ultra Rare',
-  unique: 'Légendaire',
-}
-
 type CommunityStats = {
   spots_today: number
   online_now: number
   top_brand: string | null
-}
-
-function SectionTitle({
-  icon,
-  label,
-  action,
-  size = 'md',
-}: {
-  icon: ReactNode
-  label: string
-  action?: ReactNode
-  /** `lg` bumps the title to a bigger, tighter-tracking display style
-   *  used by the post-polish home sections (Challenges, Spots récents). */
-  size?: 'md' | 'lg'
-}) {
-  const isLarge = size === 'lg'
-  return (
-    <div className={`flex items-center justify-between ${isLarge ? 'mb-4' : 'mb-3'}`}>
-      <h2
-        className="flex items-center gap-2 font-display font-extrabold text-fg"
-        style={
-          isLarge
-            ? { fontSize: '22px', letterSpacing: '-0.02em', lineHeight: 1.1 }
-            : { fontSize: '16px' }
-        }
-      >
-        <span className={isLarge ? '' : 'text-accent'}>{icon}</span>
-        {label}
-      </h2>
-      {action}
-    </div>
-  )
 }
 
 export default function Home() {
@@ -103,7 +52,6 @@ export default function Home() {
   const [loading, setLoading] = useState(true)
   const [name, setName] = useState('Spotter')
   const [xp, setXp] = useState(0)
-  const [recent, setRecent] = useState<Spot[]>([])
   const [streak, setStreak] = useState(0)
   const [challenges, setChallenges] = useState<Challenge[]>([])
   const [radarActive, setRadarActive] = useState(false)
@@ -113,9 +61,6 @@ export default function Home() {
   const [title, setTitle] = useState<string | null>(null)
   const [ville, setVille] = useState<string>('')
   const [now, setNow] = useState(() => Date.now())
-  // Author pseudo lookup for the Spots récents carousel — populated
-  // in a 2nd query after the recent spots load.
-  const [recentAuthors, setRecentAuthors] = useState<Record<string, string>>({})
   // Weather-style AI hook card under the community stats. Re-introduces
   // the prediction fetch I'd ripped from Home in commit e8f035b — the
   // new card has a different shape (icon + temp + concise message) and
@@ -200,34 +145,13 @@ export default function Home() {
 
       setName(pseudo)
       setXp((xpRes.data as number | null) ?? 0)
+      // recentSpots is still derived here even though Home no longer
+      // renders the "Spots récents" carousel — it feeds the spotting-
+      // prediction prompt below (brand counts + last car). The home
+      // RPC and the AI prompt are unchanged; only the UI surface
+      // dropped the carousel.
       const recentSpots = (recentRes.data ?? []) as Spot[]
-      setRecent(recentSpots)
       setLoading(false)
-
-      // Pseudo lookup for the Spots récents carousel. The recent fetch
-      // doesn't join profiles, so we follow up with a single IN-query
-      // over the distinct author ids. Failure is silent — we fall back
-      // to "Spotter" in the carousel render.
-      const authorIds = [
-        ...new Set(recentSpots.map((s) => s.user_id).filter(Boolean)),
-      ]
-      if (authorIds.length) {
-        supabase
-          .from('profiles')
-          .select('user_id, pseudo')
-          .in('user_id', authorIds)
-          .then(({ data }) => {
-            if (!active) return
-            const m: Record<string, string> = {}
-            for (const p of (data ?? []) as {
-              user_id: string
-              pseudo: string | null
-            }[]) {
-              m[p.user_id] = (p.pseudo ?? '').trim() || 'Spotter'
-            }
-            setRecentAuthors(m)
-          })
-      }
 
       // AI weather hook — only fires when the user has set their city
       // and isn't blocking the rest of the home grid. The Map sheet
@@ -444,6 +368,18 @@ export default function Home() {
       </header>
 
       <div className="space-y-8 pb-10">
+        {/* REVS RADAR — top-of-page hero per the 2026-06-01 car-spotting
+            refocus. Sits in the slot the F1 hero used to occupy, anchors
+            the home tab to its core ADN (spotting + hot zones). Pulses
+            a mini-sonar on the left and reads a city-aware hot-zone
+            count derived from the community stats RPC on the right.
+            Taps through to /radar. */}
+        <RevsRadarCard
+          ville={ville}
+          community={community}
+          onTap={() => navigate('/radar')}
+        />
+
         {/* "Spot du jour / de la semaine" daily card was removed from
             Home per 2026-05-28 cleanup. Code for DailyCard /
             DailyCardSpotRow has been pruned along with the
@@ -531,97 +467,6 @@ export default function Home() {
           </section>
         )}
 
-        {/* PROCHAIN GP — circuit image as backdrop + larger countdown. */}
-        {nextGp && (
-          <section
-            className="home-section-enter"
-            style={{ animationDelay: '300ms' }}
-          >
-            <SectionTitle
-              icon={<Flag className="h-[18px] w-[18px]" />}
-              label="Prochain GP"
-            />
-            <button
-              onClick={() => navigate(`/f1/${nextGp.round}`)}
-              className="tappable relative block w-full overflow-hidden rounded-4xl text-left"
-              style={{ border: '1px solid var(--color-border)' }}
-            >
-              {/* Circuit photo on the back layer; gradient on top keeps the
-                  numbers and labels legible regardless of the underlying art. */}
-              <img
-                src={circuitImage(nextGp.round)}
-                alt=""
-                aria-hidden
-                loading="lazy"
-                className="absolute inset-0 h-full w-full object-cover opacity-50"
-              />
-              <div
-                aria-hidden
-                className="absolute inset-0"
-                style={{
-                  background:
-                    'linear-gradient(160deg, rgba(74,15,22,0.85) 0%, rgba(15,5,7,0.92) 60%, rgba(0,0,0,0.95) 100%)',
-                }}
-              />
-              <div className="relative p-5">
-                <div className="flex items-center gap-3">
-                  <span className="text-4xl leading-none">{nextGp.flag}</span>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate font-display text-lg font-extrabold tracking-tighter text-fg">
-                      {nextGp.name}
-                    </p>
-                    <p className="truncate text-xs text-fg2">
-                      {nextGp.circuit}
-                    </p>
-                  </div>
-                </div>
-                {/* Single-line digital countdown — "Xd : Yh : Zm" with
-                    mono-spaced font, blinking colons, recessed glass
-                    pill instead of the previous 4-tile grid. Reads as
-                    a stadium scoreboard rather than 4 individual
-                    timers. */}
-                <div className="mt-5 flex justify-end">
-                  <div
-                    className="inline-flex items-baseline gap-1.5 rounded-xl px-4 py-2 font-mono tabular-nums tracking-wider text-white"
-                    style={{
-                      background: 'rgba(0, 0, 0, 0.40)',
-                      border: '1px solid rgba(255, 255, 255, 0.05)',
-                      backdropFilter: 'saturate(160%) blur(8px)',
-                      WebkitBackdropFilter: 'saturate(160%) blur(8px)',
-                      fontSize: '22px',
-                      fontWeight: 900,
-                    }}
-                  >
-                    <span>{String(cd.d).padStart(2, '0')}</span>
-                    <span
-                      className="text-white/55"
-                      style={{ fontSize: '14px' }}
-                    >
-                      d
-                    </span>
-                    <span className="colon-blink text-white/70">:</span>
-                    <span>{String(cd.h).padStart(2, '0')}</span>
-                    <span
-                      className="text-white/55"
-                      style={{ fontSize: '14px' }}
-                    >
-                      h
-                    </span>
-                    <span className="colon-blink text-white/70">:</span>
-                    <span>{String(cd.m).padStart(2, '0')}</span>
-                    <span
-                      className="text-white/55"
-                      style={{ fontSize: '14px' }}
-                    >
-                      m
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </button>
-          </section>
-        )}
-
         {/* 6 — CHALLENGES DE LA SEMAINE (swipe carousel) */}
         {challenges.length > 0 && (
           <section
@@ -641,230 +486,193 @@ export default function Home() {
           </section>
         )}
 
-        {/* SPOTS RÉCENTS — single-card swipe carousel */}
-        <section
-          className="home-section-enter"
-          style={{ animationDelay: '500ms' }}
-        >
-          <SectionTitle
-            icon={<Flame className="h-[20px] w-[20px] text-accent" />}
-            label="Spots récents"
-            size="lg"
-          />
-          {recent.length === 0 ? (
-            <div className="flex flex-col items-center rounded-2xl border border-white/5 bg-card px-6 py-10 text-center">
-              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-accent/10">
-                <Car className="h-8 w-8 text-accent/70" />
+        {/* PROCHAIN GP — relegated to the bottom as a secondary card per
+            the 2026-06-01 car-spotting refocus. The full circuit-art
+            hero moved out of the top slot; this compact pill keeps the
+            countdown reachable without competing with the radar above. */}
+        {nextGp && (
+          <section
+            className="home-section-enter"
+            style={{ animationDelay: '500ms' }}
+          >
+            <p
+              className="mb-3 font-extrabold uppercase tracking-widest text-white/40"
+              style={{ fontSize: '11px', letterSpacing: '0.18em' }}
+            >
+              Motorsport actu
+            </p>
+            <button
+              onClick={() => navigate(`/f1/${nextGp.round}`)}
+              className="tappable relative block w-full overflow-hidden rounded-3xl text-left transition-opacity hover:opacity-100"
+              style={{
+                border: '1px solid rgba(255, 255, 255, 0.05)',
+                background:
+                  'linear-gradient(135deg, rgba(20,20,22,0.85) 0%, rgba(5,5,7,0.95) 100%)',
+                opacity: 0.78,
+              }}
+            >
+              <div className="relative flex items-center justify-between gap-4 p-4">
+                <div className="flex min-w-0 flex-1 items-center gap-3">
+                  <span className="text-2xl leading-none">{nextGp.flag}</span>
+                  <div className="min-w-0 flex-1">
+                    <p
+                      className="truncate font-display font-bold tracking-tight text-white"
+                      style={{ fontSize: '14px' }}
+                    >
+                      {nextGp.name}
+                    </p>
+                    <p className="truncate text-[11px] text-fg2 font-medium">
+                      {nextGp.circuit}
+                    </p>
+                  </div>
+                </div>
+                <div
+                  className="inline-flex flex-none items-baseline gap-1 rounded-lg font-mono tabular-nums text-white"
+                  style={{
+                    background: 'rgba(0, 0, 0, 0.40)',
+                    border: '1px solid rgba(255, 255, 255, 0.05)',
+                    padding: '6px 12px',
+                    fontSize: '12px',
+                    fontWeight: 700,
+                  }}
+                >
+                  <span>{String(cd.d).padStart(2, '0')}</span>
+                  <span className="text-white/45">d</span>
+                  <span className="colon-blink text-white/60">:</span>
+                  <span>{String(cd.h).padStart(2, '0')}</span>
+                  <span className="text-white/45">h</span>
+                  <span className="colon-blink text-white/60">:</span>
+                  <span>{String(cd.m).padStart(2, '0')}</span>
+                  <span className="text-white/45">m</span>
+                </div>
               </div>
-              <p className="mt-4 font-medium text-fg">
-                Sois le premier à spotter ici
-              </p>
-              <button
-                onClick={() => navigate('/new-spot')}
-                className="mt-4 rounded-full bg-accent px-6 py-2.5 text-sm font-semibold text-fg"
-              >
-                Spotter
-              </button>
-            </div>
-          ) : (
-            <RecentSpotsCarousel
-              spots={recent}
-              authors={recentAuthors}
-              onOpen={(id) => navigate(`/spot/${id}`)}
-            />
-          )}
-        </section>
+            </button>
+          </section>
+        )}
       </div>
     </div>
   )
 }
 
-/** Single-card swipe carousel for the recent spots row. Same pattern
- *  as ChallengesCarousel: native CSS scroll-snap drives the swipe
- *  feel, scrollLeft is converted to an index for the dot indicator.
- *  Each card is 85% of the viewport so the next spot peeks ~15% on
- *  the right edge. Photo dominates the layout; brand+model land big
- *  at the bottom over a dark gradient, rarity chip floats top-left,
- *  spotter pseudo sits under the title. */
-function RecentSpotsCarousel({
-  spots,
-  authors,
-  onOpen,
-}: {
-  spots: Spot[]
-  authors: Record<string, string>
-  onOpen: (id: string) => void
-}) {
-  const scrollerRef = useRef<HTMLDivElement | null>(null)
-  const [idx, setIdx] = useState(0)
 
-  function onScroll() {
-    const el = scrollerRef.current
-    if (!el) return
-    const card = el.querySelector<HTMLDivElement>('[data-spot-card]')
-    if (!card) return
-    const gap = 12 // matches `gap-3` below
-    const step = card.offsetWidth + gap
-    const next = Math.round(el.scrollLeft / step)
-    if (next !== idx && next >= 0 && next < spots.length) {
-      setIdx(next)
-    }
-  }
+// ──────────────────────────────── REVS RADAR ────────────────────────────────
+
+/** Top-of-page hero per the 2026-06-01 car-spotting refocus. Pulls the
+ *  user's city from profiles.ville and the community RPC's spots_today
+ *  to derive a hot-zone count, then renders a black-satin glass card
+ *  with a mini sonar on the left and a city-aware status line on the
+ *  right. Taps through to /radar so the user lands on the live map.
+ *  The sonar uses two stacked ping rings (Tailwind's animate-ping
+ *  keyframes) — no JS animation loop, no canvas, just CSS so battery
+ *  cost stays at zero.
+ *
+ *  Hot-zone count derivation: spots_today / 5, floored, clamped to
+ *  [1, 9]. We don't surface raw activity numbers — "3 zones" reads
+ *  more like a radar UI than "47 spots aujourd'hui". When the day
+ *  is dead (≤2 community spots), the copy flips to a "sois le
+ *  premier" tone instead of overpromising activity. */
+function RevsRadarCard({
+  ville,
+  community,
+  onTap,
+}: {
+  ville: string
+  community: CommunityStats | null
+  onTap: () => void
+}) {
+  const cityLabel = ville?.trim() || 'Ta zone'
+  const today = community?.spots_today ?? 0
+  const zones = Math.min(9, Math.max(1, Math.floor(today / 5)))
+  const aliveDay = today >= 3
+  const headline = aliveDay
+    ? `${cityLabel} est active`
+    : `${cityLabel} attend ton scan`
+  const subline = aliveDay
+    ? `${zones} zone${zones > 1 ? 's' : ''} à forte activité détectée${zones > 1 ? 's' : ''}. Prends ton objectif, les bolides sortent.`
+    : 'Zone calme. Sois le premier à allumer le radar aujourd\'hui.'
 
   return (
-    <div>
-      <div
-        ref={scrollerRef}
-        onScroll={onScroll}
-        className="no-scrollbar -mx-5 overflow-x-auto"
+    <section className="home-section-enter" style={{ animationDelay: '0ms' }}>
+      <button
+        onClick={onTap}
+        className="tappable flex w-full items-center gap-4 text-left transition-transform active:scale-[0.99]"
         style={{
-          scrollSnapType: 'x mandatory',
-          scrollBehavior: 'smooth',
-          WebkitOverflowScrolling: 'touch',
+          background: 'rgba(20, 20, 22, 0.55)',
+          border: '1px solid rgba(255, 255, 255, 0.05)',
+          borderRadius: '28px',
+          padding: '20px',
+          backdropFilter: 'saturate(170%) blur(22px)',
+          WebkitBackdropFilter: 'saturate(170%) blur(22px)',
+          boxShadow:
+            '0 24px 48px rgba(0, 0, 0, 0.50), 0 8px 14px rgba(0, 0, 0, 0.30)',
         }}
+        aria-label="Ouvrir REVS RADAR"
       >
+        {/* Mini sonar — two concentric ping rings + centred bullseye
+            inside a circular well. The outer ring is a tiny bit slower
+            than the inner so the pulses interlace rather than ping in
+            lockstep. Pure CSS, GPU-friendly. */}
         <div
-          className="flex gap-3 px-5 pb-1"
-          style={{ scrollPaddingInline: '20px' }}
+          className="relative flex h-16 w-16 flex-none items-center justify-center overflow-hidden rounded-full"
+          style={{
+            background: 'rgba(0, 0, 0, 0.40)',
+            border: '1px solid rgba(232, 32, 58, 0.18)',
+          }}
         >
-          {spots.map((s, i) => {
-            const pseudo = authors[s.user_id] ?? 'Spotter'
-            const rarityColor = RARITY_TEXT_COLOR[(s.rarity ?? 'commun') as Rarity]
-            const rarityLabel = RARITY_PILL_LABEL[(s.rarity ?? 'commun') as Rarity]
-            return (
-              <button
-                key={s.id}
-                data-spot-card
-                onClick={() => onOpen(s.id)}
-                className="tappable flex-none flex-col text-left transition-all duration-300"
-                style={{
-                  flexBasis: 'calc(100vw - 60px)',
-                  maxWidth: 'calc(100vw - 60px)',
-                  scrollSnapAlign: 'start',
-                  scrollSnapStop: 'always',
-                  background: 'rgba(20, 20, 22, 0.50)',
-                  border: '1px solid rgba(255, 255, 255, 0.05)',
-                  borderRadius: '28px',
-                  padding: '12px',
-                  backdropFilter: 'saturate(170%) blur(22px)',
-                  WebkitBackdropFilter: 'saturate(170%) blur(22px)',
-                  // shadow-2xl equivalent — big ambient + close contact
-                  boxShadow:
-                    '0 25px 50px rgba(0, 0, 0, 0.50), 0 8px 14px rgba(0, 0, 0, 0.30)',
-                }}
-                aria-label={`Spot ${i + 1} sur ${spots.length} — ${s.brand} ${s.model}`}
-              >
-                {/* Inner photo well — rounded-2xl, thin border, neutral
-                    backdrop so the spot photo reads as a framed print
-                    inside the larger glass card. */}
-                <div
-                  className="relative w-full overflow-hidden rounded-2xl"
-                  style={{
-                    aspectRatio: '4 / 5',
-                    background: '#050505',
-                    border: '1px solid rgba(255, 255, 255, 0.05)',
-                  }}
-                >
-                  {s.photo_url ? (
-                    <img
-                      src={s.photo_url}
-                      alt=""
-                      loading="lazy"
-                      className="absolute inset-0 h-full w-full object-cover"
-                      draggable={false}
-                    />
-                  ) : (
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <Car className="h-12 w-12 text-fg2/30" />
-                    </div>
-                  )}
-
-                  {/* Glass rarity pill — black-50 + white-10 border +
-                      backdrop-blur, with rarity-tinted text colour so
-                      commun reads emerald, rare blue, ultra_rare violet,
-                      unique gold. */}
-                  <span
-                    className="absolute left-3 top-3 rounded-full font-black uppercase"
-                    style={{
-                      background: 'rgba(0, 0, 0, 0.55)',
-                      border: '1px solid rgba(255, 255, 255, 0.10)',
-                      backdropFilter: 'saturate(160%) blur(12px)',
-                      WebkitBackdropFilter: 'saturate(160%) blur(12px)',
-                      padding: '4px 10px',
-                      fontSize: '9px',
-                      letterSpacing: '0.16em',
-                      color: rarityColor,
-                      boxShadow: `0 6px 14px ${rarityColor}26`,
-                    }}
-                  >
-                    {rarityLabel}
-                  </span>
-                </div>
-
-                {/* Caption block — model on its own row, then a tight
-                    flex of avatar + pseudo + bullet + time. Sits inside
-                    the same glass card as the photo (no app-bg gap). */}
-                <div className="px-1 pb-1 pt-3">
-                  <h4
-                    className="truncate text-white"
-                    style={{
-                      fontSize: '14px',
-                      fontWeight: 900,
-                      letterSpacing: '-0.01em',
-                    }}
-                  >
-                    {s.brand} {s.model}
-                  </h4>
-                  <div
-                    className="mt-1.5 flex items-center gap-2 text-fg2"
-                    style={{ fontSize: '11px', fontWeight: 600 }}
-                  >
-                    <div
-                      className="flex h-4 w-4 flex-none items-center justify-center rounded-full bg-accent font-bold text-white"
-                      style={{ fontSize: '9px' }}
-                    >
-                      {pseudo.charAt(0).toUpperCase()}
-                    </div>
-                    <span className="truncate">{pseudo}</span>
-                    <span className="text-fg2/45">•</span>
-                    <span className="truncate text-fg2/65" style={{ fontWeight: 500 }}>
-                      {timeAgo(s.created_at)}
-                    </span>
-                  </div>
-                </div>
-              </button>
-            )
-          })}
+          <span
+            aria-hidden
+            className="absolute inset-0 animate-ping rounded-full"
+            style={{
+              border: '1px solid rgba(232, 32, 58, 0.35)',
+              animationDuration: '2.6s',
+            }}
+          />
+          <span
+            aria-hidden
+            className="absolute animate-ping rounded-full"
+            style={{
+              inset: '14px',
+              border: '1px solid rgba(232, 32, 58, 0.22)',
+              animationDuration: '2.2s',
+              animationDelay: '0.4s',
+            }}
+          />
+          <div
+            className="relative flex h-8 w-8 items-center justify-center rounded-full"
+            style={{
+              background: 'rgba(232, 32, 58, 0.12)',
+              border: '1px solid rgba(232, 32, 58, 0.45)',
+              boxShadow: '0 0 14px rgba(232, 32, 58, 0.35)',
+            }}
+          >
+            <Target className="h-4 w-4 text-accent" />
+          </div>
         </div>
-      </div>
 
-      {spots.length > 1 && (
-        <div className="mt-3 flex items-center justify-center gap-1.5">
-          {spots.map((_, i) => {
-            const active = i === idx
-            return (
-              <span
-                key={i}
-                className="rounded-full transition-all"
-                style={{
-                  width: active ? 18 : 6,
-                  height: 6,
-                  background: active
-                    ? 'linear-gradient(90deg, #FF4E68 0%, #E8203A 100%)'
-                    : 'rgba(255,255,255,0.18)',
-                  boxShadow: active
-                    ? '0 0 12px rgba(232, 32, 58, 0.70)'
-                    : undefined,
-                  animation: active
-                    ? 'carousel-dot-pop 380ms var(--ease-spring) both'
-                    : undefined,
-                }}
-              />
-            )
-          })}
+        <div className="min-w-0 flex-1">
+          <p
+            className="font-black uppercase text-accent"
+            style={{ fontSize: '10px', letterSpacing: '0.20em' }}
+          >
+            Radar temps réel
+          </p>
+          <h3
+            className="mt-0.5 truncate font-display font-bold tracking-tight text-white"
+            style={{ fontSize: '15px', letterSpacing: '-0.01em' }}
+          >
+            {headline}
+          </h3>
+          <p
+            className="mt-1 font-medium text-fg2"
+            style={{ fontSize: '11px', lineHeight: 1.5 }}
+          >
+            {subline}
+          </p>
         </div>
-      )}
-    </div>
+
+        <ChevronRight className="h-4 w-4 flex-none text-fg2/40" />
+      </button>
+    </section>
   )
 }
 
