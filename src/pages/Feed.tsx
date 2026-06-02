@@ -707,11 +707,11 @@ export default function Feed() {
                     <span
                       className="absolute right-4 top-4 flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-bold text-white"
                       style={{
-                        // Dark frosted glass per the 2026-06-01 polish —
-                        // bg-black/40 + white/10 border + 12px blur so
+                        // Dark frosted glass per the 2026-06-02 spec —
+                        // bg-black/50 + white/10 border + 12px blur so
                         // the photo-stack counter reads as a premium
-                        // glyph instead of an opaque chip.
-                        background: 'rgba(0, 0, 0, 0.40)',
+                        // glyph against bright spot photos.
+                        background: 'rgba(0, 0, 0, 0.50)',
                         border: '1px solid rgba(255, 255, 255, 0.10)',
                         backdropFilter: 'saturate(160%) blur(12px)',
                         WebkitBackdropFilter: 'saturate(160%) blur(12px)',

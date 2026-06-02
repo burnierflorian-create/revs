@@ -904,13 +904,13 @@ function ChallengeRing({
           {challengeEmoji(challenge)}
         </span>
       </div>
-      {/* Label wraps to 2 lines now (line-clamp-2) so long titles like
-          "MARATHON DU WEEKEND" no longer truncate to "MARATHON…". The
-          tracking dropped from wide 0.10em to tight (-0.025em) so the
-          uppercase text still fits the 88px max-width on two rows. */}
+      {/* Label wraps freely (whitespace-normal, no clamp) so long titles
+          like "Marathon du week-end" / "Youngtimers Hunter" land on two
+          natural rows. Per the 2026-06-02 spec: 10px, neutral-400,
+          tracking-tight, max-w-[80px], font-black uppercase. */}
       <span
-        className="line-clamp-2 max-w-[88px] text-center font-black uppercase leading-tight tracking-tight text-white/65"
-        style={{ fontSize: '9px' }}
+        className="block max-w-[80px] whitespace-normal text-center font-black uppercase leading-tight tracking-tight text-neutral-400"
+        style={{ fontSize: '10px' }}
       >
         {challenge.title}
       </span>

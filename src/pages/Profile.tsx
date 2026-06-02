@@ -283,31 +283,37 @@ export default function Profile() {
           gradient when the garage is empty. */}
       <div className="relative">
         {bestSpot?.photo_url ? (
-          <div className="relative h-56 w-full overflow-hidden">
+          <div className="relative h-48 w-full overflow-hidden">
             <img
               src={bestSpot.photo_url}
               alt=""
               aria-hidden
-              className="absolute inset-0 h-full w-full object-cover"
+              className="pointer-events-none absolute inset-0 h-full w-full object-cover"
               style={{
-                // Stronger blur per the immersive Apple-style spec; the
-                // photo reads as ambient colour rather than a recognisable
-                // scene. scale(1.15) hides the blur fringe on the edges.
-                filter: 'blur(28px) brightness(0.65) saturate(1.10)',
+                // Heavy blur + 30% opacity per the 2026-06-02 immersive
+                // spec — the photo reads as ambient atmosphere rather
+                // than a recognisable scene. scale(1.15) hides the
+                // blur fringe on the edges.
+                filter: 'blur(24px) saturate(1.10)',
                 transform: 'scale(1.15)',
+                opacity: 0.30,
               }}
             />
-            {/* Flat 40% black scrim — replaces the layered gradient so
-                the immersive backdrop reads as one tone rather than three. */}
+            {/* Vertical transparent → black gradient overlay so the
+                backdrop fades smoothly into the dark body of the
+                profile. Replaces the flat 40% scrim. */}
             <div
               aria-hidden
               className="absolute inset-0"
-              style={{ background: 'rgba(0, 0, 0, 0.40)' }}
+              style={{
+                background:
+                  'linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.85) 70%, rgba(0,0,0,1) 100%)',
+              }}
             />
           </div>
         ) : (
           <div
-            className="h-56 w-full"
+            className="h-48 w-full"
             style={{
               background:
                 'radial-gradient(ellipse 80% 100% at 50% 0%, rgba(232,32,58,0.35) 0%, transparent 60%), linear-gradient(180deg, #4a0f16 0%, #1a060a 55%, #0a0a0a 100%)',
@@ -397,7 +403,12 @@ export default function Profile() {
         </div>
       </div>
 
-      <div className="space-y-7 px-4 pb-10 pt-20">
+      {/* Inner pb-36 strict per the 2026-06-02 collision-fix spec —
+          stacks with the outer .tab-pane pb-36 (calc 9rem + safe-area)
+          so the Collection grid + Garage cover flow + Récompenses
+          drawer all sit comfortably above the bottom nav even on the
+          longest profile screen (Décrtains avec 100+ cards). */}
+      <div className="space-y-7 px-4 pb-36 pt-20">
         {/* Identité */}
         <div className="text-center">
           <h1 className="display-xl text-fg">{pseudo}</h1>

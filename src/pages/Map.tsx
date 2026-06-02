@@ -1313,15 +1313,15 @@ export default function MapPage() {
         <div
           className="mx-auto flex max-w-md items-center gap-2 rounded-2xl px-4 py-3"
           style={{
-            // Apple-Maps light mode — the Mapbox base layer is the
-            // light-v11 style so the search bar inverts to a white
-            // frosted pill instead of the dark glass we used before.
-            // Reads as a single material with the terrain underneath.
-            background: 'rgba(255, 255, 255, 0.85)',
-            backdropFilter: 'saturate(170%) blur(24px)',
-            WebkitBackdropFilter: 'saturate(170%) blur(24px)',
-            border: '1px solid rgba(0, 0, 0, 0.05)',
-            boxShadow: '0 12px 28px rgba(0, 0, 0, 0.10)',
+            // iOS Maps glass — translucent white 75% + 12px blur per
+            // the 2026-06-02 spec. The bright white/20 border catches
+            // dark map features (water, roads) underneath without
+            // distorting the bar's silhouette.
+            background: 'rgba(255, 255, 255, 0.75)',
+            backdropFilter: 'saturate(170%) blur(12px)',
+            WebkitBackdropFilter: 'saturate(170%) blur(12px)',
+            border: '1px solid rgba(255, 255, 255, 0.20)',
+            boxShadow: '0 12px 28px rgba(0, 0, 0, 0.12)',
           }}
         >
           <SearchIcon className="h-4 w-4 flex-none text-neutral-500" />
@@ -1348,32 +1348,42 @@ export default function MapPage() {
             stopReplay + the replay state) stays in the module so it
             can be reattached to a future UI surface without rewiring
             the marker animation. */}
-        <div
-          className="mx-auto flex max-w-md gap-1 rounded-full p-1"
-          style={{
-            // White-mode filter pills — same material language as the
-            // search bar above. Active pill keeps the brand-red fill
-            // so the selection still pops against the white track.
-            background: 'rgba(255, 255, 255, 0.80)',
-            backdropFilter: 'saturate(170%) blur(24px)',
-            WebkitBackdropFilter: 'saturate(170%) blur(24px)',
-            border: '1px solid rgba(0, 0, 0, 0.05)',
-            boxShadow: '0 10px 24px rgba(0, 0, 0, 0.10)',
-          }}
-        >
-          {FILTERS.map((f) => (
-            <button
-              key={f}
-              onClick={() => setActiveFilter(f)}
-              className={`tappable flex-1 rounded-full py-2 text-xs font-semibold tracking-wide transition-colors ${
-                activeFilter === f
-                  ? 'bg-accent text-white shadow-glow'
-                  : 'text-neutral-500 hover:text-neutral-900'
-              }`}
-            >
-              {f}
-            </button>
-          ))}
+        {/* Filter pills — per-pill glassmorphism. The bar itself is
+            transparent; each inactive pill carries its own white/60 +
+            black/05 border + 12px blur + shadow-sm so the row reads as
+            distinct iOS Maps chips rather than a single segmented
+            control. The active pill keeps the brand-red fill to
+            anchor the selection. */}
+        <div className="mx-auto flex max-w-md gap-2 px-1">
+          {FILTERS.map((f) => {
+            const isActive = activeFilter === f
+            return (
+              <button
+                key={f}
+                onClick={() => setActiveFilter(f)}
+                className={`tappable flex-1 rounded-full py-2 text-xs font-semibold tracking-wide transition-colors ${
+                  isActive ? 'text-white' : 'text-neutral-800 hover:text-black'
+                }`}
+                style={
+                  isActive
+                    ? {
+                        background: 'var(--color-accent)',
+                        border: '1px solid rgba(0, 0, 0, 0.08)',
+                        boxShadow: '0 6px 18px rgba(232, 32, 58, 0.40)',
+                      }
+                    : {
+                        background: 'rgba(255, 255, 255, 0.60)',
+                        backdropFilter: 'saturate(170%) blur(12px)',
+                        WebkitBackdropFilter: 'saturate(170%) blur(12px)',
+                        border: '1px solid rgba(0, 0, 0, 0.05)',
+                        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.06)',
+                      }
+                }
+              >
+                {f}
+              </button>
+            )
+          })}
         </div>
       </div>
 
