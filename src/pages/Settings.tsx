@@ -84,16 +84,18 @@ function Row({
 }) {
   const interactive = !!onClick
   const tone = danger ? 'text-accent' : warn ? 'text-[#F59E0B]' : 'text-fg'
-  return (
-    <button
-      onClick={onClick}
-      disabled={!interactive}
-      className={`flex w-full items-center gap-3 border-b border-white/[0.08] px-4 py-3.5 text-left last:border-0 ${tone} ${
-        interactive
-          ? 'tappable transition-colors hover:bg-white/[0.04]'
-          : ''
-      }`}
-    >
+  // 2026-06-02 critical fix — when the row has no onClick (toggle-only
+  // rows like Notifications, Localisation, Marketing), DON'T wrap it
+  // in a <button disabled>. Safari + Chrome both swallow pointer
+  // events on children of disabled buttons, which froze every Toggle
+  // in the Settings preferences section. Render <div> in that case so
+  // the inner Toggle's own onClick fires unimpeded; keep <button> for
+  // rows whose entire body should navigate (Compte, Premium, etc.).
+  const baseClass = `flex w-full items-center gap-3 border-b border-white/[0.08] px-4 py-3.5 text-left last:border-0 ${tone} ${
+    interactive ? 'tappable transition-colors hover:bg-white/[0.04]' : ''
+  }`
+  const body = (
+    <>
       {icon && (
         <span
           className={`flex h-9 w-9 flex-none items-center justify-center rounded-xl ${
@@ -121,6 +123,14 @@ function Row({
         (interactive && !noChevron ? (
           <ChevronRight className="h-4 w-4 flex-none text-fg2" />
         ) : null)}
+    </>
+  )
+  if (!interactive) {
+    return <div className={baseClass}>{body}</div>
+  }
+  return (
+    <button onClick={onClick} className={baseClass}>
+      {body}
     </button>
   )
 }
