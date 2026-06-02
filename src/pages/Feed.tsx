@@ -267,9 +267,11 @@ export default function Feed() {
       }
       map.set(spotId, { lastTap: 0, navTimer: null })
       setHeartSpotId(spotId)
+      // Cleanup synced to the new 350 ms keyframe + 50 ms safety
+      // buffer so the heart unmounts the moment the fade ends.
       window.setTimeout(() => {
         setHeartSpotId((cur) => (cur === spotId ? null : cur))
-      }, 700)
+      }, 400)
       void likeSilently(spotId)
       return
     }

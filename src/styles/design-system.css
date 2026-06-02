@@ -519,14 +519,17 @@ html[data-tier='vip'] {
    Giant heart that flashes at the center of a Feed photo when the
    user double-taps to like. Independent of the small LikeButton pop
    used by the chip below the card. */
+/* Per the 2026-06-02 strict spec: scale-0 → scale-110 → scale-100 →
+   fade-out in 350 ms total. Easing matches iOS Maps / Apple Music
+   pops (0.32, 0.72, 0, 1) so the peak lands quickly then settles. */
 @keyframes feed-double-heart {
-  0%   { transform: scale(0.30); opacity: 0; }
-  40%  { transform: scale(1.20); opacity: 1; }
-  70%  { transform: scale(0.95); opacity: 1; }
+  0%   { transform: scale(0);    opacity: 0; }
+  45%  { transform: scale(1.10); opacity: 1; }
+  65%  { transform: scale(1.00); opacity: 1; }
   100% { transform: scale(1.00); opacity: 0; }
 }
 .feed-double-heart {
-  animation: feed-double-heart 620ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  animation: feed-double-heart 350ms cubic-bezier(0.32, 0.72, 0, 1) forwards;
   filter: drop-shadow(0 8px 24px rgba(232, 32, 58, 0.65));
   pointer-events: none;
 }
