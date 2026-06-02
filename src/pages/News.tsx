@@ -260,13 +260,17 @@ export default function News({ categories }: { categories: string[] }) {
                   {n.category.toUpperCase()}
                 </span>
                 {isNew(n) && (
+                  // Glass red micro-pill 2026-06-02 — replaces the
+                  // saturated red block. Apple News style: subtle
+                  // red wash + 30% border + 8px text. Tracking widest
+                  // so the 7-letter label still reads at micro size.
                   <span
-                    className="badge-new absolute right-3 top-3 rounded-full px-2.5 py-0.5 font-extrabold uppercase text-white"
+                    className="badge-new absolute right-3 top-3 rounded-full px-2 py-0.5 font-black uppercase tracking-widest text-red-400"
                     style={{
-                      background: '#E8203A',
-                      fontSize: '9px',
-                      letterSpacing: '0.10em',
-                      boxShadow: '0 4px 12px rgba(232, 32, 58, 0.30)',
+                      background: 'rgba(239, 68, 68, 0.20)',
+                      border: '1px solid rgba(239, 68, 68, 0.30)',
+                      fontSize: '8px',
+                      letterSpacing: '0.16em',
                     }}
                   >
                     NOUVEAU

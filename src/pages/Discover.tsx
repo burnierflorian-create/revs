@@ -18,8 +18,6 @@ import F1Roster from './F1Roster'
 // stay on the DB so the feature can be re-enabled by re-adding the
 // `wars` tab below + the `<SpotWars />` render branch.
 
-const RED = '#E8203A'
-const ORANGE = '#F59E0B'
 
 type Universe = 'f1' | 'cars'
 
@@ -43,27 +41,34 @@ export default function Discover({ initial }: { initial?: 'events' }) {
   }, [initial])
 
   const isF1 = universe === 'f1'
-  const color = isF1 ? RED : ORANGE
   const sub = isF1 ? f1Sub : carsSub
 
+  // Unified glass pill 2026-06-02 — kills the dual red/orange tiles
+  // wedged side-by-side. Inactive pills carry a neutral glass (no
+  // brand colour), only the active one flips to the REVS gradient
+  // (red → orange) so the selection reads like a single accent
+  // statement rather than a coloured juxtaposition.
   const universeBtn = (u: Universe, label: string, icon: React.ReactNode) => {
-    const c = u === 'f1' ? RED : ORANGE
     const active = universe === u
     return (
       <button
         onClick={() => setUniverse(u)}
-        className="tappable flex flex-1 items-center justify-center gap-2 rounded-3xl px-3 py-3.5 text-sm font-extrabold tracking-wide transition-colors"
+        className={`tappable flex flex-1 items-center justify-center gap-2 rounded-full px-4 py-2.5 text-xs transition-colors ${
+          active ? 'font-black text-white' : 'font-bold text-neutral-400'
+        }`}
         style={
           active
             ? {
-                backgroundColor: c,
-                color: '#0A0A0A',
-                boxShadow: `0 6px 24px ${c}40`,
+                background:
+                  'linear-gradient(90deg, #DC2626 0%, #F97316 100%)',
+                boxShadow: '0 8px 24px rgba(220, 38, 38, 0.30)',
+                border: '1px solid rgba(255, 255, 255, 0.10)',
               }
             : {
-                backgroundColor: `${c}14`,
-                color: c,
-                border: `1px solid ${c}38`,
+                background: 'rgba(20, 20, 22, 0.60)',
+                border: '1px solid rgba(255, 255, 255, 0.05)',
+                backdropFilter: 'saturate(160%) blur(8px)',
+                WebkitBackdropFilter: 'saturate(160%) blur(8px)',
               }
         }
       >
@@ -126,7 +131,10 @@ export default function Discover({ initial }: { initial?: 'events' }) {
         )}
       </div>
 
-      {/* Sous-onglets de l'univers actif */}
+      {/* Sub-tabs — same unified glass language as the universe row.
+          Active flips to the same REVS red→orange gradient (no more
+          full-saturation block colour). Inactive stays in the neutral
+          glass with a subtle bg-neutral-900/60. */}
       <div className="flex gap-2 px-4 pt-3">
         {subTabs.map((t) => {
           const active = sub === t.key
@@ -134,18 +142,27 @@ export default function Discover({ initial }: { initial?: 'events' }) {
             <button
               key={t.key}
               onClick={() => setSub(t.key)}
-              className="tappable flex flex-1 items-center justify-center gap-1.5 rounded-full py-2.5 text-sm font-bold tracking-wide transition-colors"
+              className={`tappable flex flex-1 items-center justify-center gap-1.5 rounded-full py-2 text-xs transition-colors ${
+                active ? 'font-black text-white' : 'font-bold text-neutral-400'
+              }`}
               style={
                 active
-                  ? { backgroundColor: color, color: '#0A0A0A' }
+                  ? {
+                      background:
+                        'linear-gradient(90deg, #DC2626 0%, #F97316 100%)',
+                      boxShadow: '0 8px 24px rgba(220, 38, 38, 0.30)',
+                      border: '1px solid rgba(255, 255, 255, 0.10)',
+                    }
                   : {
-                      backgroundColor: 'var(--color-card)',
-                      border: '1px solid var(--color-border)',
+                      background: 'rgba(20, 20, 22, 0.60)',
+                      border: '1px solid rgba(255, 255, 255, 0.05)',
+                      backdropFilter: 'saturate(160%) blur(8px)',
+                      WebkitBackdropFilter: 'saturate(160%) blur(8px)',
                     }
               }
             >
-              <span style={active ? undefined : { color }}>{t.icon}</span>
-              <span className={active ? '' : 'text-fg2'}>{t.label}</span>
+              {t.icon}
+              <span>{t.label}</span>
             </button>
           )
         })}

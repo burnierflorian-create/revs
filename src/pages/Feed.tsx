@@ -528,23 +528,31 @@ export default function Feed() {
       <PullIndicator pull={pull} refreshing={refreshing} />
       <h1 className="display-xl py-5 text-fg">Fil</h1>
 
+      {/* Search + filtres — glass premium per the 2026-06-02 spec.
+          neutral-900/40 + white/5 border + backdrop-blur-xl reads as
+          a single iOS-style frosted layer floating on the feed. */}
       <div
-        className="mb-3 flex items-center gap-2 rounded-full bg-card px-4 py-2.5"
-        style={{ border: '1px solid var(--color-border)' }}
+        className="mb-3 flex items-center gap-2 rounded-full px-4 py-2.5"
+        style={{
+          background: 'rgba(20, 20, 22, 0.40)',
+          border: '1px solid rgba(255, 255, 255, 0.05)',
+          backdropFilter: 'saturate(160%) blur(22px)',
+          WebkitBackdropFilter: 'saturate(160%) blur(22px)',
+        }}
       >
-        <SearchIcon className="h-4 w-4 flex-none text-fg2" />
+        <SearchIcon className="h-4 w-4 flex-none text-neutral-500" />
         <input
           type="text"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           placeholder="Rechercher dans le fil…"
-          className="flex-1 bg-transparent text-sm text-fg placeholder-fg2 outline-none"
+          className="flex-1 bg-transparent text-xs font-medium text-neutral-300 placeholder:text-neutral-500 outline-none"
         />
         {searchQuery && (
           <button
             onClick={() => setSearchQuery('')}
             aria-label="Effacer"
-            className="tappable text-fg2 hover:text-fg"
+            className="tappable text-neutral-500 hover:text-neutral-300"
           >
             <X className="h-4 w-4" />
           </button>
@@ -554,29 +562,41 @@ export default function Feed() {
       <div className="mb-5 flex items-center gap-2">
         <button
           onClick={() => setFilters(DEFAULT_FILTERS)}
-          className={`tappable flex-1 rounded-full px-4 py-2.5 text-sm font-semibold transition-colors ${
+          className={`tappable flex-1 rounded-full px-4 py-2.5 text-xs font-bold transition-colors ${
             allDefaults
               ? 'bg-accent text-fg'
-              : 'bg-card text-fg2 hover:text-fg'
+              : 'text-neutral-300 hover:text-white'
           }`}
           style={
-            allDefaults ? undefined : { border: '1px solid var(--color-border)' }
+            allDefaults
+              ? undefined
+              : {
+                  background: 'rgba(20, 20, 22, 0.40)',
+                  border: '1px solid rgba(255, 255, 255, 0.05)',
+                  backdropFilter: 'saturate(160%) blur(22px)',
+                  WebkitBackdropFilter: 'saturate(160%) blur(22px)',
+                }
           }
         >
           Tout
         </button>
         <button
           onClick={() => setFiltersOpen(true)}
-          className={`tappable relative flex flex-1 items-center justify-center gap-1.5 rounded-full px-4 py-2.5 text-sm font-semibold transition-colors ${
+          className={`tappable relative flex flex-1 items-center justify-center gap-1.5 rounded-full px-4 py-2.5 text-xs font-bold transition-colors ${
             !allDefaults
               ? 'bg-accent/15 text-accent'
-              : 'bg-card text-fg2 hover:text-fg'
+              : 'text-neutral-300 hover:text-white'
           }`}
-          style={{
-            border: !allDefaults
-              ? '1px solid rgba(232,32,58,0.4)'
-              : '1px solid var(--color-border)',
-          }}
+          style={
+            !allDefaults
+              ? { border: '1px solid rgba(232,32,58,0.4)' }
+              : {
+                  background: 'rgba(20, 20, 22, 0.40)',
+                  border: '1px solid rgba(255, 255, 255, 0.05)',
+                  backdropFilter: 'saturate(160%) blur(22px)',
+                  WebkitBackdropFilter: 'saturate(160%) blur(22px)',
+                }
+          }
         >
           <FilterIcon className="h-3.5 w-3.5" />
           Filtres
@@ -693,11 +713,11 @@ export default function Feed() {
                       the category is genuinely undefined. */}
                   {catColor && (
                     <span
-                      className="absolute left-4 top-4 rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-wider text-black"
+                      className="absolute left-4 top-4 rounded-full px-3 py-1 text-[9px] font-black uppercase tracking-widest text-black"
                       style={{
                         backgroundColor: catColor,
                         boxShadow: `0 6px 16px ${catColor}55`,
-                        letterSpacing: '0.12em',
+                        letterSpacing: '0.14em',
                       }}
                     >
                       {categoryLabel(spot.category).toUpperCase()}
@@ -705,12 +725,8 @@ export default function Feed() {
                   )}
                   {count > 1 && (
                     <span
-                      className="absolute right-4 top-4 flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-bold text-white"
+                      className="absolute right-4 top-4 flex items-center gap-1 rounded-full px-2.5 py-1 text-[9px] font-bold text-white"
                       style={{
-                        // Dark frosted glass per the 2026-06-02 spec —
-                        // bg-black/50 + white/10 border + 12px blur so
-                        // the photo-stack counter reads as a premium
-                        // glyph against bright spot photos.
                         background: 'rgba(0, 0, 0, 0.50)',
                         border: '1px solid rgba(255, 255, 255, 0.10)',
                         backdropFilter: 'saturate(160%) blur(12px)',
@@ -721,7 +737,10 @@ export default function Feed() {
                       {count}
                     </span>
                   )}
-                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/95 via-black/40 to-transparent p-4 pt-16 text-left">
+                  {/* Photo gradient — extended to pt-20 per the 2026-06-02
+                      satin spec so the fade has more breathing room between
+                      the photo and the brand/model overlay text. */}
+                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/95 via-black/40 to-transparent p-4 pt-20 text-left">
                     <div className="flex items-end justify-between gap-3">
                       <div className="min-w-0">
                         <h2
