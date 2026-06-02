@@ -58,6 +58,8 @@ export default function Games() {
               <img
                 src={hero.photo_url}
                 alt={`${hero.brand} ${hero.model}`}
+                loading="lazy"
+                decoding="async"
                 className="absolute inset-0 h-full w-full object-cover"
                 draggable={false}
               />

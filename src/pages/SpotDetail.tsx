@@ -381,6 +381,11 @@ export default function SpotDetail() {
           <img
             src={spot.photo_url}
             alt={`${spot.brand} ${spot.model}`}
+            // Hero of the spot detail route — keep eager + high
+            // priority so the LCP candidate paints fast on
+            // navigation.
+            fetchPriority="high"
+            decoding="async"
             className="h-full w-full object-cover"
           />
         ) : (
@@ -597,6 +602,8 @@ export default function SpotDetail() {
               <img
                 src={owner.avatar}
                 alt=""
+                loading="lazy"
+                decoding="async"
                 className="h-full w-full object-cover"
               />
             ) : (
@@ -651,6 +658,8 @@ export default function SpotDetail() {
                         <img
                           src={p.avatar}
                           alt=""
+                          loading="lazy"
+                          decoding="async"
                           className="h-full w-full object-cover"
                         />
                       ) : (

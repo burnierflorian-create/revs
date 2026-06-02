@@ -220,7 +220,7 @@ function popupInner(p: SpotProps): string {
   const title = (p.model || p.brand || 'Spot').trim()
   const sub = [p.brand, p.year ?? undefined].filter(Boolean).join(' · ')
   const photo = p.photo_url
-    ? `<img src="${escapeHtml(p.photo_url)}" alt="" style="width:72px;height:72px;border-radius:12px;object-fit:cover;flex:none" />`
+    ? `<img src="${escapeHtml(p.photo_url)}" alt="" loading="lazy" decoding="async" style="width:72px;height:72px;border-radius:12px;object-fit:cover;flex:none" />`
     : ''
   return `
     <div style="display:flex;gap:12px;align-items:center;max-width:240px;color:#111111">
@@ -1451,6 +1451,8 @@ export default function MapPage() {
                         <img
                           src={s.photo_url}
                           alt=""
+                          loading="lazy"
+                          decoding="async"
                           className="h-full w-full object-cover"
                         />
                       ) : (

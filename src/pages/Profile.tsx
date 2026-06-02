@@ -288,6 +288,10 @@ export default function Profile() {
               src={bestSpot.photo_url}
               alt=""
               aria-hidden
+              // LCP candidate on the profile route — keep eager and
+              // hint the browser to fetch with high priority.
+              fetchPriority="high"
+              decoding="async"
               className="pointer-events-none absolute inset-0 h-full w-full object-cover"
               style={{
                 // Heavy blur + 30% opacity per the 2026-06-02 immersive
@@ -361,6 +365,10 @@ export default function Profile() {
                   <img
                     src={avatar}
                     alt=""
+                    // Above-the-fold avatar — keep eager + high priority
+                    // so it doesn't flicker in after the cover.
+                    fetchPriority="high"
+                    decoding="async"
                     className="h-full w-full object-cover"
                   />
                 ) : (

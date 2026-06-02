@@ -164,7 +164,7 @@ export default function PublicProfile() {
       <div className="flex flex-col items-center text-center">
         <div className="flex h-24 w-24 items-center justify-center overflow-hidden rounded-full bg-card text-4xl font-bold ring-4 ring-accent">
           {prof?.avatar ? (
-            <img src={prof.avatar} alt="" className="h-full w-full object-cover" />
+            <img src={prof.avatar} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" />
           ) : (
             name.charAt(0).toUpperCase()
           )}
@@ -232,7 +232,7 @@ export default function PublicProfile() {
               >
                 <div className="flex h-9 w-9 flex-none items-center justify-center overflow-hidden rounded-full bg-accent text-sm font-bold">
                   {r.avatar ? (
-                    <img src={r.avatar} alt="" className="h-full w-full object-cover" />
+                    <img src={r.avatar} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" />
                   ) : (
                     (r.pseudo || 'S').charAt(0).toUpperCase()
                   )}
@@ -260,7 +260,7 @@ export default function PublicProfile() {
               className="relative aspect-square overflow-hidden rounded-xl bg-card"
             >
               {s.photo_url ? (
-                <img src={s.photo_url} alt="" className="h-full w-full object-cover" />
+                <img src={s.photo_url} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" />
               ) : (
                 <div className="flex h-full w-full items-center justify-center">
                   <Car className="h-6 w-6 text-fg/20" />

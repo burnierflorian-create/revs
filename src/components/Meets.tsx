@@ -148,6 +148,8 @@ export default function Meets() {
                 <img
                   src={MINI_MAP_URL}
                   alt="Carte de la zone"
+                  loading="lazy"
+                  decoding="async"
                   className="h-full w-full object-cover opacity-70"
                 />
               ) : (

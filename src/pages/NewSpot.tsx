@@ -695,6 +695,11 @@ export default function NewSpot() {
               <img
                 src={previewUrl}
                 alt="Aperçu"
+                // Hero of the publish flow — keep eager + high
+                // priority so the preview lands the moment the
+                // analyse step finishes.
+                fetchPriority="high"
+                decoding="async"
                 className="w-full max-h-[55vh] object-cover rounded-3xl"
                 style={{ border: '1px solid var(--color-border)' }}
               />
@@ -750,6 +755,7 @@ export default function NewSpot() {
               src={previewUrl}
               alt=""
               aria-hidden
+              decoding="async"
               className="absolute inset-0 h-full w-full object-cover"
               style={{ opacity: 0.60 }}
             />

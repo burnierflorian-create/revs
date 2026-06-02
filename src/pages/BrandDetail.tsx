@@ -425,6 +425,8 @@ export default function BrandDetail() {
                     <img
                       src={s.photo_url}
                       alt={`${s.brand} ${s.model}`}
+                      loading="lazy"
+                      decoding="async"
                       className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
                     />
                   ) : (
@@ -456,6 +458,8 @@ export default function BrandDetail() {
                     <img
                       src={n.image_url}
                       alt=""
+                      loading="lazy"
+                      decoding="async"
                       className="h-20 w-20 flex-none rounded-2xl object-cover"
                     />
                   )}

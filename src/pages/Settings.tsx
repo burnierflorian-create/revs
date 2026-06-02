@@ -693,7 +693,7 @@ export default function Settings() {
           className="relative flex h-16 w-16 flex-none items-center justify-center overflow-hidden rounded-full bg-accent text-2xl font-bold text-fg"
         >
           {avatarUrl ? (
-            <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
+            <img src={avatarUrl} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" />
           ) : (
             (pseudo.charAt(0) || '?').toUpperCase()
           )}
@@ -875,6 +875,8 @@ export default function Settings() {
                   <img
                     src={avatarUrl}
                     alt=""
+                    loading="lazy"
+                    decoding="async"
                     className="h-full w-full object-cover"
                   />
                 ) : (

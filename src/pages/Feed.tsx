@@ -153,7 +153,7 @@ function EmptyCarousel({ onSpot }: { onSpot: () => void }) {
             className="absolute inset-0 transition-opacity duration-700"
             style={{ opacity: idx === i ? 1 : 0 }}
           >
-            <img src={s.img} alt="" className="h-full w-full object-cover" />
+            <img src={s.img} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" />
             <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-black/30" />
             <div className="absolute inset-x-0 bottom-0 p-7">
               <p className="font-display text-2xl font-bold leading-tight text-white">
@@ -796,6 +796,8 @@ export default function Feed() {
                         <img
                           src={prof.avatar}
                           alt=""
+                          loading="lazy"
+                          decoding="async"
                           className="h-full w-full object-cover"
                         />
                       ) : (

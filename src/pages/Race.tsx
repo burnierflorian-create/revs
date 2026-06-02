@@ -675,6 +675,8 @@ function BigCard({ spot, active }: { spot: Spot; active: boolean }) {
         <img
           src={spot.photo_url}
           alt={`${spot.brand} ${spot.model}`}
+          // Gameplay-critical hero — eager + async decode.
+          decoding="async"
           className="absolute inset-0 h-full w-full object-cover"
           draggable={false}
         />
@@ -884,6 +886,7 @@ function Fighter({
             <img
               src={photoUrl}
               alt={`${brand} ${model}`}
+              decoding="async"
               className="absolute inset-0 h-full w-full object-cover"
               draggable={false}
             />
@@ -1722,6 +1725,7 @@ function ResultPhase({
             <img
               src={winnerPhoto}
               alt={winnerBrand}
+              decoding="async"
               className="h-full w-full object-cover"
             />
           ) : (

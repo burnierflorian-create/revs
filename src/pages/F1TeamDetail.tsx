@@ -348,6 +348,8 @@ export default function F1TeamDetail() {
                     <img
                       src={n.image_url}
                       alt=""
+                      loading="lazy"
+                      decoding="async"
                       className="h-20 w-20 flex-none rounded-2xl object-cover"
                     />
                   )}

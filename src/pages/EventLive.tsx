@@ -135,6 +135,8 @@ export default function EventLive() {
                     <img
                       src={s.photo_url}
                       alt={`${s.brand} ${s.model}`}
+                      loading="lazy"
+                      decoding="async"
                       className="h-full w-full object-cover transition-transform group-hover:scale-105"
                     />
                   ) : (

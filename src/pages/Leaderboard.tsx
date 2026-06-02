@@ -242,6 +242,8 @@ export default function Leaderboard() {
                         <img
                           src={p.avatar}
                           alt=""
+                          loading="lazy"
+                          decoding="async"
                           className="h-full w-full object-cover"
                         />
                       ) : (
@@ -406,6 +408,8 @@ export default function Leaderboard() {
                         <img
                           src={r.avatar}
                           alt=""
+                          loading="lazy"
+                          decoding="async"
                           className="h-full w-full object-cover"
                         />
                       ) : (

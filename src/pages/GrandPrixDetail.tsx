@@ -177,6 +177,8 @@ export default function GrandPrixDetail() {
         <img
           src={circuitImage(gp.round)}
           alt={gp.circuit}
+          fetchPriority="high"
+          decoding="async"
           className="h-full w-full object-cover"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-bg via-bg/40 to-transparent" />
