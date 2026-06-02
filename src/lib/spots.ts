@@ -1,4 +1,8 @@
-import exifr from 'exifr'
+// exifr is dynamically imported inside readPhotoMeta — that move drops
+// ~30 KB gzipped out of the initial paint chunk because lib/spots.ts is
+// transitively pulled by every tab (Home, Map, Feed, Profile, …) yet
+// EXIF parsing is only ever used by NewSpot. The library is fetched
+// the first time NewSpot reads a photo, then cached by the browser.
 
 export type SpotCategory =
   | 'supercar'
@@ -143,8 +147,11 @@ export type PhotoMeta = {
 // Read EXIF from the ORIGINAL file (canvas re-encoding strips it, so this
 // must run before resizeImageToJpeg). Missing tags are returned as null —
 // browser camera captures often omit GPS and sometimes the timestamp.
+// exifr is imported dynamically so the ~30 KB lib stays out of the
+// initial paint chunk; it only loads on the first NewSpot photo read.
 export async function readPhotoMeta(file: File): Promise<PhotoMeta> {
   try {
+    const { default: exifr } = await import('exifr')
     const meta = await exifr.parse(file, { gps: true })
     if (!meta) return { takenAt: null, lat: null, lng: null }
     const raw = meta.DateTimeOriginal ?? meta.CreateDate ?? null

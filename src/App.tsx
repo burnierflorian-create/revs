@@ -1,4 +1,4 @@
-import { Suspense, lazy } from 'react'
+import { Suspense, lazy, useEffect } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './hooks/useAuth'
 import MainLayout from './layouts/MainLayout'
@@ -46,6 +46,41 @@ function lazyRoute(node: React.ReactNode) {
 
 export default function App() {
   const { session, loading } = useAuth()
+
+  // After the first idle window, warm-start the Map chunk so its
+  // 469 KB gzipped mapbox-gl payload is already in the browser cache
+  // by the time the user taps /map. Wrapped in requestIdleCallback
+  // (with a setTimeout fallback) so the warm-up never competes with
+  // the initial paint. Only runs for authenticated sessions — the
+  // /auth route doesn't have the tab bar so it'd be wasted work.
+  useEffect(() => {
+    if (!session) return
+    const w = window as Window & {
+      requestIdleCallback?: (
+        cb: IdleRequestCallback,
+        opts?: { timeout?: number },
+      ) => number
+    }
+    const warm = () => {
+      void import('./pages/Map')
+    }
+    let id: number | undefined
+    if (typeof w.requestIdleCallback === 'function') {
+      id = w.requestIdleCallback(warm, { timeout: 4000 })
+    } else {
+      id = window.setTimeout(warm, 2000) as unknown as number
+    }
+    return () => {
+      if (typeof id === 'number') {
+        if (typeof w.requestIdleCallback === 'function') {
+          // No standardised cancel; the no-op callback if it fires
+          // after unmount is harmless (browser caches the chunk).
+        } else {
+          window.clearTimeout(id)
+        }
+      }
+    }
+  }, [session])
 
   if (loading) {
     return (
