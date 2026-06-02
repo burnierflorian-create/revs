@@ -875,7 +875,7 @@ function ChallengeRing({
             cx="28"
             cy="28"
             r={r}
-            stroke="rgba(255, 255, 255, 0.08)"
+            stroke="var(--color-ring-track)"
             strokeWidth="4"
             fill="transparent"
           />

@@ -269,6 +269,11 @@ const SNAP = {
   halo: '#F5F0E8',
 } as const
 
+// Dark-theme 3D building extrusion colour — anthracite that reads as
+// volume against the Mapbox dark-v11 base without competing with
+// the brand-red rarity pins.
+const BUILDING_3D_DARK = '#2A2A2E'
+
 // Only label these road classes — no alleys / small streets.
 const MAJOR_ROADS = ['motorway', 'trunk', 'primary', 'secondary']
 
@@ -277,7 +282,7 @@ const MAJOR_ROADS = ['motorway', 'trunk', 'primary', 'secondary']
 // names — every POI / transit / airport / parking / water label is
 // removed. REVS touch: a thin red casing on major roads, a warm-beige
 // shaded 3D-building layer (toggled on only in 3D).
-function applySnapStyle(map: mapboxgl.Map) {
+function applySnapStyle(map: mapboxgl.Map, theme: 'dark' | 'light' = 'light') {
   try {
     const layers = (map.getStyle()?.layers ?? []) as unknown as RawLayer[]
     let buildingSource: string | undefined
@@ -285,6 +290,11 @@ function applySnapStyle(map: mapboxgl.Map) {
     let firstRoadLineId: string | undefined
     let firstSymbolId: string | undefined
     const toRemove: string[] = []
+    // In dark mode we let Mapbox's dark-v11 base render natively (it's
+    // a professionally tuned night style) and only add the 3D building
+    // extrusion in anthracite. In light mode we run the full Snap-style
+    // warm-neutral recolor + extrusion.
+    const isDark = theme === 'dark'
 
     for (const l of layers) {
       const sl = l['source-layer']
@@ -297,16 +307,39 @@ function applySnapStyle(map: mapboxgl.Map) {
         /settlement|state-label|country-label|continent-label/.test(l.id)
       const isRoadLabel = l.type === 'symbol' && /^road-label/.test(l.id)
 
-      if (l.type === 'symbol' && !isPlace && !isRoadLabel) {
-        toRemove.push(l.id)
-        continue
-      }
-      if (/parking/.test(l.id)) {
-        toRemove.push(l.id)
-        continue
+      // Symbol + parking stripping is part of the Snap-style light
+      // aesthetic. In dark mode we keep Mapbox dark-v11's curated
+      // label set intact — much cleaner than a near-empty night map.
+      if (!isDark) {
+        if (l.type === 'symbol' && !isPlace && !isRoadLabel) {
+          toRemove.push(l.id)
+          continue
+        }
+        if (/parking/.test(l.id)) {
+          toRemove.push(l.id)
+          continue
+        }
       }
 
       try {
+        // Building source/layer discovery must run regardless of theme
+        // so the 3D extrusion add below can target it. Recolor calls
+        // below are gated to light mode only.
+        if (
+          (l.type === 'fill' || l.type === 'fill-extrusion') &&
+          sl === 'building'
+        ) {
+          if (l.source) {
+            buildingSource = l.source
+            buildingSourceLayer = sl
+          }
+        }
+        if (isDark) {
+          // Dark mode: rely on Mapbox dark-v11's native palette. The
+          // building source was discovered above so the 3D extrusion
+          // can target it; everything else stays Mapbox-native.
+          continue
+        }
         if (l.type === 'background') {
           map.setPaintProperty(l.id, 'background-color', SNAP.bg)
         } else if (l.type === 'fill' && sl === 'water') {
@@ -322,15 +355,10 @@ function applySnapStyle(map: mapboxgl.Map) {
         ) {
           map.setPaintProperty(l.id, 'fill-color', SNAP.green)
         } else if (
-          (l.type === 'fill' || l.type === 'fill-extrusion') &&
+          l.type === 'fill' &&
           sl === 'building'
         ) {
-          if (l.source) {
-            buildingSource = l.source
-            buildingSourceLayer = sl
-          }
-          if (l.type === 'fill')
-            map.setPaintProperty(l.id, 'fill-color', SNAP.building)
+          map.setPaintProperty(l.id, 'fill-color', SNAP.building)
         } else if (l.type === 'line' && sl === 'building') {
           map.setPaintProperty(l.id, 'line-color', SNAP.outline)
         } else if (l.type === 'line' && sl === 'road') {
@@ -430,7 +458,7 @@ function applySnapStyle(map: mapboxgl.Map) {
           minzoom: 14,
           layout: { visibility: 'none' },
           paint: {
-            'fill-extrusion-color': SNAP.building3d,
+            'fill-extrusion-color': isDark ? BUILDING_3D_DARK : SNAP.building3d,
             'fill-extrusion-vertical-gradient': true,
             'fill-extrusion-height': [
               'interpolate',
@@ -1104,7 +1132,7 @@ export default function MapPage() {
 
     map.on('load', async () => {
       map.resize()
-      applySnapStyle(map)
+      applySnapStyle(map, theme)
       setMapReady(true)
 
       await fetchSpotsInBounds(map.getBounds())
@@ -1256,7 +1284,16 @@ export default function MapPage() {
       return
     }
     function onStyleLoad() {
+      // Re-narrow inside the closure — TS can't carry the outer
+      // `if (!map) return` guard through a nested function.
+      const m = mapRef.current
+      if (!m) return
       try {
+        // Re-apply the Snap-style recolor + 3D extrusion against the
+        // freshly-loaded base style. In dark mode this only adds the
+        // anthracite 3D extrusion; in light mode it runs the full
+        // warm-neutral recolor + 3D in beige.
+        applySnapStyle(m, theme)
         reattachLayersRef.current?.()
         refreshRef.current?.()
         recomputeHotZonesRef.current?.()
@@ -1375,30 +1412,30 @@ export default function MapPage() {
         <div
           className="mx-auto flex max-w-md items-center gap-2 rounded-2xl px-4 py-3"
           style={{
-            // iOS Maps glass — translucent white 75% + 12px blur per
-            // the 2026-06-02 spec. The bright white/20 border catches
-            // dark map features (water, roads) underneath without
-            // distorting the bar's silhouette.
-            background: 'rgba(255, 255, 255, 0.75)',
+            // Theme-aware iOS Maps glass — flips from translucent
+            // dark glass (dark mode, sits on dark-v11 map) to
+            // translucent white glass (light mode, sits on Snap
+            // beige map) via the CSS var ladder.
+            background: 'var(--color-glass-mid)',
             backdropFilter: 'saturate(170%) blur(12px)',
             WebkitBackdropFilter: 'saturate(170%) blur(12px)',
-            border: '1px solid rgba(255, 255, 255, 0.20)',
-            boxShadow: '0 12px 28px rgba(0, 0, 0, 0.12)',
+            border: '1px solid var(--color-border)',
+            boxShadow: '0 12px 28px rgba(0, 0, 0, 0.18)',
           }}
         >
-          <SearchIcon className="h-4 w-4 flex-none text-neutral-500" />
+          <SearchIcon className="h-4 w-4 flex-none text-fg2" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Rechercher une voiture, une marque…"
-            className="flex-1 bg-transparent text-sm font-medium text-neutral-900 outline-none placeholder:text-neutral-400"
+            className="flex-1 bg-transparent text-sm font-medium text-fg outline-none placeholder:text-fg2"
           />
           {searchQuery && (
             <button
               onClick={() => setSearchQuery('')}
               aria-label="Effacer"
-              className="tappable text-neutral-500 hover:text-neutral-900"
+              className="tappable text-fg2 hover:text-fg"
             >
               <X className="h-4 w-4" />
             </button>
@@ -1424,7 +1461,7 @@ export default function MapPage() {
                 key={f}
                 onClick={() => setActiveFilter(f)}
                 className={`tappable flex-1 rounded-full py-2 text-xs font-semibold tracking-wide transition-colors ${
-                  isActive ? 'text-white' : 'text-neutral-800 hover:text-black'
+                  isActive ? 'text-white' : 'text-fg2 hover:text-fg'
                 }`}
                 style={
                   isActive
@@ -1434,11 +1471,13 @@ export default function MapPage() {
                         boxShadow: '0 6px 18px rgba(232, 32, 58, 0.40)',
                       }
                     : {
-                        background: 'rgba(255, 255, 255, 0.60)',
+                        // Theme-aware filter pill — flips to dark
+                        // glass over Mapbox dark-v11 in night mode.
+                        background: 'var(--color-glass)',
                         backdropFilter: 'saturate(170%) blur(12px)',
                         WebkitBackdropFilter: 'saturate(170%) blur(12px)',
-                        border: '1px solid rgba(0, 0, 0, 0.05)',
-                        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.06)',
+                        border: '1px solid var(--color-border)',
+                        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.10)',
                       }
                 }
               >
