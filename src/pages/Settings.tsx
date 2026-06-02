@@ -1056,12 +1056,18 @@ export default function Settings() {
               icon={<Sun className="h-4 w-4" />}
               label="Apparence"
               sub={theme === 'light' ? 'Mode clair' : 'Mode sombre'}
+              // onClick on Row is required so the outer <button> stays
+              // enabled — a disabled <button> blocks pointer events on
+              // its children, which made the Toggle inert. Tapping the
+              // row body OR the toggle directly both flip the theme.
+              onClick={() => {
+                hapticSuccess()
+                setTheme(theme === 'light' ? 'dark' : 'light')
+              }}
               right={
                 <Toggle
                   checked={theme === 'light'}
                   onChange={() => {
-                    // Haptic confirmation so the theme switch feels
-                    // like a tangible OS-level setting change.
                     hapticSuccess()
                     setTheme(theme === 'light' ? 'dark' : 'light')
                   }}
