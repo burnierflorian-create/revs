@@ -494,6 +494,12 @@ export default function MapPage() {
   const searchRef = useRef<string>('')
   const refreshRef = useRef<(() => void) | null>(null)
   const recomputeHotZonesRef = useRef<(() => void) | null>(null)
+  // Called from the theme-change effect after setStyle() reloads the
+  // base style. setStyle() drops sources + layers but mapboxgl.Marker
+  // instances live on the map container DOM so they survive. This
+  // re-adds the `spots` source + invisible probe layer + retriggers
+  // marker sync so pins + hot zones come back instantly.
+  const reattachLayersRef = useRef<(() => void) | null>(null)
   const clearHotZonesRef = useRef<(() => void) | null>(null)
   const navRef = useRef(navigate)
   navRef.current = navigate
@@ -1103,21 +1109,31 @@ export default function MapPage() {
 
       await fetchSpotsInBounds(map.getBounds())
 
-      map.addSource('spots', {
-        type: 'geojson',
-        data: featureCollection(),
-        cluster: true,
-        clusterMaxZoom: 14,
-        clusterRadius: 50,
-      })
-      // Invisible layer so the source's tiles load (querySourceFeatures
-      // only returns features from rendered tiles).
-      map.addLayer({
-        id: 'spot-src',
-        type: 'circle',
-        source: 'spots',
-        paint: { 'circle-radius': 0, 'circle-opacity': 0 },
-      })
+      // Source + invisible probe layer extracted into a function so
+      // the theme-change setStyle() flow can re-attach them after the
+      // new base style finishes loading (Mapbox drops user sources
+      // on setStyle).
+      function attachSpotsLayer() {
+        if (!map.getSource('spots')) {
+          map.addSource('spots', {
+            type: 'geojson',
+            data: featureCollection(),
+            cluster: true,
+            clusterMaxZoom: 14,
+            clusterRadius: 50,
+          })
+        }
+        if (!map.getLayer('spot-src')) {
+          map.addLayer({
+            id: 'spot-src',
+            type: 'circle',
+            source: 'spots',
+            paint: { 'circle-radius': 0, 'circle-opacity': 0 },
+          })
+        }
+      }
+      attachSpotsLayer()
+      reattachLayersRef.current = attachSpotsLayer
       // Coalesce marker syncs to one per frame and only on events that
       // can actually change the visible set — never per render frame
       // (that was the source of pan/zoom jank under terrain).
@@ -1196,6 +1212,7 @@ export default function MapPage() {
       refreshRef.current = null
       recomputeHotZonesRef.current = null
       clearHotZonesRef.current = null
+      reattachLayersRef.current = null
       map.remove()
       mapRef.current = null
       setMapReady(false)
@@ -1220,8 +1237,11 @@ export default function MapPage() {
 
   // Theme swap — when the user flips dark/light from Settings while
   // /map is already mounted, hot-swap the Mapbox base style instead
-  // of forcing a full remount. Mapbox preserves sources/layers across
-  // setStyle calls, so our spot markers + hot-zones survive the swap.
+  // of forcing a full remount. setStyle() DROPS user sources +
+  // layers, but mapboxgl.Marker instances live on the map container
+  // DOM so they survive. We re-attach the spots source + invisible
+  // probe layer on `style.load`, then refresh the data and recompute
+  // hot zones so pins + clusters come back instantly.
   useEffect(() => {
     const map = mapRef.current
     if (!map) return
@@ -1229,10 +1249,26 @@ export default function MapPage() {
       theme === 'light'
         ? 'mapbox://styles/mapbox/light-v11'
         : 'mapbox://styles/mapbox/dark-v11'
+    // No-op if the requested style is already loaded (e.g. theme set
+    // to the same value back-to-back).
+    const current = map.getStyle()?.sprite
+    if (current && current.includes(theme === 'light' ? 'light' : 'dark')) {
+      return
+    }
+    function onStyleLoad() {
+      try {
+        reattachLayersRef.current?.()
+        refreshRef.current?.()
+        recomputeHotZonesRef.current?.()
+      } catch {
+        /* swallow — fail-open keeps the map usable */
+      }
+    }
     try {
+      map.once('style.load', onStyleLoad)
       map.setStyle(next)
     } catch {
-      /* style fetch failed — leave the previous one in place */
+      map.off('style.load', onStyleLoad)
     }
   }, [theme])
 

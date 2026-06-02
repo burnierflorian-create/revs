@@ -439,7 +439,7 @@ function BackFace({
       <div
         className="mx-3 mt-2 rounded-2xl p-2.5"
         style={{
-          background: 'rgba(20, 20, 22, 0.55)',
+          background: 'var(--color-glass-mid)',
           border: '1px solid rgba(255, 255, 255, 0.05)',
         }}
       >

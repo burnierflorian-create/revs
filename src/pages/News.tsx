@@ -248,7 +248,7 @@ export default function News({ categories }: { categories: string[] }) {
               rel="noopener noreferrer"
               className="tappable flex items-center gap-4 p-4 text-left"
               style={{
-                background: 'rgba(20, 20, 22, 0.40)',
+                background: 'var(--color-glass)',
                 border: '1px solid rgba(255, 255, 255, 0.05)',
                 borderRadius: '28px',
                 backdropFilter: 'saturate(160%) blur(12px)',

@@ -593,7 +593,7 @@ function RevsRadarCard({
         onClick={onTap}
         className="tappable flex w-full items-center gap-4 text-left transition-transform active:scale-[0.99]"
         style={{
-          background: 'rgba(20, 20, 22, 0.55)',
+          background: 'var(--color-glass-mid)',
           border: '1px solid rgba(255, 255, 255, 0.05)',
           borderRadius: '28px',
           padding: '20px',

@@ -496,7 +496,7 @@ export default function Profile() {
             <div
               className="inline-flex items-center gap-3.5 rounded-full"
               style={{
-                background: 'rgba(20, 20, 22, 0.40)',
+                background: 'var(--color-glass)',
                 border: '1px solid rgba(255, 255, 255, 0.05)',
                 padding: '8px 16px',
               }}
@@ -721,7 +721,7 @@ export default function Profile() {
                           style={{
                             width: '64px',
                             height: '64px',
-                            background: 'rgba(20, 20, 22, 0.60)',
+                            background: 'var(--color-glass-strong)',
                             border: isUnlocked
                               ? b.gold
                                 ? '1px solid rgba(224,179,65,0.40)'
@@ -988,7 +988,7 @@ function CollectionDecks({ spots }: { spots: Spot[] }) {
           onClick={() => setOpenRarity(null)}
           className="tappable mb-4 inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold text-fg/80 hover:text-fg"
           style={{
-            background: 'rgba(20, 20, 22, 0.50)',
+            background: 'var(--color-glass-mid)',
             border: '1px solid rgba(255, 255, 255, 0.08)',
           }}
         >
@@ -1020,7 +1020,7 @@ function CollectionDecks({ spots }: { spots: Spot[] }) {
           onClick={() => setOpenRarity(d.rarity)}
           className="tappable flex w-full items-center gap-4 rounded-3xl text-left transition-all duration-200 active:scale-[0.98]"
           style={{
-            background: 'rgba(20, 20, 22, 0.60)',
+            background: 'var(--color-glass-strong)',
             border: '1px solid rgba(255, 255, 255, 0.05)',
             padding: '18px 20px',
             boxShadow: `0 16px 30px rgba(0, 0, 0, 0.35), inset 0 0 0 1px ${d.tint}10`,
@@ -1399,7 +1399,7 @@ function BadgesBottomSheet({
                   key={b.slug}
                   className="flex flex-col items-center gap-2 rounded-2xl p-3 text-center"
                   style={{
-                    background: 'rgba(20, 20, 22, 0.50)',
+                    background: 'var(--color-glass-mid)',
                     border: isUnlocked
                       ? b.gold
                         ? '1px solid rgba(224,179,65,0.40)'
@@ -1528,7 +1528,7 @@ function TopChallenges({
           <div
             className="rounded-2xl p-4 text-center text-xs text-fg2"
             style={{
-              background: 'rgba(20, 20, 22, 0.40)',
+              background: 'var(--color-glass)',
               border: '1px solid rgba(255, 255, 255, 0.05)',
             }}
           >
@@ -1565,7 +1565,7 @@ function TopChallengeCard({
     <div
       className="flex items-center justify-between gap-4 rounded-2xl p-4"
       style={{
-        background: 'rgba(20, 20, 22, 0.40)',
+        background: 'var(--color-glass)',
         border: '1px solid rgba(255, 255, 255, 0.05)',
         backdropFilter: 'saturate(150%) blur(10px)',
         WebkitBackdropFilter: 'saturate(150%) blur(10px)',

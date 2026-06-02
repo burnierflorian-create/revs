@@ -540,15 +540,15 @@ export default function Feed() {
       <PullIndicator pull={pull} refreshing={refreshing} />
       <h1 className="display-xl py-5 text-fg">Fil</h1>
 
-      {/* Search + filtres — glass premium per the 2026-06-02 spec.
-          neutral-900/40 + white/5 border + backdrop-blur-xl + softer
-          ambient shadow so the bar reads as a single iOS-style
-          frosted layer floating on the feed. */}
+      {/* Search + filtres — glass premium. Background + border now
+          resolve through CSS vars (--color-glass + --color-border)
+          so the bar auto-flips when the user toggles dark / light
+          from Settings. */}
       <div
         className="mb-3 flex items-center gap-2 rounded-full px-4 py-2.5"
         style={{
-          background: 'rgba(20, 20, 22, 0.40)',
-          border: '1px solid rgba(255, 255, 255, 0.05)',
+          background: 'var(--color-glass)',
+          border: '1px solid var(--color-border)',
           backdropFilter: 'saturate(160%) blur(22px)',
           WebkitBackdropFilter: 'saturate(160%) blur(22px)',
           boxShadow: '0 4px 30px rgba(0, 0, 0, 0.40)',
@@ -585,8 +585,8 @@ export default function Feed() {
             allDefaults
               ? undefined
               : {
-                  background: 'rgba(20, 20, 22, 0.40)',
-                  border: '1px solid rgba(255, 255, 255, 0.05)',
+                  background: 'var(--color-glass)',
+                  border: '1px solid var(--color-border)',
                   backdropFilter: 'saturate(160%) blur(22px)',
                   WebkitBackdropFilter: 'saturate(160%) blur(22px)',
                 }
@@ -605,8 +605,8 @@ export default function Feed() {
             !allDefaults
               ? { border: '1px solid rgba(232,32,58,0.4)' }
               : {
-                  background: 'rgba(20, 20, 22, 0.40)',
-                  border: '1px solid rgba(255, 255, 255, 0.05)',
+                  background: 'var(--color-glass)',
+                  border: '1px solid var(--color-border)',
                   backdropFilter: 'saturate(160%) blur(22px)',
                   WebkitBackdropFilter: 'saturate(160%) blur(22px)',
                 }

@@ -24,6 +24,7 @@
      style={{ background: 'var(--color-glass)' }} renders correctly in
      both themes. */
   --color-glass:        rgba(20, 20, 22, 0.40);
+  --color-glass-mid:    rgba(20, 20, 22, 0.55);
   --color-glass-strong: rgba(20, 20, 22, 0.60);
   /* Tier glow accent — used by the avatar tier badge ring + welcome
      pill. Defaults to white/neutral so non-subscribers see no tint. */
@@ -44,6 +45,7 @@ html.light {
   --color-border:    rgba(0, 0, 0, 0.08);
   --color-divider:   rgba(0, 0, 0, 0.06);
   --color-glass:        rgba(255, 255, 255, 0.80);
+  --color-glass-mid:    rgba(255, 255, 255, 0.85);
   --color-glass-strong: rgba(255, 255, 255, 0.90);
   --tier-glow:       rgba(0, 0, 0, 0.06);
 }

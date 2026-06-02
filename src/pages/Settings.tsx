@@ -30,6 +30,7 @@ import {
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useTheme } from '../lib/theme'
+import { hapticSuccess } from '../lib/haptic'
 import { resizeImageToJpeg } from '../lib/spots'
 import { enablePush, pushSupported } from '../lib/push'
 import { translateError } from '../lib/errors'
@@ -1058,9 +1059,12 @@ export default function Settings() {
               right={
                 <Toggle
                   checked={theme === 'light'}
-                  onChange={() =>
+                  onChange={() => {
+                    // Haptic confirmation so the theme switch feels
+                    // like a tangible OS-level setting change.
+                    hapticSuccess()
                     setTheme(theme === 'light' ? 'dark' : 'light')
-                  }
+                  }}
                 />
               }
               noChevron
