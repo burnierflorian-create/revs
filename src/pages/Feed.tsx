@@ -11,7 +11,6 @@ import {
 } from '../lib/spots'
 import { SkeletonCard } from '../components/Skeleton'
 import LikeButton from '../components/LikeButton'
-import TitleChip from '../components/TitleChip'
 import FeedFiltersModal, {
   DEFAULT_FILTERS,
   filtersActive,
@@ -35,6 +34,17 @@ const CAT_COLOR: Record<string, string> = {
   JDM: '#3B82F6',
   classic: '#A0522D',
   youngtimer: '#14B8A6',
+}
+// Twin-stop linear gradient per category — replaces the flat tint on
+// the photo top-left badge. The lighter stop sits on the LEFT of the
+// pill so the badge reads as a small highlighted jewel rather than a
+// flat colour block (2026-06-02 Apple-style refinement).
+const CAT_GRADIENT: Record<string, string> = {
+  supercar: 'linear-gradient(90deg, #FBBF24 0%, #F59E0B 100%)',
+  hypercar: 'linear-gradient(90deg, #A78BFA 0%, #8B5CF6 100%)',
+  JDM: 'linear-gradient(90deg, #60A5FA 0%, #3B82F6 100%)',
+  classic: 'linear-gradient(90deg, #C68642 0%, #A0522D 100%)',
+  youngtimer: 'linear-gradient(90deg, #2DD4BF 0%, #14B8A6 100%)',
 }
 
 const SLIDES = [
@@ -529,8 +539,9 @@ export default function Feed() {
       <h1 className="display-xl py-5 text-fg">Fil</h1>
 
       {/* Search + filtres — glass premium per the 2026-06-02 spec.
-          neutral-900/40 + white/5 border + backdrop-blur-xl reads as
-          a single iOS-style frosted layer floating on the feed. */}
+          neutral-900/40 + white/5 border + backdrop-blur-xl + softer
+          ambient shadow so the bar reads as a single iOS-style
+          frosted layer floating on the feed. */}
       <div
         className="mb-3 flex items-center gap-2 rounded-full px-4 py-2.5"
         style={{
@@ -538,6 +549,7 @@ export default function Feed() {
           border: '1px solid rgba(255, 255, 255, 0.05)',
           backdropFilter: 'saturate(160%) blur(22px)',
           WebkitBackdropFilter: 'saturate(160%) blur(22px)',
+          boxShadow: '0 4px 30px rgba(0, 0, 0, 0.40)',
         }}
       >
         <SearchIcon className="h-4 w-4 flex-none text-neutral-500" />
@@ -546,7 +558,7 @@ export default function Feed() {
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           placeholder="Rechercher dans le fil…"
-          className="flex-1 bg-transparent text-xs font-medium text-neutral-300 placeholder:text-neutral-500 outline-none"
+          className="flex-1 bg-transparent text-xs font-medium tracking-tight text-neutral-200 placeholder:text-neutral-500 outline-none"
         />
         {searchQuery && (
           <button
@@ -681,9 +693,20 @@ export default function Feed() {
                 className="overflow-hidden rounded-[20px] bg-card shadow-soft"
                 style={{ border: '1px solid var(--color-border)' }}
               >
-                <button
+                {/* Photo card is a div+role=button so nested interactive
+                    children (profile nav, LikeButton) remain valid HTML.
+                    Keyboard activation mirrors a native <button>. */}
+                <div
+                  role="button"
+                  tabIndex={0}
                   onClick={() => onPhotoTap(spot.id)}
-                  className="tappable relative block w-full"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      onPhotoTap(spot.id)
+                    }
+                  }}
+                  className="tappable relative block w-full cursor-pointer select-none"
                 >
                   {spot.photo_url ? (
                     <img
@@ -713,10 +736,11 @@ export default function Feed() {
                       the category is genuinely undefined. */}
                   {catColor && (
                     <span
-                      className="absolute left-4 top-4 rounded-full px-3 py-1 text-[9px] font-black uppercase tracking-widest text-black"
+                      className="absolute left-4 top-4 z-20 rounded-full px-3 py-1 text-[9px] font-black uppercase tracking-widest text-black"
                       style={{
-                        backgroundColor: catColor,
-                        boxShadow: `0 6px 16px ${catColor}55`,
+                        background:
+                          CAT_GRADIENT[spot.category] ?? catColor,
+                        boxShadow: `0 6px 16px ${catColor}40`,
                         letterSpacing: '0.14em',
                       }}
                     >
@@ -737,10 +761,16 @@ export default function Feed() {
                       {count}
                     </span>
                   )}
-                  {/* Photo gradient — extended to pt-20 per the 2026-06-02
-                      satin spec so the fade has more breathing room between
-                      the photo and the brand/model overlay text. */}
-                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/95 via-black/40 to-transparent p-4 pt-20 text-left">
+                  {/* Photo gradient — explicit h-44 (176px) per the
+                      2026-06-02 satin spec so the fade hits a fixed
+                      ramp regardless of brand/model text length and
+                      keeps the identity row below it readable. */}
+                  <div className="absolute inset-x-0 bottom-0 h-44 bg-gradient-to-t from-black/95 via-black/40 to-transparent z-10 pointer-events-none" />
+                  {/* Immersive content layer — brand/model title at top of
+                      the gradient, identity row at the bottom. Replaces
+                      the separate spotter strip per the 2026-06-02
+                      luxury card spec. */}
+                  <div className="absolute inset-x-0 bottom-0 z-20 p-4 pt-20 text-left">
                     <div className="flex items-end justify-between gap-3">
                       <div className="min-w-0">
                         <h2
@@ -767,62 +797,78 @@ export default function Feed() {
                         {xpForSpot(spot.estimated_price, spot.rarity)}
                       </span>
                     </div>
-                  </div>
-                </button>
 
-                {/* Spotter strip — darker shade (#0f0f0f) so it reads as
-                    a separate band from the photo / card body, with a
-                    hairline divider on top for crispness. */}
-                <div
-                  className="flex items-center gap-3 px-4 py-3"
-                  style={{
-                    background: '#0f0f0f',
-                    borderTop: '1px solid var(--color-divider)',
-                  }}
-                >
-                  <button
-                    onClick={() => navigate(`/u/${spot.user_id}`)}
-                    className="tappable flex min-w-0 items-center gap-3"
-                  >
-                    <div
-                      className="flex h-12 w-12 flex-none items-center justify-center overflow-hidden rounded-full bg-accent text-base font-extrabold text-fg"
-                      style={{
-                        boxShadow: founder
-                          ? '0 0 0 2px var(--color-accent), 0 0 14px rgba(232,32,58,0.55)'
-                          : '0 0 0 2px rgba(255,255,255,0.06)',
-                      }}
-                    >
-                      {prof?.avatar ? (
-                        <img
-                          src={prof.avatar}
-                          alt=""
-                          loading="lazy"
-                          decoding="async"
-                          className="h-full w-full object-cover"
-                        />
-                      ) : (
-                        pseudo.charAt(0).toUpperCase()
-                      )}
+                    {/* Identity row — avatar + name + Fondateur badge +
+                        location/time on the left, LikeButton on the
+                        right. Nested interactive children use
+                        stopPropagation so the photo's onPhotoTap doesn't
+                        fire when the user taps the avatar / like. */}
+                    <div className="mt-3 flex items-center justify-between gap-2">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          navigate(`/u/${spot.user_id}`)
+                        }}
+                        className="tappable flex min-w-0 flex-1 items-center gap-2.5 text-left"
+                        aria-label={`Profil de ${pseudo}`}
+                      >
+                        <div
+                          className="flex h-9 w-9 flex-none items-center justify-center overflow-hidden rounded-full bg-neutral-900 text-sm font-extrabold text-white"
+                          style={{
+                            border: '1px solid rgba(255,255,255,0.10)',
+                            boxShadow:
+                              '0 4px 12px rgba(0,0,0,0.45)',
+                          }}
+                        >
+                          {prof?.avatar ? (
+                            <img
+                              src={prof.avatar}
+                              alt=""
+                              loading="lazy"
+                              decoding="async"
+                              className="h-full w-full object-cover"
+                            />
+                          ) : (
+                            pseudo.charAt(0).toUpperCase()
+                          )}
+                        </div>
+                        <div className="min-w-0 space-y-0.5">
+                          <div className="flex items-center gap-1.5">
+                            <span
+                              className="truncate font-black tracking-tight text-white"
+                              style={{ fontSize: '12px' }}
+                            >
+                              {pseudo}
+                            </span>
+                            {founder && (
+                              <span
+                                className="flex-none rounded font-black uppercase tracking-widest text-red-400"
+                                style={{
+                                  background: 'rgba(239, 68, 68, 0.10)',
+                                  border:
+                                    '1px solid rgba(239, 68, 68, 0.20)',
+                                  padding: '2px 6px',
+                                  fontSize: '8px',
+                                  letterSpacing: '0.16em',
+                                }}
+                              >
+                                Fondateur
+                              </span>
+                            )}
+                          </div>
+                          <p
+                            className="truncate font-medium tracking-tight text-neutral-400"
+                            style={{ fontSize: '10px' }}
+                          >
+                            {[prof?.ville, timeAgo(spot.created_at)]
+                              .filter(Boolean)
+                              .join(' · ')}
+                          </p>
+                        </div>
+                      </button>
+                      <LikeButton spotId={spot.id} className="flex-none" />
                     </div>
-                    <div className="flex min-w-0 flex-col">
-                      <span className="truncate text-sm font-semibold text-fg">
-                        {pseudo}
-                      </span>
-                      <span className="mt-0.5">
-                        <TitleChip
-                          xp={prof?.xp ?? 0}
-                          title={prof?.title ?? null}
-                          size="xs"
-                        />
-                      </span>
-                    </div>
-                  </button>
-                  <span className="flex-1 truncate text-center text-[11px] text-fg2">
-                    {[prof?.ville, timeAgo(spot.created_at)]
-                      .filter(Boolean)
-                      .join(' · ')}
-                  </span>
-                  <LikeButton spotId={spot.id} className="flex-none" />
+                  </div>
                 </div>
               </article>
             )

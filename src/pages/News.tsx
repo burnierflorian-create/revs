@@ -235,66 +235,91 @@ export default function News({ categories }: { categories: string[] }) {
           Aucun article pour le moment.
         </p>
       ) : (
-        <div className="space-y-4 pb-2">
+        // Apple News editorial layout — text block on the left, fixed
+        // thumbnail on the right, glass card shell. Replaces the
+        // previous "image on top, text below" stack so the feed reads
+        // like Apple News rather than a Pinterest stream.
+        <div className="space-y-3 pb-2">
           {(visible ?? []).map((n) => (
             <a
               key={n.id}
               href={n.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="tappable block overflow-hidden rounded-3xl bg-card"
-              style={{ border: '1px solid var(--color-border)' }}
+              className="tappable flex items-center gap-4 p-4 text-left"
+              style={{
+                background: 'rgba(20, 20, 22, 0.40)',
+                border: '1px solid rgba(255, 255, 255, 0.05)',
+                borderRadius: '28px',
+                backdropFilter: 'saturate(160%) blur(12px)',
+                WebkitBackdropFilter: 'saturate(160%) blur(12px)',
+                boxShadow: '0 12px 28px rgba(0, 0, 0, 0.18)',
+              }}
             >
-              <div className="relative">
-                <img
-                  src={n.image_url || fallbackImg(n.category)}
-                  alt={n.title}
-                  loading="lazy"
-                  className="aspect-video w-full object-cover"
-                />
-                <span
-                  className={`label-up absolute left-3 top-3 rounded-full px-2.5 py-1 text-[9px] text-fg shadow ${badgeClass(
-                    n.category,
-                  )}`}
-                >
-                  {n.category.toUpperCase()}
-                </span>
-                {isNew(n) && (
-                  // Glass red micro-pill 2026-06-02 — replaces the
-                  // saturated red block. Apple News style: subtle
-                  // red wash + 30% border + 8px text. Tracking widest
-                  // so the 7-letter label still reads at micro size.
+              <div className="min-w-0 flex-1 space-y-1.5">
+                {/* Stacked badge row — category + NOUVEAU pill when
+                    fresh. Single .gap row so they wrap gracefully on
+                    long category names. */}
+                <div className="flex flex-wrap items-center gap-1.5">
                   <span
-                    className="badge-new absolute right-3 top-3 rounded-full px-2 py-0.5 font-black uppercase tracking-widest text-red-400"
-                    style={{
-                      background: 'rgba(239, 68, 68, 0.20)',
-                      border: '1px solid rgba(239, 68, 68, 0.30)',
-                      fontSize: '8px',
-                      letterSpacing: '0.16em',
-                    }}
+                    className={`rounded-full px-2 py-0.5 text-[8px] font-black uppercase tracking-widest text-fg ${badgeClass(
+                      n.category,
+                    )}`}
+                    style={{ letterSpacing: '0.16em' }}
                   >
-                    NOUVEAU
+                    {n.category.toUpperCase()}
                   </span>
-                )}
-              </div>
-
-              <div className="p-5">
+                  {isNew(n) && (
+                    <span
+                      className="badge-new rounded-full font-black uppercase tracking-widest text-red-400"
+                      style={{
+                        background: 'rgba(239, 68, 68, 0.10)',
+                        border: '1px solid rgba(239, 68, 68, 0.20)',
+                        padding: '2px 8px',
+                        fontSize: '8px',
+                        letterSpacing: '0.16em',
+                      }}
+                    >
+                      Nouveau
+                    </span>
+                  )}
+                </div>
                 <h2
-                  className="line-clamp-2 font-display leading-tight tracking-tighter text-fg"
-                  style={{ fontSize: '16px', fontWeight: 800 }}
+                  className="line-clamp-2 font-display font-black leading-tight tracking-tight text-white"
+                  style={{ fontSize: '14px' }}
                 >
                   {n.title}
                 </h2>
                 {n.summary && (
-                  <p className="mt-2 line-clamp-2 text-sm leading-relaxed text-fg/70">
+                  <p className="line-clamp-2 text-xs font-medium leading-normal text-neutral-400">
                     {n.summary}
                   </p>
                 )}
-                <p className="label-up mt-3 text-[10px] text-fg2">
+                <p className="text-[10px] font-medium text-fg2/70">
                   {[n.source, timeAgo(n.published_at ?? n.created_at)]
                     .filter(Boolean)
                     .join(' · ')}
                 </p>
+              </div>
+              {/* Right-side fixed-ratio thumbnail. 20×20 (80px) per the
+                  Apple News editorial layout. Falls back to the
+                  category-mapped fallback image. */}
+              <div
+                className="h-20 w-20 flex-none overflow-hidden rounded-2xl"
+                style={{
+                  background: '#0a0a0a',
+                  border: '1px solid rgba(255, 255, 255, 0.05)',
+                  boxShadow:
+                    'inset 0 1px 0 rgba(255, 255, 255, 0.03)',
+                }}
+              >
+                <img
+                  src={n.image_url || fallbackImg(n.category)}
+                  alt={n.title}
+                  loading="lazy"
+                  decoding="async"
+                  className="h-full w-full object-cover"
+                />
               </div>
             </a>
           ))}
