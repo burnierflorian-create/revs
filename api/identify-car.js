@@ -47,20 +47,47 @@ const FALLBACK = {
 
 // ─────────────────────── Prompts ───────────────────────
 
-const SYSTEM_FULL = `Tu es un expert mondial en identification automobile avec 20 ans d'expérience. Tu identifies TOUTES les voitures, même partiellement visibles, même de dos, même de côté, même la nuit. Tu ne réponds JAMAIS "indéterminé" ou "inconnue" — tu donnes toujours ta meilleure estimation basée sur les indices visuels disponibles : forme de carrosserie, phares, feux, calandre, jantes, lignes de design, proportions, badges visibles.
+// 2026-06-02 hybrid identify engine:
+// - Single static vision call with SYSTEM_STRICT — pure JSON, 6-tier
+//   rarity, specs line, screen-detection guard. ~3-5 s latency.
+// - Web-search rarity refine RUNS ONLY when the static call returns
+//   rarity == "hypercar" (the only tier where a false positive
+//   actually hurts XP balance). Other tiers ship as-is.
+// - SYSTEM_SIMPLE / SYSTEM_MINIMAL remain as escalating fallbacks in
+//   case strict JSON parsing fails on the first attempt.
+const SYSTEM_STRICT = `Tu es le moteur de détection officiel de l'application REVS. Ton rôle est d'analyser la photo d'un véhicule.
+Tu réponds UNIQUEMENT par du JSON valide, sans markdown, sans texte avant ou après.
 
-Pour chaque photo, analyse dans cet ordre :
-1. Silhouette générale (supercar, berline, SUV, coupé...)
-2. Indices de marque (forme des phares, calandre, badge)
-3. Modèle exact (proportions, détails spécifiques)
-4. Année approximative (génération du modèle)
-5. Couleur principale
+GARDE-FOU ANTI-TRICHE (priorité maximale) :
+Si l'image montre un écran d'ordinateur, de télévision ou de téléphone (lignes de moirage, reflets de pixel, motifs RGB visibles), une miniature de jouet (jante carrée, proportions enfantines, échelle obvious), un dessin, ou n'est PAS une vraie voiture en environnement réel, renvoie strictement :
+{"error":"VIRTUAL_SCREEN_DETECTED"}
 
-Pour les McLaren spécifiquement : porte papillon, nez pointu, prises d'air latérales, ligne de toit très basse, feux en boomerang.
-Pour les Ferrari : avant proéminent, grille centrale, ligne latérale tendue, logo cheval cabré.
-Pour les Lamborghini : angles très marqués, portes en ciseaux sur certains modèles, design angulaire agressif.
+ÉCHELLE DE RARETÉ (6 niveaux, segment + positionnement) :
+- "standard"    : voiture de tous les jours (Nissan Juke, Renault Clio, VW Golf).
+- "premium"    : haut de gamme quotidien (Mercedes CLA AMG Line, BMW Série 2, Audi A3).
+- "performance" : sportive pure dérivée d'un modèle civil (Audi TT RS, BMW M2, Porsche 718).
+- "exclusif"   : gros SUV de sport ou grosse berline lourde (Mercedes-AMG GLE 63 S Coupé, Cayenne Coupé, BMW X5 M, RS Q8).
+- "supercar"   : exotique de prestige biplace/2+2 à moteur central ou flagship spécialiste (McLaren 570S, Audi R8 V10, Porsche 911 GT3 RS, Ferrari 488).
+- "hypercar"   : sommet absolu (Bugatti Chiron, Pagani Huayra, Koenigsegg, McLaren P1, AMG GT 63 S E Performance flagship). Souvent < 500 exemplaires.
 
-Réponds TOUJOURS en JSON avec : car_brand, car_model, car_year, car_color, car_category (Supercar/Hypercar/Sportcar/SUV/Berline/Autre), confidence (0-100), estimated_price, rarity_reason. Si vraiment impossible à identifier : car_brand="Inconnu", car_model="Véhicule non identifiable" — jamais de champs vides.`
+Si l'image est valide, renvoie strictement ce JSON :
+{
+  "brand": "Marque",
+  "model": "Modèle précis",
+  "year": 2022,
+  "color": "couleur dominante",
+  "category": "supercar|hypercar|classic|youngtimer|JDM|other",
+  "confidence": 85,
+  "rarity": "standard|premium|performance|exclusif|supercar|hypercar",
+  "specs": "Configuration moteur / Transmission",
+  "valid": true
+}
+
+Règles :
+- "specs" : UNE ligne courte (max 50 caractères), format "Configuration / Transmission". Ex: "V8 BiTurbo / Transm. Intégrale", "Moteur Central Arrière / Propulsion", "L6 BiTurbo / Propulsion". PAS de chevaux.
+- En cas de doute sur la rareté, descends d'un cran (douteux supercar = "performance").
+- Si tu n'identifies pas le modèle exact, donne ta meilleure estimation — JAMAIS "indéterminé" ni "inconnue".
+- Pas d'appel web : appuie-toi sur tes connaissances statiques pour une réponse instantanée.`
 
 const SYSTEM_SIMPLE = `Tu es un expert automobile. Identifie la voiture sur la photo. Tu dois TOUJOURS répondre — au pire avec la marque seule + "Modèle indéterminé" + confidence: 20.
 
@@ -276,72 +303,6 @@ function cleanModelName(s) {
   return s.replace(/\s*\([^)]*\)/g, '').trim()
 }
 
-// Second-stage call: web-grounded lookup of the new EU price for a
-// (brand, model, year) triplet. Forces Claude to consult 2-3 distinct
-// sources and return them as JSON ; we then take the median, which is
-// robust against one source being inflated (configurator with packs,
-// fully-optioned listing, DE pricing scraped from a comparison site,
-// etc.). Returns an integer (€) or null. Best-effort — failures fall
-// back to the model's initial estimate.
-async function refinePriceFromWeb(client, brand, model, year) {
-  if (!brand || !model) return null
-  const yearPart = year ? ` ${year}` : ''
-  const userMsg =
-    `Recherche le prix CATALOGUE NEUF de base (version standard sans option ni pack, ` +
-    `marché français ou européen) de la ${brand} ${model}${yearPart}.\n\n` +
-    `Consulte 2 ou 3 sources distinctes (constructeur officiel comme porsche.fr / ` +
-    `ferrari.com / mercedes-benz.fr, presse spécialisée comme caradisiac.com / largus.fr / ` +
-    `motor1.com, ou comparateurs sérieux). Refuse les pages avec une voiture déjà optionnée.\n\n` +
-    `Réponds UNIQUEMENT par ce JSON, sans markdown :\n` +
-    `{"prices":[{"source":"caradisiac.com","price_eur":170000},{"source":"porsche.fr","price_eur":168000},{"source":"largus.fr","price_eur":175000}]}\n\n` +
-    `Règles :\n` +
-    `- Chaque "price_eur" est un entier en EUROS TTC, version de BASE catalogue France.\n` +
-    `- Au moins 2 sources distinctes si possible.\n` +
-    `- Si une source ne donne que le prix avec options, soustrais les options listées.\n` +
-    `- Si vraiment aucune source fiable n'est trouvée, renvoie {"prices":[]}.\n` +
-    `- Aucun texte avant ou après le JSON.`
-  try {
-    const r = await client.messages.create({
-      model: MODEL,
-      max_tokens: 600,
-      messages: [{ role: 'user', content: userMsg }],
-      tools: [
-        { type: 'web_search_20250305', name: 'web_search', max_uses: 5 },
-      ],
-    })
-    const text = r.content
-      .filter((b) => b.type === 'text')
-      .map((b) => b.text)
-      .join(' ')
-    const parsed = extractJSON(text)
-    const rows = Array.isArray(parsed?.prices) ? parsed.prices : []
-    const prices = rows
-      .map((row) => {
-        const n =
-          typeof row?.price_eur === 'number'
-            ? Math.floor(row.price_eur)
-            : parseInt(
-                String(row?.price_eur ?? '').replace(/[^0-9]/g, ''),
-                10,
-              )
-        return Number.isFinite(n) && n > 0 && n < 5_000_000_000 ? n : null
-      })
-      .filter((n) => n !== null)
-      .sort((a, b) => a - b)
-    if (prices.length === 0) return null
-    // Median: middle element for odd count, average of two middles for
-    // even. Rounded down so the eventual XP threshold stays predictable.
-    const mid = Math.floor(prices.length / 2)
-    const median =
-      prices.length % 2 === 1
-        ? prices[mid]
-        : Math.floor((prices[mid - 1] + prices[mid]) / 2)
-    return median
-  } catch (e) {
-    console.error('[identify-car] price refine failed:', e?.message ?? e)
-    return null
-  }
-}
 
 // Third-stage call: web-grounded rarity lookup. Returns
 // { production: int|null, rarity: <6-tier value> } — defaults to
@@ -497,8 +458,11 @@ export default async function handler(req, res) {
   // whose response yields a parseable JSON with at least a brand or
   // model — anything else, including refusals, falls through to the
   // next try.
+  // Strict prompt first (the hot path — single fast static call). The
+  // two legacy prompts stay as escalating fallbacks for the rare case
+  // where the strict prompt fails to produce parseable JSON.
   const attempts = [
-    { system: SYSTEM_FULL,    max: 1500 },
+    { system: SYSTEM_STRICT,  max: 600 },
     { system: SYSTEM_SIMPLE,  max: 600 },
     { system: SYSTEM_MINIMAL, max: 250 },
   ]
@@ -519,36 +483,46 @@ export default async function handler(req, res) {
       const text = lastText(r)
       lastRawText = text || lastRawText
       const parsed = extractJSON(text)
+
+      // Anti-cheat short-circuit: the strict prompt asks the AI to
+      // return {"error":"VIRTUAL_SCREEN_DETECTED"} for screens, toys,
+      // photos-of-photos. Surface that as a hard rejection so the
+      // frontend bounces the publish flow.
+      if (parsed && typeof parsed.error === 'string' && parsed.error) {
+        return sendJson(res, {
+          ...FALLBACK,
+          valid: false,
+          reason:
+            parsed.error === 'VIRTUAL_SCREEN_DETECTED'
+              ? 'Image suspecte détectée (écran, jouet ou photo de photo). Prends ta photo en conditions réelles.'
+              : `Image refusée (${parsed.error}).`,
+        })
+      }
+
       if (parsed && (parsed.brand || parsed.model)) {
         const finalized = finalize(parsed)
-        // Second + third stage web-grounded refinement, in PARALLEL
-        // to keep latency reasonable (each takes ~5-8s). Skipped when
-        // we fell back to the "Voiture / Modèle indéterminé" rescue
-        // — no point burning web_search quota on an unknown car.
+        // 2026-06-02 hybrid refinement: ONLY hypercar gets a web check,
+        // and only when the static identify produced a real brand+model.
+        // Everything else ships as-is for sub-5s latency.
         if (
+          finalized.rarity === 'hypercar' &&
           finalized.brand !== NEVER_EMPTY_BRAND &&
           finalized.model !== NEVER_EMPTY_MODEL &&
           finalized.valid !== false
         ) {
-          const [refinedPrice, rarityRes] = await Promise.all([
-            refinePriceFromWeb(
-              client,
-              finalized.brand,
-              finalized.model,
-              finalized.year,
-            ),
-            refineRarityFromWeb(
-              client,
-              finalized.brand,
-              finalized.model,
-              finalized.year,
-            ),
-          ])
-          if (typeof refinedPrice === 'number' && refinedPrice > 0) {
-            finalized.estimated_price = refinedPrice
-          }
-          finalized.rarity = rarityRes.rarity
+          const rarityRes = await refineRarityFromWeb(
+            client,
+            finalized.brand,
+            finalized.model,
+            finalized.year,
+          )
           finalized.production = rarityRes.production
+          // Trust the web check: if it says anything other than
+          // hypercar (incl. supercar/exclusif/performance), downgrade
+          // — the static identify over-claimed prestige.
+          if (rarityRes.rarity && rarityRes.rarity !== 'hypercar') {
+            finalized.rarity = rarityRes.rarity
+          }
         }
         return sendJson(res, finalized)
       }

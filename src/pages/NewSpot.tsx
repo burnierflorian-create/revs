@@ -15,6 +15,7 @@ import {
 } from '../lib/spots'
 import { takePendingPhoto } from '../lib/pendingPhoto'
 import { getCurrentPositionSafe } from '../lib/geo'
+import { hapticError, hapticHeartbeat, hapticSuccess } from '../lib/haptic'
 import { maybePromptPush, myPseudo, notifyPush } from '../lib/push'
 import { brandSlugFor, getBrand } from '../lib/brands'
 import { Skeleton } from '../components/Skeleton'
@@ -23,7 +24,9 @@ import type { Spot } from '../lib/spots'
 
 type Step = 1 | 2 | 3 | 4
 
-const MAX_PHOTO_AGE_MS = 10 * 60 * 1000
+// Spec 2026-06-02 — anti-cheat tightened from 10 min to 5 min so
+// the photo + GPS pair stays plausibly "fresh from the street".
+const MAX_PHOTO_AGE_MS = 5 * 60 * 1000
 const MAX_GPS_DRIFT_M = 300
 
 // Supabase errors (Postgrest/Storage) are plain objects, NOT Error
@@ -163,6 +166,9 @@ export default function NewSpot() {
     setPubError(null)
     setPubStatus('')
     setRejection(message)
+    // Error buzz on every reject path (screen detected by AI, photo
+    // too old, GPS incoherent, GPS off). hapticError no-ops on iOS.
+    hapticError()
     setStep(1)
   }
 
@@ -265,6 +271,10 @@ export default function NewSpot() {
   async function analyze() {
     if (!image) return
     setStep(2)
+    // Haptic heartbeat — feels like a low-pulse sensor scan during the
+    // laser animation. cancelHeartbeat is called in every exit path
+    // below so the loop never leaks past step 2.
+    const cancelHeartbeat = hapticHeartbeat()
     const ctrl = new AbortController()
     // 25 s upper bound: identify-car's prompt ladder + detect-plate's
     // own retry can each chew ~10-15 s. Below that the abort can take
@@ -312,6 +322,8 @@ export default function NewSpot() {
 
       const data = { ...EMPTY_RESULT, ...carJson }
       if (data.valid === false) {
+        // rejectAndRestart() owns the error buzz — call it once.
+        cancelHeartbeat()
         rejectAndRestart(
           data.reason ||
             "Cette photo ne semble pas être une vraie voiture en conditions réelles.",
@@ -319,10 +331,14 @@ export default function NewSpot() {
         return
       }
       applyResult(data)
+      cancelHeartbeat()
+      // Success buzz lands at the exact moment the 3D card reveals.
+      hapticSuccess()
       setStep(3)
     } catch {
       // Infra/timeout failure: fail open to manual entry, don't block.
       clearTimeout(timer)
+      cancelHeartbeat()
       applyResult(EMPTY_RESULT)
       setStep(3)
     }
