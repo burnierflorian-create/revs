@@ -23,11 +23,13 @@ import {
   Scale,
   Shield,
   Smartphone,
+  Sun,
   Trash2,
   UserPlus,
   Users,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { useTheme } from '../lib/theme'
 import { resizeImageToJpeg } from '../lib/spots'
 import { enablePush, pushSupported } from '../lib/push'
 import { translateError } from '../lib/errors'
@@ -160,6 +162,7 @@ function Toggle({
 export default function Settings() {
   const navigate = useNavigate()
   const fileRef = useRef<HTMLInputElement>(null)
+  const { theme, setTheme } = useTheme()
 
   const [loading, setLoading] = useState(true)
   const [userId, setUserId] = useState<string | null>(null)
@@ -1048,6 +1051,20 @@ export default function Settings() {
 
           {/* 3 — PRÉFÉRENCES */}
           <Section title="Préférences">
+            <Row
+              icon={<Sun className="h-4 w-4" />}
+              label="Apparence"
+              sub={theme === 'light' ? 'Mode clair' : 'Mode sombre'}
+              right={
+                <Toggle
+                  checked={theme === 'light'}
+                  onChange={() =>
+                    setTheme(theme === 'light' ? 'dark' : 'light')
+                  }
+                />
+              }
+              noChevron
+            />
             <Row
               icon={<Bell className="h-4 w-4" />}
               label="Notifications"

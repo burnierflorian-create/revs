@@ -892,7 +892,10 @@ function ChallengeRing({
             style={{
               transition:
                 'stroke-dashoffset 1000ms cubic-bezier(0.22, 1, 0.36, 1)',
-              filter: `drop-shadow(0 0 6px ${ringColor}88)`,
+              // Neon halo per the 2026-06-02 spec — 15px diffuse blur
+              // at 15% alpha (hex 26) so the glow lifts the ring off
+              // the page without bleeding into adjacent SVGs.
+              filter: `drop-shadow(0 0 15px ${ringColor}26)`,
             }}
           />
         </svg>
@@ -905,12 +908,12 @@ function ChallengeRing({
         </span>
       </div>
       {/* Label wraps freely (whitespace-normal, no clamp) so long titles
-          land on two natural rows. Per the 2026-06-02 refinement: 9px
-          font, max-w-[85px], explicit mt-2 spacing between ring and
-          label so the labels never crowd the SVG. */}
+          land on two natural rows. Per the 2026-06-02 strict spec:
+          10px font, max-w-[90px], mt-2, dark/light-aware tint via
+          text-fg2 (auto-flips with the theme). */}
       <span
-        className="mt-2 block max-w-[85px] whitespace-normal text-center font-black uppercase leading-tight tracking-tight text-neutral-400"
-        style={{ fontSize: '9px' }}
+        className="mt-2 block max-w-[90px] whitespace-normal text-center font-black uppercase leading-tight tracking-tight text-fg2"
+        style={{ fontSize: '10px' }}
       >
         {challenge.title}
       </span>

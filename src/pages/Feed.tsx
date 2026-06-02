@@ -692,7 +692,7 @@ export default function Feed() {
             return (
               <article
                 key={spot.id}
-                className="overflow-hidden rounded-[20px] bg-card shadow-soft"
+                className="overflow-hidden rounded-[38px] bg-card shadow-soft"
                 style={{ border: '1px solid var(--color-border)' }}
               >
                 {/* Photo card is a div+role=button so nested interactive
@@ -772,12 +772,9 @@ export default function Feed() {
                       ramp regardless of brand/model text length and
                       keeps the identity row below it readable. */}
                   <div className="absolute inset-x-0 bottom-0 h-44 bg-gradient-to-t from-black/95 via-black/40 to-transparent z-10 pointer-events-none" />
-                  {/* Immersive content layer — brand/model title at top of
-                      the gradient, identity row at the bottom. pt-24
-                      extends the read zone an extra 16px so the white
-                      brand/model text never reads thin against the
-                      photo's brightest regions. */}
-                  <div className="absolute inset-x-0 bottom-0 z-20 p-4 pt-24 text-left">
+                  {/* Brand + model + XP overlay — sits above the identity
+                      glass plate, riding the photo's bottom gradient. */}
+                  <div className="absolute inset-x-0 bottom-16 z-20 px-4 text-left">
                     <div className="flex items-end justify-between gap-3">
                       <div className="min-w-0">
                         <h2
@@ -804,13 +801,23 @@ export default function Feed() {
                         {xpForSpot(spot.estimated_price, spot.rarity)}
                       </span>
                     </div>
+                  </div>
 
-                    {/* Identity row — avatar + name + Fondateur badge +
-                        location/time on the left, LikeButton on the
-                        right. Nested interactive children use
-                        stopPropagation so the photo's onPhotoTap doesn't
-                        fire when the user taps the avatar / like. */}
-                    <div className="mt-3 flex items-center justify-between gap-2">
+                  {/* Identity glass plate — own translucent strip at the
+                      very bottom of the photo per the 2026-06-02 spec.
+                      bg-black/40 + border-top white/5 + 12px blur so
+                      the avatar/pseudo/Fondateur/time row reads on a
+                      proper smoked-glass slate. Nested interactive
+                      children use stopPropagation. */}
+                  <div
+                    className="absolute inset-x-0 bottom-0 z-20 flex items-center justify-between gap-2 px-4 py-3"
+                    style={{
+                      background: 'rgba(0, 0, 0, 0.40)',
+                      borderTop: '1px solid rgba(255, 255, 255, 0.05)',
+                      backdropFilter: 'saturate(160%) blur(12px)',
+                      WebkitBackdropFilter: 'saturate(160%) blur(12px)',
+                    }}
+                  >
                       <button
                         onClick={(e) => {
                           e.stopPropagation()
@@ -874,7 +881,6 @@ export default function Feed() {
                         </div>
                       </button>
                       <LikeButton spotId={spot.id} className="flex-none" />
-                    </div>
                   </div>
                 </div>
               </article>

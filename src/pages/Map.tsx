@@ -20,6 +20,7 @@ import {
   type Rarity,
   type Spot,
 } from '../lib/spots'
+import { useTheme } from '../lib/theme'
 import {
   fetchSpottingPrediction,
   type PredictionResult,
@@ -481,6 +482,7 @@ function applyMode(map: mapboxgl.Map, mode: MapMode) {
 export default function MapPage() {
   const navigate = useNavigate()
   const location = useLocation()
+  const { theme } = useTheme()
 
   const containerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<mapboxgl.Map | null>(null)
@@ -739,7 +741,13 @@ export default function MapPage() {
     try {
       map = new mapboxgl.Map({
         container: el,
-        style: 'mapbox://styles/mapbox/light-v11',
+        // Mapbox base style follows the app theme. Dark uses Mapbox's
+        // dark-v11 so the rarity-tinted pins read as glowing dots over
+        // a noir map; light uses light-v11 for the Apple Maps feel.
+        style:
+          theme === 'light'
+            ? 'mapbox://styles/mapbox/light-v11'
+            : 'mapbox://styles/mapbox/dark-v11',
         center: initCenter,
         zoom: initZoom,
         pitch: 0,
@@ -1210,6 +1218,24 @@ export default function MapPage() {
     refreshRef.current?.()
   }, [searchQuery])
 
+  // Theme swap — when the user flips dark/light from Settings while
+  // /map is already mounted, hot-swap the Mapbox base style instead
+  // of forcing a full remount. Mapbox preserves sources/layers across
+  // setStyle calls, so our spot markers + hot-zones survive the swap.
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+    const next =
+      theme === 'light'
+        ? 'mapbox://styles/mapbox/light-v11'
+        : 'mapbox://styles/mapbox/dark-v11'
+    try {
+      map.setStyle(next)
+    } catch {
+      /* style fetch failed — leave the previous one in place */
+    }
+  }, [theme])
+
   // Search → city geocoding fallback. If the user types a query that
   // matches zero local spots AND looks like a place name (≥3 chars,
   // no digits), debounce for 700ms then hit Mapbox geocoding and
@@ -1517,9 +1543,11 @@ export default function MapPage() {
           aria-label="Me localiser"
           className="tappable flex h-12 w-12 items-center justify-center rounded-full bg-accent transition-transform active:scale-90"
           style={{
-            // Softer, two-layer shadow — ambient + tight contact.
+            // shadow-2xl level — bigger ambient + brand-tinted glow +
+            // tight contact + inset hairline so the FAB sits visually
+            // above the map regardless of zoom / style.
             boxShadow:
-              '0 14px 32px rgba(232, 32, 58, 0.40), 0 4px 12px rgba(0, 0, 0, 0.45), inset 0 0 0 1px rgba(255, 255, 255, 0.08)',
+              '0 18px 40px rgba(232, 32, 58, 0.42), 0 8px 18px rgba(0, 0, 0, 0.40), 0 4px 10px rgba(0, 0, 0, 0.30), inset 0 0 0 1px rgba(255, 255, 255, 0.10)',
           }}
         >
           <LocateFixed className="h-5 w-5 text-fg" />

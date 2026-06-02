@@ -8,17 +8,44 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 
 :root {
-  /* Palette */
+  /* Palette — DEFAULT = dark mode. The matching html.light overrides
+     below redefine the same vars for the Apple light variant; every
+     consumer using bg-bg / text-fg / text-fg2 / border-border (Tailwind
+     tokens) auto-flips when ThemeProvider toggles the html class. */
   --color-bg:        #0a0a0a;  /* fond principal — légèrement nuancé */
   --color-card:      #141414;  /* surface card */
   --color-fg:        #ffffff;  /* texte principal */
   --color-fg-2:      #8a8a8a;  /* texte secondaire / labels */
-  --color-accent:    #e8203a;  /* rouge REVS */
+  --color-accent:    #e8203a;  /* rouge REVS — invariant cross-theme */
   --color-border:    rgba(255, 255, 255, 0.06); /* bordure carte subtile */
   --color-divider:   rgba(255, 255, 255, 0.08); /* séparateur */
+  /* Glass plates — used by Home radar card, Feed search bar, Profile
+     stats pill, etc. Light variant inverts to white-tint so the same
+     style={{ background: 'var(--color-glass)' }} renders correctly in
+     both themes. */
+  --color-glass:        rgba(20, 20, 22, 0.40);
+  --color-glass-strong: rgba(20, 20, 22, 0.60);
   /* Tier glow accent — used by the avatar tier badge ring + welcome
      pill. Defaults to white/neutral so non-subscribers see no tint. */
   --tier-glow:       rgba(255, 255, 255, 0.06);
+}
+
+/* ─────────────────────── Light theme overrides ───────────────────────
+   Activated by ThemeProvider via html.light (or system preference if
+   no localStorage entry). The 55 files using bg-bg/text-fg/text-fg2/
+   bg-card auto-flip via Tailwind. Hard-coded rgba/hex values across
+   the codebase remain dark-only for now — Phase 1 ships the foundation,
+   subsequent passes will convert surface-by-surface to var(--color-…). */
+html.light {
+  --color-bg:        #F5F5F7;  /* Apple grey */
+  --color-card:      #FFFFFF;
+  --color-fg:        #1A1A1A;  /* Charcoal */
+  --color-fg-2:      #6B6B6B;  /* Mid grey */
+  --color-border:    rgba(0, 0, 0, 0.08);
+  --color-divider:   rgba(0, 0, 0, 0.06);
+  --color-glass:        rgba(255, 255, 255, 0.80);
+  --color-glass-strong: rgba(255, 255, 255, 0.90);
+  --tier-glow:       rgba(0, 0, 0, 0.06);
 }
 
 /* ─────────────────────── Premium / VIP theming ───────────────────────
