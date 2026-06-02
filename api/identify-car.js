@@ -36,6 +36,11 @@ const BASE = {
   estimated_price: null,
   rarity: 'standard',
   production: null,
+  // Architecture line per the 2026-06-02 strict prompt — surfaces
+  // "V8 BiTurbo / Transm. Intégrale" style spec instantly without
+  // waiting for the card-specs RPC. Empty string when the prompt
+  // didn't produce one.
+  specs: '',
 }
 
 const FALLBACK = {
@@ -263,6 +268,14 @@ function finalize(raw) {
         ? normalizeInt(o.price_estimate ?? o.estimated_price)
         : null,
     rarity: VALID_RARITY.has(o.rarity) ? o.rarity : 'standard',
+    // Architecture line — clamped to 60 chars so a verbose Claude
+    // response doesn't blow out the card-back row. Empty string is
+    // the safe default when the prompt didn't produce one.
+    specs: (() => {
+      const v = o.specs
+      if (typeof v === 'string' && v.trim()) return v.trim().slice(0, 60)
+      return ''
+    })(),
     production: (() => {
       const v = o.production
       if (typeof v === 'number' && Number.isFinite(v) && v > 0) return Math.floor(v)
