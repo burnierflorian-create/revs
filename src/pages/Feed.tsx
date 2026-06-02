@@ -751,7 +751,10 @@ export default function Feed() {
                     <span
                       className="absolute right-4 top-4 flex items-center gap-1 rounded-full px-2.5 py-1 text-[9px] font-bold text-white"
                       style={{
-                        background: 'rgba(0, 0, 0, 0.60)',
+                        // Spec 2026-06-02 (later refinement): back to .50
+                        // alpha for a slightly more transparent smoky
+                        // glass per the latest UI directive.
+                        background: 'rgba(0, 0, 0, 0.50)',
                         border: '1px solid rgba(255, 255, 255, 0.10)',
                         backdropFilter: 'saturate(160%) blur(12px)',
                         WebkitBackdropFilter: 'saturate(160%) blur(12px)',
