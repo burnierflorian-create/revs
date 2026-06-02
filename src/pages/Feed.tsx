@@ -736,7 +736,7 @@ export default function Feed() {
                       the category is genuinely undefined. */}
                   {catColor && (
                     <span
-                      className="absolute left-4 top-4 z-20 rounded-full px-3 py-1 text-[9px] font-black uppercase tracking-widest text-black"
+                      className="absolute left-4 top-4 z-20 rounded-full px-3 py-0.5 text-[9px] font-black uppercase tracking-widest text-black"
                       style={{
                         background:
                           CAT_GRADIENT[spot.category] ?? catColor,
@@ -751,10 +751,11 @@ export default function Feed() {
                     <span
                       className="absolute right-4 top-4 flex items-center gap-1 rounded-full px-2.5 py-1 text-[9px] font-bold text-white"
                       style={{
-                        background: 'rgba(0, 0, 0, 0.50)',
+                        background: 'rgba(0, 0, 0, 0.60)',
                         border: '1px solid rgba(255, 255, 255, 0.10)',
                         backdropFilter: 'saturate(160%) blur(12px)',
                         WebkitBackdropFilter: 'saturate(160%) blur(12px)',
+                        boxShadow: '0 4px 14px rgba(0, 0, 0, 0.35)',
                       }}
                     >
                       <Layers className="h-3 w-3" />
@@ -767,10 +768,11 @@ export default function Feed() {
                       keeps the identity row below it readable. */}
                   <div className="absolute inset-x-0 bottom-0 h-44 bg-gradient-to-t from-black/95 via-black/40 to-transparent z-10 pointer-events-none" />
                   {/* Immersive content layer — brand/model title at top of
-                      the gradient, identity row at the bottom. Replaces
-                      the separate spotter strip per the 2026-06-02
-                      luxury card spec. */}
-                  <div className="absolute inset-x-0 bottom-0 z-20 p-4 pt-20 text-left">
+                      the gradient, identity row at the bottom. pt-24
+                      extends the read zone an extra 16px so the white
+                      brand/model text never reads thin against the
+                      photo's brightest regions. */}
+                  <div className="absolute inset-x-0 bottom-0 z-20 p-4 pt-24 text-left">
                     <div className="flex items-end justify-between gap-3">
                       <div className="min-w-0">
                         <h2

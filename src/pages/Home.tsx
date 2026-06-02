@@ -905,12 +905,12 @@ function ChallengeRing({
         </span>
       </div>
       {/* Label wraps freely (whitespace-normal, no clamp) so long titles
-          like "Marathon du week-end" / "Youngtimers Hunter" land on two
-          natural rows. Per the 2026-06-02 spec: 10px, neutral-400,
-          tracking-tight, max-w-[80px], font-black uppercase. */}
+          land on two natural rows. Per the 2026-06-02 refinement: 9px
+          font, max-w-[85px], explicit mt-2 spacing between ring and
+          label so the labels never crowd the SVG. */}
       <span
-        className="block max-w-[80px] whitespace-normal text-center font-black uppercase leading-tight tracking-tight text-neutral-400"
-        style={{ fontSize: '10px' }}
+        className="mt-2 block max-w-[85px] whitespace-normal text-center font-black uppercase leading-tight tracking-tight text-neutral-400"
+        style={{ fontSize: '9px' }}
       >
         {challenge.title}
       </span>

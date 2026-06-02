@@ -347,8 +347,22 @@ export default function Profile() {
               still gets its overlay badge at the corner so paid status
               stays unmissable. */}
           <div className="relative">
+            {/* Diffuse radial halo behind the avatar — soft warm-neutral
+                glow that lifts the disc off the immersive cover
+                backdrop without competing with the VIP gold ring.
+                pointer-events:none so it never intercepts taps. */}
+            <span
+              aria-hidden
+              className="pointer-events-none absolute z-0 rounded-full"
+              style={{
+                inset: '-22px',
+                background:
+                  'radial-gradient(circle at center, rgba(64, 64, 64, 0.45) 0%, rgba(64, 64, 64, 0.18) 45%, transparent 75%)',
+                filter: 'blur(18px)',
+              }}
+            />
             <div
-              className="flex h-28 w-28 items-center justify-center overflow-hidden rounded-full bg-card"
+              className="relative z-10 flex h-28 w-28 items-center justify-center overflow-hidden rounded-full bg-card"
               style={{
                 border:
                   tier === 'vip'
@@ -411,12 +425,12 @@ export default function Profile() {
         </div>
       </div>
 
-      {/* Inner pb-36 strict per the 2026-06-02 collision-fix spec —
-          stacks with the outer .tab-pane pb-36 (calc 9rem + safe-area)
-          so the Collection grid + Garage cover flow + Récompenses
-          drawer all sit comfortably above the bottom nav even on the
-          longest profile screen (Décrtains avec 100+ cards). */}
-      <div className="space-y-7 px-4 pb-36 pt-20">
+      {/* Inner pb-40 per the 2026-06-02 collision-fix spec — extra 16
+          px on top of .tab-pane's calc(9rem + safe-area) so the
+          Collection grid / Garage cover flow / Récompenses drawer
+          never slide under the tab bar even on the longest profiles
+          (early-adopters with 100+ cards). */}
+      <div className="space-y-7 px-4 pb-40 pt-20">
         {/* Identité */}
         <div className="text-center">
           <h1 className="display-xl text-fg">{pseudo}</h1>
