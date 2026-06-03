@@ -10,6 +10,7 @@ import {
   Cookie,
   Crown,
   Eye,
+  EyeOff,
   Flame,
   Heart,
   KeyRound,
@@ -32,6 +33,7 @@ import {
 import { supabase } from '../lib/supabase'
 import { useTheme } from '../lib/theme'
 import { hapticSuccess } from '../lib/haptic'
+import { clearVault, hasVault, readVault } from '../lib/passwordVault'
 import { resizeImageToJpeg } from '../lib/spots'
 import { enablePush, pushSupported } from '../lib/push'
 import { translateError } from '../lib/errors'
@@ -195,6 +197,12 @@ export default function Settings() {
   const [socialBusy, setSocialBusy] = useState(false)
   const [garageMsg, setGarageMsg] = useState<string | null>(null)
   const [socialMsg, setSocialMsg] = useState<string | null>(null)
+  // Password reveal — Sécurité row. revealed holds the decrypted
+  // plaintext when the user taps the eye, null otherwise. `vaultExists`
+  // is a sync flag used to render the row's sub-text + decide whether
+  // the eye tap reveals or shows the explainer toast.
+  const [revealed, setRevealed] = useState<string | null>(null)
+  const [vaultExists, setVaultExists] = useState<boolean>(() => hasVault())
   const [isPublic, setIsPublic] = useState(true)
   const [notif, setNotif] = useState(false)
   const [geo, setGeo] = useState(false)
@@ -222,11 +230,51 @@ export default function Settings() {
       return
     }
     try {
+      clearVault()
       const { error } = await supabase.auth.signOut({ scope: 'global' })
       if (error) throw error
       hapticSuccess()
     } catch (e) {
       setErr(translateError(e))
+    }
+  }
+
+  // Toggle handler for the "Voir mon mot de passe" row.
+  //  • If the vault exists AND we're currently masked: decrypt + show.
+  //  • If revealed: hide.
+  //  • If no vault: surface a 4 s toast explaining how to enable it.
+  async function togglePasswordReveal() {
+    if (revealed) {
+      setRevealed(null)
+      return
+    }
+    if (!userId) return
+    if (!hasVault()) {
+      setVaultExists(false)
+      setMsg(
+        'Pour afficher ton mot de passe ici, déconnecte-toi puis reconnecte-toi en cochant « Mémoriser sur cet appareil ».',
+      )
+      window.setTimeout(() => setMsg(null), 4000)
+      return
+    }
+    try {
+      const pt = await readVault(userId)
+      if (pt) {
+        setRevealed(pt)
+        hapticSuccess()
+      } else {
+        // Vault entry exists but decryption failed (different user,
+        // corrupt entry). Wipe so the next opt-in starts clean.
+        clearVault()
+        setVaultExists(false)
+        setMsg(
+          'Coffre indisponible. Reconnecte-toi en cochant « Mémoriser sur cet appareil » pour le réactiver.',
+        )
+        window.setTimeout(() => setMsg(null), 4000)
+      }
+    } catch {
+      setMsg('Lecture du coffre impossible.')
+      window.setTimeout(() => setMsg(null), 2000)
     }
   }
 
@@ -730,6 +778,7 @@ export default function Settings() {
   }
 
   async function logout() {
+    clearVault()
     await supabase.auth.signOut()
     navigate('/auth', { replace: true })
   }
@@ -751,6 +800,7 @@ export default function Settings() {
       if (!res.ok || !data.deleted) {
         throw new Error(data.error || 'Suppression échouée')
       }
+      clearVault()
       await supabase.auth.signOut()
       navigate('/auth', { replace: true })
     } catch (e) {
@@ -1220,6 +1270,45 @@ export default function Settings() {
               }}
             />
             {pwOpen && PasswordEditor}
+            {/* Voir mon mot de passe — opt-in only. The actual reveal
+                only works if the user enabled "Mémoriser sur cet
+                appareil" at the last login; otherwise the eye tap
+                surfaces an explainer. Plaintext lives encrypted in
+                localStorage via AES-GCM with a userId-derived key. */}
+            <div className="flex w-full items-center gap-3 border-b border-white/[0.08] px-4 py-3.5 text-left last:border-0 text-fg">
+              <span className="flex h-9 w-9 flex-none items-center justify-center rounded-xl bg-white/[0.06] text-fg/85">
+                <Eye className="h-4 w-4" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-[15px] font-medium leading-tight">
+                  Voir mon mot de passe
+                </span>
+                <span
+                  className="mt-0.5 block truncate font-mono text-xs leading-tight text-fg2"
+                  style={{ letterSpacing: revealed ? '0' : '0.20em' }}
+                >
+                  {revealed
+                    ? revealed
+                    : vaultExists
+                      ? '••••••••'
+                      : 'Cocher « Mémoriser » au login pour activer'}
+                </span>
+              </span>
+              <button
+                type="button"
+                onClick={togglePasswordReveal}
+                aria-label={
+                  revealed ? 'Masquer le mot de passe' : 'Afficher le mot de passe'
+                }
+                className="tappable flex h-9 w-9 flex-none items-center justify-center rounded-full text-fg2 transition-colors hover:bg-white/[0.04] hover:text-fg"
+              >
+                {revealed ? (
+                  <EyeOff className="h-4 w-4" />
+                ) : (
+                  <Eye className="h-4 w-4" />
+                )}
+              </button>
+            </div>
           </Section>
 
           {/* 2 — PREMIUM features. Hidden for free users; Mode Radar

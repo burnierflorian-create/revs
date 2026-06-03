@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { translateError } from '../lib/errors'
 import { stashPendingReferral } from '../lib/referrals'
 import { useAuth } from '../hooks/useAuth'
+import { storeVault } from '../lib/passwordVault'
 
 type Mode = 'login' | 'signup' | 'forgot' | 'recover'
 
@@ -42,6 +43,7 @@ export default function Auth() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [rememberPassword, setRememberPassword] = useState(false)
   const [referralCode, setReferralCode] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [info, setInfo] = useState<string | null>(null)
@@ -67,7 +69,7 @@ export default function Auth() {
         //  - localStorage on this browser (instant claim if user clicks
         //    the confirmation link on the same device).
         //  - user_metadata server-side (survives device switches).
-        const { error } = await supabase.auth.signUp({
+        const { data: signupData, error } = await supabase.auth.signUp({
           email,
           password,
           options:
@@ -77,6 +79,9 @@ export default function Auth() {
         })
         if (error) throw error
         if (cleanedCode.length === 6) stashPendingReferral(cleanedCode)
+        if (rememberPassword && signupData?.user?.id) {
+          await storeVault(signupData.user.id, password)
+        }
         setInfo('Compte créé. Vérifie ta boîte mail pour confirmer.')
       } else if (mode === 'forgot') {
         // Supabase sends a password-reset email pointing to redirectTo
@@ -115,11 +120,18 @@ export default function Auth() {
         setConfirmPassword('')
         setInfo('Mot de passe mis à jour. Connecte-toi avec le nouveau.')
       } else {
-        const { error } = await supabase.auth.signInWithPassword({
+        const { data, error } = await supabase.auth.signInWithPassword({
           email,
           password,
         })
         if (error) throw error
+        // Opt-in password vault — when the user checked "Mémoriser",
+        // encrypt the password with their userId-derived key and
+        // persist to localStorage so the eye-toggle row in Settings
+        // can decrypt + reveal it later. Silent failure ok.
+        if (rememberPassword && data?.user?.id) {
+          await storeVault(data.user.id, password)
+        }
       }
     } catch (err) {
       setError(translateError(err))
@@ -265,8 +277,19 @@ export default function Auth() {
                 onChange={setPassword}
                 placeholder="••••••••"
               />
-              {mode === 'login' && (
-                <div className="flex justify-end px-1">
+              <div className="flex items-center justify-between px-1">
+                <label className="tappable flex cursor-pointer items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={rememberPassword}
+                    onChange={(e) => setRememberPassword(e.target.checked)}
+                    className="h-4 w-4 cursor-pointer accent-accent"
+                  />
+                  <span className="text-xs font-medium text-fg2">
+                    Mémoriser sur cet appareil
+                  </span>
+                </label>
+                {mode === 'login' && (
                   <button
                     type="button"
                     onClick={() => {
@@ -278,8 +301,8 @@ export default function Auth() {
                   >
                     Mot de passe oublié ?
                   </button>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           )}
 
