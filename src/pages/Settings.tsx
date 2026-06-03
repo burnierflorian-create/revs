@@ -75,6 +75,7 @@ function Row({
   danger,
   warn,
   noChevron,
+  wrap,
 }: {
   icon?: ReactNode
   label: string
@@ -84,6 +85,11 @@ function Row({
   danger?: boolean
   warn?: boolean
   noChevron?: boolean
+  /** When true, the label rolls onto multiple lines via
+   *  whitespace-normal instead of being truncated with an ellipsis.
+   *  Useful for labels that don't fit the single-row width — opt-in
+   *  so existing rows keep the iOS-style single-line truncation. */
+  wrap?: boolean
 }) {
   const interactive = !!onClick
   const tone = danger ? 'text-accent' : warn ? 'text-[#F59E0B]' : 'text-fg'
@@ -113,11 +119,17 @@ function Row({
         </span>
       )}
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-[15px] font-medium leading-tight">
+        <span
+          className={`block text-[15px] font-medium leading-tight ${
+            wrap ? 'whitespace-normal' : 'truncate'
+          }`}
+        >
           {label}
         </span>
         {sub && (
-          <span className="mt-0.5 block truncate text-xs leading-tight text-fg2">
+          <span className={`mt-0.5 block text-xs leading-tight text-fg2 ${
+            wrap ? 'whitespace-normal' : 'truncate'
+          }`}>
             {sub}
           </span>
         )}
@@ -198,11 +210,10 @@ export default function Settings() {
   const [garageMsg, setGarageMsg] = useState<string | null>(null)
   const [socialMsg, setSocialMsg] = useState<string | null>(null)
   // Password reveal — Sécurité row. revealed holds the decrypted
-  // plaintext when the user taps the eye, null otherwise. `vaultExists`
-  // is a sync flag used to render the row's sub-text + decide whether
-  // the eye tap reveals or shows the explainer toast.
+  // plaintext when the user taps the eye, null otherwise. The vault
+  // is auto-populated at every login so we don't track its existence
+  // in state; togglePasswordReveal calls hasVault() on demand.
   const [revealed, setRevealed] = useState<string | null>(null)
-  const [vaultExists, setVaultExists] = useState<boolean>(() => hasVault())
   const [isPublic, setIsPublic] = useState(true)
   const [notif, setNotif] = useState(false)
   const [geo, setGeo] = useState(false)
@@ -239,10 +250,10 @@ export default function Settings() {
     }
   }
 
-  // Toggle handler for the "Voir mon mot de passe" row.
-  //  • If the vault exists AND we're currently masked: decrypt + show.
-  //  • If revealed: hide.
-  //  • If no vault: surface a 4 s toast explaining how to enable it.
+  // Toggle handler for the "Voir mon mot de passe" row. Vault is
+  // auto-populated at every login, so the happy path is just decrypt
+  // + show / re-mask. Sessions that pre-date the auto-store rollout
+  // surface a soft toast asking the user to re-login once.
   async function togglePasswordReveal() {
     if (revealed) {
       setRevealed(null)
@@ -250,11 +261,10 @@ export default function Settings() {
     }
     if (!userId) return
     if (!hasVault()) {
-      setVaultExists(false)
       setMsg(
-        'Pour afficher ton mot de passe ici, déconnecte-toi puis reconnecte-toi en cochant « Mémoriser sur cet appareil ».',
+        'Reconnecte-toi une fois pour synchroniser le coffre sécurisé sur cet appareil.',
       )
-      window.setTimeout(() => setMsg(null), 4000)
+      window.setTimeout(() => setMsg(null), 3500)
       return
     }
     try {
@@ -264,13 +274,10 @@ export default function Settings() {
         hapticSuccess()
       } else {
         // Vault entry exists but decryption failed (different user,
-        // corrupt entry). Wipe so the next opt-in starts clean.
+        // corrupt entry). Wipe so the next login starts clean.
         clearVault()
-        setVaultExists(false)
-        setMsg(
-          'Coffre indisponible. Reconnecte-toi en cochant « Mémoriser sur cet appareil » pour le réactiver.',
-        )
-        window.setTimeout(() => setMsg(null), 4000)
+          setMsg('Coffre désynchronisé. Reconnecte-toi pour le réactiver.')
+        window.setTimeout(() => setMsg(null), 3500)
       }
     } catch {
       setMsg('Lecture du coffre impossible.')
@@ -1270,11 +1277,13 @@ export default function Settings() {
               }}
             />
             {pwOpen && PasswordEditor}
-            {/* Voir mon mot de passe — opt-in only. The actual reveal
-                only works if the user enabled "Mémoriser sur cet
-                appareil" at the last login; otherwise the eye tap
-                surfaces an explainer. Plaintext lives encrypted in
-                localStorage via AES-GCM with a userId-derived key. */}
+            {/* Voir mon mot de passe — always-on. The vault is
+                auto-populated at every login, so the eye reveals the
+                actual plaintext stored encrypted in localStorage via
+                AES-GCM with a userId-derived key. clearVault() runs
+                on every signout / account-delete path so a different
+                user on this browser never inherits the prior
+                password. */}
             <div className="flex w-full items-center gap-3 border-b border-white/[0.08] px-4 py-3.5 text-left last:border-0 text-fg">
               <span className="flex h-9 w-9 flex-none items-center justify-center rounded-xl bg-white/[0.06] text-fg/85">
                 <Eye className="h-4 w-4" />
@@ -1284,14 +1293,10 @@ export default function Settings() {
                   Voir mon mot de passe
                 </span>
                 <span
-                  className="mt-0.5 block truncate font-mono text-xs leading-tight text-fg2"
+                  className="mt-0.5 block truncate font-mono text-xs leading-tight text-fg"
                   style={{ letterSpacing: revealed ? '0' : '0.20em' }}
                 >
-                  {revealed
-                    ? revealed
-                    : vaultExists
-                      ? '••••••••'
-                      : 'Cocher « Mémoriser » au login pour activer'}
+                  {revealed ? revealed : '••••••••••••'}
                 </span>
               </span>
               <button
@@ -1612,7 +1617,7 @@ export default function Settings() {
                 </div>
                 <button
                   onClick={() => setOrgOpen(true)}
-                  className="w-full rounded-full bg-accent/15 py-2.5 text-sm font-semibold text-accent transition-colors hover:bg-accent/20"
+                  className="w-full rounded-full bg-accent/15 py-2 text-xs font-bold tracking-wider text-accent transition-colors hover:bg-accent/20"
                 >
                   Faire une demande
                 </button>
@@ -1659,6 +1664,7 @@ export default function Settings() {
               label="Effacer le cache et relancer l'onboarding"
               sub="Réinitialise l'écran d'accueil"
               onClick={resetOnboarding}
+              wrap
             />
           </Section>
 

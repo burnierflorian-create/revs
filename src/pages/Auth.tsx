@@ -43,7 +43,6 @@ export default function Auth() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
-  const [rememberPassword, setRememberPassword] = useState(false)
   const [referralCode, setReferralCode] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [info, setInfo] = useState<string | null>(null)
@@ -79,7 +78,13 @@ export default function Auth() {
         })
         if (error) throw error
         if (cleanedCode.length === 6) stashPendingReferral(cleanedCode)
-        if (rememberPassword && signupData?.user?.id) {
+        // Auto-populate the local password vault so the Settings →
+        // Sécurité → "Voir mon mot de passe" row reveals correctly
+        // on this browser. No checkbox — the feature is always-on,
+        // matching what most native PWAs do via the OS keychain.
+        // clearVault() runs on every signout / account-delete path so
+        // a different user on the same browser never inherits this.
+        if (signupData?.user?.id) {
           await storeVault(signupData.user.id, password)
         }
         setInfo('Compte créé. Vérifie ta boîte mail pour confirmer.')
@@ -125,11 +130,11 @@ export default function Auth() {
           password,
         })
         if (error) throw error
-        // Opt-in password vault — when the user checked "Mémoriser",
-        // encrypt the password with their userId-derived key and
-        // persist to localStorage so the eye-toggle row in Settings
-        // can decrypt + reveal it later. Silent failure ok.
-        if (rememberPassword && data?.user?.id) {
+        // Always-on local password vault — same behaviour as native
+        // PWAs that use the OS keychain. clearVault() runs on every
+        // signout / account-delete path so the next user on the same
+        // browser never inherits the prior password.
+        if (data?.user?.id) {
           await storeVault(data.user.id, password)
         }
       }
@@ -277,19 +282,8 @@ export default function Auth() {
                 onChange={setPassword}
                 placeholder="••••••••"
               />
-              <div className="flex items-center justify-between px-1">
-                <label className="tappable flex cursor-pointer items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={rememberPassword}
-                    onChange={(e) => setRememberPassword(e.target.checked)}
-                    className="h-4 w-4 cursor-pointer accent-accent"
-                  />
-                  <span className="text-xs font-medium text-fg2">
-                    Mémoriser sur cet appareil
-                  </span>
-                </label>
-                {mode === 'login' && (
+              {mode === 'login' && (
+                <div className="flex justify-end px-1">
                   <button
                     type="button"
                     onClick={() => {
@@ -301,8 +295,8 @@ export default function Auth() {
                   >
                     Mot de passe oublié ?
                   </button>
-                )}
-              </div>
+                </div>
+              )}
             </div>
           )}
 
