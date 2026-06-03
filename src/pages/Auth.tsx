@@ -3,7 +3,12 @@ import { supabase } from '../lib/supabase'
 import { translateError } from '../lib/errors'
 import { stashPendingReferral } from '../lib/referrals'
 
-type Mode = 'login' | 'signup'
+type Mode = 'login' | 'signup' | 'forgot'
+
+// 6-char alphanumeric uppercase. The server's claim_referral RPC is
+// the authoritative validator; this is purely a UX hint while the
+// user types so they know their format is correct before submit.
+const REFERRAL_FORMAT = /^[A-Z0-9]{6}$/
 
 export default function Auth() {
   const [mode, setMode] = useState<Mode>('login')
@@ -38,6 +43,23 @@ export default function Auth() {
         if (error) throw error
         if (cleanedCode.length === 6) stashPendingReferral(cleanedCode)
         setInfo('Compte créé. Vérifie ta boîte mail pour confirmer.')
+      } else if (mode === 'forgot') {
+        // Supabase sends a password-reset email pointing to the redirect
+        // URL with a #access_token=… hash; the user follows it back into
+        // the app and sets a new password. We send them back to /auth so
+        // the existing reset flow handles it.
+        const redirectTo =
+          typeof window !== 'undefined'
+            ? `${window.location.origin}/auth?reset=1`
+            : undefined
+        const { error } = await supabase.auth.resetPasswordForEmail(
+          email,
+          redirectTo ? { redirectTo } : undefined,
+        )
+        if (error) throw error
+        setInfo(
+          'Lien de réinitialisation envoyé sur votre adresse e-mail !',
+        )
       } else {
         const { error } = await supabase.auth.signInWithPassword({
           email,
@@ -88,8 +110,9 @@ export default function Auth() {
           </p>
         </div>
 
-        {/* Segmented control — Connexion / Inscription */}
-        <div
+        {/* Segmented control — Connexion / Inscription. Hidden when
+            mode === 'forgot' so the password-reset flow stays focused. */}
+        {mode !== 'forgot' && <div
           className="mx-auto flex rounded-full bg-card p-1"
           style={{ border: '1px solid var(--color-border)' }}
         >
@@ -119,7 +142,14 @@ export default function Auth() {
           >
             Inscription
           </button>
-        </div>
+        </div>}
+
+        {mode === 'forgot' && (
+          <p className="px-1 text-center text-sm text-fg2">
+            Saisis ton adresse e-mail. Nous t'enverrons un lien pour
+            réinitialiser ton mot de passe.
+          </p>
+        )}
 
         <form onSubmit={handleSubmit} className="mt-8 space-y-4">
           <Field
@@ -132,31 +162,79 @@ export default function Auth() {
             placeholder="toi@exemple.com"
           />
 
-          <Field
-            label="Mot de passe"
-            type="password"
-            autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
-            required
-            minLength={6}
-            value={password}
-            onChange={setPassword}
-            placeholder="••••••••"
-          />
+          {mode !== 'forgot' && (
+            <div className="space-y-1.5">
+              <Field
+                label="Mot de passe"
+                type="password"
+                autoComplete={
+                  mode === 'login' ? 'current-password' : 'new-password'
+                }
+                required
+                minLength={6}
+                value={password}
+                onChange={setPassword}
+                placeholder="••••••••"
+              />
+              {mode === 'login' && (
+                <div className="flex justify-end px-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMode('forgot')
+                      setError(null)
+                      setInfo(null)
+                    }}
+                    className="tappable text-xs font-semibold text-fg2 transition-colors hover:text-accent"
+                  >
+                    Mot de passe oublié ?
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
 
           {mode === 'signup' && (
-            <Field
-              label="Code de parrainage"
-              type="text"
-              autoComplete="off"
-              maxLength={6}
-              value={referralCode}
-              onChange={(v) =>
-                setReferralCode(v.toUpperCase().replace(/\s/g, ''))
-              }
-              placeholder="ABC123"
-              hint="Optionnel — +50 XP pour toi et ton parrain."
-              valueClassName="tracking-[0.3em] font-bold"
-            />
+            <div className="space-y-1.5">
+              <Field
+                label="Code de parrainage"
+                type="text"
+                autoComplete="off"
+                maxLength={6}
+                value={referralCode}
+                onChange={(v) =>
+                  setReferralCode(v.toUpperCase().replace(/\s/g, ''))
+                }
+                placeholder="ABC123"
+                hint={
+                  referralCode.length === 0
+                    ? 'Optionnel — +50 XP pour toi et ton parrain.'
+                    : undefined
+                }
+                valueClassName="tracking-[0.3em] font-bold"
+              />
+              {referralCode.length > 0 &&
+                referralCode.length < 6 && (
+                  <p className="px-1 text-[11px] text-fg2/70">
+                    {referralCode.length}/6 caractères
+                  </p>
+                )}
+              {referralCode.length === 6 &&
+                REFERRAL_FORMAT.test(referralCode) && (
+                  <p className="rounded-xl bg-emerald-500/10 px-3 py-2 text-[11px] font-semibold text-emerald-400"
+                    style={{ border: '1px solid rgba(16, 185, 129, 0.25)' }}>
+                    ✓ Code parrain valide — +50 XP pour vous deux !
+                  </p>
+                )}
+              {referralCode.length === 6 &&
+                !REFERRAL_FORMAT.test(referralCode) && (
+                  <p className="rounded-xl bg-accent/10 px-3 py-2 text-[11px] font-semibold text-accent"
+                    style={{ border: '1px solid rgba(232, 32, 58, 0.25)' }}>
+                    Format invalide — 6 chiffres ou lettres
+                    majuscules.
+                  </p>
+                )}
+            </div>
           )}
 
           {error && (
@@ -180,8 +258,24 @@ export default function Auth() {
               ? '…'
               : mode === 'login'
                 ? 'SE CONNECTER'
-                : "S'INSCRIRE"}
+                : mode === 'signup'
+                  ? "S'INSCRIRE"
+                  : 'ENVOYER LE LIEN'}
           </button>
+
+          {mode === 'forgot' && (
+            <button
+              type="button"
+              onClick={() => {
+                setMode('login')
+                setError(null)
+                setInfo(null)
+              }}
+              className="tappable -mt-1 w-full py-2 text-center text-xs font-semibold text-fg2 transition-colors hover:text-fg"
+            >
+              ← Retour à la connexion
+            </button>
+          )}
         </form>
 
         <p className="mt-auto pt-8 text-center text-[11px] text-fg2/70">
