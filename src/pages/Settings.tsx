@@ -195,6 +195,42 @@ export default function Settings() {
   const [msg, setMsg] = useState<string | null>(null)
   const [err, setErr] = useState<string | null>(null)
 
+  // Native Web Share — opens the iOS / Android share sheet so the
+  // user can pick any installed messaging / mail / Whatsapp app and
+  // send the install link. Falls back to clipboard + toast when the
+  // browser doesn't expose navigator.share (older desktops, embedded
+  // webviews). Title / text / url match the spec exactly.
+  async function shareApp() {
+    const url =
+      typeof window !== 'undefined' ? window.location.origin : 'https://revs-ten.vercel.app'
+    const payload = {
+      title: 'Rejoins-moi sur REVS',
+      text: 'Viens spotter les plus belles supercars avec moi !',
+      url,
+    }
+    if (
+      typeof navigator !== 'undefined' &&
+      typeof navigator.share === 'function'
+    ) {
+      try {
+        await navigator.share(payload)
+        hapticSuccess()
+        return
+      } catch {
+        // User cancelled or share API threw — fall through to copy.
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(url)
+      hapticSuccess()
+      setMsg('Lien d\'invitation copié ! Envoie-le à tes amis.')
+      window.setTimeout(() => setMsg(null), 2000)
+    } catch {
+      setMsg(`Copie le lien manuellement : ${url}`)
+      window.setTimeout(() => setMsg(null), 4000)
+    }
+  }
+
   // E-mail change inline editor.
   const [emailOpen, setEmailOpen] = useState(false)
   const [newEmail, setNewEmail] = useState('')
@@ -1211,8 +1247,8 @@ export default function Settings() {
             <Row
               icon={<UserPlus className="h-4 w-4" />}
               label="Inviter des amis"
-              sub="+50 XP pour toi et ton invité"
-              onClick={() => navigate('/referral')}
+              sub="Partage REVS via ton appli préférée"
+              onClick={shareApp}
             />
             {isOrganizer ? (
               <Row

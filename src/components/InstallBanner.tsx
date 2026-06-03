@@ -16,8 +16,24 @@ function isStandalone(): boolean {
   )
 }
 
+// iOS non-Safari detection — all iOS browsers run on WebKit but each
+// embedded webview / 3rd-party browser tags its own UA marker. If we
+// see one of these, the user is on iPhone but NOT in real Safari, so
+// the "Add to Home Screen" action doesn't apply — they need to open
+// the link in Safari first.
+function isIOSNonSafari(): boolean {
+  const ua = navigator.userAgent
+  const isIOS = /iPad|iPhone|iPod/.test(ua)
+  if (!isIOS) return false
+  return /CriOS|FxiOS|EdgiOS|OPiOS|WhatsApp|FBAN|FBAV|Instagram|Snapchat|Line|MicroMessenger/.test(
+    ua,
+  )
+}
+
 export default function InstallBanner() {
-  const [platform, setPlatform] = useState<'android' | 'ios' | null>(null)
+  const [platform, setPlatform] = useState<
+    'android' | 'ios-safari' | 'ios-non-safari' | null
+  >(null)
   const [deferred, setDeferred] = useState<BeforeInstallPromptEvent | null>(
     null,
   )
@@ -27,7 +43,7 @@ export default function InstallBanner() {
 
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
     if (isIOS) {
-      setPlatform('ios')
+      setPlatform(isIOSNonSafari() ? 'ios-non-safari' : 'ios-safari')
       return
     }
 
@@ -76,6 +92,11 @@ export default function InstallBanner() {
             Installer
           </button>
         </>
+      ) : platform === 'ios-non-safari' ? (
+        <span className="flex-1 text-sm text-fg">
+          🧭 Ouvre ce lien dans Safari pour installer REVS sur ton
+          écran d'accueil.
+        </span>
       ) : (
         <span className="flex-1 text-sm text-fg">
           📱 Pour installer : appuie sur{' '}
