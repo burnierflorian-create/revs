@@ -52,6 +52,10 @@ export default function Home() {
   const [name, setName] = useState('Spotter')
   const [xp, setXp] = useState(0)
   const [streak, setStreak] = useState(0)
+  // Recent spots powering the new "Spots Chauds À Proximité" carousel.
+  // Re-introduces the recent-feed surface that was removed in commit
+  // 939e042 with the new Apple-style rounded-[32px] + brand-glow look.
+  const [recentHot, setRecentHot] = useState<Spot[]>([])
   const [challenges, setChallenges] = useState<Challenge[]>([])
   const [radarActive, setRadarActive] = useState(false)
   const [liveEvents, setLiveEvents] = useState<LiveEvent[]>([])
@@ -144,12 +148,11 @@ export default function Home() {
 
       setName(pseudo)
       setXp((xpRes.data as number | null) ?? 0)
-      // recentSpots is still derived here even though Home no longer
-      // renders the "Spots récents" carousel — it feeds the spotting-
-      // prediction prompt below (brand counts + last car). The home
-      // RPC and the AI prompt are unchanged; only the UI surface
-      // dropped the carousel.
+      // recentSpots feeds both the new "Spots Chauds À Proximité"
+      // hero carousel (top-3 with photo) AND the still-archived
+      // spotting-prediction prompt below.
       const recentSpots = (recentRes.data ?? []) as Spot[]
+      setRecentHot(recentSpots.filter((s) => s.photo_url).slice(0, 6))
       setLoading(false)
 
       // AI weather hook — only fires when the user has set their city
@@ -398,6 +401,18 @@ export default function Home() {
           onTap={() => navigate('/radar')}
         />
 
+        {/* SPOTS CHAUDS À PROXIMITÉ — horizontal snap carousel showing
+            the 3 most-recently-photographed spots with a brand-tinted
+            backdrop glow. Re-introduces the recent-feed surface
+            (removed in commit 939e042) with the new Apple cockpit
+            aesthetic per the 2026-06-03 Live Cockpit spec. */}
+        {recentHot.length > 0 && (
+          <SpotsHotCarousel
+            spots={recentHot}
+            onOpen={(id) => navigate(`/spot/${id}`)}
+          />
+        )}
+
         {/* "Spot du jour / de la semaine" daily card was removed from
             Home per 2026-05-28 cleanup. Code for DailyCard /
             DailyCardSpotRow has been pruned along with the
@@ -492,7 +507,7 @@ export default function Home() {
             style={{ animationDelay: '500ms' }}
           >
             <p
-              className="mb-3 font-extrabold uppercase tracking-widest text-white/40"
+              className="mb-3 font-extrabold uppercase tracking-widest text-fg2"
               style={{ fontSize: '11px', letterSpacing: '0.18em' }}
             >
               Motorsport actu
@@ -504,11 +519,12 @@ export default function Home() {
                 border: '1px solid rgba(255, 255, 255, 0.05)',
                 background:
                   'linear-gradient(135deg, rgba(20,20,22,0.85) 0%, rgba(5,5,7,0.95) 100%)',
-                opacity: 0.78,
+                opacity: 0.95,
               }}
             >
-              <div className="relative flex items-center justify-between gap-4 p-4">
-                <div className="flex min-w-0 flex-1 items-center gap-3">
+              <div className="relative space-y-3 p-4">
+                {/* Header — flag + name */}
+                <div className="flex items-center gap-3">
                   <span className="text-2xl leading-none">{nextGp.flag}</span>
                   <div className="min-w-0 flex-1">
                     <p
@@ -522,24 +538,94 @@ export default function Home() {
                     </p>
                   </div>
                 </div>
-                <div
-                  className="inline-flex flex-none items-baseline gap-1 rounded-lg font-mono tabular-nums text-white"
-                  style={{
-                    background: 'rgba(0, 0, 0, 0.40)',
-                    border: '1px solid rgba(255, 255, 255, 0.05)',
-                    padding: '6px 12px',
-                    fontSize: '12px',
-                    fontWeight: 700,
-                  }}
-                >
-                  <span>{String(cd.d).padStart(2, '0')}</span>
-                  <span className="text-white/45">d</span>
-                  <span className="colon-blink text-white/60">:</span>
-                  <span>{String(cd.h).padStart(2, '0')}</span>
-                  <span className="text-white/45">h</span>
-                  <span className="colon-blink text-white/60">:</span>
-                  <span>{String(cd.m).padStart(2, '0')}</span>
-                  <span className="text-white/45">m</span>
+                {/* Linear timeline frieze — F1 car slides from left to
+                    right as the GP approaches, lands on the checkered
+                    flag at race day. The 14-day window is the
+                    perceptual countdown baseline; further away the
+                    car sits stuck at the start gate. */}
+                {(() => {
+                  const WINDOW_MS = 14 * 86_400_000
+                  const remainingMs = Math.max(0, gpDiff)
+                  const progressPct = Math.min(
+                    1,
+                    Math.max(0, 1 - remainingMs / WINDOW_MS),
+                  )
+                  // Track has the car centred on its position, so we
+                  // inset 12px on each side to keep the icon visually
+                  // inside the line bounds.
+                  const carLeft = `calc(12px + ${progressPct} * (100% - 24px))`
+                  return (
+                    <div className="relative">
+                      <div
+                        className="relative h-1 rounded-full"
+                        style={{
+                          background: 'rgba(255, 255, 255, 0.08)',
+                        }}
+                      >
+                        {/* Backlit fill — red REVS gradient lit only up
+                            to the car. */}
+                        <div
+                          className="absolute inset-y-0 left-0 rounded-full"
+                          style={{
+                            width: `${progressPct * 100}%`,
+                            background:
+                              'linear-gradient(90deg, rgba(232,32,58,0.25) 0%, rgba(232,32,58,0.85) 100%)',
+                            boxShadow: '0 0 8px rgba(232, 32, 58, 0.45)',
+                            transition:
+                              'width 700ms cubic-bezier(0.22, 1, 0.36, 1)',
+                          }}
+                        />
+                      </div>
+                      {/* F1 car glyph sitting on the line */}
+                      <span
+                        aria-hidden
+                        className="absolute -translate-x-1/2 -translate-y-1/2"
+                        style={{
+                          left: carLeft,
+                          top: '2px',
+                          fontSize: '18px',
+                          lineHeight: 1,
+                          filter:
+                            'drop-shadow(0 0 6px rgba(232, 32, 58, 0.55))',
+                          transition:
+                            'left 700ms cubic-bezier(0.22, 1, 0.36, 1)',
+                        }}
+                      >
+                        🏎️
+                      </span>
+                      {/* Checkered flag at the right end */}
+                      <span
+                        aria-hidden
+                        className="absolute -translate-y-1/2"
+                        style={{
+                          right: '-4px',
+                          top: '2px',
+                          fontSize: '14px',
+                          lineHeight: 1,
+                        }}
+                      >
+                        🏁
+                      </span>
+                    </div>
+                  )
+                })()}
+                {/* Countdown subtitle */}
+                <div className="flex items-baseline justify-between">
+                  <p className="text-[11px] font-medium text-fg2">
+                    {gpDiff > 0
+                      ? `Dans ${cd.d}j · ${String(cd.h).padStart(2, '0')}h · ${String(cd.m).padStart(2, '0')}m`
+                      : 'En cours !'}
+                  </p>
+                  <p
+                    className="font-mono tabular-nums text-white/70"
+                    style={{ fontSize: '10px' }}
+                  >
+                    {String(cd.d).padStart(2, '0')}d
+                    <span className="colon-blink text-white/45 mx-1">:</span>
+                    {String(cd.h).padStart(2, '0')}h
+                    <span className="colon-blink text-white/45 mx-1">:</span>
+                    {String(cd.m).padStart(2, '0')}m
+                  </p>
                 </div>
               </div>
             </button>
@@ -586,6 +672,30 @@ function RevsRadarCard({
   const subline = aliveDay
     ? `${zones} zone${zones > 1 ? 's' : ''} à forte activité détectée${zones > 1 ? 's' : ''}. Prends ton objectif, les bolides sortent.`
     : 'Zone calme. Sois le premier à allumer le radar aujourd\'hui.'
+
+  // Manometer pressure level — Hyperdrive Status spec. 4 tiers
+  // mapped from community.spots_today: calme / faible / active /
+  // tension. The arc fill colour + center label both follow the
+  // tier, so a single glance reads as a real cockpit gauge.
+  const pressureTier =
+    today >= 10 ? 'tension'
+    : today >= 3 ? 'active'
+    : today >= 1 ? 'faible'
+    : 'calme'
+  const pressurePct =
+    pressureTier === 'tension' ? 0.92
+    : pressureTier === 'active' ? 0.65
+    : pressureTier === 'faible' ? 0.30
+    : 0.08
+  const PRESSURE_THEME = {
+    calme:   { stroke: '#525252', label: 'CALME',   glow: 'rgba(82, 82, 82, 0.20)' },
+    faible:  { stroke: '#60A5FA', label: 'FAIBLE',  glow: 'rgba(96, 165, 250, 0.30)' },
+    active:  { stroke: '#F59E0B', label: 'ACTIVE',  glow: 'rgba(245, 158, 11, 0.40)' },
+    tension: { stroke: '#E8203A', label: 'TENSION', glow: 'rgba(232, 32, 58, 0.55)' },
+  } as const
+  const press = PRESSURE_THEME[pressureTier]
+  // Semicircle arc r=20 from (8,40)→(48,40) via top. Length = π * 20.
+  const ARC_LEN = Math.PI * 20
 
   return (
     <section className="home-section-enter" style={{ animationDelay: '0ms' }}>
@@ -666,7 +776,63 @@ function RevsRadarCard({
           </p>
         </div>
 
-        <ChevronRight className="h-4 w-4 flex-none text-fg2/40" />
+        {/* Hyperdrive Status manometer — semicircle pressure gauge.
+            Arc length fills from the left (low) to the right (high)
+            with the tier-specific colour; centre carries the short
+            status label "CALME / FAIBLE / ACTIVE / TENSION" in
+            tracking-wider mono. Replaces the previous chevron — the
+            whole card is still tappable. */}
+        <div
+          className="relative flex flex-none items-center justify-center"
+          style={{ width: '56px', height: '40px' }}
+          aria-hidden
+        >
+          <svg
+            width="56"
+            height="40"
+            viewBox="0 0 56 40"
+            style={{ overflow: 'visible' }}
+          >
+            <defs>
+              <filter id="press-glow" x="-50%" y="-50%" width="200%" height="200%">
+                <feGaussianBlur stdDeviation="1.5" />
+              </filter>
+            </defs>
+            {/* Track — neutral background arc */}
+            <path
+              d="M 8 32 A 20 20 0 0 1 48 32"
+              fill="none"
+              stroke="rgba(255, 255, 255, 0.10)"
+              strokeWidth="3"
+              strokeLinecap="round"
+            />
+            {/* Pressure fill arc with subtle glow */}
+            <path
+              d="M 8 32 A 20 20 0 0 1 48 32"
+              fill="none"
+              stroke={press.stroke}
+              strokeWidth="3"
+              strokeLinecap="round"
+              strokeDasharray={ARC_LEN.toFixed(2)}
+              strokeDashoffset={(ARC_LEN * (1 - pressurePct)).toFixed(2)}
+              style={{
+                transition: 'stroke-dashoffset 700ms cubic-bezier(0.22, 1, 0.36, 1)',
+                filter: `drop-shadow(0 0 4px ${press.glow})`,
+              }}
+            />
+          </svg>
+          <span
+            className="absolute font-mono font-black tracking-widest"
+            style={{
+              fontSize: '7px',
+              bottom: '0px',
+              color: press.stroke,
+              letterSpacing: '0.18em',
+            }}
+          >
+            {press.label}
+          </span>
+        </div>
       </button>
     </section>
   )
@@ -921,3 +1087,138 @@ function ChallengeRing({
   )
 }
 
+
+// ─────────────────────── Spots Chauds carousel ───────────────────────
+
+/** Brand-aware glow used as a soft halo behind each Spots Chauds
+ *  card. Lifted from Profile.GarageCoverFlow so the Home + Profile
+ *  surfaces speak the same brand colour language. Returns an rgba
+ *  string ready to drop into a CSS background. */
+function brandGlow(brand: string | null | undefined): string {
+  const b = (brand ?? '').toLowerCase()
+  if (b.includes('ferrari') || b.includes('alfa') || b.includes('lancia'))
+    return 'rgba(220, 30, 30, 0.32)'
+  if (b.includes('mclaren') || b.includes('porsche'))
+    return 'rgba(245, 130, 30, 0.34)'
+  if (b.includes('lamborghini')) return 'rgba(230, 190, 0, 0.30)'
+  if (b.includes('bmw')) return 'rgba(40, 120, 220, 0.28)'
+  if (b.includes('audi') || b.includes('mercedes'))
+    return 'rgba(160, 170, 180, 0.24)'
+  if (b.includes('aston')) return 'rgba(40, 110, 90, 0.28)'
+  if (b.includes('rolls') || b.includes('bentley'))
+    return 'rgba(120, 110, 150, 0.26)'
+  if (b.includes('nissan') || b.includes('honda') || b.includes('toyota'))
+    return 'rgba(200, 40, 50, 0.26)'
+  return 'rgba(232, 32, 58, 0.24)'
+}
+
+function SpotsHotCarousel({
+  spots,
+  onOpen,
+}: {
+  spots: Spot[]
+  onOpen: (id: string) => void
+}) {
+  return (
+    <section
+      className="home-section-enter -mx-5"
+      style={{ animationDelay: '50ms' }}
+    >
+      <p
+        className="mb-3 px-5 font-extrabold uppercase tracking-widest text-fg2"
+        style={{ fontSize: '11px', letterSpacing: '0.18em' }}
+      >
+        Spots chauds à proximité
+      </p>
+      <div
+        className="no-scrollbar flex snap-x snap-mandatory items-stretch gap-3 overflow-x-auto"
+        style={{
+          paddingInline: '20px',
+          scrollPaddingInline: '20px',
+          WebkitOverflowScrolling: 'touch',
+        }}
+      >
+        {spots.map((s) => {
+          const glow = brandGlow(s.brand)
+          return (
+            <button
+              key={s.id}
+              onClick={() => onOpen(s.id)}
+              className="snap-center flex-shrink-0 overflow-hidden text-left transition-transform active:scale-[0.98]"
+              style={{
+                width: '260px',
+                height: '180px',
+                borderRadius: '32px',
+                background:
+                  'linear-gradient(135deg, #1a1a1a 0%, #0a0a0a 60%, #050505 100%)',
+                border: '1px solid rgba(255, 255, 255, 0.05)',
+                boxShadow: `0 18px 36px rgba(0, 0, 0, 0.55), 0 0 22px ${glow}`,
+                position: 'relative',
+                willChange: 'transform',
+              }}
+              aria-label={`Spot ${s.brand ?? ''} ${s.model ?? ''}`}
+            >
+              {/* Brand-tinted glow puddle anchored to the bottom-right
+                  corner so the silhouette of the photo above reads
+                  like it floats in the brand's signature light. */}
+              <span
+                aria-hidden
+                className="pointer-events-none absolute"
+                style={{
+                  bottom: '-30px',
+                  right: '-30px',
+                  width: '160px',
+                  height: '160px',
+                  borderRadius: '50%',
+                  background: glow,
+                  filter: 'blur(34px)',
+                }}
+              />
+              {s.photo_url ? (
+                <img
+                  src={s.photo_url}
+                  alt=""
+                  loading="lazy"
+                  decoding="async"
+                  className="absolute inset-0 h-full w-full object-cover"
+                  style={{ opacity: 0.90 }}
+                  draggable={false}
+                />
+              ) : null}
+              {/* Bottom satin gradient overlay for label legibility */}
+              <span
+                aria-hidden
+                className="absolute inset-x-0 bottom-0 h-24"
+                style={{
+                  background:
+                    'linear-gradient(180deg, transparent 0%, rgba(0,0,0,0.85) 100%)',
+                }}
+              />
+              <div className="relative z-10 flex h-full flex-col justify-end p-4">
+                <p
+                  className="font-black uppercase"
+                  style={{
+                    fontSize: '9px',
+                    letterSpacing: '0.20em',
+                    color: '#EF4444',
+                  }}
+                >
+                  {s.brand}
+                </p>
+                <h4
+                  className="mt-0.5 truncate font-display font-black tracking-tight text-white"
+                  style={{
+                    fontSize: '17px',
+                    letterSpacing: '-0.02em',
+                  }}
+                >
+                  {s.model}
+                </h4>
+              </div>
+            </button>
+          )
+        })}
+      </div>
+    </section>
+  )
+}
