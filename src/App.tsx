@@ -45,7 +45,7 @@ function lazyRoute(node: React.ReactNode) {
 }
 
 export default function App() {
-  const { session, loading } = useAuth()
+  const { session, loading, passwordRecovery } = useAuth()
 
   // After the first idle window, warm-start the Map chunk so its
   // 469 KB gzipped mapbox-gl payload is already in the browser cache
@@ -95,10 +95,27 @@ export default function App() {
       <Routes>
         <Route
           path="/auth"
-          element={session ? <Navigate to="/" replace /> : <Auth />}
+          element={
+            // Password-recovery sessions must NOT be redirected to /
+            // even though the session is briefly non-null — the user
+            // still needs to set a new password. Same exception when
+            // ?reset=1 is in the query (user followed the email link
+            // before the Supabase event fires).
+            session && !passwordRecovery ? (
+              <Navigate to="/" replace />
+            ) : (
+              <Auth />
+            )
+          }
         />
         <Route
-          element={session ? <MainLayout /> : <Navigate to="/auth" replace />}
+          element={
+            session && !passwordRecovery ? (
+              <MainLayout />
+            ) : (
+              <Navigate to="/auth" replace />
+            )
+          }
         >
           {/* Tab routes — the actual UI is rendered by <TabsContainer />
               inside MainLayout (kept-alive). These routes only exist so

@@ -1,23 +1,58 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { translateError } from '../lib/errors'
 import { stashPendingReferral } from '../lib/referrals'
+import { useAuth } from '../hooks/useAuth'
 
-type Mode = 'login' | 'signup' | 'forgot'
+type Mode = 'login' | 'signup' | 'forgot' | 'recover'
 
 // 6-char alphanumeric uppercase. The server's claim_referral RPC is
 // the authoritative validator; this is purely a UX hint while the
 // user types so they know their format is correct before submit.
 const REFERRAL_FORMAT = /^[A-Z0-9]{6}$/
 
+// Hard-coded production origin used to force email reset links to
+// land on prod even when the request is issued from localhost during
+// dev. The check is conservative — anything that isn't 127.0.0.1 /
+// localhost / a Vercel preview slug uses window.location.origin as-is
+// so internal preview deploys still work.
+const PROD_ORIGIN = 'https://revs-ten.vercel.app'
+function resetRedirectOrigin(): string {
+  if (typeof window === 'undefined') return PROD_ORIGIN
+  const h = window.location.hostname
+  if (h === 'localhost' || h === '127.0.0.1' || h.endsWith('.local')) {
+    return PROD_ORIGIN
+  }
+  return window.location.origin
+}
+
 export default function Auth() {
-  const [mode, setMode] = useState<Mode>('login')
+  const { passwordRecovery, setPasswordRecovery } = useAuth()
+  const [searchParams] = useSearchParams()
+  // Auto-switch into recover mode when either the URL hash carries the
+  // Supabase recovery token (`#type=recovery`) or the back-channel
+  // PASSWORD_RECOVERY event has fired into useAuth. ?reset=1 in the
+  // query is an extra hint for email clients that strip the hash.
+  const initialMode: Mode =
+    passwordRecovery || searchParams.get('reset') === '1'
+      ? 'recover'
+      : 'login'
+  const [mode, setMode] = useState<Mode>(initialMode)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
   const [referralCode, setReferralCode] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [info, setInfo] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+
+  // Sync mode to the recovery flag — fires when Supabase event lands
+  // AFTER the component already mounted (e.g. user opened the email
+  // link in a tab that already had /auth open).
+  useEffect(() => {
+    if (passwordRecovery && mode !== 'recover') setMode('recover')
+  }, [passwordRecovery, mode])
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
@@ -44,22 +79,41 @@ export default function Auth() {
         if (cleanedCode.length === 6) stashPendingReferral(cleanedCode)
         setInfo('Compte créé. Vérifie ta boîte mail pour confirmer.')
       } else if (mode === 'forgot') {
-        // Supabase sends a password-reset email pointing to the redirect
-        // URL with a #access_token=… hash; the user follows it back into
-        // the app and sets a new password. We send them back to /auth so
-        // the existing reset flow handles it.
-        const redirectTo =
-          typeof window !== 'undefined'
-            ? `${window.location.origin}/auth?reset=1`
-            : undefined
+        // Supabase sends a password-reset email pointing to redirectTo
+        // with a `#access_token=…&type=recovery` hash. We route to
+        // /auth?reset=1 so the redirected page enters recover mode
+        // even if the email client strips the hash. The redirect
+        // origin is forced to the prod URL when the request fires
+        // from localhost so dev testing produces working email links.
+        const redirectTo = `${resetRedirectOrigin()}/auth?reset=1`
         const { error } = await supabase.auth.resetPasswordForEmail(
           email,
-          redirectTo ? { redirectTo } : undefined,
+          { redirectTo },
         )
         if (error) throw error
         setInfo(
           'Lien de réinitialisation envoyé sur votre adresse e-mail !',
         )
+      } else if (mode === 'recover') {
+        // User landed back from the email link. supabase-js already
+        // captured the access token from the URL hash and elevated
+        // them to a recovery session; updateUser changes the password
+        // for that authenticated user.
+        if (password.length < 6) throw new Error('Mot de passe trop court (min. 6 caractères).')
+        if (password !== confirmPassword) throw new Error('Les deux mots de passe ne correspondent pas.')
+        const { error } = await supabase.auth.updateUser({ password })
+        if (error) throw error
+        // Clear the recovery flag and route the user back to login —
+        // they'll log in fresh with the new password. Clear the hash
+        // so a reload doesn't re-enter recover mode.
+        setPasswordRecovery(false)
+        if (typeof window !== 'undefined') {
+          window.history.replaceState(null, '', '/auth')
+        }
+        setMode('login')
+        setPassword('')
+        setConfirmPassword('')
+        setInfo('Mot de passe mis à jour. Connecte-toi avec le nouveau.')
       } else {
         const { error } = await supabase.auth.signInWithPassword({
           email,
@@ -111,8 +165,9 @@ export default function Auth() {
         </div>
 
         {/* Segmented control — Connexion / Inscription. Hidden when
-            mode === 'forgot' so the password-reset flow stays focused. */}
-        {mode !== 'forgot' && <div
+            mode is forgot or recover so the password-reset flows stay
+            focused. */}
+        {mode !== 'forgot' && mode !== 'recover' && <div
           className="mx-auto flex rounded-full bg-card p-1"
           style={{ border: '1px solid var(--color-border)' }}
         >
@@ -151,16 +206,50 @@ export default function Auth() {
           </p>
         )}
 
+        {mode === 'recover' && (
+          <p className="px-1 text-center text-sm text-fg2">
+            Choisis ton nouveau mot de passe. Une fois validé, tu seras
+            renvoyé sur l'écran de connexion.
+          </p>
+        )}
+
         <form onSubmit={handleSubmit} className="mt-8 space-y-4">
-          <Field
-            label="Email"
-            type="email"
-            autoComplete="email"
-            required
-            value={email}
-            onChange={setEmail}
-            placeholder="toi@exemple.com"
-          />
+          {mode !== 'recover' && (
+            <Field
+              label="Email"
+              type="email"
+              autoComplete="email"
+              required
+              value={email}
+              onChange={setEmail}
+              placeholder="toi@exemple.com"
+            />
+          )}
+
+          {mode === 'recover' && (
+            <>
+              <Field
+                label="Nouveau mot de passe"
+                type="password"
+                autoComplete="new-password"
+                required
+                minLength={6}
+                value={password}
+                onChange={setPassword}
+                placeholder="••••••••"
+              />
+              <Field
+                label="Confirme le nouveau mot de passe"
+                type="password"
+                autoComplete="new-password"
+                required
+                minLength={6}
+                value={confirmPassword}
+                onChange={setConfirmPassword}
+                placeholder="••••••••"
+              />
+            </>
+          )}
 
           {mode !== 'forgot' && (
             <div className="space-y-1.5">
@@ -260,7 +349,9 @@ export default function Auth() {
                 ? 'SE CONNECTER'
                 : mode === 'signup'
                   ? "S'INSCRIRE"
-                  : 'ENVOYER LE LIEN'}
+                  : mode === 'recover'
+                    ? 'METTRE À JOUR LE MOT DE PASSE'
+                    : 'ENVOYER LE LIEN'}
           </button>
 
           {mode === 'forgot' && (
