@@ -195,6 +195,28 @@ export default function Settings() {
   const [msg, setMsg] = useState<string | null>(null)
   const [err, setErr] = useState<string | null>(null)
 
+  // Global session signout — invalidates every session token for the
+  // user across ALL devices via Supabase's scope:'global' option. The
+  // App.tsx auth gate observes the session becoming null and redirects
+  // to /auth automatically, so we don't need to navigate manually.
+  async function signOutAllDevices() {
+    if (
+      typeof window !== 'undefined' &&
+      !window.confirm(
+        'Déconnecter toutes les sessions actives sur tous tes appareils ? Tu devras te reconnecter partout.',
+      )
+    ) {
+      return
+    }
+    try {
+      const { error } = await supabase.auth.signOut({ scope: 'global' })
+      if (error) throw error
+      hapticSuccess()
+    } catch (e) {
+      setErr(translateError(e))
+    }
+  }
+
   // Native Web Share — opens the iOS / Android share sheet so the
   // user can pick any installed messaging / mail / Whatsapp app and
   // send the install link. Falls back to clipboard + toast when the
@@ -955,7 +977,10 @@ export default function Settings() {
             </p>
           )}
 
-          {/* 1 — MON COMPTE */}
+          {/* 1 — MON COMPTE — identity-facing rows only. The two
+              security-facing rows (e-mail + password) moved to the
+              new Sécurité section below per the 2026-06-03 settings
+              restructure spec. */}
           <Section title="Mon compte">
             <Row
               icon={<UserPlus className="h-4 w-4" />}
@@ -964,6 +989,15 @@ export default function Settings() {
               onClick={() => setEditOpen((v) => !v)}
             />
             {editOpen && ProfileEditor}
+          </Section>
+
+          {/* 1bis — SÉCURITÉ — relocated email + password + new global
+              session signout. Supabase doesn't expose a per-device
+              session list to clients, so device management is collapsed
+              into a single "Déconnexion sur tous les appareils" action
+              that calls signOut({ scope: 'global' }) — invalidates
+              every session token for the user across devices. */}
+          <Section title="Sécurité">
             <Row
               icon={<AtSign className="h-4 w-4" />}
               label="Modifier mon e-mail"
@@ -985,6 +1019,13 @@ export default function Settings() {
               }}
             />
             {pwOpen && PasswordEditor}
+            <Row
+              icon={<Shield className="h-4 w-4" />}
+              label="Déconnexion sur tous les appareils"
+              sub="Termine toutes les sessions actives — utile en cas de doute"
+              danger
+              onClick={signOutAllDevices}
+            />
           </Section>
 
           {/* 2 — PREMIUM features. Hidden for free users; Mode Radar
