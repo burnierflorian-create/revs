@@ -22,6 +22,7 @@ import {
   RotateCcw,
   Scale,
   Shield,
+  Car,
   Smartphone,
   Sun,
   Trash2,
@@ -182,6 +183,18 @@ export default function Settings() {
   const [ville, setVille] = useState('')
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [avatarFile, setAvatarFile] = useState<Blob | null>(null)
+  // Profile extras introduced by migration 0041 — daily-driver brand
+  // surfaced as a Settings row, plus optional Instagram / TikTok
+  // handles for the public profile card. All three nullable.
+  const [garageBrand, setGarageBrand] = useState('')
+  const [instagram, setInstagram] = useState('')
+  const [tiktok, setTiktok] = useState('')
+  const [garageOpen, setGarageOpen] = useState(false)
+  const [socialOpen, setSocialOpen] = useState(false)
+  const [garageBusy, setGarageBusy] = useState(false)
+  const [socialBusy, setSocialBusy] = useState(false)
+  const [garageMsg, setGarageMsg] = useState<string | null>(null)
+  const [socialMsg, setSocialMsg] = useState<string | null>(null)
   const [isPublic, setIsPublic] = useState(true)
   const [notif, setNotif] = useState(false)
   const [geo, setGeo] = useState(false)
@@ -214,6 +227,57 @@ export default function Settings() {
       hapticSuccess()
     } catch (e) {
       setErr(translateError(e))
+    }
+  }
+
+  async function saveGarage() {
+    if (!userId || garageBusy) return
+    setGarageBusy(true)
+    setGarageMsg(null)
+    const value = garageBrand.trim().slice(0, 80) || null
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ garage_brand: value })
+        .eq('user_id', userId)
+      if (error) throw error
+      hapticSuccess()
+      setGarageMsg('Véhicule principal enregistré ✅')
+      window.setTimeout(() => setGarageMsg(null), 2000)
+      setGarageOpen(false)
+    } catch (e) {
+      setGarageMsg(translateError(e))
+    } finally {
+      setGarageBusy(false)
+    }
+  }
+
+  async function saveSocial() {
+    if (!userId || socialBusy) return
+    setSocialBusy(true)
+    setSocialMsg(null)
+    // Strip leading @ / spaces / URLs — store the raw handle only.
+    const clean = (s: string) =>
+      s
+        .trim()
+        .replace(/^https?:\/\/(www\.)?(instagram|tiktok)\.com\//i, '')
+        .replace(/^@+/, '')
+        .replace(/\/.*$/, '')
+        .slice(0, 60) || null
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ instagram: clean(instagram), tiktok: clean(tiktok) })
+        .eq('user_id', userId)
+      if (error) throw error
+      hapticSuccess()
+      setSocialMsg('Comptes sociaux enregistrés ✅')
+      window.setTimeout(() => setSocialMsg(null), 2000)
+      setSocialOpen(false)
+    } catch (e) {
+      setSocialMsg(translateError(e))
+    } finally {
+      setSocialBusy(false)
     }
   }
 
@@ -303,7 +367,7 @@ export default function Settings() {
         await Promise.all([
           supabase
             .from('profiles')
-            .select('pseudo, ville, avatar, is_public, role')
+            .select('pseudo, ville, avatar, is_public, role, garage_brand, instagram, tiktok')
             .eq('user_id', user.id)
             .maybeSingle(),
           supabase
@@ -324,6 +388,9 @@ export default function Settings() {
         setAvatarUrl(prof.avatar ?? null)
         setIsPublic(prof.is_public ?? true)
         setRole((prof.role as string | undefined) ?? 'user')
+        setGarageBrand((prof as { garage_brand?: string | null }).garage_brand ?? '')
+        setInstagram((prof as { instagram?: string | null }).instagram ?? '')
+        setTiktok((prof as { tiktok?: string | null }).tiktok ?? '')
       }
       if (np)
         setNpref({
@@ -754,6 +821,111 @@ export default function Settings() {
 
   const isOrganizer = role === 'organizer' || role === 'admin'
 
+  // ─────────────────────── Inline garage / social editors ───────────────────────
+
+  const GarageEditor = (
+    <div className="px-4 pb-4 pt-2">
+      <label className="block space-y-1.5">
+        <span className="label-up block px-1 text-[10px] text-fg2">
+          Marque ou modèle quotidien
+        </span>
+        <input
+          type="text"
+          autoComplete="off"
+          value={garageBrand}
+          onChange={(e) => setGarageBrand(e.target.value)}
+          placeholder="Ex: Mercedes-Benz, BMW M2, Porsche 911…"
+          maxLength={80}
+          className="w-full rounded-2xl bg-card px-4 py-3 text-sm text-fg placeholder-fg2/60 outline-none focus:ring-2 focus:ring-accent/45"
+          style={{ border: '1px solid var(--color-border)' }}
+        />
+      </label>
+      <div className="mt-3 flex gap-2">
+        <button
+          type="button"
+          onClick={saveGarage}
+          disabled={garageBusy}
+          className="flex-1 rounded-full bg-accent py-2.5 text-xs font-extrabold tracking-wider text-fg disabled:opacity-50"
+        >
+          {garageBusy ? '…' : 'Enregistrer'}
+        </button>
+        <button
+          type="button"
+          onClick={() => setGarageOpen(false)}
+          className="rounded-full bg-card px-4 py-2.5 text-xs font-semibold text-fg2"
+          style={{ border: '1px solid var(--color-border)' }}
+        >
+          Annuler
+        </button>
+      </div>
+      {garageMsg && (
+        <p className="mt-2 rounded-xl bg-emerald-500/10 px-3 py-2 text-[11px] font-semibold text-emerald-400"
+          style={{ border: '1px solid rgba(16, 185, 129, 0.25)' }}>
+          {garageMsg}
+        </p>
+      )}
+    </div>
+  )
+
+  const SocialEditor = (
+    <div className="space-y-3 px-4 pb-4 pt-2">
+      <label className="block space-y-1.5">
+        <span className="label-up block px-1 text-[10px] text-fg2">
+          Instagram
+        </span>
+        <input
+          type="text"
+          autoComplete="off"
+          value={instagram}
+          onChange={(e) => setInstagram(e.target.value)}
+          placeholder="@ton_pseudo"
+          maxLength={60}
+          className="w-full rounded-2xl bg-card px-4 py-3 text-sm text-fg placeholder-fg2/60 outline-none focus:ring-2 focus:ring-accent/45"
+          style={{ border: '1px solid var(--color-border)' }}
+        />
+      </label>
+      <label className="block space-y-1.5">
+        <span className="label-up block px-1 text-[10px] text-fg2">
+          TikTok
+        </span>
+        <input
+          type="text"
+          autoComplete="off"
+          value={tiktok}
+          onChange={(e) => setTiktok(e.target.value)}
+          placeholder="@ton_pseudo"
+          maxLength={60}
+          className="w-full rounded-2xl bg-card px-4 py-3 text-sm text-fg placeholder-fg2/60 outline-none focus:ring-2 focus:ring-accent/45"
+          style={{ border: '1px solid var(--color-border)' }}
+        />
+      </label>
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={saveSocial}
+          disabled={socialBusy}
+          className="flex-1 rounded-full bg-accent py-2.5 text-xs font-extrabold tracking-wider text-fg disabled:opacity-50"
+        >
+          {socialBusy ? '…' : 'Enregistrer'}
+        </button>
+        <button
+          type="button"
+          onClick={() => setSocialOpen(false)}
+          className="rounded-full bg-card px-4 py-2.5 text-xs font-semibold text-fg2"
+          style={{ border: '1px solid var(--color-border)' }}
+        >
+          Annuler
+        </button>
+      </div>
+      {socialMsg && (
+        <p className="rounded-xl bg-emerald-500/10 px-3 py-2 text-[11px] font-semibold text-emerald-400"
+          style={{ border: '1px solid rgba(16, 185, 129, 0.25)' }}>
+          {socialMsg}
+        </p>
+      )}
+    </div>
+  )
+
   // ─────────────────────── Inline profile editor ───────────────────────
 
   const ProfileEditor = (
@@ -989,6 +1161,35 @@ export default function Settings() {
               onClick={() => setEditOpen((v) => !v)}
             />
             {editOpen && ProfileEditor}
+            <Row
+              icon={<Car className="h-4 w-4" />}
+              label="Mon véhicule principal"
+              sub={garageBrand || 'Renseigne ton modèle quotidien'}
+              onClick={() => {
+                setGarageMsg(null)
+                setGarageOpen((v) => !v)
+              }}
+            />
+            {garageOpen && GarageEditor}
+            <Row
+              icon={<AtSign className="h-4 w-4" />}
+              label="Réseaux sociaux"
+              sub={
+                instagram || tiktok
+                  ? [
+                      instagram ? `IG @${instagram}` : null,
+                      tiktok ? `TT @${tiktok}` : null,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')
+                  : 'Lie ton Instagram ou TikTok'
+              }
+              onClick={() => {
+                setSocialMsg(null)
+                setSocialOpen((v) => !v)
+              }}
+            />
+            {socialOpen && SocialEditor}
           </Section>
 
           {/* 1bis — SÉCURITÉ — relocated email + password + new global
@@ -1019,13 +1220,6 @@ export default function Settings() {
               }}
             />
             {pwOpen && PasswordEditor}
-            <Row
-              icon={<Shield className="h-4 w-4" />}
-              label="Déconnexion sur tous les appareils"
-              sub="Termine toutes les sessions actives — utile en cas de doute"
-              danger
-              onClick={signOutAllDevices}
-            />
           </Section>
 
           {/* 2 — PREMIUM features. Hidden for free users; Mode Radar
@@ -1386,6 +1580,23 @@ export default function Settings() {
               Zone sensible
             </h2>
             <div className="space-y-3">
+              <button
+                onClick={signOutAllDevices}
+                className="flex w-full items-center gap-3 rounded-2xl border border-[#F59E0B]/30 px-4 py-3.5 text-left transition-colors hover:bg-[#F59E0B]/5"
+              >
+                <span className="flex h-9 w-9 flex-none items-center justify-center rounded-xl bg-[#F59E0B]/15 text-[#F59E0B]">
+                  <Shield className="h-4 w-4" />
+                </span>
+                <span className="flex-1">
+                  <span className="block text-[15px] font-semibold text-[#F59E0B]">
+                    Déconnexion sur tous les appareils
+                  </span>
+                  <span className="mt-0.5 block text-[11px] text-fg2">
+                    Termine toutes les sessions actives
+                  </span>
+                </span>
+              </button>
+
               <button
                 onClick={logout}
                 className="flex w-full items-center gap-3 rounded-2xl border border-[#F59E0B]/30 px-4 py-3.5 text-left transition-colors hover:bg-[#F59E0B]/5"
