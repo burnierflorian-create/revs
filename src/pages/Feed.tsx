@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Car, Heart, Layers, Loader2, Search as SearchIcon, SlidersHorizontal, X, Zap } from 'lucide-react'
+import { Car, Heart, Layers, Loader2, MessageCircle, Search as SearchIcon, SlidersHorizontal, X, Zap } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import {
   categoryLabel,
@@ -10,7 +10,9 @@ import {
   type Spot,
 } from '../lib/spots'
 import { SkeletonCard } from '../components/Skeleton'
-import LikeButton from '../components/LikeButton'
+import CommentsSheet from '../components/CommentsSheet'
+import { hapticTap } from '../lib/haptic'
+import { myPseudo, notifyPush } from '../lib/push'
 import FeedFiltersModal, {
   DEFAULT_FILTERS,
   filtersActive,
@@ -224,66 +226,9 @@ export default function Feed() {
   const profilesRef = useRef<Record<string, Prof>>({})
   const sentinelRef = useRef<HTMLDivElement | null>(null)
 
-  // Double-tap-to-like state. tapStateRef tracks the last click time
-  // and the navigation timer per spot so we can cancel navigation
-  // when a second tap lands within the threshold. heartSpotId drives
-  // the giant heart pop overlay (one at a time across the feed).
-  const tapStateRef = useRef<
-    Map<string, { lastTap: number; navTimer: number | null }>
-  >(new Map())
-  const [heartSpotId, setHeartSpotId] = useState<string | null>(null)
+  // Per-card interaction (like, double-tap, comments) now lives inside
+  // <FeedCard /> — the feed no longer tracks a shared heart/nav timer.
 
-  /** Insert a spot_like row silently. Idempotent because the table's
-   *  (spot_id, user_id) primary key turns a duplicate into a no-op.
-   *  The card's LikeButton picks up the change via its realtime
-   *  subscription, so the chip count + filled heart update on their
-   *  own. */
-  async function likeSilently(spotId: string) {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-    if (!user) return
-    try {
-      await supabase
-        .from('spot_likes')
-        .insert({ spot_id: spotId, user_id: user.id })
-    } catch {
-      /* duplicate or transient — ignore */
-    }
-  }
-
-  /** Photo-area onClick handler: navigates on a single tap (after a
-   *  250 ms debounce), but a second tap within the same window cancels
-   *  the navigation and triggers a like + heart-pop overlay instead.
-   *  iOS Instagram pattern. */
-  function onPhotoTap(spotId: string) {
-    const map = tapStateRef.current
-    const entry = map.get(spotId) ?? { lastTap: 0, navTimer: null }
-    const now = Date.now()
-    if (now - entry.lastTap < 300) {
-      // Double-tap: cancel pending navigation, fire like + heart.
-      if (entry.navTimer != null) {
-        clearTimeout(entry.navTimer)
-      }
-      map.set(spotId, { lastTap: 0, navTimer: null })
-      setHeartSpotId(spotId)
-      // Cleanup synced to the new 350 ms keyframe + 50 ms safety
-      // buffer so the heart unmounts the moment the fade ends.
-      window.setTimeout(() => {
-        setHeartSpotId((cur) => (cur === spotId ? null : cur))
-      }, 400)
-      void likeSilently(spotId)
-      return
-    }
-    // First tap: schedule navigation; the second tap (if any) will
-    // cancel before this fires.
-    if (entry.navTimer != null) clearTimeout(entry.navTimer)
-    const navTimer = window.setTimeout(() => {
-      navigate(`/spot/${spotId}`)
-      map.set(spotId, { lastTap: 0, navTimer: null })
-    }, 250)
-    map.set(spotId, { lastTap: now, navTimer })
-  }
 
   const mergeProfiles = useCallback(async (list: Spot[]) => {
     const ids = [
@@ -637,7 +582,7 @@ export default function Feed() {
           </p>
         </div>
       ) : (
-        <div className="space-y-10">
+        <div>
           {(() => {
             const needle = searchQuery.trim().toLowerCase()
             const filtered = needle
@@ -663,179 +608,14 @@ export default function Feed() {
                 </p>
               )
             }
-            return filtered.map(({ primary: spot, count }) => {
-            const prof = profiles[spot.user_id]
-            const pseudo = prof?.pseudo || 'Spotter'
-            const catColor = CAT_COLOR[spot.category]
-            const title = [spot.brand, spot.model].filter(Boolean).join(' ') ||
-              'Voiture'
-            const founder = isFounder(spot.user_id)
-            return (
-              // No card container — three clean layers floating on the page
-              // bg: spotter row, edge-to-edge photo, then the spec line.
-              <article key={spot.id}>
-                {/* A · SPOTTER — above the photo, on the page background */}
-                <button
-                  onClick={() => navigate(`/u/${spot.user_id}`)}
-                  className="tappable mb-2.5 flex w-full min-w-0 items-center gap-2.5 px-1 text-left"
-                  aria-label={`Profil de ${pseudo}`}
-                >
-                  <div
-                    className="flex h-9 w-9 flex-none items-center justify-center overflow-hidden rounded-full bg-fg/10 text-sm font-extrabold text-fg"
-                    style={{ border: '1px solid var(--color-border)' }}
-                  >
-                    {prof?.avatar ? (
-                      <img
-                        src={prof.avatar}
-                        alt=""
-                        loading="lazy"
-                        decoding="async"
-                        className="h-full w-full object-cover"
-                      />
-                    ) : (
-                      pseudo.charAt(0).toUpperCase()
-                    )}
-                  </div>
-                  <div className="min-w-0 space-y-0.5">
-                    <div className="flex items-center gap-1.5">
-                      <span
-                        className="truncate font-black tracking-tight text-fg"
-                        style={{ fontSize: '13px' }}
-                      >
-                        {pseudo}
-                      </span>
-                      {founder && (
-                        <span
-                          className="flex-none rounded font-black uppercase tracking-widest text-red-400"
-                          style={{
-                            background: 'rgba(239, 68, 68, 0.10)',
-                            border: '1px solid rgba(239, 68, 68, 0.20)',
-                            padding: '2px 6px',
-                            fontSize: '8px',
-                            letterSpacing: '0.16em',
-                          }}
-                        >
-                          Fondateur
-                        </span>
-                      )}
-                    </div>
-                    <p
-                      className="truncate font-medium tracking-tight text-fg2"
-                      style={{ fontSize: '10.5px' }}
-                    >
-                      {[prof?.ville, timeAgo(spot.created_at)]
-                        .filter(Boolean)
-                        .join(' • ')}
-                    </p>
-                  </div>
-                </button>
-
-                {/* B · PHOTO — edge-to-edge (-mx-4 cancels the page padding),
-                    square corners for a continuous film-strip read. No text
-                    on the photo; only the discreet multi-image badge. */}
-                <div
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => onPhotoTap(spot.id)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault()
-                      onPhotoTap(spot.id)
-                    }
-                  }}
-                  className="tappable relative -mx-4 block cursor-pointer select-none"
-                >
-                  {spot.photo_url ? (
-                    <img
-                      src={spot.photo_url}
-                      alt={title}
-                      loading="lazy"
-                      className="aspect-[16/9] w-full object-cover"
-                    />
-                  ) : (
-                    <div className="flex aspect-[16/9] w-full items-center justify-center bg-fg/5">
-                      <Car className="h-12 w-12 text-fg2/40" />
-                    </div>
-                  )}
-
-                  {/* Giant heart pop on double-tap. */}
-                  {heartSpotId === spot.id && (
-                    <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center">
-                      <Heart
-                        className="feed-double-heart h-28 w-28"
-                        style={{ color: '#E8203A', fill: '#E8203A' }}
-                      />
-                    </div>
-                  )}
-
-                  {/* Multi-image filigree badge — the only thing allowed to
-                      float on the photo. */}
-                  {count > 1 && (
-                    <span
-                      className="absolute right-3 top-3 flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-bold text-white"
-                      style={{
-                        background: 'rgba(0, 0, 0, 0.45)',
-                        border: '1px solid rgba(255, 255, 255, 0.12)',
-                        backdropFilter: 'saturate(160%) blur(12px)',
-                        WebkitBackdropFilter: 'saturate(160%) blur(12px)',
-                      }}
-                    >
-                      <Layers className="h-3 w-3" />
-                      {count}
-                    </span>
-                  )}
-                </div>
-
-                {/* C · SPECS — below the photo, on the page background.
-                    Left: brand + model, year, category badge. Right: like
-                    counter + translucent XP badge. All theme-aware. */}
-                <div className="mt-3 flex items-start justify-between gap-3 px-1">
-                  <div className="min-w-0">
-                    <h2
-                      className="truncate font-display font-extrabold tracking-tight text-fg"
-                      style={{ fontSize: '17px', letterSpacing: '-0.01em' }}
-                    >
-                      {title}
-                    </h2>
-                    <div className="mt-1.5 flex items-center gap-2">
-                      {spot.year && (
-                        <span className="text-[12px] font-medium text-fg2">
-                          {spot.year}
-                        </span>
-                      )}
-                      {catColor && (
-                        <span
-                          className="rounded-md px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-black"
-                          style={{
-                            background:
-                              CAT_GRADIENT[spot.category] ?? catColor,
-                            letterSpacing: '0.06em',
-                          }}
-                        >
-                          {categoryLabel(spot.category).toUpperCase()}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex flex-none items-center gap-3">
-                    <LikeButton spotId={spot.id} />
-                    <span
-                      className="flex items-center gap-1 rounded-full px-2.5 py-1.5 text-[11px] font-extrabold tracking-wider text-fg"
-                      style={{
-                        background: 'var(--color-glass)',
-                        border: '1px solid var(--color-border)',
-                        backdropFilter: 'saturate(160%) blur(12px)',
-                        WebkitBackdropFilter: 'saturate(160%) blur(12px)',
-                      }}
-                    >
-                      <Zap className="h-3 w-3 text-accent" />+
-                      {xpForSpot(spot.estimated_price, spot.rarity)}
-                    </span>
-                  </div>
-                </div>
-              </article>
-            )
-          })
+            return filtered.map(({ primary: spot, count }) => (
+              <FeedCard
+                key={spot.id}
+                spot={spot}
+                prof={profiles[spot.user_id]}
+                burstCount={count}
+              />
+            ))
           })()}
 
           <div ref={sentinelRef} className="h-1" />
@@ -852,5 +632,331 @@ export default function Feed() {
         </div>
       )}
     </div>
+  )
+}
+
+// ─────────────────────────────── FEED CARD ───────────────────────────────
+
+/** One spot in the feed — Instagram-grade. Layers: spotter row, 4:5
+ *  edge-to-edge photo (double-tap to like, never navigates), tools row
+ *  (like + count, comment + count, XP badge), tappable title block (the
+ *  only path to the detail page), and a quick-comment row that opens the
+ *  comments sheet. All theme-aware. */
+function FeedCard({
+  spot,
+  prof,
+  burstCount,
+}: {
+  spot: Spot
+  prof?: Prof
+  burstCount: number
+}) {
+  const navigate = useNavigate()
+  const meRef = useRef<string | null>(null)
+  const busyRef = useRef(false)
+  const lastTapRef = useRef(0)
+  const [liked, setLiked] = useState(false)
+  const [likeCount, setLikeCount] = useState(0)
+  const [commentCount, setCommentCount] = useState(0)
+  const [heartPop, setHeartPop] = useState(false)
+  const [sheetOpen, setSheetOpen] = useState(false)
+  const [myAvatar, setMyAvatar] = useState<string | null>(null)
+  const [myInitial, setMyInitial] = useState('?')
+
+  const pseudo = prof?.pseudo || 'Spotter'
+  const founder = isFounder(spot.user_id)
+  const catColor = CAT_COLOR[spot.category]
+  const title = [spot.brand, spot.model].filter(Boolean).join(' ') || 'Voiture'
+
+  useEffect(() => {
+    let active = true
+    ;(async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (!active) return
+      meRef.current = user?.id ?? null
+      if (user) {
+        supabase
+          .from('profiles')
+          .select('avatar, pseudo')
+          .eq('user_id', user.id)
+          .maybeSingle()
+          .then(({ data }) => {
+            if (!active) return
+            const m = data as { avatar: string | null; pseudo: string | null } | null
+            setMyAvatar(m?.avatar ?? null)
+            setMyInitial(
+              (m?.pseudo ?? user.email ?? '?').charAt(0).toUpperCase(),
+            )
+          })
+      }
+      const [likeC, likedRes, comC] = await Promise.all([
+        supabase
+          .from('spot_likes')
+          .select('*', { count: 'exact', head: true })
+          .eq('spot_id', spot.id),
+        user
+          ? supabase
+              .from('spot_likes')
+              .select('spot_id')
+              .eq('spot_id', spot.id)
+              .eq('user_id', user.id)
+              .maybeSingle()
+          : Promise.resolve({ data: null }),
+        supabase
+          .from('comments')
+          .select('*', { count: 'exact', head: true })
+          .eq('spot_id', spot.id),
+      ])
+      if (!active) return
+      setLikeCount(likeC.count ?? 0)
+      setLiked(!!likedRes.data)
+      setCommentCount(comC.count ?? 0)
+    })()
+    return () => {
+      active = false
+    }
+  }, [spot.id])
+
+  async function setLikeState(next: boolean) {
+    const uid = meRef.current
+    if (!uid || busyRef.current || next === liked) return
+    busyRef.current = true
+    setLiked(next)
+    setLikeCount((n) => Math.max(0, n + (next ? 1 : -1)))
+    const op = next
+      ? supabase.from('spot_likes').insert({ spot_id: spot.id, user_id: uid })
+      : supabase
+          .from('spot_likes')
+          .delete()
+          .eq('spot_id', spot.id)
+          .eq('user_id', uid)
+    const { error } = await op
+    if (error) {
+      setLiked(!next)
+      setLikeCount((n) => Math.max(0, n + (next ? -1 : 1)))
+    } else if (next && spot.user_id !== uid) {
+      const who = await myPseudo()
+      void notifyPush({
+        user_id: spot.user_id,
+        title: '❤️ Nouveau like',
+        body: `${who} a liké ton spot ${spot.brand} ${spot.model}`,
+        url: `/spot/${spot.id}`,
+        type: 'likes',
+      })
+    }
+    busyRef.current = false
+  }
+
+  // Single tap does nothing (per spec — the photo never navigates). A
+  // second tap within 300 ms is a double-tap → like + spring heart pop.
+  function onPhotoTap() {
+    const now = Date.now()
+    if (now - lastTapRef.current < 300) {
+      lastTapRef.current = 0
+      setHeartPop(true)
+      hapticTap()
+      window.setTimeout(() => setHeartPop(false), 380)
+      void setLikeState(true) // double-tap always likes, never unlikes
+    } else {
+      lastTapRef.current = now
+    }
+  }
+
+  return (
+    <article className="feed-card pb-6">
+      {/* A · SPOTTER */}
+      <button
+        onClick={() => navigate(`/u/${spot.user_id}`)}
+        className="tappable mb-2.5 flex w-full min-w-0 items-center gap-2.5 px-1 text-left"
+        aria-label={`Profil de ${pseudo}`}
+      >
+        <div
+          className="flex h-9 w-9 flex-none items-center justify-center overflow-hidden rounded-full bg-fg/10 text-sm font-extrabold text-fg"
+          style={{ border: '1px solid var(--color-border)' }}
+        >
+          {prof?.avatar ? (
+            <img
+              src={prof.avatar}
+              alt=""
+              loading="lazy"
+              decoding="async"
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            pseudo.charAt(0).toUpperCase()
+          )}
+        </div>
+        <div className="min-w-0 space-y-0.5">
+          <div className="flex items-center gap-1.5">
+            <span
+              className="truncate font-black tracking-tight text-fg"
+              style={{ fontSize: '13px' }}
+            >
+              {pseudo}
+            </span>
+            {founder && (
+              <span
+                className="flex-none rounded font-black uppercase tracking-widest text-red-400"
+                style={{
+                  background: 'rgba(239, 68, 68, 0.10)',
+                  border: '1px solid rgba(239, 68, 68, 0.20)',
+                  padding: '2px 6px',
+                  fontSize: '8px',
+                  letterSpacing: '0.16em',
+                }}
+              >
+                Fondateur
+              </span>
+            )}
+          </div>
+          <p
+            className="truncate font-medium tracking-tight text-fg2"
+            style={{ fontSize: '10.5px' }}
+          >
+            {[prof?.ville, timeAgo(spot.created_at)].filter(Boolean).join(' • ')}
+          </p>
+        </div>
+      </button>
+
+      {/* B · PHOTO 4:5 — edge-to-edge, double-tap to like (no navigation) */}
+      <div
+        onClick={onPhotoTap}
+        className="relative -mx-4 cursor-pointer select-none"
+      >
+        {spot.photo_url ? (
+          <img
+            src={spot.photo_url}
+            alt={title}
+            loading="lazy"
+            className="aspect-[4/5] w-full object-cover"
+          />
+        ) : (
+          <div className="flex aspect-[4/5] w-full items-center justify-center bg-fg/5">
+            <Car className="h-12 w-12 text-fg2/40" />
+          </div>
+        )}
+
+        {heartPop && (
+          <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center">
+            <Heart
+              className="feed-double-heart h-28 w-28"
+              style={{ color: '#FF2D46', fill: '#FF2D46' }}
+            />
+          </div>
+        )}
+
+        {burstCount > 1 && (
+          <span
+            className="absolute right-3 top-3 flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-bold text-white"
+            style={{
+              background: 'rgba(0, 0, 0, 0.45)',
+              border: '1px solid rgba(255, 255, 255, 0.12)',
+              backdropFilter: 'saturate(160%) blur(12px)',
+              WebkitBackdropFilter: 'saturate(160%) blur(12px)',
+            }}
+          >
+            <Layers className="h-3 w-3" />
+            {burstCount}
+          </span>
+        )}
+      </div>
+
+      {/* C · TOOLS ROW — like · comment · (XP far right) */}
+      <div className="mt-3 flex items-center gap-5 px-1">
+        <button
+          onClick={() => setLikeState(!liked)}
+          aria-label={liked ? 'Retirer le like' : 'Liker'}
+          aria-pressed={liked}
+          className="tappable flex items-center gap-1.5"
+        >
+          <Heart
+            strokeWidth={1.75}
+            className={`h-6 w-6 transition-colors ${liked ? 'fill-accent text-accent' : 'text-fg'}`}
+          />
+          <span className="text-sm font-semibold text-fg">{likeCount}</span>
+        </button>
+        <button
+          onClick={() => setSheetOpen(true)}
+          aria-label="Commentaires"
+          className="tappable flex items-center gap-1.5"
+        >
+          <MessageCircle strokeWidth={1.75} className="h-6 w-6 text-fg" />
+          <span className="text-sm font-semibold text-fg">{commentCount}</span>
+        </button>
+        <span
+          className="ml-auto flex items-center gap-1 rounded-full px-2.5 py-1.5 text-[11px] font-extrabold tracking-wider text-fg"
+          style={{
+            background: 'var(--color-glass)',
+            border: '1px solid var(--color-border)',
+            backdropFilter: 'saturate(160%) blur(12px)',
+            WebkitBackdropFilter: 'saturate(160%) blur(12px)',
+          }}
+        >
+          <Zap className="h-3 w-3 text-accent" />+
+          {xpForSpot(spot.estimated_price, spot.rarity)} XP
+        </span>
+      </div>
+
+      {/* D · TITLE BLOCK — the ONLY tap target that opens the detail page */}
+      <button
+        onClick={() => navigate(`/spot/${spot.id}`)}
+        className="tappable mt-2 block w-full px-1 text-left"
+        aria-label={`Voir ${title}`}
+      >
+        <h2
+          className="truncate font-display font-extrabold tracking-tight text-fg"
+          style={{ fontSize: '17px', letterSpacing: '-0.01em' }}
+        >
+          {title}
+        </h2>
+        <div className="mt-1.5 flex items-center gap-2">
+          {spot.year && (
+            <span className="text-[12px] font-medium text-fg2">{spot.year}</span>
+          )}
+          {catColor && (
+            <span
+              className="rounded-md px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-black"
+              style={{
+                background: CAT_GRADIENT[spot.category] ?? catColor,
+                letterSpacing: '0.06em',
+              }}
+            >
+              {categoryLabel(spot.category).toUpperCase()}
+            </span>
+          )}
+        </div>
+      </button>
+
+      {/* E · QUICK COMMENT — opens the sheet */}
+      <button
+        onClick={() => setSheetOpen(true)}
+        className="tappable mt-3 flex w-full items-center gap-2.5 px-1 text-left"
+        aria-label="Ajouter un commentaire"
+      >
+        <div className="flex h-7 w-7 flex-none items-center justify-center overflow-hidden rounded-full bg-fg/10 text-[11px] font-extrabold text-fg2">
+          {myAvatar ? (
+            <img
+              src={myAvatar}
+              alt=""
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            myInitial
+          )}
+        </div>
+        <span className="text-[13px] text-fg2">Ajouter un commentaire…</span>
+      </button>
+
+      <CommentsSheet
+        spotId={spot.id}
+        ownerId={spot.user_id}
+        spotLabel={`${spot.brand} ${spot.model}`}
+        open={sheetOpen}
+        onClose={() => setSheetOpen(false)}
+        onCountChange={setCommentCount}
+      />
+    </article>
   )
 }

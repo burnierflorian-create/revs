@@ -47,6 +47,12 @@ export function hapticError(): void {
   vibrateSafely(220)
 }
 
+/** Light single tap — a crisp confirmation for lightweight actions like
+ *  a double-tap "like". 12 ms. */
+export function hapticTap(): void {
+  vibrateSafely(12)
+}
+
 /** Starts a heartbeat that pulses every ~580 ms while the scan
  *  laser animation runs. Returns a cancel function — call it when
  *  the analyze response lands or the user aborts. Internally guards
