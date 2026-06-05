@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Car, Filter as FilterIcon, Heart, Layers, Loader2, Search as SearchIcon, X, Zap } from 'lucide-react'
+import { Car, Heart, Layers, Loader2, Search as SearchIcon, SlidersHorizontal, X, Zap } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import {
   categoryLabel,
@@ -540,82 +540,63 @@ export default function Feed() {
       <PullIndicator pull={pull} refreshing={refreshing} />
       <h1 className="display-xl py-5 text-fg">Fil</h1>
 
-      {/* Search + filtres — glass premium. Background + border now
-          resolve through CSS vars (--color-glass + --color-border)
-          so the bar auto-flips when the user toggles dark / light
-          from Settings. */}
-      <div
-        className="mb-3 flex items-center gap-2 rounded-full px-4 py-2.5"
-        style={{
-          background: 'var(--color-glass)',
-          border: '1px solid var(--color-border)',
-          backdropFilter: 'saturate(160%) blur(22px)',
-          WebkitBackdropFilter: 'saturate(160%) blur(22px)',
-          boxShadow: '0 4px 30px rgba(0, 0, 0, 0.40)',
-        }}
-      >
-        <SearchIcon className="h-4 w-4 flex-none text-fg2" />
-        <input
-          type="text"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="Rechercher dans le fil…"
-          className="flex-1 bg-transparent text-xs font-medium tracking-tight text-fg/80 placeholder:text-fg2 outline-none"
-        />
-        {searchQuery && (
-          <button
-            onClick={() => setSearchQuery('')}
-            aria-label="Effacer"
-            className="tappable text-fg2 hover:text-fg"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        )}
-      </div>
-
-      <div className="mb-5 flex items-center gap-2">
-        <button
-          onClick={() => setFilters(DEFAULT_FILTERS)}
-          className={`tappable flex-1 rounded-full px-4 py-2.5 text-xs font-bold transition-colors ${
-            allDefaults
-              ? 'bg-accent text-fg'
-              : 'text-fg2 hover:text-fg'
-          }`}
-          style={
-            allDefaults
-              ? undefined
-              : {
-                  background: 'var(--color-glass)',
-                  border: '1px solid var(--color-border)',
-                  backdropFilter: 'saturate(160%) blur(22px)',
-                  WebkitBackdropFilter: 'saturate(160%) blur(22px)',
-                }
-          }
+      {/* Search (~85%) + a single minimal slider icon that opens the
+          filters panel. The old "Tout" / "Filtres" button row was removed
+          2026-06-05 — resetting now lives inside the filters modal, and
+          the whole header collapses to one clean line so the photos
+          below own the screen. Glass + border resolve through CSS vars so
+          the whole row auto-flips dark / light. */}
+      <div className="mb-6 flex items-center gap-2">
+        <div
+          className="flex flex-1 items-center gap-2 rounded-full px-4 py-2.5"
+          style={{
+            background: 'var(--color-glass)',
+            border: '1px solid var(--color-border)',
+            backdropFilter: 'saturate(160%) blur(22px)',
+            WebkitBackdropFilter: 'saturate(160%) blur(22px)',
+          }}
         >
-          Tout
-        </button>
+          <SearchIcon className="h-4 w-4 flex-none text-fg2" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Rechercher dans le fil…"
+            className="flex-1 bg-transparent text-xs font-medium tracking-tight text-fg/80 placeholder:text-fg2 outline-none"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              aria-label="Effacer"
+              className="tappable text-fg2 hover:text-fg"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
         <button
           onClick={() => setFiltersOpen(true)}
-          className={`tappable relative flex flex-1 items-center justify-center gap-1.5 rounded-full px-4 py-2.5 text-xs font-bold transition-colors ${
-            !allDefaults
-              ? 'bg-accent/15 text-accent'
-              : 'text-fg2 hover:text-fg'
-          }`}
-          style={
-            !allDefaults
-              ? { border: '1px solid rgba(232,32,58,0.4)' }
-              : {
-                  background: 'var(--color-glass)',
-                  border: '1px solid var(--color-border)',
-                  backdropFilter: 'saturate(160%) blur(22px)',
-                  WebkitBackdropFilter: 'saturate(160%) blur(22px)',
-                }
-          }
+          aria-label="Filtres"
+          className="tappable relative flex h-11 w-11 flex-none items-center justify-center rounded-full"
+          style={{
+            background: allDefaults
+              ? 'var(--color-glass)'
+              : 'rgba(232,32,58,0.15)',
+            border: allDefaults
+              ? '1px solid var(--color-border)'
+              : '1px solid rgba(232,32,58,0.40)',
+            backdropFilter: 'saturate(160%) blur(22px)',
+            WebkitBackdropFilter: 'saturate(160%) blur(22px)',
+          }}
         >
-          <FilterIcon className="h-3.5 w-3.5" />
-          Filtres
+          <SlidersHorizontal
+            className={`h-[18px] w-[18px] ${allDefaults ? 'text-fg2' : 'text-accent'}`}
+          />
           {!allDefaults && (
-            <span className="ml-0.5 flex h-2 w-2 rounded-full bg-accent" />
+            <span
+              className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-accent"
+              style={{ border: '2px solid rgb(var(--color-bg))' }}
+            />
           )}
         </button>
       </div>
@@ -656,7 +637,7 @@ export default function Feed() {
           </p>
         </div>
       ) : (
-        <div className="space-y-5">
+        <div className="space-y-10">
           {(() => {
             const needle = searchQuery.trim().toLowerCase()
             const filtered = needle
@@ -686,18 +667,72 @@ export default function Feed() {
             const prof = profiles[spot.user_id]
             const pseudo = prof?.pseudo || 'Spotter'
             const catColor = CAT_COLOR[spot.category]
-            const name = spot.model || spot.brand || 'Voiture'
-            const sub = [spot.brand, spot.year].filter(Boolean).join(' · ')
+            const title = [spot.brand, spot.model].filter(Boolean).join(' ') ||
+              'Voiture'
             const founder = isFounder(spot.user_id)
             return (
-              <article
-                key={spot.id}
-                className="overflow-hidden rounded-[38px] bg-card shadow-soft"
-                style={{ border: '1px solid var(--color-border)' }}
-              >
-                {/* Photo card is a div+role=button so nested interactive
-                    children (profile nav, LikeButton) remain valid HTML.
-                    Keyboard activation mirrors a native <button>. */}
+              // No card container — three clean layers floating on the page
+              // bg: spotter row, edge-to-edge photo, then the spec line.
+              <article key={spot.id}>
+                {/* A · SPOTTER — above the photo, on the page background */}
+                <button
+                  onClick={() => navigate(`/u/${spot.user_id}`)}
+                  className="tappable mb-2.5 flex w-full min-w-0 items-center gap-2.5 px-1 text-left"
+                  aria-label={`Profil de ${pseudo}`}
+                >
+                  <div
+                    className="flex h-9 w-9 flex-none items-center justify-center overflow-hidden rounded-full bg-fg/10 text-sm font-extrabold text-fg"
+                    style={{ border: '1px solid var(--color-border)' }}
+                  >
+                    {prof?.avatar ? (
+                      <img
+                        src={prof.avatar}
+                        alt=""
+                        loading="lazy"
+                        decoding="async"
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      pseudo.charAt(0).toUpperCase()
+                    )}
+                  </div>
+                  <div className="min-w-0 space-y-0.5">
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        className="truncate font-black tracking-tight text-fg"
+                        style={{ fontSize: '13px' }}
+                      >
+                        {pseudo}
+                      </span>
+                      {founder && (
+                        <span
+                          className="flex-none rounded font-black uppercase tracking-widest text-red-400"
+                          style={{
+                            background: 'rgba(239, 68, 68, 0.10)',
+                            border: '1px solid rgba(239, 68, 68, 0.20)',
+                            padding: '2px 6px',
+                            fontSize: '8px',
+                            letterSpacing: '0.16em',
+                          }}
+                        >
+                          Fondateur
+                        </span>
+                      )}
+                    </div>
+                    <p
+                      className="truncate font-medium tracking-tight text-fg2"
+                      style={{ fontSize: '10.5px' }}
+                    >
+                      {[prof?.ville, timeAgo(spot.created_at)]
+                        .filter(Boolean)
+                        .join(' • ')}
+                    </p>
+                  </div>
+                </button>
+
+                {/* B · PHOTO — edge-to-edge (-mx-4 cancels the page padding),
+                    square corners for a continuous film-strip read. No text
+                    on the photo; only the discreet multi-image badge. */}
                 <div
                   role="button"
                   tabIndex={0}
@@ -708,12 +743,12 @@ export default function Feed() {
                       onPhotoTap(spot.id)
                     }
                   }}
-                  className="tappable relative block w-full cursor-pointer select-none"
+                  className="tappable relative -mx-4 block cursor-pointer select-none"
                 >
                   {spot.photo_url ? (
                     <img
                       src={spot.photo_url}
-                      alt={`${spot.brand} ${spot.model}`}
+                      alt={title}
                       loading="lazy"
                       className="aspect-[4/3] w-full object-cover"
                     />
@@ -723,9 +758,7 @@ export default function Feed() {
                     </div>
                   )}
 
-                  {/* Giant heart pop on double-tap. Overlay sits above
-                      the gradient + chips, pointer-events: none so it
-                      doesn't intercept further taps. */}
+                  {/* Giant heart pop on double-tap. */}
                   {heartSpotId === spot.id && (
                     <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center">
                       <Heart
@@ -734,153 +767,70 @@ export default function Feed() {
                       />
                     </div>
                   )}
-                  {/* No badge for `other` — keeps the photo clean when
-                      the category is genuinely undefined. */}
-                  {catColor && (
-                    <span
-                      className="absolute left-4 top-4 z-20 rounded-full px-3 py-0.5 text-[9px] font-black uppercase tracking-widest text-black"
-                      style={{
-                        background:
-                          CAT_GRADIENT[spot.category] ?? catColor,
-                        boxShadow: `0 6px 16px ${catColor}40`,
-                        letterSpacing: '0.14em',
-                      }}
-                    >
-                      {categoryLabel(spot.category).toUpperCase()}
-                    </span>
-                  )}
+
+                  {/* Multi-image filigree badge — the only thing allowed to
+                      float on the photo. */}
                   {count > 1 && (
                     <span
-                      className="absolute right-4 top-4 flex items-center gap-1 rounded-full px-2.5 py-1 text-[9px] font-bold text-white"
+                      className="absolute right-3 top-3 flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-bold text-white"
                       style={{
-                        // Spec 2026-06-02 (later refinement): back to .50
-                        // alpha for a slightly more transparent smoky
-                        // glass per the latest UI directive.
-                        background: 'rgba(0, 0, 0, 0.50)',
-                        border: '1px solid rgba(255, 255, 255, 0.10)',
+                        background: 'rgba(0, 0, 0, 0.45)',
+                        border: '1px solid rgba(255, 255, 255, 0.12)',
                         backdropFilter: 'saturate(160%) blur(12px)',
                         WebkitBackdropFilter: 'saturate(160%) blur(12px)',
-                        boxShadow: '0 4px 14px rgba(0, 0, 0, 0.35)',
                       }}
                     >
                       <Layers className="h-3 w-3" />
                       {count}
                     </span>
                   )}
-                  {/* Photo gradient — explicit h-44 (176px) per the
-                      2026-06-02 satin spec so the fade hits a fixed
-                      ramp regardless of brand/model text length and
-                      keeps the identity row below it readable. */}
-                  <div className="absolute inset-x-0 bottom-0 h-44 bg-gradient-to-t from-black/95 via-black/40 to-transparent z-10 pointer-events-none" />
-                  {/* Brand + model + XP overlay — sits above the identity
-                      glass plate, riding the photo's bottom gradient. */}
-                  <div className="absolute inset-x-0 bottom-16 z-20 px-4 text-left">
-                    <div className="flex items-end justify-between gap-3">
-                      <div className="min-w-0">
-                        <h2
-                          className="line-clamp-2 font-display font-extrabold leading-[1.05] tracking-tighter text-white"
-                          style={{ fontSize: '22px', fontWeight: 800 }}
-                        >
-                          {name}
-                        </h2>
-                        {sub && (
-                          <p className="mt-1 truncate text-[13px] text-fg/55">
-                            {sub}
-                          </p>
-                        )}
-                      </div>
-                      <span
-                        className="flex flex-none items-center gap-1 rounded-full bg-black/55 px-2.5 py-1.5 text-[11px] font-extrabold tracking-wider text-white backdrop-blur"
-                        style={{
-                          border: '1px solid rgba(255,255,255,0.18)',
-                          boxShadow:
-                            '0 6px 18px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.08)',
-                        }}
-                      >
-                        <Zap className="h-3 w-3 text-accent" />+
-                        {xpForSpot(spot.estimated_price, spot.rarity)}
-                      </span>
-                    </div>
-                  </div>
+                </div>
 
-                  {/* Identity glass plate — own translucent strip at the
-                      very bottom of the photo per the 2026-06-02 spec.
-                      bg-black/40 + border-top white/5 + 12px blur so
-                      the avatar/pseudo/Fondateur/time row reads on a
-                      proper smoked-glass slate. Nested interactive
-                      children use stopPropagation. */}
-                  <div
-                    className="absolute inset-x-0 bottom-0 z-20 flex items-center justify-between gap-2 px-4 py-3"
-                    style={{
-                      background: 'rgba(0, 0, 0, 0.40)',
-                      borderTop: '1px solid rgba(255, 255, 255, 0.05)',
-                      backdropFilter: 'saturate(160%) blur(12px)',
-                      WebkitBackdropFilter: 'saturate(160%) blur(12px)',
-                    }}
-                  >
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          navigate(`/u/${spot.user_id}`)
-                        }}
-                        className="tappable flex min-w-0 flex-1 items-center gap-2.5 text-left"
-                        aria-label={`Profil de ${pseudo}`}
-                      >
-                        <div
-                          className="flex h-9 w-9 flex-none items-center justify-center overflow-hidden rounded-full bg-neutral-900 text-sm font-extrabold text-white"
+                {/* C · SPECS — below the photo, on the page background.
+                    Left: brand + model, year, category badge. Right: like
+                    counter + translucent XP badge. All theme-aware. */}
+                <div className="mt-3 flex items-start justify-between gap-3 px-1">
+                  <div className="min-w-0">
+                    <h2
+                      className="truncate font-display font-extrabold tracking-tight text-fg"
+                      style={{ fontSize: '17px', letterSpacing: '-0.01em' }}
+                    >
+                      {title}
+                    </h2>
+                    <div className="mt-1.5 flex items-center gap-2">
+                      {spot.year && (
+                        <span className="text-[12px] font-medium text-fg2">
+                          {spot.year}
+                        </span>
+                      )}
+                      {catColor && (
+                        <span
+                          className="rounded-full px-2 py-0.5 text-[8.5px] font-black uppercase tracking-widest text-black"
                           style={{
-                            border: '1px solid rgba(255,255,255,0.10)',
-                            boxShadow:
-                              '0 4px 12px rgba(0,0,0,0.45)',
+                            background:
+                              CAT_GRADIENT[spot.category] ?? catColor,
+                            letterSpacing: '0.14em',
                           }}
                         >
-                          {prof?.avatar ? (
-                            <img
-                              src={prof.avatar}
-                              alt=""
-                              loading="lazy"
-                              decoding="async"
-                              className="h-full w-full object-cover"
-                            />
-                          ) : (
-                            pseudo.charAt(0).toUpperCase()
-                          )}
-                        </div>
-                        <div className="min-w-0 space-y-0.5">
-                          <div className="flex items-center gap-1.5">
-                            <span
-                              className="truncate font-black tracking-tight text-white"
-                              style={{ fontSize: '12px' }}
-                            >
-                              {pseudo}
-                            </span>
-                            {founder && (
-                              <span
-                                className="flex-none rounded font-black uppercase tracking-widest text-red-400"
-                                style={{
-                                  background: 'rgba(239, 68, 68, 0.10)',
-                                  border:
-                                    '1px solid rgba(239, 68, 68, 0.20)',
-                                  padding: '2px 6px',
-                                  fontSize: '8px',
-                                  letterSpacing: '0.16em',
-                                }}
-                              >
-                                Fondateur
-                              </span>
-                            )}
-                          </div>
-                          <p
-                            className="truncate font-medium tracking-tight text-neutral-400"
-                            style={{ fontSize: '10px' }}
-                          >
-                            {[prof?.ville, timeAgo(spot.created_at)]
-                              .filter(Boolean)
-                              .join(' · ')}
-                          </p>
-                        </div>
-                      </button>
-                      <LikeButton spotId={spot.id} className="flex-none" />
+                          {categoryLabel(spot.category).toUpperCase()}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex flex-none items-center gap-3">
+                    <LikeButton spotId={spot.id} />
+                    <span
+                      className="flex items-center gap-1 rounded-full px-2.5 py-1.5 text-[11px] font-extrabold tracking-wider text-fg"
+                      style={{
+                        background: 'var(--color-glass)',
+                        border: '1px solid var(--color-border)',
+                        backdropFilter: 'saturate(160%) blur(12px)',
+                        WebkitBackdropFilter: 'saturate(160%) blur(12px)',
+                      }}
+                    >
+                      <Zap className="h-3 w-3 text-accent" />+
+                      {xpForSpot(spot.estimated_price, spot.rarity)}
+                    </span>
                   </div>
                 </div>
               </article>
