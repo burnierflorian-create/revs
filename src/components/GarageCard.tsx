@@ -34,7 +34,7 @@ export default function GarageCard({
           launch polish spec (309496.jpg). */}
       {typeof year === 'number' && year > 1900 && (
         <span
-          className="label-up absolute right-3 top-3 rounded-md px-2 py-0.5 font-bold text-white/90"
+          className="label-up absolute right-3 top-3 rounded-md px-2 py-0.5 font-bold text-fg/90"
           style={{
             background: 'rgba(255, 255, 255, 0.10)',
             border: '1px solid rgba(255, 255, 255, 0.10)',
@@ -58,7 +58,7 @@ export default function GarageCard({
             'linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.78) 40%, rgba(0,0,0,0.92) 100%)',
         }}
       >
-        <p className="label-up truncate text-[10px] text-white/55">
+        <p className="label-up truncate text-[10px] text-fg/55">
           {brand}
         </p>
         <p className="truncate font-display text-sm font-extrabold leading-tight tracking-tighter text-white">

@@ -276,7 +276,7 @@ export default function BrandDetail() {
           <h1 className="mt-6 font-display text-[34px] font-extrabold leading-none tracking-tighter text-white">
             {brand.name}
           </h1>
-          <span className="label-up mt-3 inline-block whitespace-nowrap rounded-full bg-black/35 px-4 py-1.5 text-[10px] text-white/90 backdrop-blur">
+          <span className="label-up mt-3 inline-block whitespace-nowrap rounded-full bg-black/35 px-4 py-1.5 text-[10px] text-fg/90 backdrop-blur">
             {brandTagline(brand)}
           </span>
           {/* Community vs official-account marker. Verified accounts get
@@ -287,7 +287,7 @@ export default function BrandDetail() {
             className={`label-up mt-2 inline-flex items-center gap-1 whitespace-nowrap rounded-full px-3 py-1 text-[10px] backdrop-blur ${
               brand.verified
                 ? 'bg-[#1D9BF0]/90 text-white'
-                : 'bg-white/10 text-white/55'
+                : 'bg-fg/10 text-fg/55'
             }`}
           >
             {brand.verified ? (
@@ -309,7 +309,7 @@ export default function BrandDetail() {
               disabled={followBusy || !me}
               className={`tappable inline-flex items-center gap-2 whitespace-nowrap rounded-full px-6 py-3 text-sm font-extrabold tracking-wider uppercase disabled:opacity-50 ${
                 following
-                  ? 'bg-white/15 text-white backdrop-blur'
+                  ? 'bg-fg/15 text-white backdrop-blur'
                   : 'bg-white text-black'
               }`}
               style={
@@ -330,7 +330,7 @@ export default function BrandDetail() {
                 </>
               )}
             </button>
-            <p className="mt-2.5 text-[11px] text-white/55">
+            <p className="mt-2.5 text-[11px] text-fg/55">
               {followerCount ?? 0} passionné
               {(followerCount ?? 0) > 1 ? 's ont' : ' a'} activé les alertes
             </p>

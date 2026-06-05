@@ -127,7 +127,7 @@ export default function Radar() {
           className="rounded-3xl p-6 text-center"
           style={{
             background:
-              'linear-gradient(155deg, rgba(232,32,58,0.18) 0%, rgba(232,32,58,0.04) 50%, rgba(20,20,20,0.95) 90%)',
+              'linear-gradient(155deg, rgba(232,32,58,0.18) 0%, rgba(232,32,58,0.04) 50%, rgb(var(--color-card) / 0.95) 90%)',
             border: '1px solid rgba(232,32,58,0.4)',
             boxShadow: '0 12px 36px rgba(232,32,58,0.16)',
           }}
@@ -203,7 +203,7 @@ export default function Radar() {
                 onClick={() => toggle(!prefs.enabled)}
                 disabled={busy}
                 className={`relative h-7 w-12 flex-none rounded-full transition-colors disabled:opacity-50 ${
-                  prefs.enabled ? 'bg-accent' : 'bg-white/15'
+                  prefs.enabled ? 'bg-accent' : 'bg-fg/15'
                 }`}
                 aria-pressed={prefs.enabled}
                 style={
@@ -243,7 +243,7 @@ export default function Radar() {
                       className={`tappable rounded-2xl py-3 text-sm font-extrabold tracking-wider transition-colors disabled:opacity-50 ${
                         prefs.radius_km === opt.value
                           ? 'bg-accent text-fg'
-                          : 'bg-white/[0.04] text-fg2 hover:bg-white/[0.08]'
+                          : 'bg-fg/[0.04] text-fg2 hover:bg-fg/[0.08]'
                       }`}
                       style={
                         prefs.radius_km === opt.value
@@ -276,7 +276,7 @@ export default function Radar() {
                 <button
                   onClick={refreshLocation}
                   disabled={busy}
-                  className="tappable mt-4 w-full rounded-full bg-white/[0.06] py-3 text-sm font-bold tracking-wide text-fg/80 hover:bg-white/[0.10] disabled:opacity-50"
+                  className="tappable mt-4 w-full rounded-full bg-fg/[0.06] py-3 text-sm font-bold tracking-wide text-fg/80 hover:bg-fg/[0.10] disabled:opacity-50"
                   style={{ border: '1px solid var(--color-border)' }}
                 >
                   {busy ? '…' : 'Actualiser ma position'}

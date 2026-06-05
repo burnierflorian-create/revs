@@ -157,10 +157,12 @@ function CollectionCard({
               key={s.id}
               className="relative aspect-square overflow-hidden rounded-xl"
               style={{
-                background: s.matched ? '#0a0a0a' : 'rgba(255,255,255,0.03)',
+                background: s.matched
+                  ? 'rgb(var(--color-card))'
+                  : 'rgb(var(--color-fg) / 0.03)',
                 border: s.matched
                   ? '1px solid rgba(232,32,58,0.45)'
-                  : '1px dashed rgba(255,255,255,0.10)',
+                  : '1px dashed rgb(var(--color-fg) / 0.10)',
               }}
             >
               {s.matched && s.spot?.photo_url ? (
@@ -181,7 +183,7 @@ function CollectionCard({
               )}
               {/* Brand label on locked slots so the user knows what's missing */}
               {!s.matched && s.label !== '?' && (
-                <div className="absolute inset-x-0 bottom-0 truncate bg-black/55 px-1.5 py-0.5 text-center text-[8.5px] font-bold uppercase tracking-wider text-white/65">
+                <div className="absolute inset-x-0 bottom-0 truncate bg-fg/[0.08] px-1.5 py-0.5 text-center text-[8.5px] font-bold uppercase tracking-wider text-fg/65">
                   {s.label}
                 </div>
               )}
@@ -193,7 +195,7 @@ function CollectionCard({
       {/* Progress + CTA */}
       <div className="flex items-center gap-3 px-4 py-4">
         <div className="min-w-0 flex-1">
-          <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/[0.07]">
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-fg/[0.07]">
             <div
               className={`h-full rounded-full transition-[width] duration-700 ease-out ${
                 claimed ? 'bg-green-500' : 'bg-accent'

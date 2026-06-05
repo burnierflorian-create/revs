@@ -9,8 +9,8 @@ body,
 #root {
   height: 100%;
   min-height: 100dvh;
-  background-color: var(--color-bg);
-  color: var(--color-fg);
+  background-color: rgb(var(--color-bg));
+  color: rgb(var(--color-fg));
 }
 
 body {
@@ -32,7 +32,7 @@ body {
   position: absolute;
   inset: 0;
   overflow-y: auto;
-  background: var(--color-bg);
+  background: rgb(var(--color-bg));
   /* pb-28 equivalent — leaves enough air above the bottom nav so
      stats blocks / cards never sit flush against the glass strip. */
   padding-bottom: calc(9rem + env(safe-area-inset-bottom));
@@ -54,7 +54,7 @@ body {
   inset: 0;
   z-index: 30;
   overflow-y: auto;
-  background: var(--color-bg);
+  background: rgb(var(--color-bg));
   /* Mirrors .tab-pane — 7rem of clearance above the bottom nav. */
   padding-bottom: calc(9rem + env(safe-area-inset-bottom));
   -webkit-overflow-scrolling: touch;

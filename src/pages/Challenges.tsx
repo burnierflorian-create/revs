@@ -100,7 +100,7 @@ export default function Challenges() {
                   </span>
                 </div>
 
-                <div className="mt-4 h-1.5 w-full overflow-hidden rounded-full bg-white/[0.08]">
+                <div className="mt-4 h-1.5 w-full overflow-hidden rounded-full bg-fg/[0.08]">
                   <div
                     className={`h-full rounded-full transition-all duration-1000 ease-out ${
                       done ? 'bg-green-500' : 'bg-accent'
@@ -124,7 +124,7 @@ export default function Challenges() {
                 {!done && (
                   <button
                     onClick={() => navigate('/new-spot')}
-                    className="tappable mt-4 w-full rounded-full bg-white/[0.06] py-3 text-sm font-bold tracking-wide text-fg/80 hover:bg-white/[0.10]"
+                    className="tappable mt-4 w-full rounded-full bg-fg/[0.06] py-3 text-sm font-bold tracking-wide text-fg/80 hover:bg-fg/[0.10]"
                     style={{ border: '1px solid var(--color-border)' }}
                   >
                     Continuer le défi

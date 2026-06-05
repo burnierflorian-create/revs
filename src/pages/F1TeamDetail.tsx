@@ -132,26 +132,26 @@ export default function F1TeamDetail() {
       <header
         className="relative overflow-hidden"
         style={{
-          background: `radial-gradient(130% 90% at 50% 0%, ${team.color}cc 0%, ${team.color}55 40%, ${team.color}1A 70%, #0a0a0a 100%)`,
+          background: `radial-gradient(130% 90% at 50% 0%, ${team.color}cc 0%, ${team.color}55 40%, ${team.color}1A 70%, rgb(var(--color-bg)) 100%)`,
         }}
       >
         <button
           onClick={() => navigate(-1)}
           aria-label="Retour"
           className="tappable absolute left-4 top-[max(1rem,env(safe-area-inset-top))] z-10 flex h-10 w-10 items-center justify-center rounded-full bg-black/30 backdrop-blur"
-          style={{ border: '1px solid rgba(255,255,255,0.08)' }}
+          style={{ border: '1px solid rgb(var(--color-fg) / 0.08)' }}
         >
           <ArrowLeft className="h-5 w-5 text-fg" />
         </button>
         <div className="relative flex flex-col items-center px-6 pb-12 pt-[calc(env(safe-area-inset-top)+4rem)] text-center">
-          <span className="label-up text-[11px] text-white/65">
+          <span className="label-up text-[11px] text-fg/65">
             Formule 1 · 2026
           </span>
           <h1 className="mt-3 font-display text-[34px] font-extrabold leading-none tracking-tighter text-white">
             {team.name}
           </h1>
           {data?.fullName && (
-            <p className="mt-2 max-w-[28ch] text-xs text-white/55">
+            <p className="mt-2 max-w-[28ch] text-xs text-fg/55">
               {data.fullName}
             </p>
           )}
@@ -231,7 +231,7 @@ export default function F1TeamDetail() {
                   <div
                     className="mt-4 rounded-2xl px-4 py-3"
                     style={{
-                      background: 'rgba(255,255,255,0.03)',
+                      background: 'rgb(var(--color-fg) / 0.03)',
                       border: '1px solid var(--color-divider)',
                     }}
                   >

@@ -203,7 +203,7 @@ export default function Leaderboard() {
                       isTop1
                         ? {
                             background:
-                              'linear-gradient(95deg, rgba(212,175,55,0.18) 0%, rgba(15,15,15,0.95) 70%)',
+                              'linear-gradient(95deg, rgba(212,175,55,0.18) 0%, rgb(var(--color-card) / 0.95) 70%)',
                             border: '1px solid rgba(212,175,55,0.45)',
                             boxShadow:
                               '0 6px 22px rgba(212,175,55,0.18)',
@@ -214,7 +214,7 @@ export default function Leaderboard() {
                               border: '1px solid rgba(232,32,58,0.45)',
                             }
                           : {
-                              background: 'var(--color-card)',
+                              background: 'rgb(var(--color-card))',
                               border: '1px solid var(--color-border)',
                             }
                     }
@@ -235,7 +235,7 @@ export default function Leaderboard() {
                       style={
                         isTop1
                           ? { boxShadow: '0 0 0 2px rgba(212,175,55,0.6)' }
-                          : { boxShadow: '0 0 0 2px rgba(255,255,255,0.06)' }
+                          : { boxShadow: '0 0 0 2px rgb(var(--color-fg) / 0.06)' }
                       }
                     >
                       {p?.avatar ? (
@@ -333,7 +333,7 @@ export default function Leaderboard() {
               <p className="label-up text-[10px] text-fg2">
                 {myCity} en chiffres
               </p>
-              <div className="mt-3 grid grid-cols-2 gap-3 divide-x divide-white/[0.08]">
+              <div className="mt-3 grid grid-cols-2 gap-3 divide-x divide-fg/[0.08]">
                 <div className="pr-4">
                   <p className="font-display text-3xl font-extrabold tracking-tighter text-fg">
                     {cityStats.total_spots}
@@ -373,7 +373,7 @@ export default function Leaderboard() {
                       isTop
                         ? {
                             background:
-                              'linear-gradient(95deg, rgba(212,175,55,0.18) 0%, rgba(15,15,15,0.95) 70%)',
+                              'linear-gradient(95deg, rgba(212,175,55,0.18) 0%, rgb(var(--color-card) / 0.95) 70%)',
                             border: '1px solid rgba(212,175,55,0.45)',
                             boxShadow:
                               '0 6px 22px rgba(212,175,55,0.18)',
@@ -384,7 +384,7 @@ export default function Leaderboard() {
                               border: '1px solid rgba(232,32,58,0.45)',
                             }
                           : {
-                              background: 'var(--color-card)',
+                              background: 'rgb(var(--color-card))',
                               border: '1px solid var(--color-border)',
                             }
                     }
@@ -401,7 +401,7 @@ export default function Leaderboard() {
                       style={
                         isTop
                           ? { boxShadow: '0 0 0 2px rgba(212,175,55,0.6)' }
-                          : { boxShadow: '0 0 0 2px rgba(255,255,255,0.06)' }
+                          : { boxShadow: '0 0 0 2px rgb(var(--color-fg) / 0.06)' }
                       }
                     >
                       {r.avatar ? (

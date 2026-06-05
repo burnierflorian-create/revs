@@ -320,7 +320,7 @@ export default function Profile() {
             className="h-48 w-full"
             style={{
               background:
-                'radial-gradient(ellipse 80% 100% at 50% 0%, rgba(232,32,58,0.35) 0%, transparent 60%), linear-gradient(180deg, #4a0f16 0%, #1a060a 55%, #0a0a0a 100%)',
+                'radial-gradient(ellipse 80% 100% at 50% 0%, rgba(232,32,58,0.35) 0%, transparent 60%), linear-gradient(180deg, #4a0f16 0%, #1a060a 55%, rgb(var(--color-bg)) 100%)',
             }}
           />
         )}
@@ -330,14 +330,14 @@ export default function Profile() {
           className="pointer-events-none absolute inset-x-0 bottom-0 h-16"
           style={{
             background:
-              'linear-gradient(180deg, transparent 0%, var(--color-bg) 100%)',
+              'linear-gradient(180deg, transparent 0%, rgb(var(--color-bg)) 100%)',
           }}
         />
         <button
           onClick={() => navigate('/settings')}
           aria-label="Paramètres"
           className="tappable absolute right-4 top-[max(1rem,env(safe-area-inset-top))] flex h-10 w-10 items-center justify-center rounded-full bg-black/40 text-fg/80 backdrop-blur transition-colors hover:text-fg"
-          style={{ border: '1px solid rgba(255,255,255,0.10)' }}
+          style={{ border: '1px solid rgb(var(--color-fg) / 0.10)' }}
         >
           <Settings className="h-5 w-5" />
         </button>
@@ -367,11 +367,11 @@ export default function Profile() {
                 border:
                   tier === 'vip'
                     ? '2px solid rgba(255, 215, 0, 0.55)'
-                    : '2px solid rgba(255, 255, 255, 0.20)',
+                    : '2px solid rgb(var(--color-fg) / 0.20)',
                 boxShadow:
                   tier === 'vip'
                     ? '0 18px 38px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 215, 0, 0.18)'
-                    : '0 18px 38px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.06)',
+                    : '0 18px 38px rgba(0, 0, 0, 0.55), 0 0 0 1px rgb(var(--color-fg) / 0.06)',
               }}
             >
               <div className="flex h-full w-full items-center justify-center overflow-hidden rounded-full font-display text-4xl font-extrabold tracking-tighter text-fg">
@@ -399,7 +399,7 @@ export default function Profile() {
                 style={{
                   background:
                     'linear-gradient(135deg, #FFD700 0%, #E8B225 50%, #B8860B 100%)',
-                  border: '2px solid var(--color-card)',
+                  border: '2px solid rgb(var(--color-card))',
                   boxShadow: '0 4px 14px rgba(255,200,50,0.45)',
                 }}
                 aria-label="Membre Premium"
@@ -413,7 +413,7 @@ export default function Profile() {
                 style={{
                   background:
                     'linear-gradient(135deg, #FFE066 0%, #FFD700 45%, #B8860B 100%)',
-                  border: '2px solid var(--color-card)',
+                  border: '2px solid rgb(var(--color-card))',
                   boxShadow: '0 6px 18px rgba(255,200,50,0.55)',
                 }}
                 aria-label="Membre VIP"
@@ -497,7 +497,7 @@ export default function Profile() {
               className="inline-flex items-center gap-3.5 rounded-full"
               style={{
                 background: 'var(--color-glass)',
-                border: '1px solid rgba(255, 255, 255, 0.05)',
+                border: '1px solid rgb(var(--color-fg) / 0.05)',
                 padding: '8px 16px',
               }}
             >
@@ -548,7 +548,7 @@ export default function Profile() {
               {xp} <span className="text-sm text-fg2">XP</span>
             </span>
           </div>
-          <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-white/[0.06]">
+          <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-fg/[0.06]">
             <div
               className="h-full rounded-full bg-accent transition-[width] duration-1000 ease-out"
               style={{
@@ -578,8 +578,8 @@ export default function Profile() {
           <div
             className="flex gap-1 rounded-xl p-1"
             style={{
-              background: 'rgba(10, 10, 10, 0.60)',
-              border: '1px solid rgba(255, 255, 255, 0.05)',
+              background: 'rgb(var(--color-card) / 0.60)',
+              border: '1px solid rgb(var(--color-fg) / 0.05)',
               backdropFilter: 'saturate(160%) blur(14px)',
               WebkitBackdropFilter: 'saturate(160%) blur(14px)',
             }}
@@ -602,9 +602,11 @@ export default function Profile() {
                   className="tappable flex-1 rounded-lg py-2 text-xs font-bold transition-all"
                   style={{
                     background: active
-                      ? 'rgba(255, 255, 255, 0.10)'
+                      ? 'rgb(var(--color-fg) / 0.10)'
                       : 'transparent',
-                    color: active ? '#fff' : 'rgba(255, 255, 255, 0.45)',
+                    color: active
+                      ? 'rgb(var(--color-fg))'
+                      : 'rgb(var(--color-fg) / 0.45)',
                     boxShadow: active
                       ? '0 4px 12px rgba(0, 0, 0, 0.30)'
                       : undefined,
@@ -627,7 +629,7 @@ export default function Profile() {
 
             {profileTab === 'garage' &&
               (total === 0 ? (
-                <div className="flex flex-col items-center rounded-2xl border border-white/5 bg-card px-6 py-12 text-center">
+                <div className="flex flex-col items-center rounded-2xl border border-fg/5 bg-card px-6 py-12 text-center">
                   <div className="flex h-16 w-16 items-center justify-center rounded-full bg-accent/10">
                     <Warehouse className="h-8 w-8 text-accent/70" />
                   </div>
@@ -666,7 +668,7 @@ export default function Profile() {
                           background:
                             planTier(plan) === 'vip'
                               ? 'linear-gradient(135deg, #d4af37 0%, #ffd700 100%)'
-                              : 'var(--color-accent)',
+                              : 'rgb(var(--color-accent))',
                           color: planTier(plan) === 'vip' ? '#000' : '#fff',
                           fontSize: '16px',
                         }}
@@ -726,7 +728,7 @@ export default function Profile() {
                               ? b.gold
                                 ? '1px solid rgba(224,179,65,0.40)'
                                 : '1px solid rgba(232,32,58,0.30)'
-                              : '1px solid rgba(255,255,255,0.05)',
+                              : '1px solid rgb(var(--color-fg) / 0.05)',
                             backdropFilter: 'saturate(160%) blur(12px)',
                             WebkitBackdropFilter: 'saturate(160%) blur(12px)',
                             boxShadow:
@@ -734,7 +736,7 @@ export default function Profile() {
                                 ? '0 8px 22px rgba(232,32,58,0.16)'
                                 : isUnlocked && b.gold
                                   ? '0 8px 22px rgba(224,179,65,0.20)'
-                                  : 'inset 0 1px 0 rgba(255,255,255,0.03)',
+                                  : 'inset 0 1px 0 rgb(var(--color-fg) / 0.03)',
                           }}
                           aria-label={b.name}
                         >
@@ -750,8 +752,8 @@ export default function Profile() {
                               color: isUnlocked
                                 ? b.gold
                                   ? '#E0B341'
-                                  : 'var(--color-accent)'
-                                : 'rgba(255,255,255,0.40)',
+                                  : 'rgb(var(--color-accent))'
+                                : 'rgb(var(--color-fg) / 0.40)',
                             }}
                           >
                             {b.name}
@@ -816,7 +818,7 @@ function ProfileStatTiny({
       style={{ fontSize: '11px', fontWeight: 600 }}
     >
       <span
-        className="font-black tabular-nums text-white"
+        className="font-black tabular-nums text-fg"
         style={{ fontSize: '12px' }}
       >
         {value}
@@ -836,7 +838,7 @@ function PremiumTopBanner({ onTap }: { onTap: () => void }) {
       className="tappable group relative flex w-full items-center justify-between gap-3 overflow-hidden rounded-2xl px-4 py-4 text-left transition-transform active:scale-[0.99]"
       style={{
         background:
-          'linear-gradient(95deg, #050505 0%, #141414 50%, #050505 100%)',
+          'linear-gradient(95deg, rgb(var(--color-card)) 0%, rgb(var(--color-card)) 50%, rgb(var(--color-card)) 100%)',
         border: '1px solid rgba(224, 179, 65, 0.32)',
         boxShadow:
           '0 16px 36px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 215, 0, 0.06) inset',
@@ -989,7 +991,7 @@ function CollectionDecks({ spots }: { spots: Spot[] }) {
           className="tappable mb-4 inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold text-fg/80 hover:text-fg"
           style={{
             background: 'var(--color-glass-mid)',
-            border: '1px solid rgba(255, 255, 255, 0.08)',
+            border: '1px solid rgb(var(--color-fg) / 0.08)',
           }}
         >
           <ArrowLeft className="h-3.5 w-3.5" />
@@ -997,7 +999,7 @@ function CollectionDecks({ spots }: { spots: Spot[] }) {
         </button>
         <div className="mb-3 flex items-baseline justify-between">
           <h3
-            className="font-display font-extrabold tracking-tight text-white"
+            className="font-display font-extrabold tracking-tight text-fg"
             style={{ fontSize: '18px', letterSpacing: '-0.02em' }}
           >
             <span style={{ color: theme.tint }}>{theme.emoji}</span>{' '}
@@ -1021,7 +1023,7 @@ function CollectionDecks({ spots }: { spots: Spot[] }) {
           className="tappable flex w-full items-center gap-4 rounded-3xl text-left transition-all duration-200 active:scale-[0.98]"
           style={{
             background: 'var(--color-glass-strong)',
-            border: '1px solid rgba(255, 255, 255, 0.05)',
+            border: '1px solid rgb(var(--color-fg) / 0.05)',
             padding: '18px 20px',
             boxShadow: `0 16px 30px rgba(0, 0, 0, 0.35), inset 0 0 0 1px ${d.tint}10`,
           }}
@@ -1073,7 +1075,7 @@ function CollectionDecks({ spots }: { spots: Spot[] }) {
               Deck
             </p>
             <h4
-              className="mt-0.5 font-display font-extrabold tracking-tight text-white"
+              className="mt-0.5 font-display font-extrabold tracking-tight text-fg"
               style={{ fontSize: '16px', letterSpacing: '-0.01em' }}
             >
               {d.label}
@@ -1189,10 +1191,10 @@ function GarageCoverFlow({
                 width: '280px',
                 height: '160px',
                 background:
-                  'linear-gradient(135deg, #1a1a1a 0%, #0a0a0a 60%, #050505 100%)',
+                  'linear-gradient(135deg, rgb(var(--color-card)) 0%, rgb(var(--color-card)) 60%, rgb(var(--color-card)) 100%)',
                 border: active
-                  ? '1px solid rgba(255, 255, 255, 0.10)'
-                  : '1px solid rgba(255, 255, 255, 0.05)',
+                  ? '1px solid rgb(var(--color-fg) / 0.10)'
+                  : '1px solid rgb(var(--color-fg) / 0.05)',
                 transform: active ? 'scale(1)' : 'scale(0.90)',
                 opacity: active ? 1 : 0.4,
                 boxShadow: active
@@ -1222,7 +1224,7 @@ function GarageCoverFlow({
                     <p
                       className="font-black uppercase"
                       style={{
-                        color: active ? '#EF4444' : 'rgba(115,115,115,1)',
+                        color: active ? '#EF4444' : 'rgb(var(--color-fg-2))',
                         fontSize: '9px',
                         letterSpacing: '0.20em',
                       }}
@@ -1230,7 +1232,7 @@ function GarageCoverFlow({
                       {s.brand}
                     </p>
                     <h3
-                      className="mt-0.5 truncate font-display font-black tracking-tight text-white"
+                      className="mt-0.5 truncate font-display font-black tracking-tight text-fg"
                       style={{
                         fontSize: '18px',
                         letterSpacing: '-0.02em',
@@ -1243,7 +1245,7 @@ function GarageCoverFlow({
                     <span
                       className="flex-none rounded-md font-bold text-fg2"
                       style={{
-                        background: 'rgba(255, 255, 255, 0.05)',
+                        background: 'rgb(var(--color-fg) / 0.05)',
                         padding: '2px 8px',
                         fontSize: '9px',
                       }}
@@ -1277,8 +1279,8 @@ function GarageCoverFlow({
                 height: '5px',
                 background:
                   i === activeIdx
-                    ? 'var(--color-accent)'
-                    : 'rgba(255, 255, 255, 0.15)',
+                    ? 'rgb(var(--color-accent))'
+                    : 'rgb(var(--color-fg) / 0.15)',
               }}
               aria-hidden
             />
@@ -1338,10 +1340,10 @@ function BadgesBottomSheet({
       <div
         className="absolute bottom-0 left-0 right-0 overflow-hidden"
         style={{
-          background: 'rgba(15, 15, 17, 0.96)',
+          background: 'rgb(var(--color-card) / 0.96)',
           borderTopLeftRadius: '28px',
           borderTopRightRadius: '28px',
-          borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+          borderTop: '1px solid rgb(var(--color-fg) / 0.08)',
           maxHeight: '85vh',
           paddingBottom: 'env(safe-area-inset-bottom)',
           backdropFilter: 'saturate(160%) blur(22px)',
@@ -1360,14 +1362,14 @@ function BadgesBottomSheet({
             style={{
               width: '40px',
               height: '4px',
-              background: 'rgba(255, 255, 255, 0.18)',
+              background: 'rgb(var(--color-fg) / 0.18)',
             }}
             aria-hidden
           />
         </div>
         <div className="flex items-center justify-between px-5 pb-3 pt-4">
           <h3
-            className="font-display font-extrabold tracking-tight text-white"
+            className="font-display font-extrabold tracking-tight text-fg"
             style={{ fontSize: '20px', letterSpacing: '-0.02em' }}
           >
             Tous les badges
@@ -1377,8 +1379,8 @@ function BadgesBottomSheet({
             aria-label="Fermer"
             className="tappable flex h-9 w-9 items-center justify-center rounded-full text-fg2 hover:text-fg"
             style={{
-              background: 'rgba(255, 255, 255, 0.06)',
-              border: '1px solid rgba(255, 255, 255, 0.08)',
+              background: 'rgb(var(--color-fg) / 0.06)',
+              border: '1px solid rgb(var(--color-fg) / 0.08)',
             }}
           >
             <X className="h-4 w-4" />
@@ -1404,7 +1406,7 @@ function BadgesBottomSheet({
                       ? b.gold
                         ? '1px solid rgba(224,179,65,0.40)'
                         : '1px solid rgba(232,32,58,0.30)'
-                      : '1px solid rgba(255,255,255,0.05)',
+                      : '1px solid rgb(var(--color-fg) / 0.05)',
                     backdropFilter: 'saturate(150%) blur(10px)',
                     WebkitBackdropFilter: 'saturate(150%) blur(10px)',
                     boxShadow:
@@ -1412,7 +1414,7 @@ function BadgesBottomSheet({
                         ? '0 8px 22px rgba(232,32,58,0.16)'
                         : isUnlocked && b.gold
                           ? '0 8px 22px rgba(224,179,65,0.20)'
-                          : 'inset 0 1px 0 rgba(255,255,255,0.03)',
+                          : 'inset 0 1px 0 rgb(var(--color-fg) / 0.03)',
                   }}
                 >
                   {isUnlocked ? (
@@ -1529,7 +1531,7 @@ function TopChallenges({
             className="rounded-2xl p-4 text-center text-xs text-fg2"
             style={{
               background: 'var(--color-glass)',
-              border: '1px solid rgba(255, 255, 255, 0.05)',
+              border: '1px solid rgb(var(--color-fg) / 0.05)',
             }}
           >
             Tous les défis sont déjà réclamés. Bravo 🏁
@@ -1566,7 +1568,7 @@ function TopChallengeCard({
       className="flex items-center justify-between gap-4 rounded-2xl p-4"
       style={{
         background: 'var(--color-glass)',
-        border: '1px solid rgba(255, 255, 255, 0.05)',
+        border: '1px solid rgb(var(--color-fg) / 0.05)',
         backdropFilter: 'saturate(150%) blur(10px)',
         WebkitBackdropFilter: 'saturate(150%) blur(10px)',
       }}
@@ -1577,7 +1579,7 @@ function TopChallengeCard({
             {collection.emoji}
           </span>
           <h5
-            className="min-w-0 flex-1 truncate font-display font-black tracking-tight text-white"
+            className="min-w-0 flex-1 truncate font-display font-black tracking-tight text-fg"
             style={{ fontSize: '13px', letterSpacing: '-0.01em' }}
           >
             {collection.title}
@@ -1588,7 +1590,7 @@ function TopChallengeCard({
             achievement gauge. */}
         <div
           className="mt-2.5 h-1 w-full overflow-hidden rounded-full"
-          style={{ background: 'rgba(255, 255, 255, 0.06)' }}
+          style={{ background: 'rgb(var(--color-fg) / 0.06)' }}
         >
           <div
             className="h-full rounded-full bg-accent transition-[width] duration-500 ease-out"
@@ -1616,7 +1618,7 @@ function TopChallengeCard({
             style={{
               background:
                 'linear-gradient(135deg, #EF4444 0%, #B91C1C 100%)',
-              border: '1px solid rgba(255, 255, 255, 0.10)',
+              border: '1px solid rgb(var(--color-fg) / 0.10)',
               padding: '6px 12px',
               fontSize: '9px',
               letterSpacing: '0.10em',
@@ -1629,8 +1631,8 @@ function TopChallengeCard({
           <span
             className="inline-block cursor-not-allowed rounded-lg font-bold uppercase tracking-wider text-fg2"
             style={{
-              background: 'rgba(40, 40, 42, 0.60)',
-              border: '1px solid rgba(255, 255, 255, 0.05)',
+              background: 'rgb(var(--color-card) / 0.60)',
+              border: '1px solid rgb(var(--color-fg) / 0.05)',
               padding: '6px 12px',
               fontSize: '9px',
               letterSpacing: '0.10em',

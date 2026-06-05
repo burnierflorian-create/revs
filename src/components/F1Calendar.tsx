@@ -117,8 +117,8 @@ export default function F1Calendar() {
                   className="absolute inset-0 bg-card"
                   style={{
                     background: isNext
-                      ? 'linear-gradient(155deg, rgba(232,32,58,0.20) 0%, var(--color-card) 70%)'
-                      : 'var(--color-card)',
+                      ? 'linear-gradient(155deg, rgba(232,32,58,0.20) 0%, rgb(var(--color-card)) 70%)'
+                      : 'rgb(var(--color-card))',
                   }}
                 />
               )}
@@ -130,16 +130,16 @@ export default function F1Calendar() {
                 </span>
                 <div className="min-w-0 flex-1">
                   <p
-                    className="truncate font-display leading-tight tracking-tighter text-white"
+                    className="truncate font-display leading-tight tracking-tighter text-fg"
                     style={{ fontSize: '16px', fontWeight: 800 }}
                   >
                     {g.name}
                   </p>
-                  <p className="mt-0.5 truncate text-[12px] text-white/55">
+                  <p className="mt-0.5 truncate text-[12px] text-fg/55">
                     {g.circuit}
                   </p>
                   <p
-                    className={`mt-1 text-[12px] ${isNext ? 'font-bold text-accent' : 'text-white/55'}`}
+                    className={`mt-1 text-[12px] ${isNext ? 'font-bold text-accent' : 'text-fg/55'}`}
                   >
                     {fmtGpDate(g.date)}
                     {isNext && (
@@ -148,7 +148,7 @@ export default function F1Calendar() {
                       </span>
                     )}
                     {isPast && winner && (
-                      <span className="ml-2 text-white/65">· 🏆 {winner}</span>
+                      <span className="ml-2 text-fg/65">· 🏆 {winner}</span>
                     )}
                   </p>
                 </div>
@@ -165,10 +165,10 @@ export default function F1Calendar() {
                   </span>
                 ) : isPast ? (
                   <span
-                    className="label-up flex-none rounded-full px-2.5 py-1 text-[10px] text-white/55"
+                    className="label-up flex-none rounded-full px-2.5 py-1 text-[10px] text-fg/55"
                     style={{
-                      background: 'rgba(255,255,255,0.06)',
-                      border: '1px solid rgba(255,255,255,0.10)',
+                      background: 'rgb(var(--color-fg) / 0.06)',
+                      border: '1px solid rgb(var(--color-fg) / 0.10)',
                     }}
                   >
                     TERMINÉ

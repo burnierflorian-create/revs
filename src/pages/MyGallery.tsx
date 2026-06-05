@@ -140,7 +140,7 @@ export default function MyGallery() {
                 <p className="truncate font-display text-xs font-extrabold leading-tight tracking-tighter text-white">
                   {s.brand} {s.model}
                 </p>
-                <p className="mt-0.5 text-[10px] text-white/55">
+                <p className="mt-0.5 text-[10px] text-fg/55">
                   {timeAgo(s.created_at)}
                 </p>
               </div>

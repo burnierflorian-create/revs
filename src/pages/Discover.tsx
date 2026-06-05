@@ -54,7 +54,7 @@ export default function Discover({ initial }: { initial?: 'events' }) {
       <button
         onClick={() => setUniverse(u)}
         className={`tappable flex flex-1 items-center justify-center gap-2 rounded-full px-4 py-2.5 text-xs transition-colors ${
-          active ? 'font-black text-white' : 'font-bold text-neutral-400'
+          active ? 'font-black text-white' : 'font-bold text-fg2'
         }`}
         style={
           active
@@ -66,7 +66,7 @@ export default function Discover({ initial }: { initial?: 'events' }) {
               }
             : {
                 background: 'var(--color-glass-mid)',
-                border: '1px solid rgba(255, 255, 255, 0.05)',
+                border: '1px solid rgb(var(--color-fg) / 0.05)',
                 backdropFilter: 'saturate(160%) blur(8px)',
                 WebkitBackdropFilter: 'saturate(160%) blur(8px)',
               }
@@ -143,7 +143,7 @@ export default function Discover({ initial }: { initial?: 'events' }) {
               key={t.key}
               onClick={() => setSub(t.key)}
               className={`tappable flex flex-1 items-center justify-center gap-1.5 rounded-full py-2 text-xs transition-colors ${
-                active ? 'font-black text-white' : 'font-bold text-neutral-400'
+                active ? 'font-black text-white' : 'font-bold text-fg2'
               }`}
               style={
                 active
@@ -155,7 +155,7 @@ export default function Discover({ initial }: { initial?: 'events' }) {
                     }
                   : {
                       background: 'var(--color-glass-mid)',
-                      border: '1px solid rgba(255, 255, 255, 0.05)',
+                      border: '1px solid rgb(var(--color-fg) / 0.05)',
                       backdropFilter: 'saturate(160%) blur(8px)',
                       WebkitBackdropFilter: 'saturate(160%) blur(8px)',
                     }

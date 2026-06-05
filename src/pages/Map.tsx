@@ -1398,11 +1398,11 @@ export default function MapPage() {
 
       {activeFilter !== 'Tous' && visibleCount === 0 && !error && (
         <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center px-8 text-center">
-          <Car size={48} color="#444444" strokeWidth={1.5} />
+          <Car size={48} color="rgb(var(--color-fg-2))" strokeWidth={1.5} />
           <p className="mt-4 text-base font-medium text-fg">
             Aucun spot en {activeFilter}
           </p>
-          <p className="mt-1 text-sm text-[#888888]">
+          <p className="mt-1 text-sm text-fg2">
             Soyez le premier à spotter !
           </p>
         </div>
@@ -1466,7 +1466,7 @@ export default function MapPage() {
                 style={
                   isActive
                     ? {
-                        background: 'var(--color-accent)',
+                        background: 'rgb(var(--color-accent))',
                         border: '1px solid rgba(0, 0, 0, 0.08)',
                         boxShadow: '0 6px 18px rgba(232, 32, 58, 0.40)',
                       }
@@ -1499,10 +1499,10 @@ export default function MapPage() {
           className="tappable absolute right-4 z-10 flex h-10 w-10 items-center justify-center rounded-full"
           style={{
             top: 'calc(max(3rem, env(safe-area-inset-top) + 2rem) + 3.25rem)',
-            background: '#141414',
-            border: '1px solid rgba(255,255,255,0.10)',
+            background: 'rgb(var(--color-card))',
+            border: '1px solid rgb(var(--color-fg) / 0.10)',
             boxShadow: '0 8px 22px rgba(0,0,0,0.45)',
-            color: 'var(--color-accent)',
+            color: 'rgb(var(--color-accent))',
           }}
         >
           <Sparkles className="h-4 w-4" />
@@ -1522,7 +1522,7 @@ export default function MapPage() {
           className="animate-slide-up absolute left-0 right-0 z-10"
           style={{ bottom: 'calc(env(safe-area-inset-bottom) + 5rem)' }}
         >
-          <div className="mx-2 rounded-2xl bg-black/70 p-3 backdrop-blur">
+          <div className="mx-2 rounded-2xl bg-card/70 p-3 backdrop-blur">
             <p className="mb-2 px-1 text-xs font-semibold text-fg/70">
               {panelSpots.length} {activeFilter} sur la carte
             </p>
@@ -1590,10 +1590,10 @@ export default function MapPage() {
         <div
           className="flex gap-0.5 rounded-xl p-0.5"
           style={{
-            background: 'rgba(20, 20, 20, 0.80)',
+            background: 'rgb(var(--color-card) / 0.80)',
             backdropFilter: 'saturate(160%) blur(14px)',
             WebkitBackdropFilter: 'saturate(160%) blur(14px)',
-            border: '1px solid rgba(255, 255, 255, 0.06)',
+            border: '1px solid rgb(var(--color-fg) / 0.06)',
             boxShadow: '0 10px 24px rgba(0, 0, 0, 0.45)',
           }}
         >
@@ -1738,8 +1738,8 @@ function MapPredictionSheet({
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
         style={{
-          background: 'var(--color-card)',
-          border: '1px solid rgba(255,255,255,0.08)',
+          background: 'rgb(var(--color-card))',
+          border: '1px solid rgb(var(--color-fg) / 0.08)',
           borderBottom: 'none',
           paddingBottom: 'max(1.25rem, env(safe-area-inset-bottom))',
           maxHeight: '70vh',
@@ -1754,7 +1754,7 @@ function MapPredictionSheet({
         <div className="flex justify-center pb-1 pt-2.5">
           <div
             className="h-1 w-12 rounded-full"
-            style={{ background: 'rgba(255,255,255,0.22)' }}
+            style={{ background: 'rgb(var(--color-fg) / 0.22)' }}
           />
         </div>
 
@@ -1766,20 +1766,20 @@ function MapPredictionSheet({
           >
             <div className="flex items-center justify-between gap-2">
               <p
-                className="label-up text-[9.5px] text-white/75"
+                className="label-up text-[9.5px] text-fg/75"
                 style={{ letterSpacing: '0.18em' }}
               >
                 {prediction ? theme.label : 'CONSEIL DU JOUR'}
               </p>
               <span
-                className="inline-flex items-center gap-1 rounded-full bg-black/45 px-2 py-1 text-[9px] font-bold tracking-wider text-white/85 backdrop-blur"
+                className="inline-flex items-center gap-1 rounded-full bg-black/45 px-2 py-1 text-[9px] font-bold tracking-wider text-fg/85 backdrop-blur"
                 style={{ border: '1px solid rgba(255,255,255,0.12)' }}
               >
                 IA 🎯
               </span>
             </div>
             {loading && !prediction ? (
-              <div className="mt-3 flex items-center gap-2 text-[14px] text-white/80">
+              <div className="mt-3 flex items-center gap-2 text-[14px] text-fg/80">
                 <Loader2 className="h-4 w-4 animate-spin" />
                 Analyse en cours…
               </div>
@@ -1792,7 +1792,7 @@ function MapPredictionSheet({
               </p>
             ) : (
               <p
-                className="mt-3 leading-snug text-white/75"
+                className="mt-3 leading-snug text-fg/75"
                 style={{ fontSize: '14px' }}
               >
                 Ajoute ta ville dans Réglages pour recevoir un conseil

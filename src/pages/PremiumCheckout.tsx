@@ -90,15 +90,15 @@ export default function PremiumCheckout() {
         className="relative overflow-hidden"
         style={{
           background: isVip
-            ? 'radial-gradient(130% 90% at 50% 0%, rgba(255,215,0,0.30) 0%, rgba(212,175,55,0.18) 35%, rgba(184,134,11,0.10) 65%, #0a0a0a 100%)'
-            : 'radial-gradient(130% 90% at 50% 0%, rgba(230,57,70,0.50) 0%, rgba(230,57,70,0.22) 35%, rgba(230,57,70,0.08) 65%, #0a0a0a 100%)',
+            ? 'radial-gradient(130% 90% at 50% 0%, rgba(255,215,0,0.30) 0%, rgba(212,175,55,0.18) 35%, rgba(184,134,11,0.10) 65%, rgb(var(--color-bg)) 100%)'
+            : 'radial-gradient(130% 90% at 50% 0%, rgba(230,57,70,0.50) 0%, rgba(230,57,70,0.22) 35%, rgba(230,57,70,0.08) 65%, rgb(var(--color-bg)) 100%)',
         }}
       >
         <button
           onClick={() => navigate(-1)}
           aria-label="Retour"
-          className="tappable absolute left-4 top-[max(1rem,env(safe-area-inset-top))] z-10 flex h-10 w-10 items-center justify-center rounded-full bg-black/30 backdrop-blur"
-          style={{ border: '1px solid rgba(255,255,255,0.08)' }}
+          className="tappable absolute left-4 top-[max(1rem,env(safe-area-inset-top))] z-10 flex h-10 w-10 items-center justify-center rounded-full bg-fg/10 backdrop-blur"
+          style={{ border: '1px solid rgb(var(--color-fg) / 0.08)' }}
         >
           <ArrowLeft className="h-5 w-5 text-fg" />
         </button>
@@ -116,7 +116,7 @@ export default function PremiumCheckout() {
                   }
                 : {
                     background:
-                      'linear-gradient(135deg, var(--color-accent) 0%, #ff6b76 100%)',
+                      'linear-gradient(135deg, rgb(var(--color-accent)) 0%, #ff6b76 100%)',
                     boxShadow: '0 12px 40px rgba(232,32,58,0.45)',
                     border: '2px solid rgba(255,255,255,0.18)',
                   }
@@ -130,12 +130,12 @@ export default function PremiumCheckout() {
           </div>
           <h1
             className={`mt-5 font-display text-[34px] font-extrabold leading-none tracking-tighter ${
-              isVip ? 'text-[#ffd700]' : 'text-white'
+              isVip ? 'text-[#ffd700]' : 'text-fg'
             }`}
           >
             {isVip ? 'Cercle VIP' : 'Premium'}
           </h1>
-          <p className="mt-2 text-sm text-white/65">
+          <p className="mt-2 text-sm text-fg/65">
             {isVip
               ? 'L’expérience REVS au sommet'
               : 'Débloque l’expérience complète'}
@@ -155,17 +155,17 @@ export default function PremiumCheckout() {
           >
             <span
               className={`font-display text-5xl font-extrabold tracking-tighter ${
-                isVip ? 'text-[#ffd700]' : 'text-white'
+                isVip ? 'text-[#ffd700]' : 'text-fg'
               }`}
             >
               {price}
             </span>
-            <span className="text-sm text-white/55">
+            <span className="text-sm text-fg/55">
               / {interval === 'year' ? 'an' : 'mois'}
             </span>
           </div>
           {interval === 'year' ? (
-            <p className="label-up mt-3 text-[11px] text-white/70">
+            <p className="label-up mt-3 text-[11px] text-fg/70">
               🎁 2 mois offerts vs le tarif mensuel
             </p>
           ) : (
@@ -185,9 +185,9 @@ export default function PremiumCheckout() {
 
           {/* 7-day trial pitch (Premium only) */}
           {!isVip && (
-            <p className="mt-4 max-w-[28ch] text-center text-[12px] leading-relaxed text-white/70">
+            <p className="mt-4 max-w-[28ch] text-center text-[12px] leading-relaxed text-fg/70">
               ✨ Tu ne seras pas débité pendant{' '}
-              <strong className="text-white">7 jours</strong>.
+              <strong className="text-fg">7 jours</strong>.
               <br />
               Annule à tout moment avant la fin de l'essai.
             </p>

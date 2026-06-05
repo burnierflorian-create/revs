@@ -256,7 +256,7 @@ export default function NewEvent() {
             type="button"
             onClick={() => setIsLive((v) => !v)}
             className={`relative h-7 w-12 flex-none rounded-full transition-colors ${
-              isLive ? 'bg-accent' : 'bg-white/15'
+              isLive ? 'bg-accent' : 'bg-fg/15'
             }`}
             aria-pressed={isLive}
             style={

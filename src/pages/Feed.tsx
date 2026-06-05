@@ -178,7 +178,7 @@ function EmptyCarousel({ onSpot }: { onSpot: () => void }) {
               key={idx}
               onClick={() => setI(idx)}
               className={`h-1.5 rounded-full transition-all ${
-                idx === i ? 'w-6 bg-accent' : 'w-2 bg-white/40'
+                idx === i ? 'w-6 bg-accent' : 'w-2 bg-fg/40'
               }`}
               aria-label={`Slide ${idx + 1}`}
             />
@@ -554,19 +554,19 @@ export default function Feed() {
           boxShadow: '0 4px 30px rgba(0, 0, 0, 0.40)',
         }}
       >
-        <SearchIcon className="h-4 w-4 flex-none text-neutral-500" />
+        <SearchIcon className="h-4 w-4 flex-none text-fg2" />
         <input
           type="text"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           placeholder="Rechercher dans le fil…"
-          className="flex-1 bg-transparent text-xs font-medium tracking-tight text-neutral-200 placeholder:text-neutral-500 outline-none"
+          className="flex-1 bg-transparent text-xs font-medium tracking-tight text-fg/80 placeholder:text-fg2 outline-none"
         />
         {searchQuery && (
           <button
             onClick={() => setSearchQuery('')}
             aria-label="Effacer"
-            className="tappable text-neutral-500 hover:text-neutral-300"
+            className="tappable text-fg2 hover:text-fg"
           >
             <X className="h-4 w-4" />
           </button>
@@ -579,7 +579,7 @@ export default function Feed() {
           className={`tappable flex-1 rounded-full px-4 py-2.5 text-xs font-bold transition-colors ${
             allDefaults
               ? 'bg-accent text-fg'
-              : 'text-neutral-300 hover:text-white'
+              : 'text-fg2 hover:text-fg'
           }`}
           style={
             allDefaults
@@ -599,7 +599,7 @@ export default function Feed() {
           className={`tappable relative flex flex-1 items-center justify-center gap-1.5 rounded-full px-4 py-2.5 text-xs font-bold transition-colors ${
             !allDefaults
               ? 'bg-accent/15 text-accent'
-              : 'text-neutral-300 hover:text-white'
+              : 'text-fg2 hover:text-fg'
           }`}
           style={
             !allDefaults
@@ -718,7 +718,7 @@ export default function Feed() {
                       className="aspect-[4/3] w-full object-cover"
                     />
                   ) : (
-                    <div className="flex aspect-[4/3] w-full items-center justify-center bg-white/5">
+                    <div className="flex aspect-[4/3] w-full items-center justify-center bg-fg/5">
                       <Car className="h-12 w-12 text-fg2/40" />
                     </div>
                   )}
@@ -784,7 +784,7 @@ export default function Feed() {
                           {name}
                         </h2>
                         {sub && (
-                          <p className="mt-1 truncate text-[13px] text-white/55">
+                          <p className="mt-1 truncate text-[13px] text-fg/55">
                             {sub}
                           </p>
                         )}

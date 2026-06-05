@@ -88,7 +88,7 @@ export default function GlobalStats() {
       </div>
 
       {/* Top voiture */}
-      <div className="rounded-2xl border border-white/5 bg-card p-5">
+      <div className="rounded-2xl border border-fg/5 bg-card p-5">
         <div className="flex items-center gap-2 text-fg/50">
           <Car className="h-4 w-4 text-accent" />
           <span className="text-xs uppercase tracking-wider">
@@ -107,7 +107,7 @@ export default function GlobalStats() {
 
       <div className="grid grid-cols-2 gap-3">
         {/* Top ville */}
-        <div className="rounded-2xl border border-white/5 bg-card p-4">
+        <div className="rounded-2xl border border-fg/5 bg-card p-4">
           <div className="flex items-center gap-2 text-fg/50">
             <MapPin className="h-4 w-4 text-accent" />
             <span className="text-xs uppercase tracking-wider">Ville n°1</span>
@@ -123,7 +123,7 @@ export default function GlobalStats() {
         </div>
 
         {/* Top marque */}
-        <div className="rounded-2xl border border-white/5 bg-card p-4">
+        <div className="rounded-2xl border border-fg/5 bg-card p-4">
           <div className="flex items-center gap-2 text-fg/50">
             <Tag className="h-4 w-4 text-accent" />
             <span className="text-xs uppercase tracking-wider">
@@ -142,7 +142,7 @@ export default function GlobalStats() {
       </div>
 
       {/* Spotteurs actifs */}
-      <div className="rounded-2xl border border-white/5 bg-card p-4">
+      <div className="rounded-2xl border border-fg/5 bg-card p-4">
         <div className="flex items-center gap-2 text-fg/50">
           <Users className="h-4 w-4 text-accent" />
           <span className="text-xs uppercase tracking-wider">

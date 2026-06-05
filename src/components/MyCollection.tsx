@@ -60,7 +60,7 @@ export default function MyCollection({ spots }: { spots: Spot[] }) {
 
   if (spots.length === 0) {
     return (
-      <div className="flex flex-col items-center rounded-2xl border border-white/5 bg-card px-6 py-12 text-center">
+      <div className="flex flex-col items-center rounded-2xl border border-fg/5 bg-card px-6 py-12 text-center">
         <div className="flex h-16 w-16 items-center justify-center rounded-full bg-accent/10">
           <ImageOff className="h-8 w-8 text-accent/70" />
         </div>

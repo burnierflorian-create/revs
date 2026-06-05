@@ -103,8 +103,8 @@ function TeamCard({ team }: { team: F1Team }) {
       onClick={() => navigate(`/f1-team/${team.slug}`)}
       className="tappable group relative aspect-[5/4] overflow-hidden rounded-[20px] text-left"
       style={{
-        background: `linear-gradient(140deg, ${team.color} 0%, ${team.color}55 60%, #0a0a0a 100%)`,
-        border: '1px solid rgba(255,255,255,0.08)',
+        background: `linear-gradient(140deg, ${team.color} 0%, ${team.color}55 60%, rgb(var(--color-card)) 100%)`,
+        border: '1px solid rgb(var(--color-fg) / 0.08)',
       }}
     >
       {/* Z-0 base: 3-letter code watermark BEHIND the car shot */}
@@ -140,7 +140,7 @@ function TeamCard({ team }: { team: F1Team }) {
 
       {/* Z-30: text overlay */}
       <div className="absolute inset-x-0 bottom-0 z-30 flex flex-col gap-1 p-4">
-        <span className="label-up text-[10px] text-white/65">F1 2026</span>
+        <span className="label-up text-[10px] text-fg/65">F1 2026</span>
         <span className="line-clamp-2 font-display text-base font-extrabold leading-tight tracking-tighter text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.7)]">
           {team.name}
         </span>
@@ -183,8 +183,8 @@ function DriverCard({
       onClick={onClick}
       className="tappable group relative aspect-[5/6] overflow-hidden rounded-[20px] text-left"
       style={{
-        background: `linear-gradient(165deg, ${color} 0%, ${color}66 50%, #0a0a0a 100%)`,
-        border: '1px solid rgba(255,255,255,0.08)',
+        background: `linear-gradient(165deg, ${color} 0%, ${color}66 50%, rgb(var(--color-card)) 100%)`,
+        border: '1px solid rgb(var(--color-fg) / 0.08)',
       }}
     >
       {/* Z-0 base: race-number watermark — always rendered. When the
@@ -222,7 +222,7 @@ function DriverCard({
 
       {/* Z-30: text overlay */}
       <div className="absolute inset-x-0 bottom-0 z-30 flex flex-col gap-1 p-3">
-        <div className="flex items-center gap-1.5 text-[11px] text-white/85">
+        <div className="flex items-center gap-1.5 text-[11px] text-fg/85">
           <span aria-hidden>{flagEmoji(driver.country)}</span>
           {driver.number !== null && (
             <span className="font-extrabold tracking-wider">

@@ -332,7 +332,7 @@ function FrontFace({
 
       <div className="mt-2 flex-1 px-3 pb-3">
         <p
-          className="uppercase text-white/55"
+          className="uppercase text-fg/55"
           style={{ fontSize: '8.5px', letterSpacing: '0.18em' }}
         >
           {spot.brand}
@@ -361,7 +361,7 @@ function FrontFace({
           >
             +{xp} XP
           </span>
-          <span className="text-white/45" style={{ fontSize: '9px' }}>
+          <span className="text-fg/45" style={{ fontSize: '9px' }}>
             {dateLabel(spot.created_at)}
           </span>
         </div>
@@ -420,7 +420,7 @@ function BackFace({
 
       <div className="px-3 pt-1">
         <p
-          className="uppercase text-white/55"
+          className="uppercase text-fg/55"
           style={{ fontSize: '8.5px', letterSpacing: '0.18em' }}
         >
           {spot.brand}
@@ -536,7 +536,7 @@ function Stat({ label, value }: { label: string; value: string }) {
       }}
     >
       <p
-        className="font-bold uppercase text-white/50"
+        className="font-bold uppercase text-fg/50"
         style={{ fontSize: '8px', letterSpacing: '0.14em' }}
       >
         {label}

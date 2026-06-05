@@ -122,7 +122,7 @@ export default function BadgeDetail() {
                     boxShadow: '0 12px 38px rgba(232,32,58,0.32)',
                   }
               : {
-                  background: 'var(--color-card)',
+                  background: 'rgb(var(--color-card))',
                   border: '1px solid var(--color-border)',
                 }
           }
@@ -136,7 +136,7 @@ export default function BadgeDetail() {
                       ? 'radial-gradient(circle at 30% 30%, rgba(224,179,65,0.25), #0a0a0a 70%)'
                       : 'radial-gradient(circle at 30% 30%, rgba(232,32,58,0.18), #0a0a0a 70%)',
                   }
-                : { background: 'var(--color-bg)' }
+                : { background: 'rgb(var(--color-bg))' }
             }
           >
             {unlocked ? badge.emoji : <Lock className="h-12 w-12 text-fg2/40" />}

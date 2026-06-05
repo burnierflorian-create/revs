@@ -652,7 +652,7 @@ export default function NewSpot() {
             <div
               key={n}
               className={`h-1 flex-1 rounded-full transition-colors ${
-                n <= step ? 'bg-accent' : 'bg-white/10'
+                n <= step ? 'bg-accent' : 'bg-fg/10'
               }`}
               style={
                 n <= step
@@ -806,7 +806,7 @@ export default function NewSpot() {
                   Analyse REVS IA en cours
                 </h3>
                 <p
-                  className="mt-1.5 leading-snug text-white/55"
+                  className="mt-1.5 leading-snug text-fg/55"
                   style={{ fontSize: '12px' }}
                 >
                   Identification des courbes, de la rareté et des

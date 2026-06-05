@@ -106,7 +106,7 @@ export default function WelcomeCelebration({
       <div className="relative flex w-full max-w-md flex-1 flex-col justify-center px-8 py-8 text-center">
         {/* Header — visible on all slides, animates the title */}
         <div className="space-y-2">
-          <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-white/60">
+          <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-fg/60">
             {isVip ? 'Cercle VIP' : 'Premium'}
           </p>
           <h1
@@ -132,7 +132,7 @@ export default function WelcomeCelebration({
             {slide.emoji}
           </div>
           <h2 className="font-display text-xl font-bold">{slide.title}</h2>
-          <p className="max-w-[28ch] text-sm leading-relaxed text-white/80">
+          <p className="max-w-[28ch] text-sm leading-relaxed text-fg/80">
             {slide.body}
           </p>
         </div>
@@ -148,7 +148,7 @@ export default function WelcomeCelebration({
               className={`h-2 rounded-full transition-all duration-300 ${
                 i === step
                   ? `w-6 ${isVip ? 'bg-[#FFD700]' : 'bg-accent'}`
-                  : 'w-2 bg-white/25'
+                  : 'w-2 bg-fg/25'
               }`}
             />
           ))}
@@ -178,7 +178,7 @@ export default function WelcomeCelebration({
         {!isLast && (
           <button
             onClick={onClose}
-            className="block w-full text-center text-xs text-white/45 transition-colors hover:text-white/70"
+            className="block w-full text-center text-xs text-fg/45 transition-colors hover:text-fg/70"
           >
             Passer
           </button>

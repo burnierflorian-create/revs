@@ -186,7 +186,7 @@ export default function GrandPrixDetail() {
           onClick={() => navigate(-1)}
           aria-label="Retour"
           className="tappable absolute left-4 top-[max(1rem,env(safe-area-inset-top))] flex h-10 w-10 items-center justify-center rounded-full bg-black/50 backdrop-blur"
-          style={{ border: '1px solid rgba(255,255,255,0.08)' }}
+          style={{ border: '1px solid rgb(var(--color-fg) / 0.08)' }}
         >
           <ArrowLeft className="h-5 w-5 text-fg" />
         </button>
@@ -263,7 +263,7 @@ export default function GrandPrixDetail() {
               <div
                 key={s.label}
                 className={`flex items-center justify-between gap-3 px-4 py-3.5 ${
-                  i < sessions.length - 1 ? 'border-b border-white/5' : ''
+                  i < sessions.length - 1 ? 'border-b border-fg/5' : ''
                 } ${s.label === 'Course' ? 'bg-accent/10' : ''}`}
               >
                 <span
@@ -299,7 +299,7 @@ export default function GrandPrixDetail() {
                   key={w.year}
                   className={`flex items-center justify-between px-4 py-3.5 ${
                     i < Math.min(gp.winners!.length, 3) - 1
-                      ? 'border-b border-white/5'
+                      ? 'border-b border-fg/5'
                       : ''
                   }`}
                 >
@@ -389,7 +389,7 @@ function RaceResults({
                 key={p.position}
                 className="flex items-center gap-3 rounded-2xl px-3 py-3"
                 style={{
-                  background: 'var(--color-card)',
+                  background: 'rgb(var(--color-card))',
                   border: `1px solid ${style.ring}`,
                   boxShadow:
                     p.position === 1
@@ -461,7 +461,7 @@ function RaceResults({
         <div
           className="flex items-start gap-3 rounded-2xl px-4 py-3.5"
           style={{
-            background: 'rgba(255,255,255,0.03)',
+            background: 'rgb(var(--color-fg) / 0.03)',
             border: '1px solid var(--color-divider)',
           }}
         >
@@ -507,7 +507,7 @@ function PodiumPortrait({
       className="relative flex h-11 w-11 flex-none items-center justify-center overflow-hidden rounded-full font-display text-sm font-extrabold tracking-tighter text-fg"
       style={{
         background:
-          'linear-gradient(135deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 100%)',
+          'linear-gradient(135deg, rgb(var(--color-fg) / 0.06) 0%, rgb(var(--color-fg) / 0.02) 100%)',
         border: `2px solid ${ring}`,
       }}
     >

@@ -90,7 +90,7 @@ export default function Referral() {
             className="rounded-3xl p-6 text-center"
             style={{
               background:
-                'linear-gradient(155deg, rgba(232,32,58,0.22) 0%, rgba(232,32,58,0.08) 40%, rgba(20,20,20,0.95) 90%)',
+                'linear-gradient(155deg, rgba(232,32,58,0.22) 0%, rgba(232,32,58,0.08) 40%, rgb(var(--color-card) / 0.95) 90%)',
               border: '1px solid rgba(232,32,58,0.4)',
               boxShadow: '0 12px 36px rgba(232,32,58,0.2)',
             }}
@@ -111,8 +111,8 @@ export default function Referral() {
               <button
                 onClick={copyCode}
                 disabled={!stats.invite_code}
-                className="tappable flex flex-1 items-center justify-center gap-2 rounded-full bg-white/10 px-4 py-3 text-sm font-extrabold tracking-wider text-fg backdrop-blur transition-colors hover:bg-white/15 disabled:opacity-40"
-                style={{ border: '1px solid rgba(255,255,255,0.10)' }}
+                className="tappable flex flex-1 items-center justify-center gap-2 rounded-full bg-fg/10 px-4 py-3 text-sm font-extrabold tracking-wider text-fg backdrop-blur transition-colors hover:bg-fg/15 disabled:opacity-40"
+                style={{ border: '1px solid rgb(var(--color-fg) / 0.10)' }}
               >
                 {copied ? (
                   <>

@@ -147,14 +147,14 @@ export default function F1DriverDetail() {
       <header
         className="relative overflow-hidden"
         style={{
-          background: `radial-gradient(130% 90% at 50% 0%, ${color}cc 0%, ${color}55 40%, ${color}1A 70%, #0a0a0a 100%)`,
+          background: `radial-gradient(130% 90% at 50% 0%, ${color}cc 0%, ${color}55 40%, ${color}1A 70%, rgb(var(--color-bg)) 100%)`,
         }}
       >
         <button
           onClick={() => navigate(-1)}
           aria-label="Retour"
           className="tappable absolute left-4 top-[max(1rem,env(safe-area-inset-top))] z-10 flex h-10 w-10 items-center justify-center rounded-full bg-black/30 backdrop-blur"
-          style={{ border: '1px solid rgba(255,255,255,0.08)' }}
+          style={{ border: '1px solid rgb(var(--color-fg) / 0.08)' }}
         >
           <ArrowLeft className="h-5 w-5 text-fg" />
         </button>
@@ -177,7 +177,7 @@ export default function F1DriverDetail() {
           <h1 className="relative mt-5 font-display text-[34px] font-extrabold leading-none tracking-tighter text-white">
             {driver.name}
           </h1>
-          <div className="relative mt-3 flex items-center gap-3 text-xs text-white/75">
+          <div className="relative mt-3 flex items-center gap-3 text-xs text-fg/75">
             <span className="inline-flex items-center gap-1">
               <span aria-hidden className="text-base leading-none">
                 {flagEmoji(driver.country)}
@@ -287,7 +287,7 @@ export default function F1DriverDetail() {
                   >
                     <div
                       className="grid grid-cols-[1fr_auto_auto] gap-3 px-3 py-2 text-[10px] uppercase tracking-wider text-fg2/70"
-                      style={{ background: 'rgba(255,255,255,0.02)' }}
+                      style={{ background: 'rgb(var(--color-fg) / 0.02)' }}
                     >
                       <span>Grand Prix</span>
                       <span className="text-right">Pos.</span>
@@ -298,7 +298,7 @@ export default function F1DriverDetail() {
                         key={`${gp.name}-${i}`}
                         className={`grid grid-cols-[1fr_auto_auto] items-center gap-3 px-3 py-2.5 text-sm ${
                           i < (data.lastFiveGps?.length ?? 0) - 1
-                            ? 'border-b border-white/[0.05]'
+                            ? 'border-b border-fg/5'
                             : ''
                         }`}
                       >

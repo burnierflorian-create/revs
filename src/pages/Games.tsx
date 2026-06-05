@@ -101,7 +101,7 @@ export default function Games() {
             {/* Bottom-left title block */}
             <div className="absolute inset-x-0 bottom-0 z-10 px-5 pb-5">
               <p
-                className="text-[10px] uppercase tracking-[0.3em] text-white/65"
+                className="text-[10px] uppercase tracking-[0.3em] text-fg/65"
               >
                 Jeux REVS
               </p>
@@ -116,12 +116,12 @@ export default function Games() {
               >
                 JEUX REVS
               </h1>
-              <p className="mt-1.5 text-[13px] text-white/80">
+              <p className="mt-1.5 text-[13px] text-fg/80">
                 Affronte d'autres spotters
               </p>
               {hero?.brand && hero?.model && (
                 <p
-                  className="mt-2 text-[10px] uppercase tracking-widest text-white/45"
+                  className="mt-2 text-[10px] uppercase tracking-widest text-fg/45"
                 >
                   Mis en avant : {hero.brand} {hero.model}
                 </p>
@@ -170,7 +170,7 @@ export default function Games() {
                 >
                   REVS RACE
                 </p>
-                <p className="mt-1.5 max-w-[80%] text-[12px] text-white/75">
+                <p className="mt-1.5 max-w-[80%] text-[12px] text-fg/75">
                   Choisis ta carte, vise le départ parfait, empoche
                   l'enjeu.
                 </p>
@@ -182,7 +182,7 @@ export default function Games() {
                     Solo · IA
                   </span>
                   <span
-                    className="flex items-center gap-1 rounded-full bg-white/[0.10] px-2.5 py-1 font-extrabold uppercase tracking-wider text-white/85"
+                    className="flex items-center gap-1 rounded-full bg-fg/[0.10] px-2.5 py-1 font-extrabold uppercase tracking-wider text-fg/85"
                     style={{ fontSize: '9.5px', letterSpacing: '0.08em' }}
                   >
                     <Zap className="h-3 w-3" /> jusqu'à +1000 XP
@@ -203,7 +203,7 @@ export default function Games() {
         <div
           className="mt-4 flex items-center gap-3 rounded-2xl px-4 py-3.5 text-[12px] text-fg2"
           style={{
-            background: 'rgba(255,255,255,0.03)',
+            background: 'rgb(var(--color-fg) / 0.03)',
             border: '1px dashed var(--color-border)',
           }}
         >

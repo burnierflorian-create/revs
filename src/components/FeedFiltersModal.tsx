@@ -77,7 +77,7 @@ export default function FeedFiltersModal({
         className="flex max-h-[88vh] w-full max-w-md flex-col rounded-t-3xl bg-bg sm:rounded-3xl"
       >
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-white/5 px-5 pt-5 pb-3">
+        <div className="flex items-center justify-between border-b border-fg/5 px-5 pt-5 pb-3">
           <h2 className="flex items-center gap-2 font-display text-lg font-bold">
             <Filter className="h-5 w-5 text-accent" />
             Filtres
@@ -194,18 +194,18 @@ export default function FeedFiltersModal({
                 setDraft((d) => ({ ...d, city: e.target.value }))
               }
               placeholder="ex. Annecy, Paris…"
-              className="w-full rounded-2xl bg-card px-4 py-3 text-sm text-fg placeholder-fg/30 outline-none ring-1 ring-white/5 focus:ring-accent/60"
+              className="w-full rounded-2xl bg-card px-4 py-3 text-sm text-fg placeholder-fg/30 outline-none ring-1 ring-fg/5 focus:ring-accent/60"
               autoComplete="off"
             />
           </section>
         </div>
 
         {/* Footer */}
-        <div className="flex flex-col gap-2 border-t border-white/5 p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+        <div className="flex flex-col gap-2 border-t border-fg/5 p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
           {filtersActive(draft) && (
             <button
               onClick={() => setDraft(DEFAULT_FILTERS)}
-              className="w-full rounded-full bg-white/5 py-2.5 text-sm font-medium text-fg/70 hover:bg-white/10"
+              className="w-full rounded-full bg-fg/5 py-2.5 text-sm font-medium text-fg/70 hover:bg-fg/10"
             >
               Réinitialiser
             </button>

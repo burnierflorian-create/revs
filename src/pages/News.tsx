@@ -52,7 +52,7 @@ const BADGE: Record<string, string> = {
   Events: 'bg-[#3B82F6]',
 }
 function badgeClass(cat: string): string {
-  return BADGE[cat] ?? 'bg-white/20'
+  return BADGE[cat] ?? 'bg-fg/20'
 }
 
 // Royalty-free Unsplash fallbacks per category (verified URLs) used when
@@ -249,7 +249,7 @@ export default function News({ categories }: { categories: string[] }) {
               className="tappable flex items-center gap-4 p-4 text-left"
               style={{
                 background: 'var(--color-glass)',
-                border: '1px solid rgba(255, 255, 255, 0.05)',
+                border: '1px solid rgb(var(--color-fg) / 0.05)',
                 borderRadius: '28px',
                 backdropFilter: 'saturate(160%) blur(12px)',
                 WebkitBackdropFilter: 'saturate(160%) blur(12px)',
@@ -285,13 +285,13 @@ export default function News({ categories }: { categories: string[] }) {
                   )}
                 </div>
                 <h2
-                  className="line-clamp-2 font-display font-black leading-tight tracking-tight text-white"
+                  className="line-clamp-2 font-display font-black leading-tight tracking-tight text-fg"
                   style={{ fontSize: '14px' }}
                 >
                   {n.title}
                 </h2>
                 {n.summary && (
-                  <p className="line-clamp-2 text-xs font-medium leading-normal text-neutral-400">
+                  <p className="line-clamp-2 text-xs font-medium leading-normal text-fg2">
                     {n.summary}
                   </p>
                 )}
@@ -307,10 +307,10 @@ export default function News({ categories }: { categories: string[] }) {
               <div
                 className="h-20 w-20 flex-none overflow-hidden rounded-2xl"
                 style={{
-                  background: '#0a0a0a',
-                  border: '1px solid rgba(255, 255, 255, 0.05)',
+                  background: 'rgb(var(--color-card))',
+                  border: '1px solid rgb(var(--color-fg) / 0.05)',
                   boxShadow:
-                    'inset 0 1px 0 rgba(255, 255, 255, 0.03)',
+                    'inset 0 1px 0 rgb(var(--color-fg) / 0.03)',
                 }}
               >
                 <img

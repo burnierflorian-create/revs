@@ -79,7 +79,7 @@ export default function InstallBanner() {
   if (!platform) return null
 
   return (
-    <div className="fixed inset-x-3 bottom-24 z-40 flex items-center gap-3 rounded-2xl border border-white/10 bg-card px-4 py-3 shadow-lg shadow-black/50">
+    <div className="fixed inset-x-3 bottom-24 z-40 flex items-center gap-3 rounded-2xl border border-fg/10 bg-card px-4 py-3 shadow-lg shadow-black/50">
       {platform === 'android' ? (
         <>
           <span className="flex-1 text-sm text-fg">

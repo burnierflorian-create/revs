@@ -1,22 +1,29 @@
 /** @type {import('tailwindcss').Config} */
-// Token values mirror src/styles/design-system.css (CSS variables).
-// Kept as literal hex so Tailwind's /opacity modifiers keep working.
+// Colour tokens resolve through the CSS channel-triplet vars in
+// src/styles/design-system.css so they flip with the html.light class.
 export default {
   content: ['./index.html', './src/**/*.{ts,tsx}'],
   darkMode: 'class',
   theme: {
     extend: {
       colors: {
-        bg:     '#0A0A0A', // noir profond (légèrement nuancé, pas pur #000)
-        card:   '#141414', // surface card
-        fg:     '#FFFFFF', // texte principal
-        fg2:    '#8A8A8A', // texte secondaire / labels
-        accent: '#E8203A', // rouge accent — plus précis qu'avant
-        // legacy alias — anciens spots du code utilisent fg/45 etc.
+        // Wired to the CSS channel-triplet vars in design-system.css so
+        // every bg-bg / bg-card / text-fg / text-fg2 / text-accent (and
+        // their /opacity modifiers) flip with the html.light class.
+        // The <alpha-value> placeholder keeps text-fg/45 working.
+        bg:     'rgb(var(--color-bg) / <alpha-value>)',     // fond principal
+        card:   'rgb(var(--color-card) / <alpha-value>)',   // surface card
+        fg:     'rgb(var(--color-fg) / <alpha-value>)',     // texte principal
+        fg2:    'rgb(var(--color-fg-2) / <alpha-value>)',   // texte secondaire
+        accent: 'rgb(var(--color-accent) / <alpha-value>)', // rouge REVS
       },
       borderColor: {
-        DEFAULT: 'rgba(255,255,255,0.08)', // séparateur standard
-        subtle:  'rgba(255,255,255,0.06)', // bordure card
+        // border-border / border-divider flip via the CSS vars; the
+        // DEFAULT/subtle aliases stay as fixed rgba (dark hairlines).
+        DEFAULT: 'var(--color-divider)', // séparateur standard
+        subtle:  'var(--color-border)',  // bordure card
+        border:  'var(--color-border)',
+        divider: 'var(--color-divider)',
       },
       fontFamily: {
         // Inter chargé via Google Fonts en HEAD ; SF Pro arrive via la

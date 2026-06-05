@@ -122,7 +122,7 @@ export default function SpotWars() {
                             border: '1px solid rgba(205,127,50,0.32)',
                           }
                         : {
-                            background: 'var(--color-card)',
+                            background: 'rgb(var(--color-card))',
                             border: '1px solid var(--color-border)',
                           }
                 }
@@ -144,17 +144,17 @@ export default function SpotWars() {
                     style={{
                       background: isTop
                         ? 'rgba(212,175,55,0.20)'
-                        : 'rgba(255,255,255,0.06)',
+                        : 'rgb(var(--color-fg) / 0.06)',
                       color: isTop
                         ? '#FFD700'
                         : r.rank === 2
                           ? '#C0C0C0'
                           : r.rank === 3
                             ? '#CD7F32'
-                            : 'var(--color-fg-2)',
+                            : 'rgb(var(--color-fg-2))',
                       border: isTop
                         ? '1px solid rgba(212,175,55,0.55)'
-                        : '1px solid rgba(255,255,255,0.08)',
+                        : '1px solid rgb(var(--color-fg) / 0.08)',
                     }}
                   >
                     {isTop ? <Crown className="h-4 w-4" /> : r.rank}
@@ -169,7 +169,7 @@ export default function SpotWars() {
                   </div>
                   <span
                     className="flex-none font-display text-xl font-extrabold tracking-tighter"
-                    style={{ color: isPodium ? '#FFD700' : 'var(--color-fg)' }}
+                    style={{ color: isPodium ? '#FFD700' : 'rgb(var(--color-fg))' }}
                   >
                     {r.spots_week}
                     <span className="ml-1 text-[10px] font-bold tracking-wider text-fg2">

@@ -100,8 +100,8 @@ function Row({
   // in the Settings preferences section. Render <div> in that case so
   // the inner Toggle's own onClick fires unimpeded; keep <button> for
   // rows whose entire body should navigate (Compte, Premium, etc.).
-  const baseClass = `flex w-full items-center gap-3 border-b border-white/[0.08] px-4 py-3.5 text-left last:border-0 ${tone} ${
-    interactive ? 'tappable transition-colors hover:bg-white/[0.04]' : ''
+  const baseClass = `flex w-full items-center gap-3 border-b border-fg/[0.08] px-4 py-3.5 text-left last:border-0 ${tone} ${
+    interactive ? 'tappable transition-colors hover:bg-fg/[0.04]' : ''
   }`
   const body = (
     <>
@@ -112,7 +112,7 @@ function Row({
               ? 'bg-accent/15 text-accent'
               : warn
                 ? 'bg-[#F59E0B]/15 text-[#F59E0B]'
-                : 'bg-white/[0.06] text-fg/85'
+                : 'bg-fg/[0.06] text-fg/85'
           }`}
         >
           {icon}
@@ -168,7 +168,7 @@ function Toggle({
       role="switch"
       aria-checked={checked}
       className={`relative inline-block h-6 w-11 flex-none rounded-full transition-colors ${
-        checked ? 'bg-accent' : 'bg-white/15'
+        checked ? 'bg-accent' : 'bg-fg/15'
       } ${disabled ? 'opacity-50' : 'cursor-pointer'}`}
       style={
         checked ? { boxShadow: '0 0 12px rgba(232,32,58,0.35)' } : undefined
@@ -986,7 +986,7 @@ export default function Settings() {
   // ─────────────────────── Inline profile editor ───────────────────────
 
   const ProfileEditor = (
-    <div className="space-y-4 border-b border-white/5 p-4 last:border-0">
+    <div className="space-y-4 border-b border-fg/5 p-4 last:border-0">
       <div className="flex items-center gap-4">
         <button
           onClick={() => fileRef.current?.click()}
@@ -1021,7 +1021,7 @@ export default function Settings() {
           value={pseudo}
           maxLength={24}
           onChange={(e) => setPseudo(e.target.value)}
-          className="w-full rounded-lg bg-white/5 px-3 py-3 text-fg outline-none focus:ring-1 focus:ring-accent"
+          className="w-full rounded-lg bg-fg/5 px-3 py-3 text-fg outline-none focus:ring-1 focus:ring-accent"
         />
       </div>
       <div className="space-y-2">
@@ -1032,7 +1032,7 @@ export default function Settings() {
           value={ville}
           maxLength={48}
           onChange={(e) => setVille(e.target.value)}
-          className="w-full rounded-lg bg-white/5 px-3 py-3 text-fg outline-none focus:ring-1 focus:ring-accent"
+          className="w-full rounded-lg bg-fg/5 px-3 py-3 text-fg outline-none focus:ring-1 focus:ring-accent"
         />
       </div>
       <button
@@ -1046,7 +1046,7 @@ export default function Settings() {
   )
 
   const EmailEditor = (
-    <div className="space-y-3 border-b border-white/5 p-4 last:border-0">
+    <div className="space-y-3 border-b border-fg/5 p-4 last:border-0">
       <div className="space-y-2">
         <label className="label-up text-[10px] text-fg2">Nouvel e-mail</label>
         <input
@@ -1081,7 +1081,7 @@ export default function Settings() {
   )
 
   const PasswordEditor = (
-    <div className="space-y-3 border-b border-white/5 p-4 last:border-0">
+    <div className="space-y-3 border-b border-fg/5 p-4 last:border-0">
       <div className="space-y-2">
         <label className="label-up text-[10px] text-fg2">
           Mot de passe actuel
@@ -1284,8 +1284,8 @@ export default function Settings() {
                 on every signout / account-delete path so a different
                 user on this browser never inherits the prior
                 password. */}
-            <div className="flex w-full items-center gap-3 border-b border-white/[0.08] px-4 py-3.5 text-left last:border-0 text-fg">
-              <span className="flex h-9 w-9 flex-none items-center justify-center rounded-xl bg-white/[0.06] text-fg/85">
+            <div className="flex w-full items-center gap-3 border-b border-fg/[0.08] px-4 py-3.5 text-left last:border-0 text-fg">
+              <span className="flex h-9 w-9 flex-none items-center justify-center rounded-xl bg-fg/[0.06] text-fg/85">
                 <Eye className="h-4 w-4" />
               </span>
               <span className="min-w-0 flex-1">
@@ -1305,7 +1305,7 @@ export default function Settings() {
                 aria-label={
                   revealed ? 'Masquer le mot de passe' : 'Afficher le mot de passe'
                 }
-                className="tappable flex h-9 w-9 flex-none items-center justify-center rounded-full text-fg2 transition-colors hover:bg-white/[0.04] hover:text-fg"
+                className="tappable flex h-9 w-9 flex-none items-center justify-center rounded-full text-fg2 transition-colors hover:bg-fg/[0.04] hover:text-fg"
               >
                 {revealed ? (
                   <EyeOff className="h-4 w-4" />
@@ -1342,7 +1342,7 @@ export default function Settings() {
                         disabled={radarBusy || !radarPrefs}
                         aria-pressed={radarPrefs?.enabled ?? false}
                         className={`relative h-7 w-12 flex-none rounded-full transition-colors disabled:opacity-50 ${
-                          radarPrefs?.enabled ? 'bg-accent' : 'bg-white/15'
+                          radarPrefs?.enabled ? 'bg-accent' : 'bg-fg/15'
                         }`}
                         style={
                           radarPrefs?.enabled
@@ -1380,7 +1380,7 @@ export default function Settings() {
                             className={`tappable rounded-2xl py-2.5 text-sm font-extrabold tracking-wider transition-colors disabled:opacity-50 ${
                               radarPrefs.radius_km === r
                                 ? 'bg-accent text-fg'
-                                : 'bg-white/[0.04] text-fg2 hover:bg-white/[0.08]'
+                                : 'bg-fg/[0.04] text-fg2 hover:bg-fg/[0.08]'
                             }`}
                             style={
                               radarPrefs.radius_km === r
@@ -1396,7 +1396,7 @@ export default function Settings() {
                         ))}
                       </div>
                     </div>
-                    <div className="mt-3 flex items-center justify-between gap-3 rounded-2xl bg-white/[0.03] px-3 py-2.5">
+                    <div className="mt-3 flex items-center justify-between gap-3 rounded-2xl bg-fg/[0.03] px-3 py-2.5">
                       <div className="min-w-0 text-[11px] text-fg2">
                         <span className="label-up text-[9px]">
                           Position de référence
@@ -1410,7 +1410,7 @@ export default function Settings() {
                       <button
                         onClick={refreshRadarPosition}
                         disabled={radarBusy}
-                        className="tappable flex-none rounded-full bg-white/[0.06] px-3 py-1.5 text-[11px] font-bold text-fg/80 disabled:opacity-50"
+                        className="tappable flex-none rounded-full bg-fg/[0.06] px-3 py-1.5 text-[11px] font-bold text-fg/80 disabled:opacity-50"
                         style={{ border: '1px solid var(--color-border)' }}
                       >
                         {radarBusy ? '…' : 'Actualiser'}
@@ -1592,7 +1592,7 @@ export default function Settings() {
                 label="Devenir organisateur"
                 sub="Demande envoyée — on revient vers toi rapidement"
                 right={
-                  <span className="rounded-full bg-white/[0.06] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-fg/55">
+                  <span className="rounded-full bg-fg/[0.06] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-fg/55">
                     En attente
                   </span>
                 }
@@ -1633,7 +1633,7 @@ export default function Settings() {
                   rows={3}
                   onChange={(e) => setOrgRaison(e.target.value)}
                   placeholder="Ta motivation"
-                  className="w-full resize-none rounded-lg bg-white/5 px-3 py-3 text-sm text-fg outline-none focus:ring-1 focus:ring-accent"
+                  className="w-full resize-none rounded-lg bg-fg/5 px-3 py-3 text-sm text-fg outline-none focus:ring-1 focus:ring-accent"
                 />
                 <div className="flex gap-3">
                   <button
@@ -1641,7 +1641,7 @@ export default function Settings() {
                       setOrgOpen(false)
                       setOrgRaison('')
                     }}
-                    className="flex-1 rounded-full bg-white/5 py-3 text-sm font-medium text-fg"
+                    className="flex-1 rounded-full bg-fg/5 py-3 text-sm font-medium text-fg"
                   >
                     Annuler
                   </button>
@@ -1670,7 +1670,7 @@ export default function Settings() {
 
           {/* 7 — ZONE SENSIBLE */}
           <section className="space-y-3 pt-4">
-            <div className="h-px bg-white/10" />
+            <div className="h-px bg-fg/10" />
             <h2 className="px-1 text-[11px] font-bold uppercase tracking-[0.18em] text-accent/70">
               Zone sensible
             </h2>
@@ -1725,7 +1725,7 @@ export default function Settings() {
                   <div className="flex gap-3">
                     <button
                       onClick={() => setConfirmDelete(false)}
-                      className="flex-1 rounded-full border border-white/15 py-3 text-sm text-fg/70"
+                      className="flex-1 rounded-full border border-fg/15 py-3 text-sm text-fg/70"
                     >
                       Annuler
                     </button>

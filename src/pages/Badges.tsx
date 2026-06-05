@@ -84,7 +84,7 @@ export default function Badges() {
               <span className="ml-1 text-sm text-fg2">/{data.total}</span>
             </span>
           </div>
-          <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-white/[0.08]">
+          <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-fg/[0.08]">
             <div
               className="h-full rounded-full bg-accent transition-[width] duration-700 ease-out"
               style={{
@@ -142,7 +142,7 @@ export default function Badges() {
                             ? b.gold
                               ? 'rgba(224,179,65,0.12)'
                               : 'rgba(232,32,58,0.08)'
-                            : 'var(--color-card)',
+                            : 'rgb(var(--color-card))',
                           border: isUnlocked
                             ? b.gold
                               ? '1px solid rgba(224,179,65,0.4)'

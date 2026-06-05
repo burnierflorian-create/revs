@@ -123,7 +123,7 @@ export default function MyBrands() {
                 <div
                   className="h-14 w-14 flex-none overflow-hidden rounded-xl"
                   style={{
-                    background: 'rgba(255,255,255,0.04)',
+                    background: 'rgb(var(--color-fg) / 0.04)',
                     border: '1px solid var(--color-border)',
                   }}
                 >

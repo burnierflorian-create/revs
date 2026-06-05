@@ -566,7 +566,7 @@ function SelectCarousel({
               background:
                 i === idx
                   ? RARITY_COLOR[currentRarity]
-                  : 'rgba(255,255,255,0.18)',
+                  : 'rgb(var(--color-fg) / 0.18)',
               boxShadow:
                 i === idx ? `0 0 10px ${RARITY_COLOR[currentRarity]}` : undefined,
             }}
@@ -580,7 +580,7 @@ function SelectCarousel({
           className="mx-auto mt-4 max-w-[320px] rounded-2xl px-4 py-3"
           style={{
             background:
-              `linear-gradient(135deg, ${RARITY_COLOR[currentRarity]}1A 0%, rgba(20,20,20,0.6) 100%)`,
+              `linear-gradient(135deg, ${RARITY_COLOR[currentRarity]}1A 0%, rgb(var(--color-card) / 0.6) 100%)`,
             border: `1px solid ${RARITY_COLOR[currentRarity]}55`,
           }}
         >
@@ -591,7 +591,7 @@ function SelectCarousel({
             {RARITY_LABEL[currentRarity]}
           </p>
           <p
-            className="mt-1 text-center font-display font-extrabold tracking-tighter text-white"
+            className="mt-1 text-center font-display font-extrabold tracking-tighter text-fg"
             style={{ fontSize: '18px', lineHeight: 1.1 }}
           >
             {current.brand}
@@ -607,7 +607,7 @@ function SelectCarousel({
             <div>
               <p className="text-[8px] uppercase tracking-widest text-fg2">Multi</p>
               <p
-                className="font-display font-extrabold text-white"
+                className="font-display font-extrabold text-fg"
                 style={{ fontSize: '15px' }}
               >
                 ×{RARITY_MULT[currentRarity]}
@@ -633,7 +633,7 @@ function SelectCarousel({
         style={{
           paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))',
           background:
-            'linear-gradient(to top, rgba(10,10,10,0.96) 60%, rgba(10,10,10,0) 100%)',
+            'linear-gradient(to top, rgb(var(--color-bg) / 0.96) 60%, rgb(var(--color-bg) / 0) 100%)',
         }}
       >
         <button
@@ -663,10 +663,10 @@ function BigCard({ spot, active }: { spot: Spot; active: boolean }) {
     <div
       className="relative h-full w-full overflow-hidden rounded-3xl"
       style={{
-        background: '#0d0d0d',
+        background: 'rgb(var(--color-card))',
         border: `2px solid ${RARITY_COLOR[rarity]}`,
         boxShadow: active
-          ? `0 22px 50px ${RARITY_COLOR[rarity]}66, 0 0 0 1px ${RARITY_COLOR[rarity]}55, inset 0 0 0 1px rgba(255,255,255,0.04)`
+          ? `0 22px 50px ${RARITY_COLOR[rarity]}66, 0 0 0 1px ${RARITY_COLOR[rarity]}55, inset 0 0 0 1px rgb(var(--color-fg) / 0.04)`
           : '0 12px 26px rgba(0,0,0,0.5)',
         animation: active ? 'race-card-pop 360ms var(--ease-spring)' : undefined,
       }}
@@ -693,7 +693,7 @@ function BigCard({ spot, active }: { spot: Spot; active: boolean }) {
         }}
       >
         <p
-          className="uppercase tracking-widest text-white/65"
+          className="uppercase tracking-widest text-fg/65"
           style={{ fontSize: '10px', letterSpacing: '0.16em' }}
         >
           {spot.brand}
@@ -768,7 +768,7 @@ function ReadyPhase({
             animation: 'race-pop 420ms var(--ease-spring) both',
           }}
         >
-          <p className="text-[10px] uppercase tracking-widest text-white/70">
+          <p className="text-[10px] uppercase tracking-widest text-fg/70">
             Enjeu de la course
           </p>
           <p
@@ -821,7 +821,7 @@ function ReadyPhase({
         style={{
           paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))',
           background:
-            'linear-gradient(to top, rgba(10,10,10,0.96) 60%, rgba(10,10,10,0) 100%)',
+            'linear-gradient(to top, rgb(var(--color-bg) / 0.96) 60%, rgb(var(--color-bg) / 0) 100%)',
         }}
       >
         <button
@@ -876,8 +876,8 @@ function Fighter({
         className="overflow-hidden rounded-2xl"
         style={{
           border: `1.5px solid ${RARITY_COLOR[rarity]}`,
-          boxShadow: `0 14px 32px ${RARITY_COLOR[rarity]}66, inset 0 0 0 1px rgba(255,255,255,0.04)`,
-          background: '#0d0d0d',
+          boxShadow: `0 14px 32px ${RARITY_COLOR[rarity]}66, inset 0 0 0 1px rgb(var(--color-fg) / 0.04)`,
+          background: 'rgb(var(--color-card))',
           transform: `perspective(900px) ${tilt}`,
         }}
       >
@@ -902,14 +902,14 @@ function Fighter({
             {title}
           </p>
           <p
-            className="mt-0.5 truncate font-display font-extrabold tracking-tight text-white"
+            className="mt-0.5 truncate font-display font-extrabold tracking-tight text-fg"
             style={{ fontSize: '12px' }}
           >
             {model}
           </p>
           <div className="mt-1.5 flex items-baseline justify-between">
             <span className="text-[10px] text-fg2">
-              <span className="text-white/85">{hp} ch</span>
+              <span className="text-fg/85">{hp} ch</span>
             </span>
             <span
               className="font-extrabold"
@@ -940,7 +940,7 @@ function PhotoFallback({ brand, color }: { brand: string; color: string }) {
     <div
       className="absolute inset-0 flex flex-col items-center justify-center"
       style={{
-        background: `radial-gradient(circle at 50% 100%, ${color}33 0%, #050505 70%)`,
+        background: `radial-gradient(circle at 50% 100%, ${color}33 0%, rgb(var(--color-card)) 70%)`,
       }}
     >
       <span
@@ -950,7 +950,7 @@ function PhotoFallback({ brand, color }: { brand: string; color: string }) {
         {initials || '??'}
       </span>
       <span
-        className="mt-0.5 text-[8.5px] uppercase tracking-widest text-white/55"
+        className="mt-0.5 text-[8.5px] uppercase tracking-widest text-fg/55"
       >
         {brand}
       </span>
@@ -1781,7 +1781,7 @@ function ResultPhase({
         >
           <p className="text-[12px] text-fg2">Lot de consolation</p>
           <p
-            className="mt-1 flex items-center justify-center gap-1.5 font-extrabold text-white"
+            className="mt-1 flex items-center justify-center gap-1.5 font-extrabold text-fg"
             style={{ fontSize: '20px' }}
           >
             <Zap className="h-4 w-4 text-accent" fill="currentColor" />
@@ -1795,12 +1795,12 @@ function ResultPhase({
         style={{
           paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))',
           background:
-            'linear-gradient(to top, rgba(10,10,10,0.96) 60%, rgba(10,10,10,0) 100%)',
+            'linear-gradient(to top, rgb(var(--color-bg) / 0.96) 60%, rgb(var(--color-bg) / 0) 100%)',
         }}
       >
         <button
           onClick={onHome}
-          className="tappable rounded-full bg-white/[0.07] px-5 py-4 text-sm font-extrabold uppercase tracking-wider text-fg/80"
+          className="tappable rounded-full bg-fg/[0.07] px-5 py-4 text-sm font-extrabold uppercase tracking-wider text-fg/80"
           style={{ border: '1px solid var(--color-border)' }}
         >
           Accueil
@@ -1836,7 +1836,7 @@ function LootBoxReveal({ amount, label }: { amount: number; label: string }) {
       className="mx-4 mt-5 flex flex-col items-center rounded-2xl py-5"
       style={{
         background:
-          'radial-gradient(circle at 50% 50%, rgba(232,32,58,0.12) 0%, rgba(20,20,20,0.85) 70%)',
+          'radial-gradient(circle at 50% 50%, rgba(232,32,58,0.12) 0%, rgb(var(--color-card) / 0.85) 70%)',
         border: '1px solid rgba(232,32,58,0.30)',
         boxShadow: '0 14px 40px rgba(232,32,58,0.18)',
       }}
@@ -1913,7 +1913,7 @@ function ScoreCard({
     <div
       className="rounded-2xl p-3"
       style={{
-        background: '#0d0d0d',
+        background: 'rgb(var(--color-card))',
         border: winner
           ? `2px solid ${RARITY_COLOR[rarity]}`
           : '1px solid var(--color-border)',
@@ -1935,13 +1935,13 @@ function ScoreCard({
         {label}
       </p>
       <p
-        className="mt-0.5 truncate font-display font-extrabold tracking-tight text-white"
+        className="mt-0.5 truncate font-display font-extrabold tracking-tight text-fg"
         style={{ fontSize: '12px' }}
       >
         {brand !== label ? `${brand} ${model}` : model}
       </p>
       <p
-        className="mt-2 font-display font-extrabold tracking-tighter text-white"
+        className="mt-2 font-display font-extrabold tracking-tighter text-fg"
         style={{ fontSize: '22px' }}
       >
         {score}

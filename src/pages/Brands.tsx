@@ -50,7 +50,7 @@ export default function Brands({ embedded = false }: { embedded?: boolean }) {
                   <div
                     className="flex aspect-square w-full items-center justify-center overflow-hidden rounded-2xl shadow-soft"
                     style={{
-                      backgroundColor: b.cardBg ?? 'var(--color-card)',
+                      backgroundColor: b.cardBg ?? 'rgb(var(--color-card))',
                       border: b.cardBorder
                         ? `1px solid ${b.cardBorder}`
                         : '1px solid var(--color-border)',

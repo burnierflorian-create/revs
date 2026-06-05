@@ -485,8 +485,8 @@ export default function SpotDetail() {
                         boxShadow: '0 8px 22px rgba(224,179,65,0.55)',
                       }
                     : {
-                        background: 'var(--color-accent)',
-                        color: 'var(--color-fg)',
+                        background: 'rgb(var(--color-accent))',
+                        color: 'rgb(var(--color-fg))',
                         boxShadow: '0 6px 18px rgba(232,32,58,0.45)',
                       }
                 }
@@ -560,7 +560,7 @@ export default function SpotDetail() {
                       </div>
                     ))}
                   </dl>
-                  <p className="border-t border-white/5 pt-3 text-fg/70">
+                  <p className="border-t border-fg/5 pt-3 text-fg/70">
                     {carInfo.history}
                   </p>
                 </div>
@@ -584,7 +584,7 @@ export default function SpotDetail() {
           style={{
             width: '100%',
             height: '180px',
-            backgroundColor: 'var(--color-card)',
+            backgroundColor: 'rgb(var(--color-card))',
             border: '1px solid var(--color-border)',
           }}
         />
@@ -596,7 +596,7 @@ export default function SpotDetail() {
         >
           <div
             className="flex h-12 w-12 flex-none items-center justify-center overflow-hidden rounded-full bg-accent text-lg font-extrabold tracking-tighter text-fg"
-            style={{ boxShadow: '0 0 0 2px rgba(255,255,255,0.06)' }}
+            style={{ boxShadow: '0 0 0 2px rgb(var(--color-fg) / 0.06)' }}
           >
             {owner?.avatar ? (
               <img

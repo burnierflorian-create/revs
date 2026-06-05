@@ -133,7 +133,7 @@ export default function Meets() {
           Array.from({ length: 3 }).map((_, i) => (
             <div
               key={i}
-              className="space-y-3 rounded-2xl border border-white/5 bg-card p-4"
+              className="space-y-3 rounded-2xl border border-fg/5 bg-card p-4"
             >
               <Skeleton className="h-4 w-20 rounded-full" />
               <Skeleton className="h-5 w-2/3 rounded" />
@@ -142,7 +142,7 @@ export default function Meets() {
             </div>
           ))
         ) : events.length === 0 ? (
-          <div className="overflow-hidden rounded-2xl border border-white/5 bg-card">
+          <div className="overflow-hidden rounded-2xl border border-fg/5 bg-card">
             <div className="relative h-36 w-full">
               {MINI_MAP_URL ? (
                 <img
