@@ -106,19 +106,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     auth: { persistSession: false },
   })
 
-  // ─── action=challenges → reseed the weekly pool. Runs Mon 00:00 UTC.
-  // Safe to call any time (idempotent within the same week).
-  if (req.query.action === 'challenges') {
-    try {
-      const { data, error } = await admin.rpc('activate_weekly_challenges')
-      if (error) throw new Error(error.message)
-      res.status(200).json({ activated: Array.isArray(data) ? data.length : 0 })
-    } catch (e) {
-      console.error('[cron-notify:challenges]', e)
-      res.status(500).json({ error: 'challenge rotation failed' })
-    }
-    return
-  }
+  // ─── action=challenges removed 2026-06-05: the global weekly rotation
+  // (activate_weekly_challenges) is retired. Challenges are now assigned
+  // per-user, adaptively, by get_my_weekly_challenges / the spots trigger
+  // (migrations 0042/0043) — there is no scheduled rotation anymore.
 
   // ─── action=stats → refresh the global stats materialized view.
   // Cheap (a few seconds). Runs hourly.
