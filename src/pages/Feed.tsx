@@ -805,11 +805,11 @@ export default function Feed() {
                       )}
                       {catColor && (
                         <span
-                          className="rounded-full px-2 py-0.5 text-[8.5px] font-black uppercase tracking-widest text-black"
+                          className="rounded-md px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-black"
                           style={{
                             background:
                               CAT_GRADIENT[spot.category] ?? catColor,
-                            letterSpacing: '0.14em',
+                            letterSpacing: '0.06em',
                           }}
                         >
                           {categoryLabel(spot.category).toUpperCase()}

@@ -162,6 +162,19 @@ export default function MainLayout() {
         />
       )}
 
+      {/* Bottom fade — softens scroll content (esp. the edge-to-edge feed
+          photos) into the page background right above the tab bar instead
+          of cutting off abruptly. Theme-aware via from-bg (near-black in
+          dark, alabaster in light); non-interactive. */}
+      <div
+        aria-hidden
+        className="pointer-events-none fixed inset-x-0 z-30 bg-gradient-to-t from-bg to-transparent"
+        style={{
+          bottom: 'calc(5rem + env(safe-area-inset-bottom))',
+          height: '5rem',
+        }}
+      />
+
       <nav className="app-nav glass fixed bottom-0 left-0 right-0 z-40">
         <div className="grid grid-cols-5 items-end h-20 max-w-md mx-auto px-1">
           <NavLink to="/map" className={tabClass}>

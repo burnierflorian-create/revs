@@ -147,7 +147,8 @@ export default function LikeButton({
           />
         )}
         <Heart
-          className={`relative h-7 w-7 transition-colors ${
+          strokeWidth={1.75}
+          className={`relative h-6 w-6 transition-colors ${
             bump ? 'heart-pop' : ''
           } ${liked ? 'fill-accent text-accent' : 'text-fg2'}`}
         />
