@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Settings, Sun, CloudRain, ChevronRight, Target } from 'lucide-react'
+import { Settings, Sun, CloudRain, ChevronRight } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { setPendingPhoto } from '../lib/pendingPhoto'
 import { xpLevel, XP_LADDER } from '../lib/xp'
 import { GP_2026 } from '../lib/f1'
 import { Skeleton } from '../components/Skeleton'
@@ -182,7 +183,6 @@ export default function Home() {
         title={title}
         challenges={challenges}
         onSettings={() => navigate('/settings')}
-        onScan={() => navigate('/new-spot')}
         onChallenges={() => navigate('/challenges')}
       />
 
@@ -255,7 +255,6 @@ function CockpitWidget({
   title,
   challenges,
   onSettings,
-  onScan,
   onChallenges,
 }: {
   name: string
@@ -263,7 +262,6 @@ function CockpitWidget({
   title: string | null
   challenges: Challenge[]
   onSettings: () => void
-  onScan: () => void
   onChallenges: () => void
 }) {
   return (
@@ -324,8 +322,8 @@ function CockpitWidget({
       {/* — Zone B · RPM CHALLENGE GAUGES — */}
       <RpmGauges challenges={challenges} onTap={onChallenges} />
 
-      {/* — Zone C · SCAN ACTION — */}
-      <ScanAction onActivate={onScan} />
+      {/* — Zone C · SPOTTER (native camera) — */}
+      <SpotterAction />
     </section>
   )
 }
@@ -363,12 +361,12 @@ const FORCED_ARCS: {
 }[] = [
   {
     label: 'Marathon du week-end',
-    emoji: '🏃',
+    emoji: '🏎️',
     match: (t) => t.includes('marathon') || t.includes('week'),
   },
   {
     label: 'Youngtimer Collector',
-    emoji: '🕰️',
+    emoji: '🏁',
     match: (t, _b, cat) =>
       t.includes('youngtimer') ||
       cat.includes('youngtimer') ||
@@ -377,7 +375,7 @@ const FORCED_ARCS: {
   },
   {
     label: "Roi de l'Audi",
-    emoji: '🏁',
+    emoji: '🛞',
     match: (t, b) => b.includes('audi') || t.includes('audi'),
   },
 ]
@@ -430,8 +428,16 @@ function RpmGauges({
       emoji: f.emoji,
       pct: c ? Math.min(100, Math.max(0, computeChallengePct(c))) : 0,
       done: c ? c.claimed || c.completed : false,
+      // Real "Actuel / Objectif" counters for the legend.
+      progress: c ? Math.min(c.progress, c.target_value) : 0,
+      target: c ? c.target_value : 0,
     }
   })
+
+  // Central focal readout — cumulative average progress of the 3 arcs.
+  const cumulative = Math.round(
+    slots.reduce((sum, s) => sum + s.pct, 0) / slots.length,
+  )
 
   const trackStroke = 'rgb(var(--color-fg) / 0.08)'
 
@@ -505,35 +511,55 @@ function RpmGauges({
           )
         })}
 
-        {/* Central hub — faint needle anchor. */}
+        {/* Central focal readout — the cumulative % is the gauge's hero
+            figure. text-fg flips white↔charcoal with the theme. */}
         <span
-          aria-hidden
-          className="absolute left-1/2 flex items-center justify-center"
+          className="absolute left-1/2 flex flex-col items-center"
           style={{
             top: `${(GAUGE_CY / 175) * 100}%`,
             transform: 'translate(-50%,-50%)',
           }}
         >
-          <Target className="h-5 w-5 text-fg/20" />
+          <span
+            className="font-display font-extrabold leading-none text-fg"
+            style={{ fontSize: '30px', letterSpacing: '-0.03em' }}
+          >
+            {cumulative}
+            <span className="font-bold text-fg/55" style={{ fontSize: '15px' }}>
+              %
+            </span>
+          </span>
+          <span
+            className="mt-1 font-black uppercase text-fg2"
+            style={{ fontSize: '7px', letterSpacing: '0.22em' }}
+          >
+            Cumulé
+          </span>
         </span>
       </div>
 
-      {/* Forced-label legend — colour dot + verbatim objective name. */}
+      {/* Forced-label legend — auto emoji + verbatim objective + the real
+          "Actuel / Objectif" counter (colour-coded to its arc). */}
       <div className="mt-1 flex w-full flex-col gap-1.5">
         {slots.map((s, i) => (
           <div key={s.label} className="flex items-center gap-2">
-            <span
-              className="h-2 w-2 flex-none rounded-full"
-              style={{
-                background: s.done ? '#22C55E' : palette[i].c,
-                boxShadow: `0 0 6px ${s.done ? 'rgba(34,197,94,0.5)' : palette[i].glow}`,
-              }}
-            />
+            <span aria-hidden style={{ fontSize: '12px' }}>
+              {s.emoji}
+            </span>
             <span
               className="flex-1 truncate font-bold uppercase tracking-wide text-fg/75"
               style={{ fontSize: '10.5px', letterSpacing: '0.04em' }}
             >
               {s.label}
+            </span>
+            <span
+              className="flex-none tabular-nums font-extrabold"
+              style={{
+                fontSize: '11px',
+                color: s.done ? '#22C55E' : palette[i].c,
+              }}
+            >
+              {s.progress} / {s.target}
             </span>
           </div>
         ))}
@@ -542,39 +568,48 @@ function RpmGauges({
   )
 }
 
-// ─────────────────────────────── SCAN ACTION ───────────────────────────────
+// ─────────────────────────────── SPOTTER ───────────────────────────────
 
-/** Centered "LANCER UN SCAN" pill with a half-size holographic scan ring.
- *  Tapping fires a brief ring-pulse before navigating to the capture
- *  flow, so the action feels like arming a scanner. */
-function ScanAction({ onActivate }: { onActivate: () => void }) {
-  const [scanning, setScanning] = useState(false)
-  function go() {
-    if (scanning) return
-    setScanning(true)
-    window.setTimeout(() => {
-      setScanning(false)
-      onActivate()
-    }, 560)
+/** Centered premium "SPOTTER" CTA with a holographic capture ring. The
+ *  hidden file input carries capture="environment", and we click it
+ *  synchronously inside the tap gesture — that's the iOS requirement for
+ *  the native camera to open instantly. The captured photo is stashed
+ *  (pendingPhoto) and NewSpot consumes it on mount. */
+function SpotterAction() {
+  const navigate = useNavigate()
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  function onCapture(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return // user backed out of the camera
+    setPendingPhoto(file)
+    navigate('/new-spot')
   }
+
   return (
-    <div className="mt-5 flex justify-center">
+    <div className="mt-6 flex justify-center">
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        onChange={onCapture}
+        className="hidden"
+      />
       <button
-        onClick={go}
+        onClick={() => inputRef.current?.click()}
         className="tappable inline-flex items-center gap-3 rounded-full"
         style={{
-          padding: '11px 22px 11px 12px',
+          padding: '12px 28px 12px 14px',
           background:
-            'linear-gradient(135deg, rgba(232,32,58,0.16) 0%, rgba(232,32,58,0.07) 100%)',
-          border: '1px solid rgba(232,32,58,0.35)',
-          boxShadow: scanning
-            ? '0 0 26px rgba(232,32,58,0.45)'
-            : '0 8px 22px rgba(232,32,58,0.18)',
-          transition: 'box-shadow 220ms ease',
+            'linear-gradient(135deg, #FF3B52 0%, #E8203A 58%, #C7172A 100%)',
+          boxShadow:
+            '0 16px 32px rgba(232,32,58,0.42), inset 0 1px 0 rgba(255,255,255,0.28), inset 0 -2px 6px rgba(0,0,0,0.25)',
         }}
-        aria-label="Lancer un scan"
+        aria-label="Spotter une voiture — ouvrir la caméra"
       >
-        {/* Holo scan ring — two ping rings + bullseye, intensifying on tap. */}
+        {/* Holo capture ring — two ambient ping rings + bright core. */}
         <span
           className="relative flex h-7 w-7 flex-none items-center justify-center"
           aria-hidden
@@ -582,29 +617,29 @@ function ScanAction({ onActivate }: { onActivate: () => void }) {
           <span
             className="absolute inset-0 animate-ping rounded-full"
             style={{
-              border: '1.5px solid rgba(232,32,58,0.45)',
-              animationDuration: scanning ? '0.7s' : '2.4s',
+              border: '1.5px solid rgba(255,255,255,0.55)',
+              animationDuration: '2.4s',
             }}
           />
           <span
             className="absolute animate-ping rounded-full"
             style={{
               inset: '5px',
-              border: '1.5px solid rgba(232,32,58,0.30)',
-              animationDuration: scanning ? '0.5s' : '2s',
+              border: '1.5px solid rgba(255,255,255,0.35)',
+              animationDuration: '2s',
               animationDelay: '0.3s',
             }}
           />
           <span
-            className="relative h-2.5 w-2.5 rounded-full bg-accent"
-            style={{ boxShadow: '0 0 10px rgba(232,32,58,0.6)' }}
+            className="relative h-2.5 w-2.5 rounded-full bg-white"
+            style={{ boxShadow: '0 0 10px rgba(255,255,255,0.85)' }}
           />
         </span>
         <span
-          className="font-display font-extrabold uppercase tracking-wider text-accent"
-          style={{ fontSize: '13px', letterSpacing: '0.10em' }}
+          className="font-display font-extrabold uppercase text-white"
+          style={{ fontSize: '14px', letterSpacing: '0.14em' }}
         >
-          {scanning ? 'Scan…' : 'Lancer un scan'}
+          Spotter
         </span>
       </button>
     </div>

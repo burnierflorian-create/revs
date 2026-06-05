@@ -10,7 +10,6 @@ import {
 import { Map as MapIcon, Newspaper, Home, Compass, User } from 'lucide-react'
 import UpdateNotification from '../components/UpdateNotification'
 import InstallBanner from '../components/InstallBanner'
-import SpotFab from '../components/SpotFab'
 import WelcomeCelebration from '../components/WelcomeCelebration'
 import XpFloater from '../components/XpFloater'
 import TabsContainer, { type TabKey } from './TabsContainer'
@@ -152,7 +151,6 @@ export default function MainLayout() {
         )}
       </main>
 
-      <SpotFab />
       <XpFloater />
       <UpdateNotification />
       <InstallBanner />
