@@ -750,10 +750,10 @@ export default function Feed() {
                       src={spot.photo_url}
                       alt={title}
                       loading="lazy"
-                      className="aspect-[4/3] w-full object-cover"
+                      className="aspect-[16/9] w-full object-cover"
                     />
                   ) : (
-                    <div className="flex aspect-[4/3] w-full items-center justify-center bg-fg/5">
+                    <div className="flex aspect-[16/9] w-full items-center justify-center bg-fg/5">
                       <Car className="h-12 w-12 text-fg2/40" />
                     </div>
                   )}
