@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Settings, Sun, CloudRain, ChevronRight } from 'lucide-react'
+import { Sun, CloudRain, ChevronRight } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { setPendingPhoto } from '../lib/pendingPhoto'
 import { xpLevel, XP_LADDER } from '../lib/xp'
@@ -182,7 +182,6 @@ export default function Home() {
         xp={xp}
         title={title}
         challenges={challenges}
-        onSettings={() => navigate('/settings')}
         onChallenges={() => navigate('/challenges')}
       />
 
@@ -254,14 +253,12 @@ function CockpitWidget({
   xp,
   title,
   challenges,
-  onSettings,
   onChallenges,
 }: {
   name: string
   xp: number
   title: string | null
   challenges: Challenge[]
-  onSettings: () => void
   onChallenges: () => void
 }) {
   return (
@@ -294,29 +291,18 @@ function CockpitWidget({
       />
 
       {/* — Zone A · IDENTITY — */}
-      <div className="relative flex items-start justify-between">
-        <div className="min-w-0">
-          <h1
-            className="font-display font-extrabold tracking-tighter text-fg"
-            style={{ fontSize: '30px', lineHeight: 1, letterSpacing: '-0.03em' }}
-          >
-            Bonjour {name}
-          </h1>
-          <div className="mt-2.5">
-            <TitleChip xp={xp} title={title} size="sm" />
-          </div>
-        </div>
-        <button
-          onClick={onSettings}
-          aria-label="Réglages"
-          className="tappable flex h-9 w-9 flex-none items-center justify-center rounded-full text-fg2 transition-colors hover:text-fg"
-          style={{
-            background: 'rgb(var(--color-fg) / 0.06)',
-            border: '1px solid rgb(var(--color-fg) / 0.06)',
-          }}
+      {/* Settings gear intentionally removed here (2026-06-05): account
+          configuration is centralised on the Profile tab's header gear. */}
+      <div className="relative min-w-0">
+        <h1
+          className="font-display font-extrabold tracking-tighter text-fg"
+          style={{ fontSize: '30px', lineHeight: 1, letterSpacing: '-0.03em' }}
         >
-          <Settings className="h-[18px] w-[18px]" />
-        </button>
+          Bonjour {name}
+        </h1>
+        <div className="mt-2.5">
+          <TitleChip xp={xp} title={title} size="sm" />
+        </div>
       </div>
 
       {/* — Zone B · RPM CHALLENGE GAUGES — */}

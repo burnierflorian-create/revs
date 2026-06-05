@@ -8,12 +8,15 @@ import {
   distanceMeters,
   readPhotoMeta,
   resizeImageToJpeg,
+  xpForSpot,
   type BBox,
   type IdentifyResult,
   type PhotoMeta,
+  type Rarity,
   type SpotCategory,
 } from '../lib/spots'
 import { takePendingPhoto } from '../lib/pendingPhoto'
+import { useTheme } from '../lib/theme'
 import { getCurrentPositionSafe } from '../lib/geo'
 import { hapticError, hapticHeartbeat, hapticSuccess } from '../lib/haptic'
 import { maybePromptPush, myPseudo, notifyPush } from '../lib/push'
@@ -527,22 +530,25 @@ export default function NewSpot() {
         }
       })()
 
-      // Fire the "+N XP" floater so the user sees their reward land.
-      // Same formula as the SQL trigger : basePrice × rarityMultiplier.
-      const { floatXp } = await import('../components/XpFloater')
-      const { xpForSpot } = await import('../lib/spots')
-      floatXp(
-        xpForSpot(
-          result.estimated_price,
-          (result.rarity ?? 'standard') as
-            | 'standard'
-            | 'premium'
-            | 'performance'
-            | 'exclusif'
-            | 'supercar'
-            | 'hypercar',
-        ),
-      )
+      // Cosmetic "+N XP" floater — strictly best-effort. The spot is
+      // already saved at this point, so a failure here (e.g. a chunk that
+      // fails to resolve, or xpForSpot somehow undefined in a minified
+      // bundle — the original "oe is not a function" crash) must NEVER
+      // abort the publish or block navigation. Rarity falls back to
+      // 'standard' and the floater is simply skipped on any error.
+      try {
+        const { floatXp } = await import('../components/XpFloater')
+        if (typeof xpForSpot === 'function' && typeof floatXp === 'function') {
+          floatXp(
+            xpForSpot(
+              result.estimated_price ?? null,
+              (result.rarity ?? 'standard') as Rarity,
+            ),
+          )
+        }
+      } catch (floaterErr) {
+        console.warn('[spot] xp floater skipped:', floaterErr)
+      }
       navigate('/map', { state: { toast: 'Spot publié ! 🔥' } })
     } catch (err) {
       console.error('[spot] publish aborted:', err)
@@ -855,6 +861,10 @@ export default function NewSpot() {
               >
                 IA · {result.confidence}% de confiance
               </p>
+              {/* Low-confidence warning — a far / obscured shot makes the
+                  model guess unreliable. Surfaced under the card so the
+                  user double-checks the brand/model before publishing. */}
+              {result.confidence < 50 && <LowConfidenceBadge />}
               <span aria-hidden className="card-reveal-flash" />
             </div>
           )}
@@ -1014,6 +1024,32 @@ function Field({
         className="w-full rounded-2xl bg-card px-4 py-3.5 text-fg outline-none focus:border-accent"
         style={{ border: '1px solid var(--color-border)' }}
       />
+    </div>
+  )
+}
+
+/** Shown under the AI preview card when the model's confidence is low
+ *  (< 50%) — a far or obscured shot. Amber alert, theme-aware: muted
+ *  glow on dark, deeper contrasted amber on the alabaster light surface. */
+function LowConfidenceBadge() {
+  const { theme } = useTheme()
+  const light = theme === 'light'
+  return (
+    <div className="flex justify-center">
+      <span
+        className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 font-bold"
+        style={{
+          fontSize: '11px',
+          letterSpacing: '0.01em',
+          background: light ? 'rgba(245,158,11,0.16)' : 'rgba(245,158,11,0.12)',
+          color: light ? '#B45309' : '#FBBF24',
+          border: light
+            ? '1px solid rgba(180,83,9,0.40)'
+            : '1px solid rgba(245,158,11,0.30)',
+        }}
+      >
+        ⚠️ Cible éloignée — Reconnaissance basse
+      </span>
     </div>
   )
 }
