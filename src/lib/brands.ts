@@ -62,9 +62,9 @@ export type Brand = {
 
 export const BRAND_CATEGORIES: { key: BrandCategory; label: string }[] = [
   { key: 'hypercars', label: 'Hypercars' },
-  { key: 'supercars', label: 'Supercars' },
-  { key: 'premium', label: 'Premium & GT' },
-  { key: 'sport', label: 'Sport' },
+  { key: 'supercars', label: 'Supercars & Prestige' },
+  { key: 'premium', label: 'Premium Allemand' },
+  { key: 'sport', label: 'Sport & GT' },
   { key: 'jdm', label: 'JDM' },
   { key: 'american', label: 'Américaines' },
   { key: 'tuners', label: 'Préparateurs' },
@@ -141,17 +141,17 @@ export const BRANDS: Brand[] = [
     logos: [`${WM}/commons/4/44/BMW.svg`] },
   { slug: 'audi',         name: 'Audi',          category: 'premium',   type: 'brand', domain: 'audi.com',            color: '#BB0A30', match: ['audi'],
     logos: [`${WM}/commons/9/92/Audi-Logo_2016.svg`] },
-  { slug: 'lexus',        name: 'Lexus',         category: 'premium',   type: 'brand', domain: 'lexus.com',           color: '#1A1A1A', match: ['lexus'],
+  { slug: 'lexus',        name: 'Lexus',         category: 'sport',   type: 'brand', domain: 'lexus.com',           color: '#1A1A1A', match: ['lexus'],
     logos: [`${CL}/lexus-logo.png`], invertOnDark: true },
-  { slug: 'maserati',     name: 'Maserati',      category: 'premium',   type: 'brand', domain: 'maserati.com',        color: '#003B6F', match: ['maserati'],
+  { slug: 'maserati',     name: 'Maserati',      category: 'supercars',   type: 'brand', domain: 'maserati.com',        color: '#003B6F', match: ['maserati'],
     logos: [`${CL}/maserati-logo.png`], cardBg: '#0d1b2a' },
-  { slug: 'alfa-romeo',   name: 'Alfa Romeo',    category: 'premium',   type: 'brand', domain: 'alfaromeo.com',       color: '#B71234', match: ['alfa'],
+  { slug: 'alfa-romeo',   name: 'Alfa Romeo',    category: 'sport',   type: 'brand', domain: 'alfaromeo.com',       color: '#B71234', match: ['alfa'],
     logos: [`${CL}/alfa-romeo-logo.png`] },
-  { slug: 'bentley',      name: 'Bentley',       category: 'premium',   type: 'brand', domain: 'bentleymotors.com',   color: '#003E25', match: ['bentley'],
+  { slug: 'bentley',      name: 'Bentley',       category: 'supercars',   type: 'brand', domain: 'bentleymotors.com',   color: '#003E25', match: ['bentley'],
     logos: [`${CL}/bentley-logo.png`], cardBg: '#2a2a2a', logoScale: 1.2, logoFilter: 'brightness(1.5)' },
-  { slug: 'rolls-royce',  name: 'Rolls-Royce',   category: 'premium',   type: 'brand', domain: 'rolls-roycemotorcars.com', color: '#4B0E1A', match: ['rolls'],
+  { slug: 'rolls-royce',  name: 'Rolls-Royce',   category: 'supercars',   type: 'brand', domain: 'rolls-roycemotorcars.com', color: '#4B0E1A', match: ['rolls'],
     logos: [svgDataUrl(ROLLS_SVG)], cardBg: '#1e1e1e', cardBorder: '#A4895F66' },
-  { slug: 'range-rover',  name: 'Range Rover',   category: 'premium',   type: 'brand', domain: 'landrover.com',       color: '#00563F', match: ['range rover', 'land rover'],
+  { slug: 'range-rover',  name: 'Range Rover',   category: 'supercars',   type: 'brand', domain: 'landrover.com',       color: '#00563F', match: ['range rover', 'land rover'],
     logos: [svgDataUrl(RANGE_ROVER_SVG)], cardBg: '#1a3a1a' },
 
   // JDM
@@ -239,11 +239,11 @@ export function brandTagline(b: Brand): string {
     case 'hypercars':
       return 'Hypercar'
     case 'supercars':
-      return 'Supercar'
+      return 'Supercar & Prestige'
     case 'premium':
-      return 'Premium & GT'
+      return 'Premium Allemand'
     case 'sport':
-      return 'Sport'
+      return 'Sport & GT'
     case 'jdm':
       return 'JDM'
     case 'american':

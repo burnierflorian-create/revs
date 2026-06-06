@@ -117,7 +117,7 @@ export default function Games() {
                 JEUX REVS
               </h1>
               <p className="mt-1.5 text-[13px] text-fg/80">
-                Affronte d'autres spotters
+                Affronte d'autres passionnés
               </p>
               {hero?.brand && hero?.model && (
                 <p

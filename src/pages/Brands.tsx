@@ -25,14 +25,17 @@ export default function Brands({ embedded = false }: { embedded?: boolean }) {
   //  - Below the plate, the brand name + optional "PRÉPARATEUR" chip.
   //  - `brand.cardBg` overrides the default near-black surface for
   //    marques whose logo would otherwise vanish on dark.
+  // Logos float free on the page background (no card plates anymore):
+  // every mark is rendered monochrome (white on dark / charcoal on light)
+  // so the catalogue reads as one clean, airy 3-column grid.
   const grid = (
-    <div className="space-y-8 px-4 pb-8">
+    <div className="space-y-10 px-4 pb-8">
       {BRAND_CATEGORIES.map((cat) => {
         const list = byCat.get(cat.key) ?? []
         if (list.length === 0) return null
         return (
           <section key={cat.key}>
-            <h2 className="mb-3 flex items-center justify-between px-1">
+            <h2 className="mb-5 flex items-center justify-between px-1">
               <span className="font-display text-lg font-extrabold tracking-tighter text-fg">
                 {cat.label}
               </span>
@@ -40,25 +43,15 @@ export default function Brands({ embedded = false }: { embedded?: boolean }) {
                 {list.length}
               </span>
             </h2>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-3 gap-x-4 gap-y-8">
               {list.map((b) => (
                 <button
                   key={b.slug}
                   onClick={() => navigate(`/brand/${b.slug}`)}
-                  className="tappable group flex flex-col gap-2 text-center"
+                  className="tappable group flex flex-col items-center gap-2.5"
                 >
-                  <div
-                    className="flex aspect-square w-full items-center justify-center overflow-hidden rounded-2xl shadow-soft"
-                    style={{
-                      backgroundColor: b.cardBg ?? 'rgb(var(--color-card))',
-                      border: b.cardBorder
-                        ? `1px solid ${b.cardBorder}`
-                        : '1px solid var(--color-border)',
-                    }}
-                  >
-                    <BrandLogo brand={b} size={88} />
-                  </div>
-                  <span className="line-clamp-2 px-0.5 text-xs font-semibold leading-tight text-fg">
+                  <BrandLogo brand={b} size={72} mono />
+                  <span className="line-clamp-1 text-center text-xs font-light tracking-wide text-fg2">
                     {b.name}
                   </span>
                 </button>

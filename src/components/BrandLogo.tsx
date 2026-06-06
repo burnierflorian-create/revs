@@ -27,10 +27,16 @@ export default function BrandLogo({
   brand,
   size = 64,
   className = '',
+  mono = false,
 }: {
   brand: Brand
   size?: number
   className?: string
+  // When true, render the logo as a single theme-aware silhouette
+  // (white on dark, charcoal on light) via the .brand-logo-mono class —
+  // overrides the per-brand colour/invert filters. Used by the Explorer
+  // grid so every mark reads cleanly on the OLED background.
+  mono?: boolean
 }) {
   const sources = useMemo(() => logoCandidates(brand), [brand])
   const [cursor, setCursor] = useState(0)
@@ -66,11 +72,14 @@ export default function BrandLogo({
         alt={brand.name}
         loading="lazy"
         onError={() => setCursor((c) => c + 1)}
+        className={mono ? 'brand-logo-mono' : undefined}
         style={{
           width: imgPx,
           height: imgPx,
           objectFit: 'contain',
-          filter: filter || undefined,
+          // In mono mode the CSS class owns the filter (theme-aware), so
+          // we skip the per-brand inline filter entirely.
+          filter: mono ? undefined : filter || undefined,
         }}
       />
     </div>

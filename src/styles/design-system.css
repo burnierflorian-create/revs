@@ -589,6 +589,17 @@ html.light .glass {
   contain-intrinsic-size: auto 620px;
 }
 
+/* Monochrome brand logo for the Explorer grid — collapses any coloured
+   or dark mark to a single high-contrast silhouette so every logo reads
+   on the OLED background (kills the dark-on-dark problem). Theme-aware:
+   pure white at night, charcoal on the alabaster light surface. */
+.brand-logo-mono {
+  filter: brightness(0) invert(1);
+}
+html.light .brand-logo-mono {
+  filter: brightness(0);
+}
+
 /* ─────────────────────── Spot identification reveal ───────────────────────
    Used at step 3 of NewSpot when Claude successfully identifies a
    car. The result chip pops out of the camera-roll-style perspective

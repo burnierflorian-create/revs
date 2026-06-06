@@ -43,7 +43,7 @@ export default function Home() {
   }, [])
 
   // Live community stats — refresh every 60s while on the home tab so
-  // the "spotters en ligne" micro-stat stays warm.
+  // the "passionnés en ligne" micro-stat stays warm.
   useEffect(() => {
     let active = true
     const refresh = async () => {
@@ -161,7 +161,7 @@ export default function Home() {
             <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
           </span>
           <span className="tabular-nums">{community?.online_now ?? 0}</span>
-          <span className="text-fg/45">spotters en ligne</span>
+          <span className="text-fg/45">passionnés en ligne</span>
         </span>
         <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-fg/70">
           <span aria-hidden>🎯</span>

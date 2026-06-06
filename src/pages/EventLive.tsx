@@ -87,7 +87,7 @@ export default function EventLive() {
           <StatCard
             icon={<Users className="h-4 w-4" />}
             value={stats.participant_count}
-            label="Spotters"
+            label="Passionnés"
           />
           <StatCard
             icon={<Tag className="h-4 w-4" />}
