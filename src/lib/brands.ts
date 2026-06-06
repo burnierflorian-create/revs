@@ -105,7 +105,7 @@ export function wordmarkDataUrl(name: string): string {
 }
 
 export const BRANDS: Brand[] = [
-  // Hypercars (strict — only true ultra-low-volume marques)
+  // Hypercars — ultra-low-volume marques
   { slug: 'bugatti',      name: 'Bugatti',       category: 'hypercars', type: 'brand', domain: 'bugatti.com',         color: '#002F6C', match: ['bugatti'],
     logos: [`${CL}/bugatti-logo.png`], cardBg: '#1a1a4e' },
   { slug: 'pagani',       name: 'Pagani',        category: 'hypercars', type: 'brand', domain: 'pagani.com',          color: '#1D4E8A', match: ['pagani'],
@@ -115,8 +115,7 @@ export const BRANDS: Brand[] = [
   { slug: 'rimac',        name: 'Rimac',         category: 'hypercars', type: 'brand', domain: 'rimac-automobili.com',color: '#E60000', match: ['rimac'],
     logos: [`${CL}/rimac-logo.png`] },
 
-  // Supercars — McLaren sits here (most-models case ; Speedtail/Senna
-  // Ultimate-class are exceptions but brand-level taxonomy can't split)
+  // Supercars & Prestige
   { slug: 'ferrari',      name: 'Ferrari',       category: 'supercars', type: 'brand', domain: 'ferrari.com',         color: '#DC0000', match: ['ferrari'],
     logos: [`${CL}/ferrari-logo.png`] },
   { slug: 'lamborghini',  name: 'Lamborghini',   category: 'supercars', type: 'brand', domain: 'lamborghini.com',     color: '#B8860B', match: ['lamborghini', 'lambo'],
@@ -129,30 +128,34 @@ export const BRANDS: Brand[] = [
     logos: [`${CL}/porsche-logo.png`] },
   { slug: 'lotus',        name: 'Lotus',         category: 'supercars', type: 'brand', domain: 'lotuscars.com',       color: '#006633', match: ['lotus'],
     logos: [`${CL}/lotus-logo.png`] },
-
-  // Premium & GT — luxury daily drivers, big sedans, GTs and grand
-  // SUVs from historically prestige marques. Maserati/Alfa moved here
-  // from hypercars (they belong with luxury more than with ultra-low-
-  // volume hypercars) ; Bentley/Rolls/Range Rover folded in (former
-  // 'british' category dropped).
-  { slug: 'mercedes-benz',name: 'Mercedes-Benz', category: 'premium',   type: 'brand', domain: 'mercedes-benz.com',   color: '#007681', match: ['mercedes', 'merc', 'amg'],
-    logos: [`${WM}/commons/9/90/Mercedes-Logo.svg`] },
-  { slug: 'bmw',          name: 'BMW',           category: 'premium',   type: 'brand', domain: 'bmw.com',             color: '#1C69D4', match: ['bmw'],
-    logos: [`${WM}/commons/4/44/BMW.svg`] },
-  { slug: 'audi',         name: 'Audi',          category: 'premium',   type: 'brand', domain: 'audi.com',            color: '#BB0A30', match: ['audi'],
-    logos: [`${WM}/commons/9/92/Audi-Logo_2016.svg`] },
-  { slug: 'lexus',        name: 'Lexus',         category: 'sport',   type: 'brand', domain: 'lexus.com',           color: '#1A1A1A', match: ['lexus'],
-    logos: [`${CL}/lexus-logo.png`], invertOnDark: true },
   { slug: 'maserati',     name: 'Maserati',      category: 'supercars',   type: 'brand', domain: 'maserati.com',        color: '#003B6F', match: ['maserati'],
     logos: [`${CL}/maserati-logo.png`], cardBg: '#0d1b2a' },
-  { slug: 'alfa-romeo',   name: 'Alfa Romeo',    category: 'sport',   type: 'brand', domain: 'alfaromeo.com',       color: '#B71234', match: ['alfa'],
-    logos: [`${CL}/alfa-romeo-logo.png`] },
   { slug: 'bentley',      name: 'Bentley',       category: 'supercars',   type: 'brand', domain: 'bentleymotors.com',   color: '#003E25', match: ['bentley'],
     logos: [`${CL}/bentley-logo.png`], cardBg: '#2a2a2a', logoScale: 1.2, logoFilter: 'brightness(1.5)' },
   { slug: 'rolls-royce',  name: 'Rolls-Royce',   category: 'supercars',   type: 'brand', domain: 'rolls-roycemotorcars.com', color: '#4B0E1A', match: ['rolls'],
     logos: [svgDataUrl(ROLLS_SVG)], cardBg: '#1e1e1e', cardBorder: '#A4895F66' },
   { slug: 'range-rover',  name: 'Range Rover',   category: 'supercars',   type: 'brand', domain: 'landrover.com',       color: '#00563F', match: ['range rover', 'land rover'],
     logos: [svgDataUrl(RANGE_ROVER_SVG)], cardBg: '#1a3a1a' },
+
+  // Premium Allemand — the major German trio, isolated
+  { slug: 'mercedes-benz',name: 'Mercedes-Benz', category: 'premium',   type: 'brand', domain: 'mercedes-benz.com',   color: '#007681', match: ['mercedes', 'merc', 'amg'],
+    logos: [`${WM}/commons/9/90/Mercedes-Logo.svg`] },
+  { slug: 'bmw',          name: 'BMW',           category: 'premium',   type: 'brand', domain: 'bmw.com',             color: '#1C69D4', match: ['bmw'],
+    logos: [`${WM}/commons/4/44/BMW.svg`] },
+  { slug: 'audi',         name: 'Audi',          category: 'premium',   type: 'brand', domain: 'audi.com',            color: '#BB0A30', match: ['audi'],
+    logos: [`${WM}/commons/9/92/Audi-Logo_2016.svg`] },
+
+  // Sport & GT
+  { slug: 'alpine',       name: 'Alpine',        category: 'sport',     type: 'brand', domain: 'alpinecars.com',      color: '#0E7CFF', match: ['alpine'],
+    logos: [`${CL}/alpine-logo.png`, `${WM}/commons/4/41/Alpine_logo.svg`] },
+  { slug: 'cupra',        name: 'Cupra',         category: 'sport',     type: 'brand', domain: 'cupraofficial.com',   color: '#B68666', match: ['cupra'],
+    logos: [svgDataUrl(CUPRA_SVG)], cardBg: '#0d0d0d' },
+  { slug: 'hyundai-n',    name: 'Hyundai N',     category: 'sport',     type: 'brand', domain: 'hyundai.com',         color: '#002C5F', match: ['hyundai'],
+    logos: [`${CL}/hyundai-logo.png`, `${WM}/commons/5/5c/Hyundai_Motor_Company_logo.svg`], invertOnDark: true },
+  { slug: 'lexus',        name: 'Lexus',         category: 'sport',   type: 'brand', domain: 'lexus.com',           color: '#1A1A1A', match: ['lexus'],
+    logos: [`${CL}/lexus-logo.png`], invertOnDark: true },
+  { slug: 'alfa-romeo',   name: 'Alfa Romeo',    category: 'sport',   type: 'brand', domain: 'alfaromeo.com',       color: '#B71234', match: ['alfa'],
+    logos: [`${CL}/alfa-romeo-logo.png`] },
 
   // JDM
   { slug: 'toyota',       name: 'Toyota',        category: 'jdm',       type: 'brand', domain: 'toyota.com',          color: '#EB0A1E', match: ['toyota'],
@@ -168,7 +171,7 @@ export const BRANDS: Brand[] = [
   { slug: 'mitsubishi',   name: 'Mitsubishi',    category: 'jdm',       type: 'brand', domain: 'mitsubishi-motors.com',color:'#ED1C24', match: ['mitsubishi'],
     logos: [`${CL}/mitsubishi-logo.png`] },
 
-  // American
+  // Américaines
   { slug: 'chevrolet',    name: 'Chevrolet',     category: 'american',  type: 'brand', domain: 'chevrolet.com',       color: '#FCB424', match: ['chevrolet', 'chevy', 'corvette'],
     logos: [`${CL}/chevrolet-logo.png`, `${WM}/commons/1/14/Chevrolet_logo.svg`] },
   { slug: 'dodge',        name: 'Dodge',         category: 'american',  type: 'brand', domain: 'dodge.com',           color: '#D22630', match: ['dodge'],
@@ -178,9 +181,7 @@ export const BRANDS: Brand[] = [
   { slug: 'shelby',       name: 'Shelby',        category: 'american',  type: 'brand', domain: 'shelby.com',          color: '#003478', match: ['shelby'],
     logos: [svgDataUrl(SHELBY_SVG)], cardBg: '#0a1628' },
 
-  // Tuners — Clearbit / carlogos may not have them; the fallback
-  // chain (carlogos → Clearbit → monogram) handles missing entries.
-  // invertOnDark keeps wordmark logos legible on the dark theme.
+  // Préparateurs
   { slug: 'brabus',       name: 'Brabus',        category: 'tuners',    type: 'tuner', domain: 'brabus.com',          color: '#000000', match: ['brabus'],
     logos: [`${CL}/brabus-logo.png`], invertOnDark: true },
   { slug: 'mansory',      name: 'Mansory',       category: 'tuners',    type: 'tuner', domain: 'mansory.com',         color: '#C9A557', match: ['mansory'],
@@ -189,16 +190,6 @@ export const BRANDS: Brand[] = [
     logos: [`${CL}/ruf-logo.png`], invertOnDark: true },
   { slug: 'abt',          name: 'ABT',           category: 'tuners',    type: 'tuner', domain: 'abt-sportsline.com',  color: '#222222', match: ['abt'],
     logos: [svgDataUrl(ABT_SVG)], cardBg: '#252525' },
-
-  // Sport européen — Alpine sits HERE (constructor sportif français,
-  // pas haut-de-gamme classique). Hyundai N = la division
-  // performance de Hyundai.
-  { slug: 'alpine',       name: 'Alpine',        category: 'sport',     type: 'brand', domain: 'alpinecars.com',      color: '#0E7CFF', match: ['alpine'],
-    logos: [`${CL}/alpine-logo.png`, `${WM}/commons/4/41/Alpine_logo.svg`] },
-  { slug: 'cupra',        name: 'Cupra',         category: 'sport',     type: 'brand', domain: 'cupraofficial.com',   color: '#B68666', match: ['cupra'],
-    logos: [svgDataUrl(CUPRA_SVG)], cardBg: '#0d0d0d' },
-  { slug: 'hyundai-n',    name: 'Hyundai N',     category: 'sport',     type: 'brand', domain: 'hyundai.com',         color: '#002C5F', match: ['hyundai'],
-    logos: [`${CL}/hyundai-logo.png`, `${WM}/commons/5/5c/Hyundai_Motor_Company_logo.svg`], invertOnDark: true },
 ]
 
 const BY_SLUG = new Map(BRANDS.map((b) => [b.slug, b]))
