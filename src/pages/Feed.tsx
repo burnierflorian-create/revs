@@ -13,6 +13,7 @@ import { SkeletonCard } from '../components/Skeleton'
 import CommentsSheet from '../components/CommentsSheet'
 import { hapticTap } from '../lib/haptic'
 import { myPseudo, notifyPush } from '../lib/push'
+import { onNewSpot } from '../lib/feedSync'
 import FeedFiltersModal, {
   DEFAULT_FILTERS,
   filtersActive,
@@ -277,6 +278,25 @@ export default function Feed() {
     profilesRef.current = next
     setProfiles(next)
   }, [])
+
+  // Instant re-render — when a spot is published (NewSpot emits it the
+  // moment the insert is confirmed), unshift it to the very top of the
+  // feed so it's already there when the user switches back to the Fil.
+  // Deduped by id; a later server fetch replaces the optimistic row.
+  useEffect(() => {
+    return onNewSpot((spot) => {
+      poolRef.current = [
+        spot,
+        ...poolRef.current.filter((s) => s.id !== spot.id),
+      ]
+      setSpots((prev) => {
+        const list = prev ?? []
+        if (list.some((s) => s.id === spot.id)) return list
+        return [spot, ...list]
+      })
+      void mergeProfiles([spot])
+    })
+  }, [mergeProfiles])
 
   const getPosition = useCallback(
     () =>
@@ -765,7 +785,7 @@ function FeedCard({
   }
 
   return (
-    <article className="feed-card pb-6">
+    <article className="feed-card pb-8">
       {/* A · SPOTTER */}
       <button
         onClick={() => navigate(`/u/${spot.user_id}`)}
@@ -863,8 +883,9 @@ function FeedCard({
         )}
       </div>
 
-      {/* C · TOOLS ROW — like · comment · (XP far right) */}
-      <div className="mt-3 flex items-center gap-5 px-1">
+      {/* C · TOOLS ROW — like · comment · (XP far right). Bigger icons for
+          a proper Instagram tap-target / visual weight. */}
+      <div className="mt-3.5 flex items-center gap-5 px-1">
         <button
           onClick={() => setLikeState(!liked)}
           aria-label={liked ? 'Retirer le like' : 'Liker'}
@@ -873,7 +894,7 @@ function FeedCard({
         >
           <Heart
             strokeWidth={1.75}
-            className={`h-6 w-6 transition-colors ${liked ? 'fill-accent text-accent' : 'text-fg'}`}
+            className={`h-7 w-7 transition-colors ${liked ? 'fill-accent text-accent' : 'text-fg'}`}
           />
           <span className="text-sm font-semibold text-fg">{likeCount}</span>
         </button>
@@ -882,7 +903,7 @@ function FeedCard({
           aria-label="Commentaires"
           className="tappable flex items-center gap-1.5"
         >
-          <MessageCircle strokeWidth={1.75} className="h-6 w-6 text-fg" />
+          <MessageCircle strokeWidth={1.75} className="h-7 w-7 text-fg" />
           <span className="text-sm font-semibold text-fg">{commentCount}</span>
         </button>
         <span
@@ -907,7 +928,7 @@ function FeedCard({
       >
         <h2
           className="truncate font-display font-extrabold tracking-tight text-fg"
-          style={{ fontSize: '17px', letterSpacing: '-0.01em' }}
+          style={{ fontSize: '18px', letterSpacing: '-0.01em' }}
         >
           {title}
         </h2>

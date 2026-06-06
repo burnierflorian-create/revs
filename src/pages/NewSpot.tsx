@@ -17,6 +17,7 @@ import {
 } from '../lib/spots'
 import { takePendingPhoto } from '../lib/pendingPhoto'
 import { useTheme } from '../lib/theme'
+import { emitNewSpot } from '../lib/feedSync'
 import { getCurrentPositionSafe } from '../lib/geo'
 import { hapticError, hapticHeartbeat, hapticSuccess } from '../lib/haptic'
 import { maybePromptPush, myPseudo, notifyPush } from '../lib/push'
@@ -472,10 +473,15 @@ export default function NewSpot() {
           lng: pos.coords.longitude,
           event_id: liveEventId,
         })
-        .select('id')
+        .select('*')
         .single()
       if (insErr) throw supaError('Publication', insErr)
-      const newSpotId = (inserted as { id: string } | null)?.id ?? null
+      const insertedSpot = (inserted as Spot | null) ?? null
+      const newSpotId = insertedSpot?.id ?? null
+      // Instant feed re-render — hand the full row to the (kept-alive)
+      // Feed so the user's photo is already at the top of the Fil the
+      // moment they switch tabs, no manual refresh.
+      if (insertedSpot) emitNewSpot(insertedSpot)
 
       // After the first successful spot: ask for push permission, then
       // fire two parallel notifications:
