@@ -247,19 +247,52 @@ export default function BrandDetail() {
     return set.size
   }, [spots])
 
-  // Community photos grouped by precise model, biggest model first, so
-  // the gallery reads as a tidy per-model showcase.
-  const spotsByModel = useMemo(() => {
+  // Community photos segmented by real production-volume rarity tier, then
+  // grouped by precise model inside each tier (biggest model first).
+  const tiers = useMemo(() => {
     if (!spots) return null
-    const groups = new Map<string, Spot[]>()
-    for (const s of spots) {
-      if (!s.photo_url) continue
-      const key = (s.model ?? '').trim() || 'Autres modèles'
-      const arr = groups.get(key) ?? []
-      arr.push(s)
-      groups.set(key, arr)
-    }
-    return [...groups.entries()].sort((a, b) => b[1].length - a[1].length)
+    const TIERS: {
+      key: string
+      label: string
+      emoji: string
+      has: (r: string | null | undefined) => boolean
+    }[] = [
+      {
+        key: 'elite',
+        label: 'Exclusif / Hypercar',
+        emoji: '👑',
+        has: (r) => r === 'hypercar' || r === 'exclusif',
+      },
+      { key: 'supercar', label: 'Supercar', emoji: '🔥', has: (r) => r === 'supercar' },
+      {
+        key: 'performance',
+        label: 'Performance',
+        emoji: '⚡',
+        has: (r) => r === 'performance',
+      },
+      {
+        key: 'autres',
+        label: 'Autres modèles',
+        emoji: '🚗',
+        has: (r) => !['hypercar', 'exclusif', 'supercar', 'performance'].includes(r ?? ''),
+      },
+    ]
+    const photos = spots.filter((s) => s.photo_url)
+    return TIERS.map((t) => {
+      const inTier = photos.filter((s) => t.has(s.rarity))
+      const byModel = new Map<string, Spot[]>()
+      for (const s of inTier) {
+        const key = (s.model ?? '').trim() || '—'
+        const arr = byModel.get(key) ?? []
+        arr.push(s)
+        byModel.set(key, arr)
+      }
+      return {
+        ...t,
+        count: inTier.length,
+        models: [...byModel.entries()].sort((a, b) => b[1].length - a[1].length),
+      }
+    }).filter((t) => t.count > 0)
   }, [spots])
 
   if (!brand) {
@@ -440,7 +473,7 @@ export default function BrandDetail() {
                 <Skeleton key={i} className="aspect-square rounded-lg" />
               ))}
             </div>
-          ) : !spotsByModel || spotsByModel.length === 0 ? (
+          ) : !tiers || tiers.length === 0 ? (
             <p
               className="rounded-3xl bg-card p-8 text-center text-sm text-fg2"
               style={{ border: '1px solid var(--color-border)' }}
@@ -450,40 +483,52 @@ export default function BrandDetail() {
               Sois le premier à en spotter une !
             </p>
           ) : (
-            <div className="space-y-6">
-              {spotsByModel.map(([model, list]) => (
-                <div key={model}>
-                  {/* Model divider */}
-                  <div className="mb-2.5 flex items-baseline gap-2 px-0.5">
-                    <h3 className="font-display text-sm font-extrabold tracking-tight text-fg">
-                      {model}
-                    </h3>
+            <div className="space-y-8">
+              {tiers.map((tier) => (
+                <div key={tier.key}>
+                  {/* Rarity tier header */}
+                  <div className="mb-3 flex items-center gap-2">
+                    <span aria-hidden style={{ fontSize: '15px' }}>
+                      {tier.emoji}
+                    </span>
+                    <span className="font-display text-xs font-black uppercase tracking-widest text-fg">
+                      {tier.label}
+                    </span>
                     <span className="text-[11px] font-medium text-fg2">
-                      {list.length}
+                      {tier.count}
                     </span>
                   </div>
-                  <div className="grid grid-cols-3 gap-1.5">
-                    {list.map((s) => (
-                      <button
-                        key={s.id}
-                        onClick={() => navigate(`/spot/${s.id}`)}
-                        className="tappable group relative aspect-square overflow-hidden rounded-xl bg-card"
-                        style={{ border: '1px solid var(--color-border)' }}
-                      >
-                        <img
-                          src={s.photo_url ?? ''}
-                          alt={`${s.brand} ${s.model}`}
-                          loading="lazy"
-                          decoding="async"
-                          className="h-full w-full object-cover transition-transform duration-300 group-active:scale-105"
-                        />
-                        {/* Spotter credit watermark — valorise la communauté */}
-                        <span className="pointer-events-none absolute inset-x-0 bottom-0 flex items-end bg-gradient-to-t from-black/70 to-transparent px-1.5 pb-1 pt-5">
-                          <span className="truncate text-[9px] font-semibold tracking-tight text-white/85">
-                            @{spotterNames[s.user_id] ?? 'Spotter'}
-                          </span>
-                        </span>
-                      </button>
+                  <div className="space-y-5">
+                    {tier.models.map(([model, list]) => (
+                      <div key={model}>
+                        <p className="mb-2 px-0.5 text-[11px] font-bold uppercase tracking-wide text-fg2">
+                          {model}
+                        </p>
+                        <div className="grid grid-cols-3 gap-1.5">
+                          {list.map((s) => (
+                            <button
+                              key={s.id}
+                              onClick={() => navigate(`/spot/${s.id}`)}
+                              className="tappable group relative aspect-square overflow-hidden rounded-xl bg-card"
+                              style={{ border: '1px solid var(--color-border)' }}
+                            >
+                              <img
+                                src={s.photo_url ?? ''}
+                                alt={`${s.brand} ${s.model}`}
+                                loading="lazy"
+                                decoding="async"
+                                className="h-full w-full object-cover transition-transform duration-300 group-active:scale-105"
+                              />
+                              {/* Spotter watermark — valorise la communauté */}
+                              <span className="pointer-events-none absolute inset-x-0 bottom-0 flex items-end bg-gradient-to-t from-black/70 to-transparent px-1.5 pb-1 pt-5">
+                                <span className="truncate text-[9px] font-semibold tracking-tight text-white/85">
+                                  @{spotterNames[s.user_id] ?? 'Spotter'}
+                                </span>
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                     ))}
                   </div>
                 </div>
