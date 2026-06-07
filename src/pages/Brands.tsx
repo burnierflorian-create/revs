@@ -25,9 +25,10 @@ export default function Brands({ embedded = false }: { embedded?: boolean }) {
   //  - Below the plate, the brand name + optional "PRÉPARATEUR" chip.
   //  - `brand.cardBg` overrides the default near-black surface for
   //    marques whose logo would otherwise vanish on dark.
-  // Logos float free on the page background (no card plates anymore):
-  // every mark is rendered monochrome (white on dark / charcoal on light)
-  // so the catalogue reads as one clean, airy 3-column grid.
+  // Each mark sits inside a "carbon wheel-centre" pastille: a jet-black
+  // domed disc with a metallic radial sheen, the real (coloured) emblem
+  // detoured cleanly inside. No generic white plates. Brand name floats
+  // below in a thin label.
   const grid = (
     <div className="space-y-10 px-4 pb-8">
       {BRAND_CATEGORIES.map((cat) => {
@@ -43,14 +44,27 @@ export default function Brands({ embedded = false }: { embedded?: boolean }) {
                 {list.length}
               </span>
             </h2>
-            <div className="grid grid-cols-3 gap-x-4 gap-y-8">
+            <div className="grid grid-cols-3 gap-x-4 gap-y-7">
               {list.map((b) => (
                 <button
                   key={b.slug}
                   onClick={() => navigate(`/brand/${b.slug}`)}
                   className="tappable group flex flex-col items-center gap-2.5"
                 >
-                  <BrandLogo brand={b} size={72} mono />
+                  <div
+                    className="flex items-center justify-center rounded-full transition-transform group-active:scale-95"
+                    style={{
+                      width: 84,
+                      height: 84,
+                      background:
+                        'radial-gradient(circle at 38% 28%, #2c2c30 0%, #161618 46%, #060607 100%)',
+                      border: '1px solid rgba(255,255,255,0.10)',
+                      boxShadow:
+                        '0 10px 24px rgba(0,0,0,0.55), inset 0 1px 1px rgba(255,255,255,0.14), inset 0 -4px 8px rgba(0,0,0,0.6)',
+                    }}
+                  >
+                    <BrandLogo brand={b} size={52} />
+                  </div>
                   <span className="line-clamp-1 text-center text-xs font-light tracking-wide text-fg2">
                     {b.name}
                   </span>

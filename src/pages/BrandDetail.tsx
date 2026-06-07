@@ -53,6 +53,8 @@ export default function BrandDetail() {
   const [totalSpots, setTotalSpots] = useState<number | null>(null)
   const [topSpotter, setTopSpotter] = useState<TopSpotter | null>(null)
   const [news, setNews] = useState<NewsRow[]>([])
+  // user_id → pseudo for the spotter watermark on every community photo.
+  const [spotterNames, setSpotterNames] = useState<Record<string, string>>({})
 
   const matchPatterns = useMemo(() => brand?.match ?? [], [brand])
 
@@ -109,6 +111,26 @@ export default function BrandDetail() {
       const allSpots = (spotsRes.data ?? []) as Spot[]
       setSpots(allSpots)
       setTotalSpots(countRes.count ?? allSpots.length)
+
+      // Pseudos for every spotter in the grid (watermark + community credit).
+      const uids = [...new Set(allSpots.map((s) => s.user_id))]
+      if (uids.length) {
+        supabase
+          .from('profiles')
+          .select('user_id, pseudo')
+          .in('user_id', uids)
+          .then(({ data }) => {
+            if (!active) return
+            const m: Record<string, string> = {}
+            for (const p of (data ?? []) as {
+              user_id: string
+              pseudo: string | null
+            }[]) {
+              m[p.user_id] = (p.pseudo ?? '').trim() || 'Spotter'
+            }
+            setSpotterNames(m)
+          })
+      }
       setFollowerCount(
         typeof followCountRes.data === 'number' ? followCountRes.data : 0,
       )
@@ -223,6 +245,21 @@ export default function BrandDetail() {
       if (m) set.add(m)
     }
     return set.size
+  }, [spots])
+
+  // Community photos grouped by precise model, biggest model first, so
+  // the gallery reads as a tidy per-model showcase.
+  const spotsByModel = useMemo(() => {
+    if (!spots) return null
+    const groups = new Map<string, Spot[]>()
+    for (const s of spots) {
+      if (!s.photo_url) continue
+      const key = (s.model ?? '').trim() || 'Autres modèles'
+      const arr = groups.get(key) ?? []
+      arr.push(s)
+      groups.set(key, arr)
+    }
+    return [...groups.entries()].sort((a, b) => b[1].length - a[1].length)
   }, [spots])
 
   if (!brand) {
@@ -394,7 +431,7 @@ export default function BrandDetail() {
           />
         </section>
 
-        {/* ─────────────────── COMMUNITY SPOTS ─────────────────── */}
+        {/* ─────────────────── COMMUNITY SPOTS (par modèle) ─────────────────── */}
         <section>
           <SectionTitle>Spots de la communauté</SectionTitle>
           {spots === null ? (
@@ -403,7 +440,7 @@ export default function BrandDetail() {
                 <Skeleton key={i} className="aspect-square rounded-lg" />
               ))}
             </div>
-          ) : spots.length === 0 ? (
+          ) : !spotsByModel || spotsByModel.length === 0 ? (
             <p
               className="rounded-3xl bg-card p-8 text-center text-sm text-fg2"
               style={{ border: '1px solid var(--color-border)' }}
@@ -413,28 +450,43 @@ export default function BrandDetail() {
               Sois le premier à en spotter une !
             </p>
           ) : (
-            <div className="grid grid-cols-3 gap-1.5">
-              {spots.map((s) => (
-                <button
-                  key={s.id}
-                  onClick={() => navigate(`/spot/${s.id}`)}
-                  className="tappable group relative aspect-square overflow-hidden rounded-xl bg-card"
-                  style={{ border: '1px solid var(--color-border)' }}
-                >
-                  {s.photo_url ? (
-                    <img
-                      src={s.photo_url}
-                      alt={`${s.brand} ${s.model}`}
-                      loading="lazy"
-                      decoding="async"
-                      className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-                    />
-                  ) : (
-                    <div className="flex h-full w-full items-center justify-center text-xs text-fg2/50">
-                      —
-                    </div>
-                  )}
-                </button>
+            <div className="space-y-6">
+              {spotsByModel.map(([model, list]) => (
+                <div key={model}>
+                  {/* Model divider */}
+                  <div className="mb-2.5 flex items-baseline gap-2 px-0.5">
+                    <h3 className="font-display text-sm font-extrabold tracking-tight text-fg">
+                      {model}
+                    </h3>
+                    <span className="text-[11px] font-medium text-fg2">
+                      {list.length}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {list.map((s) => (
+                      <button
+                        key={s.id}
+                        onClick={() => navigate(`/spot/${s.id}`)}
+                        className="tappable group relative aspect-square overflow-hidden rounded-xl bg-card"
+                        style={{ border: '1px solid var(--color-border)' }}
+                      >
+                        <img
+                          src={s.photo_url ?? ''}
+                          alt={`${s.brand} ${s.model}`}
+                          loading="lazy"
+                          decoding="async"
+                          className="h-full w-full object-cover transition-transform duration-300 group-active:scale-105"
+                        />
+                        {/* Spotter credit watermark — valorise la communauté */}
+                        <span className="pointer-events-none absolute inset-x-0 bottom-0 flex items-end bg-gradient-to-t from-black/70 to-transparent px-1.5 pb-1 pt-5">
+                          <span className="truncate text-[9px] font-semibold tracking-tight text-white/85">
+                            @{spotterNames[s.user_id] ?? 'Spotter'}
+                          </span>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
               ))}
             </div>
           )}

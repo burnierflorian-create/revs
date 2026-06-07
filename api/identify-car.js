@@ -67,13 +67,13 @@ GARDE-FOU ANTI-TRICHE (priorité maximale) :
 Si l'image montre un écran d'ordinateur, de télévision ou de téléphone (lignes de moirage, reflets de pixel, motifs RGB visibles), une miniature de jouet (jante carrée, proportions enfantines, échelle obvious), un dessin, ou n'est PAS une vraie voiture en environnement réel, renvoie strictement :
 {"error":"VIRTUAL_SCREEN_DETECTED"}
 
-ÉCHELLE DE RARETÉ (6 niveaux, segment + positionnement) :
-- "standard"    : voiture de tous les jours (Nissan Juke, Renault Clio, VW Golf).
-- "premium"    : haut de gamme quotidien (Mercedes CLA AMG Line, BMW Série 2, Audi A3).
-- "performance" : sportive pure dérivée d'un modèle civil (Audi TT RS, BMW M2, Porsche 718).
-- "exclusif"   : gros SUV de sport ou grosse berline lourde (Mercedes-AMG GLE 63 S Coupé, Cayenne Coupé, BMW X5 M, RS Q8).
-- "supercar"   : exotique de prestige biplace/2+2 à moteur central ou flagship spécialiste (McLaren 570S, Audi R8 V10, Porsche 911 GT3 RS, Ferrari 488).
-- "hypercar"   : sommet absolu (Bugatti Chiron, Pagani Huayra, Koenigsegg, McLaren P1, AMG GT 63 S E Performance flagship). Souvent < 500 exemplaires.
+ÉCHELLE DE RARETÉ — basée EXCLUSIVEMENT sur le VOLUME DE PRODUCTION MONDIAL réel du modèle. Le prix N'A AUCUNE influence sur la rareté, ne le prends JAMAIS en compte :
+- "standard"    : modèle premium classique de grande série, gros volume (Mercedes CLA, BMW Série 2, Audi A3, VW Golf).
+- "premium"    : haut de gamme quotidien à fort volume, finition supérieure.
+- "performance" : véhicule de grande série issu d'un département sportif officiel (Mercedes-AMG, BMW M, Audi RS, Porsche 718). Sportivité = ADN, mais produit en grande série.
+- "exclusif"   : série limitée mondiale stricte < 500 exemplaires (édition spéciale / collector qui n'est pas une hypercar).
+- "supercar"   : production mondiale TOTALE < 5 000 unités (ex: Ferrari 488 GTB, McLaren 570S, Audi R8 V10, Lamborghini Huracán).
+- "hypercar"   : série ultra-limitée < 500 exemplaires, sommet absolu (Bugatti Chiron, Pagani Huayra, Koenigsegg, McLaren P1).
 
 Si l'image est valide, renvoie strictement ce JSON :
 {
@@ -90,6 +90,7 @@ Si l'image est valide, renvoie strictement ce JSON :
 
 Règles :
 - "specs" : UNE ligne courte (max 50 caractères), format "Configuration / Transmission". Ex: "V8 BiTurbo / Transm. Intégrale", "Moteur Central Arrière / Propulsion", "L6 BiTurbo / Propulsion". PAS de chevaux.
+- RARETÉ = uniquement le volume de production mondial du modèle. JAMAIS le prix, jamais le lieu, jamais le standing perçu.
 - En cas de doute sur la rareté, descends d'un cran (douteux supercar = "performance").
 - Si tu n'identifies pas le modèle exact, donne ta meilleure estimation — JAMAIS "indéterminé" ni "inconnue".
 - Pas d'appel web : appuie-toi sur tes connaissances statiques pour une réponse instantanée.`
@@ -335,26 +336,20 @@ async function refineRarityFromWeb(client, brand, model, year) {
     `cumulé connu (sinon une estimation crédible).\n\n` +
     `Réponds UNIQUEMENT par ce JSON, sans markdown :\n` +
     `{"production": 499, "rarity": "supercar"}\n\n` +
-    `Échelle de rareté à 6 niveaux (positionnement segment + volume) :\n` +
-    `- "standard" : voiture de tous les jours, segment de masse (ex: Nissan Juke, ` +
-    `Renault Clio, VW Golf de base). Volume élevé.\n` +
-    `- "premium" : modèle haut de gamme quotidien, finition supérieure (ex: ` +
-    `Mercedes CLA AMG Line, BMW Série 2, Audi A3). Volume élevé mais positionnement ` +
-    `premium.\n` +
-    `- "performance" : sportive pure, dérivée de la même plateforme qu'un modèle ` +
-    `civil (ex: Audi TT RS, BMW M2, Porsche 718 Cayman). Sportivité = ADN.\n` +
-    `- "exclusif" : SUV de sport ou grosse berline de performance à très ` +
-    `forte présence (ex: Mercedes-AMG GLE 63 S Coupé, Porsche Cayenne Coupé, ` +
-    `BMW X5 M, Audi RS Q8, Bentley Bentayga, Maserati Levante Trofeo). ` +
-    `Carrosserie SUV/grande berline + moteur de sport + 4 places utilisables.\n` +
-    `- "supercar" : voiture de sport exotique à moteur central ou flagship ` +
-    `d'une marque spécialiste, exclusivité radicale (ex: McLaren 570S Spider, ` +
-    `Audi R8 V10, Porsche 911 GT3 RS, Ferrari 488, Lamborghini Huracán). ` +
-    `Biplace ou 2+2, layout typiquement moteur central / propulsion, ` +
-    `moins de 5 000 / an.\n` +
-    `- "hypercar" : sommet absolu — top-flagship moteur central, série très limitée ` +
-    `ou édition one-off (ex: Mercedes-AMG GT 63 S E Performance flagship, Bugatti ` +
-    `Chiron, Pagani Huayra, Koenigsegg, McLaren P1). Souvent < 500 exemplaires.\n\n` +
+    `Échelle de rareté à 6 niveaux — classe UNIQUEMENT selon le VOLUME DE ` +
+    `PRODUCTION MONDIAL réel. Le prix n'entre JAMAIS en compte :\n` +
+    `- "standard" : modèle premium classique de grande série (ex: Mercedes CLA, ` +
+    `BMW Série 2, Audi A3, VW Golf). Volume très élevé.\n` +
+    `- "premium" : haut de gamme quotidien à fort volume, finition supérieure.\n` +
+    `- "performance" : véhicule de grande série issu d'un département sportif ` +
+    `officiel (ex: Mercedes-AMG, BMW M, Audi RS, Porsche 718). Sportif mais ` +
+    `produit en grande série.\n` +
+    `- "exclusif" : série limitée mondiale stricte < 500 exemplaires (édition ` +
+    `spéciale / collector qui n'est pas une hypercar).\n` +
+    `- "supercar" : production mondiale TOTALE < 5 000 unités (ex: Ferrari 488 GTB, ` +
+    `McLaren 570S, Audi R8 V10, Lamborghini Huracán).\n` +
+    `- "hypercar" : série ultra-limitée < 500 exemplaires, sommet absolu (ex: ` +
+    `Bugatti Chiron, Pagani Huayra, Koenigsegg, McLaren P1).\n\n` +
     `Si la production exacte est inconnue, mets production: null mais TOUJOURS un rarity ` +
     `cohérent avec le positionnement du modèle. En cas de doute, descends d'un cran ` +
     `(une supercar douteuse = "performance", pas "supercar"). Aucun texte avant ou ` +
