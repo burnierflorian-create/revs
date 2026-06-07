@@ -15,8 +15,9 @@ import { hapticTap } from '../lib/haptic'
 import { myPseudo, notifyPush } from '../lib/push'
 import { onNewSpot } from '../lib/feedSync'
 import FeedFiltersModal, {
-  DEFAULT_FILTERS,
   filtersActive,
+  loadFeedFilters,
+  saveFeedFilters,
   type FeedFilters,
 } from '../components/FeedFiltersModal'
 import PullIndicator from '../components/PullIndicator'
@@ -191,9 +192,15 @@ export default function Feed() {
   const navigate = useNavigate()
   const [spots, setSpots] = useState<Spot[] | null>(null)
   const [profiles, setProfiles] = useState<Record<string, Prof>>({})
-  const [filters, setFilters] = useState<FeedFilters>(DEFAULT_FILTERS)
+  // Feed-only state — search + filters live entirely here and sort ONLY
+  // the community post list. Filters persisted under their own key
+  // (revs_feed_filters, distinct from the map's), restored on mount, so
+  // nothing here ever touches the Carte.
+  const [feedFilters, setFeedFilters] = useState<FeedFilters>(() =>
+    loadFeedFilters(),
+  )
   const [filtersOpen, setFiltersOpen] = useState(false)
-  const [searchQuery, setSearchQuery] = useState('')
+  const [feedSearchQuery, setFeedSearchQuery] = useState('')
   const [loadingMore, setLoadingMore] = useState(false)
   const [hasMore, setHasMore] = useState(true)
   const [geoMsg, setGeoMsg] = useState<string | null>(null)
@@ -304,7 +311,7 @@ export default function Feed() {
   // Resolve the final filtered+sorted list from the in-memory pool.
   // The pool itself is always "the last 200 spots ordered by created_at
   // desc" — every filter operation works on top of that snapshot to
-  // avoid round-trips when toggling filters.
+  // avoid round-trips when toggling feedFilters.
   const applyFilters = useCallback(
     (pool: Spot[], f: FeedFilters): Spot[] => {
       let out = pool
@@ -387,7 +394,7 @@ export default function Feed() {
 
       // 2. Sort-specific side fetches in parallel.
       const sideFetches: Promise<unknown>[] = []
-      if (filters.sort === 'liked') {
+      if (feedFilters.sort === 'liked') {
         sideFetches.push(
           (async () => {
             const ids = pool.map((s) => s.id)
@@ -404,7 +411,7 @@ export default function Feed() {
           })(),
         )
       }
-      if (filters.sort === 'nearby') {
+      if (feedFilters.sort === 'nearby') {
         sideFetches.push(
           getPosition().then((p) => {
             userPosRef.current = p
@@ -418,13 +425,13 @@ export default function Feed() {
       }
       // City filter needs profiles to resolve villes — resolve them eagerly
       // so the initial filter pass doesn't miss matches.
-      if (filters.city.trim()) {
+      if (feedFilters.city.trim()) {
         sideFetches.push(mergeProfiles(pool))
       }
       if (sideFetches.length) await Promise.all(sideFetches)
       if (!active) return
 
-      const filtered = applyFilters(pool, filters)
+      const filtered = applyFilters(pool, feedFilters)
       const slice = filtered.slice(0, PAGE)
       await mergeProfiles(slice)
       if (!active) return
@@ -435,13 +442,13 @@ export default function Feed() {
     return () => {
       active = false
     }
-  }, [filters, refreshKey, applyFilters, getPosition, mergeProfiles])
+  }, [feedFilters, refreshKey, applyFilters, getPosition, mergeProfiles])
 
   const loadMore = useCallback(async () => {
     if (loadingMore || !hasMore || spots === null) return
     setLoadingMore(true)
     try {
-      const filtered = applyFilters(poolRef.current, filters)
+      const filtered = applyFilters(poolRef.current, feedFilters)
       const shown = spots.length
       const next = filtered.slice(shown, shown + PAGE)
       await mergeProfiles(next)
@@ -450,7 +457,7 @@ export default function Feed() {
     } finally {
       setLoadingMore(false)
     }
-  }, [loadingMore, hasMore, spots, filters, applyFilters, mergeProfiles])
+  }, [loadingMore, hasMore, spots, feedFilters, applyFilters, mergeProfiles])
 
   const loadMoreRef = useRef(loadMore)
   loadMoreRef.current = loadMore
@@ -480,7 +487,7 @@ export default function Feed() {
     )
   }
 
-  const allDefaults = !filtersActive(filters)
+  const allDefaults = !filtersActive(feedFilters)
   if (spots.length === 0 && allDefaults) {
     return <EmptyCarousel onSpot={() => navigate('/new-spot')} />
   }
@@ -518,15 +525,15 @@ export default function Feed() {
           <SearchIcon className="h-4 w-4 flex-none text-fg2" />
           <input
             type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            value={feedSearchQuery}
+            onChange={(e) => setFeedSearchQuery(e.target.value)}
             placeholder="Rechercher dans le fil…"
             style={{ fontSize: '16px' }}
             className="flex-1 bg-transparent font-medium tracking-tight text-fg/80 placeholder:text-fg2 outline-none"
           />
-          {searchQuery && (
+          {feedSearchQuery && (
             <button
-              onClick={() => setSearchQuery('')}
+              onClick={() => setFeedSearchQuery('')}
               aria-label="Effacer"
               className="tappable text-fg2 hover:text-fg"
             >
@@ -563,9 +570,14 @@ export default function Feed() {
 
       <FeedFiltersModal
         open={filtersOpen}
-        initial={filters}
+        initial={feedFilters}
         onClose={() => setFiltersOpen(false)}
-        onApply={setFilters}
+        onApply={(next) => {
+          // Apply + persist to the feed's own key. onClose (fired by the
+          // modal right after onApply) closes the sheet.
+          setFeedFilters(next)
+          saveFeedFilters(next)
+        }}
       />
 
       {geoMsg && (
@@ -599,7 +611,7 @@ export default function Feed() {
       ) : (
         <div>
           {(() => {
-            const needle = searchQuery.trim().toLowerCase()
+            const needle = feedSearchQuery.trim().toLowerCase()
             const filtered = needle
               ? groupSpots(spots).filter(({ primary: s }) => {
                   const p = profiles[s.user_id]
@@ -619,7 +631,7 @@ export default function Feed() {
               return (
                 <p className="px-8 py-12 text-center text-sm text-fg2">
                   Aucune voiture trouvée pour
-                  <span className="text-fg"> « {searchQuery} »</span>.
+                  <span className="text-fg"> « {feedSearchQuery} »</span>.
                 </p>
               )
             }

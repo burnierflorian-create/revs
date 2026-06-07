@@ -25,6 +25,34 @@ export function mapFiltersActive(f: MapFilters): boolean {
   return f.rarity !== 'all' || f.brand !== null || f.cardLevel > 0
 }
 
+// Map-only persistence. A DEDICATED localStorage key (distinct from the
+// Feed's) is what guarantees absolute isolation: applying map filters can
+// never bleed into the Fil and vice-versa.
+const MAP_FILTERS_KEY = 'revs_map_filters'
+
+export function loadMapFilters(): MapFilters {
+  try {
+    const raw = localStorage.getItem(MAP_FILTERS_KEY)
+    if (!raw) return DEFAULT_MAP_FILTERS
+    const p = JSON.parse(raw) as Partial<MapFilters>
+    return {
+      rarity: typeof p.rarity === 'string' ? (p.rarity as MapFilters['rarity']) : 'all',
+      brand: typeof p.brand === 'string' ? p.brand : null,
+      cardLevel: typeof p.cardLevel === 'number' ? p.cardLevel : 0,
+    }
+  } catch {
+    return DEFAULT_MAP_FILTERS
+  }
+}
+
+export function saveMapFilters(f: MapFilters): void {
+  try {
+    localStorage.setItem(MAP_FILTERS_KEY, JSON.stringify(f))
+  } catch {
+    /* storage unavailable — non-fatal */
+  }
+}
+
 const RARITIES: { value: Rarity; label: string }[] = [
   { value: 'standard', label: 'Standard' },
   { value: 'premium', label: 'Premium' },
@@ -82,8 +110,9 @@ export default function MapFiltersModal({
           </button>
         </div>
 
-        {/* Body */}
-        <div className="flex-1 space-y-5 overflow-y-auto px-5 py-5">
+        {/* Body — scrollable. Big bottom padding so the last section
+            clears the floating footer + the global tab bar. */}
+        <div className="flex-1 space-y-5 overflow-y-auto px-5 pb-24 pt-5">
           {/* Rareté */}
           <section>
             <p className="mb-2 text-xs uppercase tracking-[0.16em] text-fg/45">
@@ -181,8 +210,11 @@ export default function MapFiltersModal({
           </section>
         </div>
 
-        {/* Footer */}
-        <div className="flex flex-col gap-2 border-t border-fg/5 p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+        {/* Footer — the Appliquer button floats clear of the global tab
+            bar (z-40, ~2.75rem + safe area). The modal lives inside an
+            opacity-driven .tab-pane stacking context, so we lift the
+            button with padding rather than relying on z-index alone. */}
+        <div className="flex flex-col gap-2 border-t border-fg/5 p-4 pb-[calc(env(safe-area-inset-bottom)+4.5rem)]">
           {mapFiltersActive(draft) && (
             <button
               onClick={() => setDraft(DEFAULT_MAP_FILTERS)}

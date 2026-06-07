@@ -27,6 +27,35 @@ export function filtersActive(f: FeedFilters): boolean {
   )
 }
 
+// Feed-only persistence. A DEDICATED localStorage key (distinct from the
+// map's revs_map_filters) is what guarantees absolute isolation: applying
+// feed filters can never reach the Carte and vice-versa.
+const FEED_FILTERS_KEY = 'revs_feed_filters'
+
+export function loadFeedFilters(): FeedFilters {
+  try {
+    const raw = localStorage.getItem(FEED_FILTERS_KEY)
+    if (!raw) return DEFAULT_FILTERS
+    const p = JSON.parse(raw) as Partial<FeedFilters>
+    return {
+      category: typeof p.category === 'string' ? p.category : 'Tout',
+      brand: typeof p.brand === 'string' ? p.brand : null,
+      sort: typeof p.sort === 'string' ? (p.sort as FeedSort) : 'recent',
+      city: typeof p.city === 'string' ? p.city : '',
+    }
+  } catch {
+    return DEFAULT_FILTERS
+  }
+}
+
+export function saveFeedFilters(f: FeedFilters): void {
+  try {
+    localStorage.setItem(FEED_FILTERS_KEY, JSON.stringify(f))
+  } catch {
+    /* storage unavailable — non-fatal */
+  }
+}
+
 const CATEGORIES = [
   'Tout',
   'Supercars',
@@ -91,8 +120,9 @@ export default function FeedFiltersModal({
           </button>
         </div>
 
-        {/* Body — scrollable */}
-        <div className="flex-1 space-y-5 overflow-y-auto px-5 py-5">
+        {/* Body — scrollable. Big bottom padding so the last section
+            clears the floating footer + the global tab bar. */}
+        <div className="flex-1 space-y-5 overflow-y-auto px-5 pb-24 pt-5">
           {/* Catégorie */}
           <section>
             <p className="mb-2 text-xs uppercase tracking-[0.16em] text-fg/45">
@@ -200,8 +230,11 @@ export default function FeedFiltersModal({
           </section>
         </div>
 
-        {/* Footer */}
-        <div className="flex flex-col gap-2 border-t border-fg/5 p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+        {/* Footer — the Appliquer button floats clear of the global tab
+            bar (z-40, ~2.75rem + safe area). The modal lives inside an
+            opacity-driven .tab-pane stacking context, so we lift the
+            button with padding rather than relying on z-index alone. */}
+        <div className="flex flex-col gap-2 border-t border-fg/5 p-4 pb-[calc(env(safe-area-inset-bottom)+4.5rem)]">
           {filtersActive(draft) && (
             <button
               onClick={() => setDraft(DEFAULT_FILTERS)}

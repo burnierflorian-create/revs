@@ -22,6 +22,8 @@ import {
 } from '../lib/spots'
 import MapFiltersModal, {
   DEFAULT_MAP_FILTERS,
+  loadMapFilters,
+  saveMapFilters,
   mapFiltersActive,
   type MapFilters,
 } from '../components/MapFiltersModal'
@@ -539,8 +541,14 @@ export default function MapPage() {
   const posRef = useRef<{ lat: number; lng: number } | null>(null)
 
   const [error, setError] = useState<string | null>(null)
-  const [searchQuery, setSearchQuery] = useState<string>('')
-  const [mapFilters, setMapFilters] = useState<MapFilters>(DEFAULT_MAP_FILTERS)
+  // Map-only state — search + filters live entirely here and touch ONLY
+  // the geographic markers. Filters are persisted under their own
+  // localStorage key (revs_map_filters), so nothing here ever reaches
+  // the Fil. Restored from storage on mount.
+  const [mapSearchQuery, setMapSearchQuery] = useState<string>('')
+  const [mapFilters, setMapFilters] = useState<MapFilters>(() =>
+    loadMapFilters(),
+  )
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
   const [geoError, setGeoError] = useState<string | null>(null)
@@ -1266,9 +1274,9 @@ export default function MapPage() {
   }, [])
 
   useEffect(() => {
-    searchRef.current = searchQuery
+    searchRef.current = mapSearchQuery
     refreshRef.current?.()
-  }, [searchQuery])
+  }, [mapSearchQuery])
 
   // Load the viewer's card collection once so the "niveau de carte" filter
   // can resolve each spot's level. Read-own; empty map when logged out.
@@ -1342,7 +1350,7 @@ export default function MapPage() {
   // spotted there yet. Brand-name queries still hit zero results
   // and just stay zoomed where the user was — no harm.
   useEffect(() => {
-    const q = searchQuery.trim()
+    const q = mapSearchQuery.trim()
     if (q.length < 3) return
     // Skip if the query already matches at least one local spot —
     // the user is filtering, not searching.
@@ -1390,7 +1398,7 @@ export default function MapPage() {
       window.clearTimeout(t)
       ctl.abort()
     }
-  }, [searchQuery, visibleCount])
+  }, [mapSearchQuery, visibleCount])
 
   useEffect(() => {
     try {
@@ -1444,14 +1452,14 @@ export default function MapPage() {
             <SearchIcon className="h-4 w-4 flex-none text-fg2" />
             <input
               type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              value={mapSearchQuery}
+              onChange={(e) => setMapSearchQuery(e.target.value)}
               placeholder="Rechercher une voiture…"
               className="min-w-0 flex-1 bg-transparent text-sm font-medium text-fg outline-none placeholder:text-fg2"
             />
-            {searchQuery && (
+            {mapSearchQuery && (
               <button
-                onClick={() => setSearchQuery('')}
+                onClick={() => setMapSearchQuery('')}
                 aria-label="Effacer"
                 className="tappable text-fg2 hover:text-fg"
               >
@@ -1580,7 +1588,12 @@ export default function MapPage() {
         open={filtersOpen}
         initial={mapFilters}
         onClose={() => setFiltersOpen(false)}
-        onApply={setMapFilters}
+        onApply={(next) => {
+          // Apply + persist to the map's own key. onClose (fired by the
+          // modal right after onApply) closes the sheet.
+          setMapFilters(next)
+          saveMapFilters(next)
+        }}
       />
     </div>
   )
