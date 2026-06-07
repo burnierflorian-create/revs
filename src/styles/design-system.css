@@ -43,7 +43,7 @@
      massive) — just a minimal clearance, floored at 4px elsewhere. The
      nav height (h-12 = 3rem) + this var = the bar's total footprint, and
      the scroll panes reserve `3.5rem + var` so content sits ~8px above. */
-  --safe-bottom: max(0.25rem, calc(env(safe-area-inset-bottom) - 1.25rem));
+  --safe-bottom: max(0.25rem, calc(env(safe-area-inset-bottom) - 1.6rem));
 }
 
 /* ─────────────────────── Light theme overrides ───────────────────────

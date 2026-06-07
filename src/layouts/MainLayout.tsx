@@ -170,7 +170,7 @@ export default function MainLayout() {
         aria-hidden
         className="pointer-events-none fixed inset-x-0 z-30 bg-gradient-to-t from-bg to-transparent"
         style={{
-          bottom: 'calc(3rem + var(--safe-bottom))',
+          bottom: 'calc(2.75rem + var(--safe-bottom))',
           height: '4rem',
         }}
       />
@@ -178,7 +178,7 @@ export default function MainLayout() {
       <nav className="app-nav glass fixed bottom-0 left-0 right-0 z-40">
         {/* Ultra-thin, label-less, hairline-stroke icons centred on the
             bar (Instagram-native). Height trimmed ~35% from the old h-20. */}
-        <div className="grid grid-cols-5 items-center h-12 max-w-md mx-auto px-1">
+        <div className="grid grid-cols-5 items-center h-11 max-w-md mx-auto px-1">
           <NavLink to="/map" className={tabClass} aria-label="Carte">
             <MapIcon className="h-6 w-6" strokeWidth={1.2} />
           </NavLink>
