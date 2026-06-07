@@ -1,10 +1,9 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, Flag, Users } from 'lucide-react'
+import { ArrowLeft } from 'lucide-react'
 import {
   F1_DRIVERS,
   F1_TEAMS,
-  flagEmoji,
   proxyImage,
   type F1Team,
   type F1Driver,
@@ -25,40 +24,27 @@ export default function F1Roster({
 
   const grid = (
     <div className="px-4 pb-8">
-      {/* Sub-toggle: Écuries / Pilotes */}
-      <div className="mb-5 flex gap-2">
-        <button
-          onClick={() => setTab('teams')}
-          className={`tappable flex flex-1 items-center justify-center gap-2 rounded-full px-4 py-2.5 text-sm font-bold tracking-wide transition-colors ${
-            tab === 'teams'
-              ? 'bg-accent text-fg'
-              : 'bg-card text-fg2 hover:text-fg'
-          }`}
-          style={
-            tab === 'teams'
-              ? undefined
-              : { border: '1px solid var(--color-border)' }
-          }
-        >
-          <Flag className="h-4 w-4" />
-          Écuries
-        </button>
-        <button
-          onClick={() => setTab('drivers')}
-          className={`tappable flex flex-1 items-center justify-center gap-2 rounded-full px-4 py-2.5 text-sm font-bold tracking-wide transition-colors ${
-            tab === 'drivers'
-              ? 'bg-accent text-fg'
-              : 'bg-card text-fg2 hover:text-fg'
-          }`}
-          style={
-            tab === 'drivers'
-              ? undefined
-              : { border: '1px solid var(--color-border)' }
-          }
-        >
-          <Users className="h-4 w-4" />
-          Pilotes
-        </button>
+      {/* Écuries / Pilotes — Apple text nav (no pills) */}
+      <div className="mb-5 flex gap-6 px-1">
+        {(['teams', 'drivers'] as Tab[]).map((t) => {
+          const active = tab === t
+          return (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className="relative pb-2 text-sm transition-colors"
+            >
+              <span
+                className={active ? 'font-medium text-fg' : 'font-normal text-fg2'}
+              >
+                {t === 'teams' ? 'Écuries' : 'Pilotes'}
+              </span>
+              {active && (
+                <span className="absolute inset-x-0 -bottom-px h-px bg-fg" />
+              )}
+            </button>
+          )
+        })}
       </div>
 
       {tab === 'teams' ? <TeamsGrid teams={F1_TEAMS} /> : <DriversGrid />}
@@ -94,6 +80,8 @@ function TeamsGrid({ teams }: { teams: F1Team[] }) {
   )
 }
 
+// Uniform jet card — no colour gradient, no giant background letters. The
+// monoplace floats on the surface; the team name sits below in clean caps.
 function TeamCard({ team }: { team: F1Team }) {
   const navigate = useNavigate()
   const [photoFailed, setPhotoFailed] = useState(false)
@@ -101,64 +89,41 @@ function TeamCard({ team }: { team: F1Team }) {
   return (
     <button
       onClick={() => navigate(`/f1-team/${team.slug}`)}
-      className="tappable group relative aspect-[5/4] overflow-hidden rounded-[20px] text-left"
-      style={{
-        background: `linear-gradient(140deg, ${team.color} 0%, ${team.color}55 60%, rgb(var(--color-card)) 100%)`,
-        border: '1px solid rgb(var(--color-fg) / 0.08)',
-      }}
+      className="tappable group flex flex-col"
     >
-      {/* Z-0 base: 3-letter code watermark BEHIND the car shot */}
       <div
-        aria-hidden
-        className="pointer-events-none absolute -right-2 -top-1 z-0 font-display text-[68px] font-black leading-none text-white/[0.10]"
+        className="relative aspect-[5/4] w-full overflow-hidden rounded-xl"
+        style={{
+          background: 'rgb(var(--color-card))',
+          border: '1px solid var(--color-border)',
+        }}
       >
-        {teamShortCode(team.name)}
+        {photoUrl && (
+          <img
+            src={photoUrl}
+            alt={team.name}
+            loading="lazy"
+            onError={() => setPhotoFailed(true)}
+            className="absolute inset-0 h-full w-full object-contain"
+            style={{ padding: '14px' }}
+          />
+        )}
       </div>
-
-      {/* Z-10: car photo, contained with interior padding so the car
-          never touches the card edges. Padding-bottom is bigger to
-          clear the gradient + text overlay below. */}
-      {photoUrl && (
-        <img
-          src={photoUrl}
-          alt={team.name}
-          loading="lazy"
-          onError={() => setPhotoFailed(true)}
-          className="absolute inset-0 z-10 h-full w-full object-contain"
-          style={{
-            objectPosition: 'center 38%',
-            padding: '14px 14px 56px',
-          }}
-        />
-      )}
-
-      {/* Z-20: dark gradient on the bottom 50% so the name stays readable */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-x-0 bottom-0 z-20 h-1/2 bg-gradient-to-t from-black/95 via-black/50 to-transparent"
-      />
-
-      {/* Z-30: text overlay */}
-      <div className="absolute inset-x-0 bottom-0 z-30 flex flex-col gap-1 p-4">
-        <span className="label-up text-[10px] text-fg/65">F1 2026</span>
-        <span className="line-clamp-2 font-display text-base font-extrabold leading-tight tracking-tighter text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.7)]">
-          {team.name}
-        </span>
-      </div>
+      <span className="mt-2 line-clamp-1 text-center text-xs font-medium uppercase tracking-wide text-fg2">
+        {team.name}
+      </span>
     </button>
   )
 }
 
 function DriversGrid() {
   const navigate = useNavigate()
-  const teamColor = new Map(F1_TEAMS.map((t) => [t.slug, t.color]))
   return (
     <div className="grid grid-cols-2 gap-3">
       {F1_DRIVERS.map((d) => (
         <DriverCard
           key={d.slug}
           driver={d}
-          color={teamColor.get(d.team) ?? '#333333'}
           onClick={() => navigate(`/f1-driver/${d.slug}`)}
         />
       ))}
@@ -166,13 +131,14 @@ function DriversGrid() {
   )
 }
 
+// No bright coloured borders. The portrait fills the whole card (rounded
+// corners), with the race number as a minimalist grey watermark just
+// above the name.
 function DriverCard({
   driver,
-  color,
   onClick,
 }: {
   driver: F1Driver
-  color: string
   onClick: () => void
 }) {
   const [photoFailed, setPhotoFailed] = useState(false)
@@ -181,79 +147,46 @@ function DriverCard({
   return (
     <button
       onClick={onClick}
-      className="tappable group relative aspect-[5/6] overflow-hidden rounded-[20px] text-left"
+      className="tappable group relative aspect-[5/6] overflow-hidden rounded-md text-left"
       style={{
-        background: `linear-gradient(165deg, ${color} 0%, ${color}66 50%, rgb(var(--color-card)) 100%)`,
-        border: '1px solid rgb(var(--color-fg) / 0.08)',
+        background: 'rgb(var(--color-card))',
+        border: '1px solid var(--color-border)',
       }}
     >
-      {/* Z-0 base: race-number watermark — always rendered. When the
-          photo loads it covers the watermark; if the photo fails it
-          stays visible as the fallback identity. */}
-      {driver.number !== null && (
-        <div
-          aria-hidden
-          className="pointer-events-none absolute -right-3 -top-4 z-0 font-display text-[120px] font-black leading-none text-white/[0.10]"
-        >
-          {driver.number}
-        </div>
-      )}
-
-      {/* Z-10: photo (proxied), centred-top so the face is always
-          framed near the top third regardless of source crop. */}
-      {photoUrl && (
+      {photoUrl ? (
         <img
           src={photoUrl}
           alt={driver.name}
           loading="lazy"
           onError={() => setPhotoFailed(true)}
-          className="absolute inset-0 z-10 h-full w-full object-cover"
+          className="absolute inset-0 h-full w-full object-cover"
           style={{ objectPosition: 'center top' }}
         />
+      ) : (
+        driver.number !== null && (
+          <div className="absolute inset-0 flex items-center justify-center font-display text-6xl font-black text-fg/10">
+            {driver.number}
+          </div>
+        )
       )}
 
-      {/* Z-20: dark gradient — 40 % of the card height. Slightly
-          softer than the 60 % version so more of the portrait is
-          visible while the bottom row stays readable. */}
+      {/* Bottom legibility gradient */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-x-0 bottom-0 z-20 h-2/5 bg-gradient-to-t from-black/95 via-black/55 to-transparent"
+        className="pointer-events-none absolute inset-x-0 bottom-0 h-2/5 bg-gradient-to-t from-black/85 via-black/40 to-transparent"
       />
 
-      {/* Z-30: text overlay */}
-      <div className="absolute inset-x-0 bottom-0 z-30 flex flex-col gap-1 p-3">
-        <div className="flex items-center gap-1.5 text-[11px] text-fg/85">
-          <span aria-hidden>{flagEmoji(driver.country)}</span>
-          {driver.number !== null && (
-            <span className="font-extrabold tracking-wider">
-              #{driver.number}
-            </span>
-          )}
-        </div>
-        <span className="line-clamp-2 font-display text-[15px] font-extrabold leading-tight tracking-tighter text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.7)]">
+      {/* Race-number watermark + name (bottom-left) */}
+      <div className="absolute inset-x-0 bottom-0 flex flex-col gap-0.5 p-2.5">
+        {driver.number !== null && (
+          <span className="font-display text-[13px] font-black leading-none text-white/45">
+            #{driver.number}
+          </span>
+        )}
+        <span className="line-clamp-1 font-display text-[14px] font-extrabold leading-tight tracking-tight text-white">
           {driver.name}
         </span>
       </div>
     </button>
   )
-}
-
-// 3-letter abbreviation used as a faded watermark on the team card.
-// Avoids hardcoding logo URLs (Wikimedia / team-site assets are
-// notoriously unstable). Falls back to the first 3 letters of the
-// brand name.
-function teamShortCode(name: string): string {
-  const map: Record<string, string> = {
-    'Red Bull Racing': 'RBR',
-    Ferrari: 'SF',
-    Mercedes: 'MER',
-    McLaren: 'MCL',
-    'Aston Martin': 'AMR',
-    Alpine: 'ALP',
-    Williams: 'WIL',
-    Haas: 'HAA',
-    'Racing Bulls': 'RB',
-    'Kick Sauber': 'SAU',
-  }
-  return map[name] ?? name.slice(0, 3).toUpperCase()
 }
