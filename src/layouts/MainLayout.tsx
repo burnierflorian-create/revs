@@ -21,7 +21,7 @@ import { supabase } from '../lib/supabase'
 import { useMyTier } from '../lib/tier'
 
 const tabClass = ({ isActive }: { isActive: boolean }) =>
-  `tappable flex flex-col items-center justify-center gap-1 h-full text-[10px] font-semibold tracking-wider uppercase transition-colors ${
+  `tappable flex items-center justify-center h-full transition-colors ${
     isActive ? 'text-accent' : 'text-[#555]'
   }`
 
@@ -170,36 +170,33 @@ export default function MainLayout() {
         aria-hidden
         className="pointer-events-none fixed inset-x-0 z-30 bg-gradient-to-t from-bg to-transparent"
         style={{
-          bottom: 'calc(5rem + env(safe-area-inset-bottom))',
-          height: '5rem',
+          bottom: 'calc(52px + env(safe-area-inset-bottom))',
+          height: '4rem',
         }}
       />
 
       <nav className="app-nav glass fixed bottom-0 left-0 right-0 z-40">
-        <div className="grid grid-cols-5 items-end h-20 max-w-md mx-auto px-1">
-          <NavLink to="/map" className={tabClass}>
-            <MapIcon className="w-5 h-5" />
-            <span>Carte</span>
+        {/* Ultra-thin, label-less, hairline-stroke icons centred on the
+            bar (Instagram-native). Height trimmed ~35% from the old h-20. */}
+        <div className="grid grid-cols-5 items-center h-[52px] max-w-md mx-auto px-1">
+          <NavLink to="/map" className={tabClass} aria-label="Carte">
+            <MapIcon className="h-6 w-6" strokeWidth={1.2} />
           </NavLink>
 
-          <NavLink to="/feed" className={tabClass}>
-            <Newspaper className="w-5 h-5" />
-            <span>Fil</span>
+          <NavLink to="/feed" className={tabClass} aria-label="Fil">
+            <Newspaper className="h-6 w-6" strokeWidth={1.2} />
           </NavLink>
 
-          <NavLink to="/" end className={tabClass}>
-            <Home className="w-5 h-5" />
-            <span>Accueil</span>
+          <NavLink to="/" end className={tabClass} aria-label="Accueil">
+            <Home className="h-6 w-6" strokeWidth={1.2} />
           </NavLink>
 
-          <NavLink to="/discover" className={tabClass}>
-            <Compass className="w-5 h-5" />
-            <span>Explorer</span>
+          <NavLink to="/discover" className={tabClass} aria-label="Explorer">
+            <Compass className="h-6 w-6" strokeWidth={1.2} />
           </NavLink>
 
-          <NavLink to="/profile" className={tabClass}>
-            <User className="w-5 h-5" />
-            <span>Profil</span>
+          <NavLink to="/profile" className={tabClass} aria-label="Profil">
+            <User className="h-6 w-6" strokeWidth={1.2} />
           </NavLink>
         </div>
       </nav>

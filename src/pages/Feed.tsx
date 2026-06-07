@@ -38,17 +38,6 @@ const CAT_COLOR: Record<string, string> = {
   classic: '#A0522D',
   youngtimer: '#14B8A6',
 }
-// Twin-stop linear gradient per category — replaces the flat tint on
-// the photo top-left badge. The lighter stop sits on the LEFT of the
-// pill so the badge reads as a small highlighted jewel rather than a
-// flat colour block (2026-06-02 Apple-style refinement).
-const CAT_GRADIENT: Record<string, string> = {
-  supercar: 'linear-gradient(90deg, #FBBF24 0%, #F59E0B 100%)',
-  hypercar: 'linear-gradient(90deg, #A78BFA 0%, #8B5CF6 100%)',
-  JDM: 'linear-gradient(90deg, #60A5FA 0%, #3B82F6 100%)',
-  classic: 'linear-gradient(90deg, #C68642 0%, #A0522D 100%)',
-  youngtimer: 'linear-gradient(90deg, #2DD4BF 0%, #14B8A6 100%)',
-}
 
 const SLIDES = [
   {
@@ -784,16 +773,26 @@ function FeedCard({
     }
   }
 
+  const sub = [
+    spot.year,
+    catColor ? categoryLabel(spot.category).toUpperCase() : null,
+    timeAgo(spot.created_at),
+  ]
+    .filter(Boolean)
+    .join(' · ')
+
   return (
-    <article className="feed-card pb-8">
-      {/* A · SPOTTER */}
+    // Content rows sit at the page container's inset; the photo bleeds to
+    // the screen edges (-mx-4). pb-6 seals the post before the next one.
+    <article className="feed-card pb-6">
+      {/* A · HEADER — sealed tight to the photo, single compact line */}
       <button
         onClick={() => navigate(`/u/${spot.user_id}`)}
-        className="tappable mb-2.5 flex w-full min-w-0 items-center gap-2.5 px-1 text-left"
+        className="tappable mb-2 flex w-full min-w-0 items-center gap-2.5 text-left"
         aria-label={`Profil de ${pseudo}`}
       >
         <div
-          className="flex h-9 w-9 flex-none items-center justify-center overflow-hidden rounded-full bg-fg/10 text-sm font-extrabold text-fg"
+          className="flex h-8 w-8 flex-none items-center justify-center overflow-hidden rounded-full bg-fg/10 text-[13px] font-extrabold text-fg"
           style={{ border: '1px solid var(--color-border)' }}
         >
           {prof?.avatar ? (
@@ -808,36 +807,25 @@ function FeedCard({
             pseudo.charAt(0).toUpperCase()
           )}
         </div>
-        <div className="min-w-0 space-y-0.5">
-          <div className="flex items-center gap-1.5">
-            <span
-              className="truncate font-black tracking-tight text-fg"
-              style={{ fontSize: '13px' }}
-            >
-              {pseudo}
-            </span>
-            {founder && (
-              <span
-                className="flex-none rounded font-black uppercase tracking-widest text-red-400"
-                style={{
-                  background: 'rgba(239, 68, 68, 0.10)',
-                  border: '1px solid rgba(239, 68, 68, 0.20)',
-                  padding: '2px 6px',
-                  fontSize: '8px',
-                  letterSpacing: '0.16em',
-                }}
-              >
-                Fondateur
-              </span>
-            )}
-          </div>
-          <p
-            className="truncate font-medium tracking-tight text-fg2"
-            style={{ fontSize: '10.5px' }}
+        <span
+          className="truncate font-semibold tracking-tight text-fg"
+          style={{ fontSize: '13px' }}
+        >
+          {pseudo}
+        </span>
+        {founder && (
+          <span
+            className="flex-none rounded uppercase tracking-wider text-red-400/70"
+            style={{
+              background: 'rgba(239, 68, 68, 0.07)',
+              padding: '1px 4px',
+              fontSize: '7px',
+              letterSpacing: '0.12em',
+            }}
           >
-            {[prof?.ville, timeAgo(spot.created_at)].filter(Boolean).join(' • ')}
-          </p>
-        </div>
+            Fondateur
+          </span>
+        )}
       </button>
 
       {/* B · PHOTO 4:5 — edge-to-edge, double-tap to like (no navigation) */}
@@ -883,9 +871,8 @@ function FeedCard({
         )}
       </div>
 
-      {/* C · TOOLS ROW — like · comment · (XP far right). Bigger icons for
-          a proper Instagram tap-target / visual weight. */}
-      <div className="mt-3.5 flex items-center gap-5 px-1">
+      {/* C · TOOLS ROW — hairline icons, compact counters, discreet XP */}
+      <div className="mt-2.5 flex items-center gap-5">
         <button
           onClick={() => setLikeState(!liked)}
           aria-label={liked ? 'Retirer le like' : 'Liker'}
@@ -893,76 +880,50 @@ function FeedCard({
           className="tappable flex items-center gap-1.5"
         >
           <Heart
-            strokeWidth={1.75}
-            className={`h-7 w-7 transition-colors ${liked ? 'fill-accent text-accent' : 'text-fg'}`}
+            strokeWidth={1.2}
+            className={`h-6 w-6 transition-colors ${liked ? 'fill-accent text-accent' : 'text-fg'}`}
           />
-          <span className="text-sm font-semibold text-fg">{likeCount}</span>
+          <span className="text-sm font-medium text-fg">{likeCount}</span>
         </button>
         <button
           onClick={() => setSheetOpen(true)}
           aria-label="Commentaires"
           className="tappable flex items-center gap-1.5"
         >
-          <MessageCircle strokeWidth={1.75} className="h-7 w-7 text-fg" />
-          <span className="text-sm font-semibold text-fg">{commentCount}</span>
+          <MessageCircle strokeWidth={1.2} className="h-6 w-6 text-fg" />
+          <span className="text-sm font-medium text-fg">{commentCount}</span>
         </button>
-        <span
-          className="ml-auto flex items-center gap-1 rounded-full px-2.5 py-1.5 text-[11px] font-extrabold tracking-wider text-fg"
-          style={{
-            background: 'var(--color-glass)',
-            border: '1px solid var(--color-border)',
-            backdropFilter: 'saturate(160%) blur(12px)',
-            WebkitBackdropFilter: 'saturate(160%) blur(12px)',
-          }}
-        >
-          <Zap className="h-3 w-3 text-accent" />+
-          {xpForSpot(spot.estimated_price, spot.rarity)} XP
+        {/* Performance marker — a thin bolt + ultra-discreet XP, no badge */}
+        <span className="ml-auto flex items-center gap-1 text-fg2">
+          <Zap strokeWidth={1.2} className="h-[18px] w-[18px] text-accent" />
+          <span className="text-xs font-medium tabular-nums">
+            +{xpForSpot(spot.estimated_price, spot.rarity)} XP
+          </span>
         </span>
       </div>
 
-      {/* D · TITLE BLOCK — the ONLY tap target that opens the detail page */}
+      {/* D · CAPTION (Instagram) — bold pseudo + car name, tappable → detail */}
       <button
         onClick={() => navigate(`/spot/${spot.id}`)}
-        className="tappable mt-2 block w-full px-1 text-left"
+        className="tappable mt-2 block w-full text-left"
         aria-label={`Voir ${title}`}
       >
-        <h2
-          className="truncate font-display font-extrabold tracking-tight text-fg"
-          style={{ fontSize: '18px', letterSpacing: '-0.01em' }}
-        >
-          {title}
-        </h2>
-        <div className="mt-1.5 flex items-center gap-2">
-          {spot.year && (
-            <span className="text-[12px] font-medium text-fg2">{spot.year}</span>
-          )}
-          {catColor && (
-            <span
-              className="rounded-md px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-black"
-              style={{
-                background: CAT_GRADIENT[spot.category] ?? catColor,
-                letterSpacing: '0.06em',
-              }}
-            >
-              {categoryLabel(spot.category).toUpperCase()}
-            </span>
-          )}
-        </div>
+        <p className="text-sm leading-snug">
+          <span className="mr-1.5 font-semibold text-fg">{pseudo}</span>
+          <span className="font-normal text-fg/90">{title}</span>
+        </p>
+        {sub && <p className="mt-0.5 truncate text-xs text-fg2">{sub}</p>}
       </button>
 
       {/* E · QUICK COMMENT — opens the sheet */}
       <button
         onClick={() => setSheetOpen(true)}
-        className="tappable mt-3 flex w-full items-center gap-2.5 px-1 text-left"
+        className="tappable mt-2.5 flex w-full items-center gap-2.5 text-left"
         aria-label="Ajouter un commentaire"
       >
         <div className="flex h-7 w-7 flex-none items-center justify-center overflow-hidden rounded-full bg-fg/10 text-[11px] font-extrabold text-fg2">
           {myAvatar ? (
-            <img
-              src={myAvatar}
-              alt=""
-              className="h-full w-full object-cover"
-            />
+            <img src={myAvatar} alt="" className="h-full w-full object-cover" />
           ) : (
             myInitial
           )}
