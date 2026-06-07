@@ -104,6 +104,16 @@ export function wordmarkDataUrl(name: string): string {
   return svgDataUrl(svg)
 }
 
+// Guaranteed inline-SVG monogram (data URL, zero network) for niche
+// marques with no reachable remote logo. White glyph on transparent so it
+// composes cleanly with BrandLogo's monochrome filter in both themes.
+export function monogram(txt: string): string {
+  const fs = txt.length > 1 ? 54 : 74
+  return svgDataUrl(
+    `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><text x="50%" y="68%" text-anchor="middle" font-family="Helvetica,Arial,sans-serif" font-size="${fs}" font-weight="800" letter-spacing="-1" fill="white">${txt}</text></svg>`,
+  )
+}
+
 export const BRANDS: Brand[] = [
   // Hypercars — ultra-low-volume marques
   { slug: 'bugatti',      name: 'Bugatti',       category: 'hypercars', type: 'brand', domain: 'bugatti.com',         color: '#002F6C', match: ['bugatti'],
@@ -239,25 +249,25 @@ export const BRANDS: Brand[] = [
   { slug: 'jeep', name: 'Jeep', category: 'american', type: 'brand', domain: 'jeep.com', color: '#424A3C', match: ['jeep', 'trackhawk', 'grand cherokee', 'wrangler'],
     logos: [`${CL}/jeep-logo.png`] },
   { slug: 'novitec', name: 'Novitec', category: 'tuners', type: 'tuner', domain: 'novitecgroup.com', color: '#C8102E', match: ['novitec'],
-    logos: [`${CL}/novitec-logo.png`] },
+    logos: [monogram('N')] },
   { slug: 'techart', name: 'TechArt', category: 'tuners', type: 'tuner', domain: 'techart.de', color: '#B0BEC5', match: ['techart'],
     logos: [`${CL}/techart-logo.png`] },
   { slug: 'singer', name: 'Singer', category: 'tuners', type: 'tuner', domain: 'singervehicledesign.com', color: '#B8973A', match: ['singer'],
     logos: [`${CL}/singer-logo.png`] },
   { slug: 'g-power', name: 'G-Power', category: 'tuners', type: 'tuner', domain: 'g-power.de', color: '#B0BEC5', match: ['g-power', 'gpower'],
-    logos: [`${CL}/g-power-logo.png`] },
+    logos: [monogram('GP')] },
   { slug: 'ac-schnitzer', name: 'AC Schnitzer', category: 'tuners', type: 'tuner', domain: 'ac-schnitzer.de', color: '#009640', match: ['schnitzer'],
-    logos: [`${CL}/ac-schnitzer-logo.png`] },
+    logos: [monogram('AC')] },
   { slug: 'alpina', name: 'Alpina', category: 'tuners', type: 'tuner', domain: 'alpina-automobiles.com', color: '#006BB6', match: ['alpina'],
     logos: [`${CL}/alpina-logo.png`] },
   { slug: 'manhart', name: 'Manhart', category: 'tuners', type: 'tuner', domain: 'manhart-performance.de', color: '#D4AF37', match: ['manhart'],
-    logos: [`${CL}/manhart-logo.png`] },
+    logos: [monogram('MH')] },
   { slug: 'larte', name: 'Larte Design', category: 'tuners', type: 'tuner', domain: 'larte-design.com', color: '#B0BEC5', match: ['larte'],
-    logos: [`${CL}/larte-logo.png`] },
+    logos: [monogram('LD')] },
   { slug: 'prior-design', name: 'Prior Design', category: 'tuners', type: 'tuner', domain: 'prior-design.de', color: '#B0BEC5', match: ['prior'],
-    logos: [`${CL}/prior-design-logo.png`] },
+    logos: [monogram('PD')] },
   { slug: 'liberty-walk', name: 'Liberty Walk', category: 'tuners', type: 'tuner', domain: 'libertywalk.co.jp', color: '#E74C3C', match: ['liberty walk', 'libertywalk'],
-    logos: [`${CL}/liberty-walk-logo.png`] },
+    logos: [monogram('LB')] },
 ]
 
 const BY_SLUG = new Map(BRANDS.map((b) => [b.slug, b]))
