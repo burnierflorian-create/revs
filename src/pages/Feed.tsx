@@ -834,11 +834,13 @@ function FeedCard({
         className="relative -mx-4 cursor-pointer select-none"
       >
         {spot.photo_url ? (
+          // Natural aspect ratio (full-width, height auto) — the photo
+          // adapts to each image like Instagram instead of a forced crop.
           <img
             src={spot.photo_url}
             alt={title}
             loading="lazy"
-            className="aspect-[4/5] w-full object-cover"
+            className="block w-full"
           />
         ) : (
           <div className="flex aspect-[4/5] w-full items-center justify-center bg-fg/5">
