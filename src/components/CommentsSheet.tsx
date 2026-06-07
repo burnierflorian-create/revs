@@ -219,8 +219,8 @@ export default function CommentsSheet({
             }}
             maxLength={280}
             placeholder="Ajouter un commentaire…"
-            className="flex-1 rounded-full bg-fg/5 px-4 py-2.5 text-sm text-fg outline-none placeholder:text-fg2"
-            style={{ border: '1px solid var(--color-border)' }}
+            className="flex-1 rounded-full bg-fg/5 px-4 py-2.5 text-fg outline-none placeholder:text-fg2"
+            style={{ fontSize: '16px', border: '1px solid var(--color-border)' }}
           />
           <button
             onClick={() => void send()}

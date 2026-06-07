@@ -521,7 +521,8 @@ export default function Feed() {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Rechercher dans le fil…"
-            className="flex-1 bg-transparent text-xs font-medium tracking-tight text-fg/80 placeholder:text-fg2 outline-none"
+            style={{ fontSize: '16px' }}
+            className="flex-1 bg-transparent font-medium tracking-tight text-fg/80 placeholder:text-fg2 outline-none"
           />
           {searchQuery && (
             <button

@@ -16,6 +16,7 @@ export default function Brands({ embedded = false }: { embedded?: boolean }) {
   const navigate = useNavigate()
   const [q, setQ] = useState('')
   const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({})
+  const lastLetterRef = useRef<string>('')
 
   const needle = q.trim().toLowerCase()
 
@@ -49,13 +50,17 @@ export default function Brands({ embedded = false }: { embedded?: boolean }) {
     sectionRefs.current[letter]?.scrollIntoView({ block: 'start' })
   }
 
-  // Drag the alphabet rail like iOS — resolve the letter under the finger.
+  // Drag the alphabet rail like iOS — resolve the letter under the finger,
+  // and only jump when it crosses to a NEW letter (smooth, no scroll spam).
   function onRailTouch(e: React.TouchEvent) {
     const t = e.touches[0]
     if (!t) return
     const el = document.elementFromPoint(t.clientX, t.clientY) as HTMLElement | null
     const l = el?.dataset?.letter
-    if (l) jumpTo(l)
+    if (l && l !== lastLetterRef.current) {
+      lastLetterRef.current = l
+      jumpTo(l)
+    }
   }
 
   const list = (
@@ -77,7 +82,9 @@ export default function Brands({ embedded = false }: { embedded?: boolean }) {
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Rechercher une marque…"
-            className="flex-1 bg-transparent text-xs font-medium tracking-tight text-fg/80 outline-none placeholder:text-fg2"
+            // 16px font-size prevents the iOS focus auto-zoom.
+            style={{ fontSize: '16px' }}
+            className="flex-1 bg-transparent font-medium tracking-tight text-fg/80 outline-none placeholder:text-fg2"
           />
           {q && (
             <button
@@ -114,7 +121,7 @@ export default function Brands({ embedded = false }: { embedded?: boolean }) {
                 className="tappable flex w-full items-center gap-3.5 px-4 py-2.5 text-left"
                 style={{ borderBottom: '1px solid var(--color-divider)' }}
               >
-                <BrandLogo brand={b} size={24} mono className="flex-none" />
+                <BrandLogo brand={b} size={28} mono className="flex-none" />
                 <span className="flex-1 truncate text-sm font-medium uppercase tracking-wider text-fg">
                   {b.name}
                 </span>
