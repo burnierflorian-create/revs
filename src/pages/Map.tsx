@@ -8,6 +8,7 @@ import {
   LocateFixed,
   Loader2,
   Search as SearchIcon,
+  SlidersHorizontal,
   Sparkles,
   X,
 } from 'lucide-react'
@@ -20,6 +21,17 @@ import {
   type Rarity,
   type Spot,
 } from '../lib/spots'
+import MapFiltersModal, {
+  DEFAULT_MAP_FILTERS,
+  mapFiltersActive,
+  type MapFilters,
+} from '../components/MapFiltersModal'
+import {
+  cardKey,
+  fetchMyCardProgress,
+  type CardProgress,
+} from '../lib/cardLevels'
+import { BRANDS } from '../lib/brands'
 import { useTheme } from '../lib/theme'
 import {
   fetchSpottingPrediction,
@@ -520,6 +532,13 @@ export default function MapPage() {
   const onScreenRef = useRef<Record<string, mapboxgl.Marker>>({})
   const filterRef = useRef<string>('Tous')
   const searchRef = useRef<string>('')
+  // Advanced filters (rarity / brand / card level) + the viewer's card
+  // collection, mirrored into refs so the marker-building loop reads the
+  // latest without re-subscribing.
+  const advFiltersRef = useRef<MapFilters>(DEFAULT_MAP_FILTERS)
+  const cardMapRef = useRef<globalThis.Map<string, CardProgress>>(
+    new globalThis.Map(),
+  )
   const refreshRef = useRef<(() => void) | null>(null)
   const recomputeHotZonesRef = useRef<(() => void) | null>(null)
   // Called from the theme-change effect after setStyle() reloads the
@@ -536,6 +555,8 @@ export default function MapPage() {
   const [error, setError] = useState<string | null>(null)
   const [activeFilter, setActiveFilter] = useState<string>('Tous')
   const [searchQuery, setSearchQuery] = useState<string>('')
+  const [mapFilters, setMapFilters] = useState<MapFilters>(DEFAULT_MAP_FILTERS)
+  const [filtersOpen, setFiltersOpen] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
   const [geoError, setGeoError] = useState<string | null>(null)
   const [visibleCount, setVisibleCount] = useState(0)
@@ -809,6 +830,16 @@ export default function MapPage() {
     function featureCollection(): GeoJSON.FeatureCollection {
       const cat = FILTER_CATEGORY[filterRef.current]
       const needle = searchRef.current.trim().toLowerCase()
+      const adv = advFiltersRef.current
+      const cards = cardMapRef.current
+      // Resolve the selected brand slug to its display name once so the
+      // per-spot test is a cheap normalized compare.
+      const advBrandName =
+        adv.brand != null
+          ? (BRANDS.find((b) => b.slug === adv.brand)?.name ?? adv.brand)
+          : null
+      const norm = (s: string) =>
+        (s ?? '').toLowerCase().trim().replace(/\s+/g, ' ')
       const feats: GeoJSON.Feature[] = []
       const panel: Spot[] = []
       for (const sp of allSpots.values()) {
@@ -818,6 +849,18 @@ export default function MapPage() {
           const hay = `${sp.brand ?? ''} ${sp.model ?? ''} ${sp.category ?? ''}`
             .toLowerCase()
           if (!hay.includes(needle)) continue
+        }
+        // Advanced filters — rarity / brand / card level.
+        if (adv.rarity !== 'all' && (sp.rarity ?? 'standard') !== adv.rarity)
+          continue
+        if (advBrandName != null) {
+          const b = norm(sp.brand ?? '')
+          const want = norm(advBrandName)
+          if (b !== want && !b.includes(want) && !want.includes(b)) continue
+        }
+        if (adv.cardLevel > 0) {
+          const cp = cards.get(cardKey(sp.brand ?? '', sp.model ?? ''))
+          if (!cp || cp.level < adv.cardLevel) continue
         }
         if (cat != null) panel.push(sp)
         feats.push({
@@ -1263,6 +1306,25 @@ export default function MapPage() {
     refreshRef.current?.()
   }, [searchQuery])
 
+  // Load the viewer's card collection once so the "niveau de carte" filter
+  // can resolve each spot's level. Read-own; empty map when logged out.
+  useEffect(() => {
+    let active = true
+    fetchMyCardProgress().then((m) => {
+      if (!active) return
+      cardMapRef.current = m
+      refreshRef.current?.()
+    })
+    return () => {
+      active = false
+    }
+  }, [])
+
+  useEffect(() => {
+    advFiltersRef.current = mapFilters
+    refreshRef.current?.()
+  }, [mapFilters])
+
   // Theme swap — when the user flips dark/light from Settings while
   // /map is already mounted, hot-swap the Mapbox base style instead
   // of forcing a full remount. setStyle() DROPS user sources +
@@ -1409,37 +1471,55 @@ export default function MapPage() {
       )}
 
       <div className="absolute left-0 right-0 top-0 z-10 space-y-2 px-4 pt-[max(3rem,calc(env(safe-area-inset-top)+2rem))]">
-        <div
-          className="mx-auto flex max-w-md items-center gap-2 rounded-2xl px-4 py-3"
-          style={{
-            // Theme-aware iOS Maps glass — flips from translucent
-            // dark glass (dark mode, sits on dark-v11 map) to
-            // translucent white glass (light mode, sits on Snap
-            // beige map) via the CSS var ladder.
-            background: 'var(--color-glass-mid)',
-            backdropFilter: 'saturate(170%) blur(12px)',
-            WebkitBackdropFilter: 'saturate(170%) blur(12px)',
-            border: '1px solid var(--color-border)',
-            boxShadow: '0 12px 28px rgba(0, 0, 0, 0.18)',
-          }}
-        >
-          <SearchIcon className="h-4 w-4 flex-none text-fg2" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Rechercher une voiture, une marque…"
-            className="flex-1 bg-transparent text-sm font-medium text-fg outline-none placeholder:text-fg2"
-          />
-          {searchQuery && (
-            <button
-              onClick={() => setSearchQuery('')}
-              aria-label="Effacer"
-              className="tappable text-fg2 hover:text-fg"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          )}
+        {/* Search + advanced-filters icon on one line — mirrors the Fil.
+            The search bar flexes; the filter icon sits to its right as a
+            light, fond-less glyph (a tiny active dot when filters are on). */}
+        <div className="mx-auto flex max-w-md items-center gap-2">
+          <div
+            className="flex flex-1 items-center gap-2 rounded-2xl px-4 py-3"
+            style={{
+              // Theme-aware iOS Maps glass — flips from translucent
+              // dark glass (dark mode, sits on dark-v11 map) to
+              // translucent white glass (light mode, sits on Snap
+              // beige map) via the CSS var ladder.
+              background: 'var(--color-glass-mid)',
+              backdropFilter: 'saturate(170%) blur(12px)',
+              WebkitBackdropFilter: 'saturate(170%) blur(12px)',
+              border: '1px solid var(--color-border)',
+              boxShadow: '0 12px 28px rgba(0, 0, 0, 0.18)',
+            }}
+          >
+            <SearchIcon className="h-4 w-4 flex-none text-fg2" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Rechercher une voiture…"
+              className="min-w-0 flex-1 bg-transparent text-sm font-medium text-fg outline-none placeholder:text-fg2"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                aria-label="Effacer"
+                className="tappable text-fg2 hover:text-fg"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+          <button
+            onClick={() => setFiltersOpen(true)}
+            aria-label="Filtres"
+            className="tappable relative flex-none p-2 text-fg2 hover:text-fg"
+          >
+            <SlidersHorizontal className="h-5 w-5" />
+            {mapFiltersActive(mapFilters) && (
+              <span
+                className="absolute right-1 top-1 h-2 w-2 rounded-full bg-accent"
+                aria-hidden
+              />
+            )}
+          </button>
         </div>
 
         {/* "REPLAY AUJOURD'HUI" pill removed per 2026-05-28 cleanup.
@@ -1639,6 +1719,13 @@ export default function MapPage() {
           </div>
         </div>
       )}
+
+      <MapFiltersModal
+        open={filtersOpen}
+        initial={mapFilters}
+        onClose={() => setFiltersOpen(false)}
+        onApply={setMapFilters}
+      />
     </div>
   )
 }
