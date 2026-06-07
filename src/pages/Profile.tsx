@@ -18,7 +18,6 @@ import { xpLevel } from '../lib/xp'
 import { useMyTier } from '../lib/tier'
 import { Skeleton } from '../components/Skeleton'
 import MyCollection from '../components/MyCollection'
-import TitleChip from '../components/TitleChip'
 import { rarityRank } from '../components/CollectorCard'
 import {
   COLLECTIONS,
@@ -30,14 +29,6 @@ import {
 import { floatXp } from '../components/XpFloater'
 
 
-function memberSince(iso: string | undefined): string {
-  if (!iso) return ''
-  return new Intl.DateTimeFormat('fr-FR', {
-    month: 'long',
-    year: 'numeric',
-  }).format(new Date(iso))
-}
-
 export default function Profile() {
   const navigate = useNavigate()
   const tier = useMyTier()
@@ -47,7 +38,6 @@ export default function Profile() {
   const [ville, setVille] = useState('')
   const [title, setTitle] = useState<string | null>(null)
   const [avatar, setAvatar] = useState<string | null>(null)
-  const [joined, setJoined] = useState('')
   const [spots, setSpots] = useState<Spot[]>([])
   const [uniqueBrands, setUniqueBrands] = useState(0)
   const [rank, setRank] = useState<number | null>(null)
@@ -173,7 +163,6 @@ export default function Profile() {
       setVille(profRes.data?.ville ?? '')
       setTitle((profRes.data as { title?: string | null } | null)?.title ?? null)
       setAvatar(profRes.data?.avatar ?? null)
-      setJoined(memberSince(user.created_at))
       setSpots(mySpots)
       setUniqueBrands(
         new Set(mySpots.map((s) => s.brand).filter(Boolean)).size,
@@ -221,6 +210,20 @@ export default function Profile() {
   }, [])
 
   const level = xpLevel(xp)
+
+  // Single furtive identity line: status • level • ville (e.g.
+  // "FONDATEUR • EXPERT • ANNECY") — replaces the stacked gold/red badges.
+  const statusLabel =
+    title ||
+    (planTier(plan) === 'vip'
+      ? 'VIP'
+      : planTier(plan) === 'premium'
+        ? 'Premium'
+        : null)
+  const idLine = [statusLabel, level.name, ville]
+    .filter(Boolean)
+    .map((s) => (s as string).toUpperCase())
+    .join('  •  ')
 
   useEffect(() => {
     if (loading) return
@@ -434,56 +437,14 @@ export default function Profile() {
         {/* Identité */}
         <div className="text-center">
           <h1 className="display-xl text-fg">{pseudo}</h1>
-          <div className="mt-2 flex justify-center">
-            <TitleChip xp={xp} title={title} />
-          </div>
-          {/* Subscribers see their plan badge in place of the XP level
-              pill — once you've paid, "Débutant" feels off. Free tier
-              keeps the level pill as before. */}
-          {planTier(plan) === 'vip' ? (
-            <span
-              className="mt-3 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold text-black shadow-md"
-              style={{
-                background:
-                  'linear-gradient(120deg, #d4af37 0%, #ffd700 50%, #b8860b 100%)',
-              }}
+          {/* Furtive identity line — status • level • ville, all in one
+              thin steel-grey row (no stacked gold/red badges). */}
+          {idLine && (
+            <p
+              className="mt-2.5 text-xs font-normal text-fg2"
+              style={{ letterSpacing: '0.18em' }}
             >
-              VIP 👑
-            </span>
-          ) : planTier(plan) === 'premium' ? (
-            <span className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-accent px-3 py-1 text-xs font-bold text-fg shadow-md">
-              Premium ⚡
-            </span>
-          ) : (
-            // Editorial rank chip — sport-red uppercase with a barely-
-            // there 5% red wash + matching border, per the immersive
-            // header spec (309487.jpg).
-            <span
-              className="mt-3 inline-flex items-center rounded-md font-extrabold uppercase"
-              style={{
-                color: '#EF4444',
-                background: 'rgba(239, 68, 68, 0.05)',
-                border: '1px solid rgba(239, 68, 68, 0.30)',
-                padding: '2px 10px',
-                fontSize: '11px',
-                letterSpacing: '0.16em',
-              }}
-            >
-              {level.name}
-            </span>
-          )}
-          {/* Single subtitle line — ville • Membre depuis X. Replaces the
-              two previous standalone paragraphs so the identity block
-              reads in three vertical bands instead of five. */}
-          {(ville || joined) && (
-            <p className="mt-2 text-xs font-semibold text-fg2">
-              {ville && <span>{ville}</span>}
-              {ville && joined && (
-                <span className="mx-1.5 text-fg2/40" aria-hidden>
-                  •
-                </span>
-              )}
-              {joined && <span>Membre depuis {joined}</span>}
+              {idLine}
             </p>
           )}
           {/* Unified stats pill — replaces both the followers/following
@@ -533,63 +494,40 @@ export default function Profile() {
               )}
             </div>
           </div>
-        </div>
 
-        {/* SECTION 2 — XP */}
-        <section
-          className="rounded-3xl bg-card p-5"
-          style={{ border: '1px solid var(--color-border)' }}
-        >
-          <div className="flex items-baseline justify-between">
-            <span className="label-up text-[10px] text-fg2">
-              Niveau {level.name}
-            </span>
-            <span className="font-display text-2xl font-extrabold tracking-tighter text-fg">
-              {xp} <span className="text-sm text-fg2">XP</span>
-            </span>
+          {/* Hairline XP — a 2px jet track filling pure white, right under
+              the stats line; tiny unified caption below. Replaces the big
+              central "Niveau" card. */}
+          <div className="mx-auto mt-4 max-w-[280px]">
+            <div className="h-0.5 w-full overflow-hidden rounded-full bg-fg/[0.10]">
+              <div
+                className="h-full rounded-full bg-fg transition-[width] duration-1000 ease-out"
+                style={{ width: `${animPct}%` }}
+              />
+            </div>
+            <p className="mt-1.5 text-xs font-normal text-fg2">
+              {level.isMax
+                ? `${level.name} — ${new Intl.NumberFormat('fr-FR').format(xp)} XP`
+                : `${level.name} — ${new Intl.NumberFormat('fr-FR').format(xp)} XP (Plus que ${level.toNext} XP avant ${level.next})`}
+            </p>
           </div>
-          <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-fg/[0.06]">
-            <div
-              className="h-full rounded-full bg-accent transition-[width] duration-1000 ease-out"
-              style={{
-                width: `${animPct}%`,
-                // Discreet red glow on the filled segment so the bar
-                // still reads against the dark surface despite the
-                // thinner 1.5px height.
-                boxShadow:
-                  '0 0 8px rgba(232, 32, 58, 0.55), 0 0 1px rgba(232, 32, 58, 0.75) inset',
-              }}
-            />
-          </div>
-          <p className="mt-2 text-xs text-fg2">
-            {level.isMax
-              ? 'Niveau maximum atteint 👑'
-              : `Plus que ${level.toNext} XP avant ${level.next}`}
-          </p>
-        </section>
+        </div>
 
         {/* PREMIUM BANNER moved to the very bottom of the profile
             page per the 2026-06-01 cleanup so the stats pill flows
             directly into the segmented control without a paid CTA
             wedge. See <PremiumTopBanner /> at the end of this block. */}
 
-        {/* SEGMENTED CONTROL — 3 tabs (Collection / Garage / Récompenses) */}
+        {/* TAB NAV — three plain words spaced horizontally (Apple text
+            nav): active in pure white under a 1px underline, inactive in
+            muted grey. No pills, no gradient fills, no emoji. */}
         <section>
-          <div
-            className="flex gap-1 rounded-xl p-1"
-            style={{
-              background: 'rgb(var(--color-card) / 0.60)',
-              border: '1px solid rgb(var(--color-fg) / 0.05)',
-              backdropFilter: 'saturate(160%) blur(14px)',
-              WebkitBackdropFilter: 'saturate(160%) blur(14px)',
-            }}
-            role="tablist"
-          >
+          <div className="flex gap-6 px-1" role="tablist">
             {(
               [
-                { key: 'collection', label: 'Collection', emoji: '🃏' },
-                { key: 'garage', label: 'Garage', emoji: '🏎️' },
-                { key: 'rewards', label: 'Récompenses', emoji: '🏆' },
+                { key: 'collection', label: 'Collection' },
+                { key: 'garage', label: 'Garage' },
+                { key: 'rewards', label: 'Récompenses' },
               ] as const
             ).map((t) => {
               const active = profileTab === t.key
@@ -599,23 +537,18 @@ export default function Profile() {
                   role="tab"
                   aria-selected={active}
                   onClick={() => setProfileTab(t.key)}
-                  className="tappable flex-1 rounded-lg py-2 text-xs font-bold transition-all"
-                  style={{
-                    background: active
-                      ? 'rgb(var(--color-fg) / 0.10)'
-                      : 'transparent',
-                    color: active
-                      ? 'rgb(var(--color-fg))'
-                      : 'rgb(var(--color-fg) / 0.45)',
-                    boxShadow: active
-                      ? '0 4px 12px rgba(0, 0, 0, 0.30)'
-                      : undefined,
-                  }}
+                  className="tappable relative pb-2 text-sm transition-colors"
                 >
-                  <span className="mr-1" aria-hidden>
-                    {t.emoji}
+                  <span
+                    className={
+                      active ? 'font-medium text-fg' : 'font-normal text-fg2'
+                    }
+                  >
+                    {t.label}
                   </span>
-                  {t.label}
+                  {active && (
+                    <span className="absolute inset-x-0 -bottom-px h-px bg-fg" />
+                  )}
                 </button>
               )
             })}
@@ -828,64 +761,24 @@ function ProfileStatTiny({
   )
 }
 
-/** Jet-black banner with a drifting gold sweep that nudges free
- *  users toward /premium. Lifted from the previous Section 3.5 into
- *  its own component so the top of Profile stays uncluttered. */
+/** Monochrome list line nudging free users toward /premium — no gold
+ *  border, gradient or shimmer. Reads as a quiet settings row: a label
+ *  with a thin grey subtitle and a chevron, separated from the page by
+ *  a single hairline. */
 function PremiumTopBanner({ onTap }: { onTap: () => void }) {
   return (
     <button
       onClick={onTap}
-      className="tappable group relative flex w-full items-center justify-between gap-3 overflow-hidden rounded-2xl px-4 py-4 text-left transition-transform active:scale-[0.99]"
-      style={{
-        background:
-          'linear-gradient(95deg, rgb(var(--color-card)) 0%, rgb(var(--color-card)) 50%, rgb(var(--color-card)) 100%)',
-        border: '1px solid rgba(224, 179, 65, 0.32)',
-        boxShadow:
-          '0 16px 36px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 215, 0, 0.06) inset',
-      }}
+      className="tappable flex w-full items-center justify-between gap-3 py-4 text-left"
+      style={{ borderTop: '1px solid var(--color-divider)' }}
     >
-      <span
-        aria-hidden
-        className="pointer-events-none absolute inset-0"
-        style={{
-          background:
-            'linear-gradient(95deg, rgba(224, 179, 65, 0) 0%, rgba(255, 215, 0, 0.10) 35%, rgba(255, 246, 200, 0.18) 50%, rgba(255, 215, 0, 0.10) 65%, rgba(184, 134, 11, 0) 100%)',
-          backgroundSize: '220% 100%',
-          animation: 'founder-shimmer 6s linear infinite',
-        }}
-      />
-      <div className="relative z-10 flex items-center gap-3">
-        <span
-          className="flex h-10 w-10 flex-none items-center justify-center rounded-xl"
-          style={{
-            background:
-              'linear-gradient(135deg, rgba(255, 215, 0, 0.25) 0%, rgba(184, 134, 11, 0.10) 100%)',
-            border: '1px solid rgba(255, 215, 0, 0.35)',
-            color: '#FFD700',
-            fontSize: '18px',
-          }}
-        >
-          ⚡
-        </span>
-        <div className="min-w-0">
-          <p
-            className="font-display font-extrabold uppercase tracking-widest"
-            style={{
-              color: '#FFD700',
-              fontSize: '11px',
-              letterSpacing: '0.16em',
-            }}
-          >
-            Club REVS Premium
-          </p>
-          <p className="mt-0.5 text-fg/75" style={{ fontSize: '12px' }}>
-            Mode Radar temps réel & spots illimités
-          </p>
-        </div>
+      <div className="min-w-0">
+        <p className="text-base font-semibold text-fg">Club REVS Premium</p>
+        <p className="mt-0.5 text-xs font-normal text-fg2">
+          Mode Radar temps réel & spots illimités
+        </p>
       </div>
-      <ChevronRight
-        className="relative z-10 h-5 w-5 flex-none text-fg/55 transition-transform group-hover:translate-x-0.5"
-      />
+      <ChevronRight className="h-5 w-5 flex-none text-fg2" />
     </button>
   )
 }
@@ -926,21 +819,21 @@ function brandGlow(brand: string | null | undefined): string {
 
 // ─────────────────────────── COLLECTION DECKS ───────────────────────────
 
-/** Rarity-anchored deck headers per the 2026-06-01 showroom refocus.
- *  The Collection tab no longer dumps every card into a flat 2-col
- *  grid; instead the user lands on 4 horizontal "deck" rectangles
- *  (one per rarity that has at least one spot) and drills into a
- *  filtered grid on tap. Decks ordered high → low so Legendary/Ultra
- *  Rare lead. */
+/** Rarity-anchored collection cards per the 2026-06-04 ennoblissement.
+ *  The Collection tab lands on horizontal "portfolio" cards — one per
+ *  rarity that has at least one spot — each backdropped by the user's
+ *  best (priciest) photographed car in that category, heavily darkened
+ *  and blurred. No neon glyphs, no tints, no emoji: just a white deck
+ *  name and a grey card count. Tapping drills into the filtered grid.
+ *  Ordered high → low so Hypercar leads. */
 type Deck = {
   rarity: Rarity
   label: string
   count: number
-  /** Rarity-tinted accent colour for the eyebrow + glow on the
-   *  deck rectangle. Same palette as the Home recent-spot pills
-   *  (emerald commun, blue rare, violet ultra_rare, gold unique). */
-  tint: string
-  emoji: string
+  /** URL of the priciest photographed spot in this rarity — used as a
+   *  furtive, darkened background for the card. Null when none of the
+   *  rarity's spots carry a photo. */
+  cover: string | null
 }
 const DECK_RARITY_ORDER: Rarity[] = [
   'hypercar',
@@ -950,16 +843,13 @@ const DECK_RARITY_ORDER: Rarity[] = [
   'premium',
   'standard',
 ]
-const DECK_THEME: Record<
-  Rarity,
-  { label: string; tint: string; emoji: string }
-> = {
-  hypercar:    { label: 'Hypercar',    tint: '#FACC15', emoji: '👑' },
-  supercar:    { label: 'Supercar',    tint: '#C084FC', emoji: '✨' },
-  exclusif:    { label: 'Exclusif',    tint: '#B87333', emoji: '💎' },
-  performance: { label: 'Performance', tint: '#EF4444', emoji: '🏁' },
-  premium:     { label: 'Premium',     tint: '#60A5FA', emoji: '⚡' },
-  standard:    { label: 'Standard',    tint: '#9CA3AF', emoji: '🎯' },
+const DECK_LABEL: Record<Rarity, string> = {
+  hypercar: 'Hypercar',
+  supercar: 'Supercar',
+  exclusif: 'Exclusif',
+  performance: 'Performance',
+  premium: 'Premium',
+  standard: 'Standard',
 }
 
 function CollectionDecks({ spots }: { spots: Spot[] }) {
@@ -967,9 +857,15 @@ function CollectionDecks({ spots }: { spots: Spot[] }) {
 
   const decks = useMemo<Deck[]>(() => {
     return DECK_RARITY_ORDER.map((r) => {
-      const count = spots.filter((s) => (s.rarity ?? 'standard') === r).length
-      const t = DECK_THEME[r]
-      return { rarity: r, label: t.label, count, tint: t.tint, emoji: t.emoji }
+      const inRarity = spots.filter((s) => (s.rarity ?? 'standard') === r)
+      // Best photo = the priciest spot that actually carries an image.
+      const cover =
+        inRarity
+          .filter((s) => s.photo_url)
+          .sort(
+            (a, b) => (b.estimated_price ?? 0) - (a.estimated_price ?? 0),
+          )[0]?.photo_url ?? null
+      return { rarity: r, label: DECK_LABEL[r], count: inRarity.length, cover }
     }).filter((d) => d.count > 0)
   }, [spots])
 
@@ -983,29 +879,20 @@ function CollectionDecks({ spots }: { spots: Spot[] }) {
     const filtered = spots.filter(
       (s) => (s.rarity ?? 'standard') === openRarity,
     )
-    const theme = DECK_THEME[openRarity]
     return (
       <div>
         <button
           onClick={() => setOpenRarity(null)}
-          className="tappable mb-4 inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold text-fg/80 hover:text-fg"
-          style={{
-            background: 'var(--color-glass-mid)',
-            border: '1px solid rgb(var(--color-fg) / 0.08)',
-          }}
+          className="tappable mb-4 inline-flex items-center gap-2 text-xs font-medium text-fg2 hover:text-fg"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
           Tous les decks
         </button>
         <div className="mb-3 flex items-baseline justify-between">
-          <h3
-            className="font-display font-extrabold tracking-tight text-fg"
-            style={{ fontSize: '18px', letterSpacing: '-0.02em' }}
-          >
-            <span style={{ color: theme.tint }}>{theme.emoji}</span>{' '}
-            {theme.label}
+          <h3 className="text-lg font-semibold tracking-tight text-fg">
+            {DECK_LABEL[openRarity]}
           </h3>
-          <span className="text-xs text-fg2 font-semibold">
+          <span className="text-xs font-normal text-fg2">
             {filtered.length} carte{filtered.length > 1 ? 's' : ''}
           </span>
         </div>
@@ -1020,81 +907,60 @@ function CollectionDecks({ spots }: { spots: Spot[] }) {
         <button
           key={d.rarity}
           onClick={() => setOpenRarity(d.rarity)}
-          className="tappable flex w-full items-center gap-4 rounded-3xl text-left transition-all duration-200 active:scale-[0.98]"
+          className="tappable relative flex w-full items-center gap-4 overflow-hidden rounded-2xl px-5 py-5 text-left transition-transform duration-200 active:scale-[0.98]"
           style={{
-            background: 'var(--color-glass-strong)',
-            border: '1px solid rgb(var(--color-fg) / 0.05)',
-            padding: '18px 20px',
-            boxShadow: `0 16px 30px rgba(0, 0, 0, 0.35), inset 0 0 0 1px ${d.tint}10`,
+            background: 'rgb(var(--color-card))',
+            border: '1px solid var(--color-border)',
           }}
         >
-          {/* Stack glyph — three nested tilted squares hinting "deck
-              of cards", tinted in the rarity colour. Pure CSS, no
-              extra fetch. */}
-          <div
-            className="relative flex-none"
-            style={{ width: '44px', height: '44px' }}
-          >
-            <div
-              className="absolute inset-0 rounded-xl"
-              style={{
-                background: `${d.tint}1A`,
-                border: `1px solid ${d.tint}55`,
-                transform: 'rotate(-10deg) translate(-4px, 4px)',
-              }}
-            />
-            <div
-              className="absolute inset-0 rounded-xl"
-              style={{
-                background: `${d.tint}26`,
-                border: `1px solid ${d.tint}77`,
-                transform: 'rotate(4deg) translate(2px, -2px)',
-              }}
-            />
-            <div
-              className="absolute inset-0 flex items-center justify-center rounded-xl text-lg"
-              style={{
-                background: `${d.tint}33`,
-                border: `1px solid ${d.tint}AA`,
-                boxShadow: `0 4px 14px ${d.tint}33`,
-              }}
-            >
-              {d.emoji}
-            </div>
-          </div>
+          {/* Furtive background: the best car of the deck, darkened and
+              blurred so the white text reads cleanly on top. */}
+          {d.cover && (
+            <>
+              <img
+                src={d.cover}
+                alt=""
+                aria-hidden
+                loading="lazy"
+                className="pointer-events-none absolute inset-0 h-full w-full object-cover"
+                style={{ opacity: 0.3, filter: 'blur(6px)' }}
+              />
+              <span
+                aria-hidden
+                className="pointer-events-none absolute inset-0"
+                style={{
+                  background:
+                    'linear-gradient(90deg, rgba(0,0,0,0.65) 0%, rgba(0,0,0,0.35) 60%, rgba(0,0,0,0.15) 100%)',
+                }}
+              />
+            </>
+          )}
 
-          <div className="min-w-0 flex-1">
-            <p
-              className="font-black uppercase"
-              style={{
-                color: d.tint,
-                fontSize: '10px',
-                letterSpacing: '0.20em',
-              }}
-            >
-              Deck
-            </p>
+          <div className="relative z-10 min-w-0 flex-1">
             <h4
-              className="mt-0.5 font-display font-extrabold tracking-tight text-fg"
-              style={{ fontSize: '16px', letterSpacing: '-0.01em' }}
+              className={`text-base font-semibold tracking-tight ${
+                d.cover ? 'text-white' : 'text-fg'
+              }`}
             >
               {d.label}
             </h4>
             <p
-              className="mt-0.5 text-fg2 font-semibold"
-              style={{ fontSize: '11px' }}
+              className={`mt-0.5 text-xs font-normal ${
+                d.cover ? 'text-white/65' : 'text-fg2'
+              }`}
             >
               {d.count} carte{d.count > 1 ? 's' : ''} collectionnée
               {d.count > 1 ? 's' : ''}
             </p>
           </div>
 
-          <ChevronRight className="h-4 w-4 flex-none text-fg2/45" />
+          <ChevronRight
+            className={`relative z-10 h-4 w-4 flex-none ${
+              d.cover ? 'text-white/55' : 'text-fg2'
+            }`}
+          />
         </button>
       ))}
-      <p className="pt-2 text-center text-[10px] uppercase tracking-widest text-fg2/40">
-        Decks groupés par rareté
-      </p>
     </div>
   )
 }
