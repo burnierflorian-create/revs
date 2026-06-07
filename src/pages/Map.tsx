@@ -4,7 +4,6 @@ import mapboxgl from 'mapbox-gl'
 import type { DataDrivenPropertyValueSpecification } from 'mapbox-gl'
 import 'mapbox-gl/dist/mapbox-gl.css'
 import {
-  Car,
   LocateFixed,
   Loader2,
   Search as SearchIcon,
@@ -40,10 +39,6 @@ import {
 } from '../lib/spotPredictions'
 import { xpLevel } from '../lib/xp'
 
-function fmtDist(m: number): string {
-  return m < 1000 ? `${Math.round(m)} m` : `${(m / 1000).toFixed(1)} km`
-}
-
 const PARIS: [number, number] = [2.3522, 48.8566]
 const DEFAULT_ZOOM = 13
 const USER_ZOOM = 15
@@ -51,14 +46,6 @@ const RECENTER_ZOOM = 17
 const GEO_TIMEOUT_MS = 3000
 const SPOT_TTL_MS = 60 * 60 * 1000
 const POLL_MS = 60 * 1000
-
-const FILTERS = ['Tous', 'Supercars', 'Autre', 'JDM'] as const
-const FILTER_CATEGORY: Record<string, string | null> = {
-  Tous: null,
-  Supercars: 'supercar',
-  Autre: 'other',
-  JDM: 'JDM',
-}
 
 const CAR_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><path d="M9 17h6"/><circle cx="17" cy="17" r="2"/></svg>`
 
@@ -530,7 +517,6 @@ export default function MapPage() {
   const namesRef = useRef<globalThis.Map<string, string>>(new globalThis.Map())
   const markersRef = useRef<Record<string, mapboxgl.Marker>>({})
   const onScreenRef = useRef<Record<string, mapboxgl.Marker>>({})
-  const filterRef = useRef<string>('Tous')
   const searchRef = useRef<string>('')
   // Advanced filters (rarity / brand / card level) + the viewer's card
   // collection, mirrored into refs so the marker-building loop reads the
@@ -553,17 +539,12 @@ export default function MapPage() {
   const posRef = useRef<{ lat: number; lng: number } | null>(null)
 
   const [error, setError] = useState<string | null>(null)
-  const [activeFilter, setActiveFilter] = useState<string>('Tous')
   const [searchQuery, setSearchQuery] = useState<string>('')
   const [mapFilters, setMapFilters] = useState<MapFilters>(DEFAULT_MAP_FILTERS)
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
   const [geoError, setGeoError] = useState<string | null>(null)
   const [visibleCount, setVisibleCount] = useState(0)
-  const [panelSpots, setPanelSpots] = useState<Spot[]>([])
-  const [userPos, setUserPos] = useState<{ lat: number; lng: number } | null>(
-    null,
-  )
   const [mapReady, setMapReady] = useState(false)
 
   const [mode, setMode] = useState<MapMode>(() => {
@@ -674,7 +655,6 @@ export default function MapPage() {
         setGeoError(null)
         const p = { lat: pos.coords.latitude, lng: pos.coords.longitude }
         posRef.current = p
-        setUserPos(p)
         mapRef.current?.flyTo({
           center: [pos.coords.longitude, pos.coords.latitude],
           zoom: RECENTER_ZOOM,
@@ -765,7 +745,6 @@ export default function MapPage() {
             clearTimeout(fallback)
             const p = { lat: pos.coords.latitude, lng: pos.coords.longitude }
             posRef.current = p
-            setUserPos(p)
             resolve({
               center: [pos.coords.longitude, pos.coords.latitude],
               zoom: USER_ZOOM,
@@ -828,7 +807,6 @@ export default function MapPage() {
     }
 
     function featureCollection(): GeoJSON.FeatureCollection {
-      const cat = FILTER_CATEGORY[filterRef.current]
       const needle = searchRef.current.trim().toLowerCase()
       const adv = advFiltersRef.current
       const cards = cardMapRef.current
@@ -841,10 +819,8 @@ export default function MapPage() {
       const norm = (s: string) =>
         (s ?? '').toLowerCase().trim().replace(/\s+/g, ' ')
       const feats: GeoJSON.Feature[] = []
-      const panel: Spot[] = []
       for (const sp of allSpots.values()) {
         if (!isAlive(sp)) continue
-        if (cat != null && sp.category !== cat) continue
         if (needle) {
           const hay = `${sp.brand ?? ''} ${sp.model ?? ''} ${sp.category ?? ''}`
             .toLowerCase()
@@ -862,7 +838,6 @@ export default function MapPage() {
           const cp = cards.get(cardKey(sp.brand ?? '', sp.model ?? ''))
           if (!cp || cp.level < adv.cardLevel) continue
         }
-        if (cat != null) panel.push(sp)
         feats.push({
           type: 'Feature',
           geometry: { type: 'Point', coordinates: [sp.lng, sp.lat] },
@@ -879,13 +854,7 @@ export default function MapPage() {
           },
         })
       }
-      panel.sort(
-        (a, b) =>
-          new Date(b.created_at).getTime() -
-          new Date(a.created_at).getTime(),
-      )
       setVisibleCount(feats.length)
-      setPanelSpots(panel)
       return { type: 'FeatureCollection', features: feats }
     }
 
@@ -1297,11 +1266,6 @@ export default function MapPage() {
   }, [])
 
   useEffect(() => {
-    filterRef.current = activeFilter
-    refreshRef.current?.()
-  }, [activeFilter])
-
-  useEffect(() => {
     searchRef.current = searchQuery
     refreshRef.current?.()
   }, [searchQuery])
@@ -1458,19 +1422,7 @@ export default function MapPage() {
         </div>
       )}
 
-      {activeFilter !== 'Tous' && visibleCount === 0 && !error && (
-        <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center px-8 text-center">
-          <Car size={48} color="rgb(var(--color-fg-2))" strokeWidth={1.5} />
-          <p className="mt-4 text-base font-medium text-fg">
-            Aucun spot en {activeFilter}
-          </p>
-          <p className="mt-1 text-sm text-fg2">
-            Soyez le premier à spotter !
-          </p>
-        </div>
-      )}
-
-      <div className="absolute left-0 right-0 top-0 z-10 space-y-2 px-4 pt-[max(3rem,calc(env(safe-area-inset-top)+2rem))]">
+      <div className="absolute left-0 right-0 top-0 z-10 px-4 pt-[max(3rem,calc(env(safe-area-inset-top)+2rem))]">
         {/* Search + advanced-filters icon on one line — mirrors the Fil.
             The search bar flexes; the filter icon sits to its right as a
             light, fond-less glyph (a tiny active dot when filters are on). */}
@@ -1527,45 +1479,10 @@ export default function MapPage() {
             stopReplay + the replay state) stays in the module so it
             can be reattached to a future UI surface without rewiring
             the marker animation. */}
-        {/* Filter pills — per-pill glassmorphism. The bar itself is
-            transparent; each inactive pill carries its own white/60 +
-            black/05 border + 12px blur + shadow-sm so the row reads as
-            distinct iOS Maps chips rather than a single segmented
-            control. The active pill keeps the brand-red fill to
-            anchor the selection. */}
-        <div className="mx-auto flex max-w-md gap-2 px-1">
-          {FILTERS.map((f) => {
-            const isActive = activeFilter === f
-            return (
-              <button
-                key={f}
-                onClick={() => setActiveFilter(f)}
-                className={`tappable flex-1 rounded-full py-2 text-xs font-semibold tracking-wide transition-colors ${
-                  isActive ? 'text-white' : 'text-fg2 hover:text-fg'
-                }`}
-                style={
-                  isActive
-                    ? {
-                        background: 'rgb(var(--color-accent))',
-                        border: '1px solid rgba(0, 0, 0, 0.08)',
-                        boxShadow: '0 6px 18px rgba(232, 32, 58, 0.40)',
-                      }
-                    : {
-                        // Theme-aware filter pill — flips to dark
-                        // glass over Mapbox dark-v11 in night mode.
-                        background: 'var(--color-glass)',
-                        backdropFilter: 'saturate(170%) blur(12px)',
-                        WebkitBackdropFilter: 'saturate(170%) blur(12px)',
-                        border: '1px solid var(--color-border)',
-                        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.10)',
-                      }
-                }
-              >
-                {f}
-              </button>
-            )
-          })}
-        </div>
+        {/* Category pill row (Tous/Supercars/Autre/JDM) removed
+            2026-06-07: superseded by the advanced-filters sheet behind
+            the SlidersHorizontal icon. The map now extends straight
+            under the search bar for maximum spotting surface. */}
       </div>
 
       {/* AI prediction Sparkles entry button — archived behind
@@ -1595,67 +1512,6 @@ export default function MapPage() {
           loading={predictionLoading}
           onClose={() => setInfoSheetOpen(false)}
         />
-      )}
-
-      {activeFilter !== 'Tous' && panelSpots.length > 0 && (
-        <div
-          className="animate-slide-up absolute left-0 right-0 z-10"
-          style={{ bottom: 'calc(env(safe-area-inset-bottom) + 5rem)' }}
-        >
-          <div className="mx-2 rounded-2xl bg-card/70 p-3 backdrop-blur">
-            <p className="mb-2 px-1 text-xs font-semibold text-fg/70">
-              {panelSpots.length} {activeFilter} sur la carte
-            </p>
-            <div className="no-scrollbar flex gap-3 overflow-x-auto">
-              {panelSpots.map((s) => {
-                const dist =
-                  userPos &&
-                  Number.isFinite(s.lat) &&
-                  Number.isFinite(s.lng)
-                    ? fmtDist(
-                        distanceMeters(
-                          userPos.lat,
-                          userPos.lng,
-                          s.lat,
-                          s.lng,
-                        ),
-                      )
-                    : null
-                return (
-                  <button
-                    key={s.id}
-                    onClick={() => navigate(`/spot/${s.id}`)}
-                    className="w-32 flex-none text-left"
-                  >
-                    <div className="h-20 w-32 overflow-hidden rounded-xl bg-card">
-                      {s.photo_url ? (
-                        <img
-                          src={s.photo_url}
-                          alt=""
-                          loading="lazy"
-                          decoding="async"
-                          className="h-full w-full object-cover"
-                        />
-                      ) : (
-                        <div className="flex h-full w-full items-center justify-center">
-                          <Car className="h-6 w-6 text-fg/20" />
-                        </div>
-                      )}
-                    </div>
-                    <p className="mt-1 truncate text-xs font-semibold text-fg">
-                      {s.brand} {s.model}
-                    </p>
-                    <p className="truncate text-[10px] text-fg/50">
-                      {[dist, timeAgo(s.created_at)]
-                        .filter(Boolean)
-                        .join(' · ')}
-                    </p>
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-        </div>
       )}
 
       {/* Bottom-right control stack — slim 2D/3D pill sitting just
