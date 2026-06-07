@@ -55,12 +55,29 @@ export default function BrandLogo({
   const src =
     cursor >= sources.length ? wordmarkDataUrl(brand.name) : sources[cursor]
 
-  const filter = [
+  // Full per-brand treatment used on the colour brand-detail hero.
+  const perBrandFilter = [
     brand.invertOnDark ? 'brightness(0) invert(1)' : '',
     brand.logoFilter ?? '',
   ]
     .filter(Boolean)
     .join(' ')
+
+  // In the Explorer list (mono), the theme-aware monochrome class is only
+  // safe for SVG GLYPHS (inline monograms/wordmarks) and brands flagged as
+  // dark wordmarks — there it flips white↔charcoal cleanly. Colored or
+  // detailed logos (BMW roundel, Ferrari, etc.) keep their REAL colours:
+  // the destructive brightness(0)·invert flattens them into a white blob,
+  // and they read perfectly on both themes as-is. Off the list (detail
+  // page) we keep the original per-brand filter.
+  const inline = src.startsWith('data:')
+  const monoActive = mono && (inline || brand.invertOnDark === true)
+  const monoClass = monoActive ? 'brand-logo-mono' : undefined
+  const appliedFilter = monoActive
+    ? undefined
+    : mono
+      ? brand.logoFilter || undefined
+      : perBrandFilter || undefined
 
   return (
     <div
@@ -72,14 +89,12 @@ export default function BrandLogo({
         alt={brand.name}
         loading="lazy"
         onError={() => setCursor((c) => c + 1)}
-        className={mono ? 'brand-logo-mono' : undefined}
+        className={monoClass}
         style={{
           width: imgPx,
           height: imgPx,
           objectFit: 'contain',
-          // In mono mode the CSS class owns the filter (theme-aware), so
-          // we skip the per-brand inline filter entirely.
-          filter: mono ? undefined : filter || undefined,
+          filter: appliedFilter,
         }}
       />
     </div>
