@@ -489,10 +489,15 @@ export default function Feed() {
   return (
     <div
       ref={containerRef}
-      className="relative min-h-screen bg-bg px-4 pt-[max(1rem,env(safe-area-inset-top))]"
+      className="relative min-h-screen bg-bg pt-[max(1rem,env(safe-area-inset-top))]"
     >
+      {/* Root is edge-to-edge (px-0) so feed photos touch the screen
+          edges with NO overflow trick — the old -mx-4 was being clipped by
+          the feed-card's content-visibility paint-containment. Horizontal
+          breathing room is re-applied selectively (px-4) on text/icon rows
+          only. */}
       <PullIndicator pull={pull} refreshing={refreshing} />
-      <h1 className="display-xl py-5 text-fg">Fil</h1>
+      <h1 className="display-xl px-4 py-5 text-fg">Fil</h1>
 
       {/* Search (~85%) + a single minimal slider icon that opens the
           filters panel. The old "Tout" / "Filtres" button row was removed
@@ -500,7 +505,7 @@ export default function Feed() {
           the whole header collapses to one clean line so the photos
           below own the screen. Glass + border resolve through CSS vars so
           the whole row auto-flips dark / light. */}
-      <div className="mb-6 flex items-center gap-2">
+      <div className="mb-6 flex items-center gap-2 px-4">
         <div
           className="flex flex-1 items-center gap-2 rounded-full px-4 py-2.5"
           style={{
@@ -563,7 +568,7 @@ export default function Feed() {
       />
 
       {geoMsg && (
-        <p className="mb-4 rounded-xl bg-card px-4 py-3 text-xs text-fg/50">
+        <p className="mb-4 mx-4 rounded-xl bg-card px-4 py-3 text-xs text-fg/50">
           {geoMsg}
         </p>
       )}
@@ -788,7 +793,7 @@ function FeedCard({
       {/* A · HEADER — sealed tight to the photo, single compact line */}
       <button
         onClick={() => navigate(`/u/${spot.user_id}`)}
-        className="tappable mb-2 flex w-full min-w-0 items-center gap-2.5 text-left"
+        className="tappable mb-2 flex w-full min-w-0 items-center gap-2.5 px-4 text-left"
         aria-label={`Profil de ${pseudo}`}
       >
         <div
@@ -828,19 +833,19 @@ function FeedCard({
         )}
       </button>
 
-      {/* B · PHOTO 4:5 — edge-to-edge, double-tap to like (no navigation) */}
+      {/* B · PHOTO 4:5 — true edge-to-edge (root is px-0, so w-full reaches
+          the screen with NO overflow → no content-visibility clipping).
+          Double-tap to like; never navigates. */}
       <div
         onClick={onPhotoTap}
-        className="relative -mx-4 cursor-pointer select-none"
+        className="relative cursor-pointer select-none"
       >
         {spot.photo_url ? (
-          // Natural aspect ratio (full-width, height auto) — the photo
-          // adapts to each image like Instagram instead of a forced crop.
           <img
             src={spot.photo_url}
             alt={title}
             loading="lazy"
-            className="block w-full"
+            className="aspect-[4/5] w-full rounded-none object-cover"
           />
         ) : (
           <div className="flex aspect-[4/5] w-full items-center justify-center bg-fg/5">
@@ -874,7 +879,7 @@ function FeedCard({
       </div>
 
       {/* C · TOOLS ROW — hairline icons, compact counters, discreet XP */}
-      <div className="mt-2 flex items-center gap-5">
+      <div className="mt-2 flex items-center gap-5 px-4">
         <button
           onClick={() => setLikeState(!liked)}
           aria-label={liked ? 'Retirer le like' : 'Liker'}
@@ -907,7 +912,7 @@ function FeedCard({
       {/* D · CAPTION (Instagram) — bold pseudo + car name, tappable → detail */}
       <button
         onClick={() => navigate(`/spot/${spot.id}`)}
-        className="tappable mt-2 block w-full text-left"
+        className="tappable mt-2 block w-full px-4 text-left"
         aria-label={`Voir ${title}`}
       >
         <p className="text-sm leading-snug">
@@ -920,7 +925,7 @@ function FeedCard({
       {/* E · QUICK COMMENT — opens the sheet */}
       <button
         onClick={() => setSheetOpen(true)}
-        className="tappable mt-2.5 flex w-full items-center gap-2.5 text-left"
+        className="tappable mt-2.5 flex w-full items-center gap-2.5 px-4 text-left"
         aria-label="Ajouter un commentaire"
       >
         <div className="flex h-7 w-7 flex-none items-center justify-center overflow-hidden rounded-full bg-fg/10 text-[11px] font-extrabold text-fg2">
