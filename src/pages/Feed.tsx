@@ -872,7 +872,7 @@ function FeedCard({
       </div>
 
       {/* C · TOOLS ROW — hairline icons, compact counters, discreet XP */}
-      <div className="mt-2.5 flex items-center gap-5">
+      <div className="mt-2 flex items-center gap-5">
         <button
           onClick={() => setLikeState(!liked)}
           aria-label={liked ? 'Retirer le like' : 'Liker'}

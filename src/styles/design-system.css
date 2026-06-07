@@ -38,6 +38,12 @@
   /* Tier glow accent — used by the avatar tier badge ring + welcome
      pill. Defaults to white/neutral so non-subscribers see no tint. */
   --tier-glow:       rgba(255, 255, 255, 0.06);
+  /* Trimmed bottom safe-area for the ultra-thin tab bar. We don't
+     reserve the full iPhone home-indicator inset (that made the bar feel
+     massive) — just a minimal clearance, floored at 4px elsewhere. The
+     nav height (h-12 = 3rem) + this var = the bar's total footprint, and
+     the scroll panes reserve `3.5rem + var` so content sits ~8px above. */
+  --safe-bottom: max(0.25rem, calc(env(safe-area-inset-bottom) - 1.25rem));
 }
 
 /* ─────────────────────── Light theme overrides ───────────────────────
