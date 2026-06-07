@@ -52,12 +52,13 @@ const FALLBACK = {
 
 // ─────────────────────── Prompts ───────────────────────
 
-// 2026-06-02 hybrid identify engine:
-// - Single static vision call with SYSTEM_STRICT — pure JSON, 6-tier
+// 2026-06-07 single-call identify engine (API-cost cleanup):
+// - ONE static vision call with SYSTEM_STRICT — pure JSON, 6-tier
 //   rarity, specs line, screen-detection guard. ~3-5 s latency.
-// - Web-search rarity refine RUNS ONLY when the static call returns
-//   rarity == "hypercar" (the only tier where a false positive
-//   actually hurts XP balance). Other tiers ship as-is.
+// - NO web_search refine anymore. Rarity ships straight from the
+//   prompt's static knowledge; the previous hypercar web check was the
+//   only "à la volée" AI cost left in a spot's lifecycle and is gone.
+//   Every later step (rarity, specs, history) is local or DB-cached.
 // - SYSTEM_SIMPLE / SYSTEM_MINIMAL remain as escalating fallbacks in
 //   case strict JSON parsing fails on the first attempt.
 const SYSTEM_STRICT = `Tu es le moteur de détection officiel de l'application REVS. Ton rôle est d'analyser la photo d'un véhicule.
@@ -318,73 +319,6 @@ function cleanModelName(s) {
 }
 
 
-// Third-stage call: web-grounded rarity lookup. Returns
-// { production: int|null, rarity: <6-tier value> } — defaults to
-// 'standard' when the answer is missing or unparseable, which is the
-// conservative XP-floor choice. The 6-tier scale (standard → hypercar)
-// landed in migration 0040; the prompt mixes positioning and
-// production cues since strict count thresholds alone can't tell a
-// 1000-unit JDM youngtimer apart from a 1000-unit hypercar.
-
-async function refineRarityFromWeb(client, brand, model, year) {
-  if (!brand || !model) return { production: null, rarity: 'standard' }
-  const yearPart = year ? ` ${year}` : ''
-  const userMsg =
-    `Recherche combien d'exemplaires de la ${brand} ${model}${yearPart} ont été ` +
-    `produits au total. Cherche sur les sites officiels du constructeur, ` +
-    `Wikipedia, presse auto. Si la production est encore en cours, donne le total ` +
-    `cumulé connu (sinon une estimation crédible).\n\n` +
-    `Réponds UNIQUEMENT par ce JSON, sans markdown :\n` +
-    `{"production": 499, "rarity": "supercar"}\n\n` +
-    `Échelle de rareté à 6 niveaux — classe UNIQUEMENT selon le VOLUME DE ` +
-    `PRODUCTION MONDIAL réel. Le prix n'entre JAMAIS en compte :\n` +
-    `- "standard" : modèle premium classique de grande série (ex: Mercedes CLA, ` +
-    `BMW Série 2, Audi A3, VW Golf). Volume très élevé.\n` +
-    `- "premium" : haut de gamme quotidien à fort volume, finition supérieure.\n` +
-    `- "performance" : véhicule de grande série issu d'un département sportif ` +
-    `officiel (ex: Mercedes-AMG, BMW M, Audi RS, Porsche 718). Sportif mais ` +
-    `produit en grande série.\n` +
-    `- "exclusif" : série limitée mondiale stricte < 500 exemplaires (édition ` +
-    `spéciale / collector qui n'est pas une hypercar).\n` +
-    `- "supercar" : production mondiale TOTALE < 5 000 unités (ex: Ferrari 488 GTB, ` +
-    `McLaren 570S, Audi R8 V10, Lamborghini Huracán).\n` +
-    `- "hypercar" : série ultra-limitée < 500 exemplaires, sommet absolu (ex: ` +
-    `Bugatti Chiron, Pagani Huayra, Koenigsegg, McLaren P1).\n\n` +
-    `Si la production exacte est inconnue, mets production: null mais TOUJOURS un rarity ` +
-    `cohérent avec le positionnement du modèle. En cas de doute, descends d'un cran ` +
-    `(une supercar douteuse = "performance", pas "supercar"). Aucun texte avant ou ` +
-    `après le JSON.`
-  try {
-    const r = await client.messages.create({
-      model: MODEL,
-      max_tokens: 400,
-      messages: [{ role: 'user', content: userMsg }],
-      tools: [
-        { type: 'web_search_20250305', name: 'web_search', max_uses: 3 },
-      ],
-    })
-    const text = r.content
-      .filter((b) => b.type === 'text')
-      .map((b) => b.text)
-      .join(' ')
-    const parsed = extractJSON(text)
-    const rarity = VALID_RARITY.has(parsed?.rarity) ? parsed.rarity : 'standard'
-    const production = (() => {
-      const v = parsed?.production
-      if (typeof v === 'number' && Number.isFinite(v) && v > 0) return Math.floor(v)
-      if (typeof v === 'string') {
-        const n = parseInt(v.replace(/[^0-9]/g, ''), 10)
-        if (Number.isFinite(n) && n > 0) return n
-      }
-      return null
-    })()
-    return { production, rarity }
-  } catch (e) {
-    console.error('[identify-car] rarity refine failed:', e?.message ?? e)
-    return { production: null, rarity: 'standard' }
-  }
-}
-
 async function callClaude(client, mimeType, imageBase64, system, maxTokens) {
   return client.messages.create({
     model: MODEL,
@@ -508,31 +442,12 @@ export default async function handler(req, res) {
       }
 
       if (parsed && (parsed.brand || parsed.model)) {
-        const finalized = finalize(parsed)
-        // 2026-06-02 hybrid refinement: ONLY hypercar gets a web check,
-        // and only when the static identify produced a real brand+model.
-        // Everything else ships as-is for sub-5s latency.
-        if (
-          finalized.rarity === 'hypercar' &&
-          finalized.brand !== NEVER_EMPTY_BRAND &&
-          finalized.model !== NEVER_EMPTY_MODEL &&
-          finalized.valid !== false
-        ) {
-          const rarityRes = await refineRarityFromWeb(
-            client,
-            finalized.brand,
-            finalized.model,
-            finalized.year,
-          )
-          finalized.production = rarityRes.production
-          // Trust the web check: if it says anything other than
-          // hypercar (incl. supercar/exclusif/performance), downgrade
-          // — the static identify over-claimed prestige.
-          if (rarityRes.rarity && rarityRes.rarity !== 'hypercar') {
-            finalized.rarity = rarityRes.rarity
-          }
-        }
-        return sendJson(res, finalized)
+        // Single static vision call — rarity ships straight from the
+        // strict prompt's static knowledge, no paid web_search refine.
+        // This is the only AI touch in a spot's lifecycle; rarity,
+        // specs and history are all served locally or from DB cache
+        // afterwards.
+        return sendJson(res, finalize(parsed))
       }
     } catch (e) {
       console.error(`[identify-car] attempt ${i + 1} threw:`, e?.message ?? e)
