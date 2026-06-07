@@ -499,7 +499,7 @@ export default function Profile() {
               the stats line; tiny unified caption below. Replaces the big
               central "Niveau" card. */}
           <div className="mx-auto mt-4 max-w-[280px]">
-            <div className="h-0.5 w-full overflow-hidden rounded-full bg-fg/[0.10]">
+            <div className="h-1 w-full overflow-hidden rounded-full bg-fg/[0.10]">
               <div
                 className="h-full rounded-full bg-fg transition-[width] duration-1000 ease-out"
                 style={{ width: `${animPct}%` }}
