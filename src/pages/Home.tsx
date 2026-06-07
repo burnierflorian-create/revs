@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Sun, CloudRain, ChevronRight } from 'lucide-react'
+import { ChevronRight } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { setPendingPhoto } from '../lib/pendingPhoto'
 import { xpLevel, XP_LADDER } from '../lib/xp'
@@ -12,7 +12,6 @@ import {
   type Challenge,
 } from '../lib/challenges'
 import { fetchLiveEvents, type LiveEvent } from '../lib/liveEvents'
-import { fetchSupercarWeather, type SupercarWeather } from '../lib/weather'
 import TitleChip from '../components/TitleChip'
 import { useTheme } from '../lib/theme'
 
@@ -31,10 +30,7 @@ export default function Home() {
   const [liveEvents, setLiveEvents] = useState<LiveEvent[]>([])
   const [community, setCommunity] = useState<CommunityStats | null>(null)
   const [title, setTitle] = useState<string | null>(null)
-  const [ville, setVille] = useState<string>('')
   const [now, setNow] = useState(() => Date.now())
-  const [weather, setWeather] = useState<SupercarWeather | null>(null)
-  const [weatherLoading, setWeatherLoading] = useState(true)
 
   // 1 Hz tick — feeds the Motorsport countdown frieze.
   useEffect(() => {
@@ -68,7 +64,7 @@ export default function Home() {
       const [profRes, xpRes] = await Promise.all([
         supabase
           .from('profiles')
-          .select('pseudo, ville, title')
+          .select('pseudo, title')
           .eq('user_id', user.id)
           .maybeSingle(),
         supabase.rpc('my_xp'),
@@ -79,7 +75,6 @@ export default function Home() {
         (profRes.data?.pseudo as string | undefined)?.trim() ||
         (user.email ? user.email.split('@')[0] : 'Spotter')
       setName(pseudo)
-      setVille((profRes.data?.ville as string | undefined)?.trim() ?? '')
       setTitle((profRes.data?.title as string | undefined)?.trim() || null)
       setXp((xpRes.data as number | null) ?? 0)
       setLoading(false)
@@ -102,25 +97,6 @@ export default function Home() {
       active = false
     }
   }, [])
-
-  // Real weather for the "Météo des Supercars" module. Defaults to
-  // Annecy (Flo's home base) when the profile has no city set so the
-  // module always has something meaningful to say.
-  useEffect(() => {
-    if (loading) return
-    const city = ville?.trim() || 'Annecy'
-    let active = true
-    // weatherLoading starts true and only flips off once resolved, so no
-    // synchronous in-effect setState is needed for the first read.
-    fetchSupercarWeather(city).then((w) => {
-      if (!active) return
-      setWeather(w)
-      setWeatherLoading(false)
-    })
-    return () => {
-      active = false
-    }
-  }, [ville, loading])
 
   const lvl = xpLevel(xp)
   // In-tier XP numbers for the "x / y XP" micro-stat, derived from the
@@ -222,21 +198,15 @@ export default function Home() {
       )}
 
       {/* ─── 3 · COMPLÉMENTS — floating on the page, massive breathing ─── */}
-      <div className="mt-12 space-y-12">
-        <SupercarWeatherModule
-          weather={weather}
-          loading={weatherLoading}
-          city={ville?.trim() || 'Annecy'}
-        />
-
-        {nextGp && (
+      {nextGp && (
+        <div className="mt-12">
           <MotorsportFrieze
             name={nextGp.name}
             gpDiff={gpDiff}
             onTap={() => navigate(`/f1/${nextGp.round}`)}
           />
-        )}
-      </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -629,77 +599,6 @@ function SpotterAction() {
         </span>
       </button>
     </div>
-  )
-}
-
-// ──────────────────────── MÉTÉO DES SUPERCARS ────────────────────────
-
-/** Ultra-sober textual weather module. Reads the real conditions for the
- *  user's city and resolves a binary "sortie index": dry → supercars are
- *  out; wet → limited, prefer covered spots. Theme-aware throughout. */
-function SupercarWeatherModule({
-  weather,
-  loading,
-  city,
-}: {
-  weather: SupercarWeather | null
-  loading: boolean
-  city: string
-}) {
-  const dry = weather?.condition !== 'humide'
-  const Icon = dry ? Sun : CloudRain
-  const accent = dry ? '#FFB85C' : '#93C5FD'
-
-  return (
-    <section className="home-section-enter">
-      <p
-        className="mb-3 px-1 font-black uppercase text-fg2"
-        style={{ fontSize: '10px', letterSpacing: '0.22em' }}
-      >
-        Météo des supercars
-      </p>
-      <div className="flex items-center gap-4 px-1">
-        <div
-          className="flex h-12 w-12 flex-none items-center justify-center rounded-2xl"
-          style={{
-            background: 'rgb(var(--color-fg) / 0.05)',
-            border: '1px solid rgb(var(--color-fg) / 0.07)',
-          }}
-        >
-          <Icon className="h-6 w-6" style={{ color: accent }} />
-        </div>
-        <div className="min-w-0 flex-1">
-          {loading && !weather ? (
-            <p className="text-[14px] font-medium text-fg/55">
-              Lecture du ciel sur {city}…
-            </p>
-          ) : (
-            <>
-              <p className="flex items-baseline gap-2">
-                <span
-                  className="font-display font-extrabold tracking-tight text-fg"
-                  style={{ fontSize: '15px', letterSpacing: '-0.01em' }}
-                >
-                  {weather?.headline ?? 'Conditions standards'}
-                </span>
-                {weather && (
-                  <span className="tabular-nums text-[12px] font-semibold text-fg2">
-                    {weather.tempC}° · {city}
-                  </span>
-                )}
-              </p>
-              <p
-                className="mt-0.5 font-medium text-fg/65"
-                style={{ fontSize: '13px', lineHeight: 1.45 }}
-              >
-                {weather?.detail ??
-                  'Sors quand même — on ne sait jamais ce qui passe.'}
-              </p>
-            </>
-          )}
-        </div>
-      </div>
-    </section>
   )
 }
 
