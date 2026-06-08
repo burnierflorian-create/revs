@@ -4,6 +4,7 @@ import mapboxgl from 'mapbox-gl'
 import type { DataDrivenPropertyValueSpecification } from 'mapbox-gl'
 import 'mapbox-gl/dist/mapbox-gl.css'
 import {
+  Camera,
   LocateFixed,
   Loader2,
   Search as SearchIcon,
@@ -12,6 +13,7 @@ import {
   X,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { setPendingPhoto } from '../lib/pendingPhoto'
 import { SkeletonMap } from '../components/Skeleton'
 import {
   distanceMeters,
@@ -520,6 +522,10 @@ export default function MapPage() {
   const markersRef = useRef<Record<string, mapboxgl.Marker>>({})
   const onScreenRef = useRef<Record<string, mapboxgl.Marker>>({})
   const searchRef = useRef<string>('')
+  // Hidden camera input for the centered "Spotter" FAB — clicked
+  // synchronously inside the tap so iOS opens the native camera; the
+  // captured photo is stashed and NewSpot consumes it on mount.
+  const spotInputRef = useRef<HTMLInputElement>(null)
   // Advanced filters (rarity / brand / card level) + the viewer's card
   // collection, mirrored into refs so the marker-building loop reads the
   // latest without re-subscribing.
@@ -680,6 +686,17 @@ export default function MapPage() {
       },
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
     )
+  }
+
+  // Centered camera FAB → native camera → stash photo → NewSpot.
+  // Same flow as Home's SpotterAction so spotting straight from the map
+  // lands in the identical publish pipeline.
+  function onSpotCapture(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return // user backed out of the camera
+    setPendingPhoto(file)
+    navigate('/new-spot')
   }
 
   function flyToUser() {
@@ -1572,6 +1589,32 @@ export default function MapPage() {
           <LocateFixed className="h-5 w-5 text-fg" />
         </button>
       </div>
+
+      {/* Centered "Spotter" camera FAB — primary action, round, brand
+          red (#E8203A), white camera glyph. Sits above the global tab
+          bar so it's fully visible and never overlapped. Tapping fires
+          the hidden capture input synchronously (iOS camera requirement). */}
+      <input
+        ref={spotInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        onChange={onSpotCapture}
+        className="hidden"
+      />
+      <button
+        onClick={() => spotInputRef.current?.click()}
+        aria-label="Spotter une voiture"
+        className="tappable absolute left-1/2 z-40 flex h-16 w-16 -translate-x-1/2 items-center justify-center rounded-full transition-transform active:scale-90"
+        style={{
+          bottom: 'calc(env(safe-area-inset-bottom) + 4.75rem)',
+          background: '#E8203A',
+          boxShadow:
+            '0 18px 40px rgba(232, 32, 58, 0.45), 0 8px 18px rgba(0, 0, 0, 0.40), 0 4px 10px rgba(0, 0, 0, 0.30), inset 0 0 0 1px rgba(255, 255, 255, 0.12)',
+        }}
+      >
+        <Camera className="h-7 w-7 text-white" strokeWidth={2.2} />
+      </button>
 
       {error && (
         <div className="absolute inset-0 z-20 flex items-center justify-center bg-bg px-8">
