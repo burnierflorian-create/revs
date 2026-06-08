@@ -443,7 +443,11 @@ function RpmGauges({
           })}
         </svg>
 
-        {/* Start-tip icons — one per arc, on its down-left origin. */}
+        {/* Start-tip icons — one per arc, pinned to the EXACT origin
+            (down-left start) of its own ring. The three rings start at
+            the same angle but only ~19px apart radially, so the badges
+            are sized 16px to sit cleanly on each tip without piling /
+            overlapping when the gauges are empty (0% cumulative). */}
         {GAUGE_RADII.map((r, i) => {
           const p = polar(GAUGE_CX, GAUGE_CY, r, GAUGE_START)
           return (
@@ -455,9 +459,10 @@ function RpmGauges({
                 left: `${(p.x / 200) * 100}%`,
                 top: `${(p.y / 175) * 100}%`,
                 transform: 'translate(-50%, -50%)',
-                width: '20px',
-                height: '20px',
-                fontSize: '11px',
+                width: '16px',
+                height: '16px',
+                fontSize: '9px',
+                lineHeight: 1,
                 background: 'var(--color-glass-strong)',
                 border: '1px solid rgb(var(--color-fg) / 0.10)',
               }}

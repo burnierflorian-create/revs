@@ -925,13 +925,12 @@ function CollectionDecks({ spots }: { spots: Spot[] }) {
                 className="pointer-events-none absolute inset-0 h-full w-full object-cover"
                 style={{ opacity: 0.3, filter: 'blur(6px)' }}
               />
+              {/* Discreet dark linear filter behind the white text so the
+                  deck name stays perfectly legible over any blurred
+                  background photo. */}
               <span
                 aria-hidden
-                className="pointer-events-none absolute inset-0"
-                style={{
-                  background:
-                    'linear-gradient(90deg, rgba(0,0,0,0.65) 0%, rgba(0,0,0,0.35) 60%, rgba(0,0,0,0.15) 100%)',
-                }}
+                className="pointer-events-none absolute inset-0 bg-gradient-to-r from-black/60 via-black/20 to-transparent"
               />
             </>
           )}

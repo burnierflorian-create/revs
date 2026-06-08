@@ -1143,7 +1143,7 @@ export default function Settings() {
   // ─────────────────────── Render ───────────────────────
 
   return (
-    <div className="min-h-screen bg-bg px-4 pt-[max(1rem,env(safe-area-inset-top))] text-fg">
+    <div className="min-h-screen bg-bg px-4 pt-[calc(max(1rem,env(safe-area-inset-top))+15px)] text-fg">
       <div className="flex items-center gap-3 py-4">
         <button
           onClick={() => navigate(-1)}
