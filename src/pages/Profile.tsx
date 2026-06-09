@@ -16,6 +16,7 @@ import { allBadges, computeUnlocks, type Badge } from '../lib/badges'
 import { fetchRaceStats } from '../lib/race'
 import { xpLevel } from '../lib/xp'
 import { useMyTier } from '../lib/tier'
+import { appConfig } from '../config/appConfig'
 import { Skeleton } from '../components/Skeleton'
 import MyCollection from '../components/MyCollection'
 import { rarityRank } from '../components/CollectorCard'
@@ -583,7 +584,47 @@ export default function Profile() {
                 />
               ))}
 
-            {profileTab === 'rewards' && (
+            {/* Récompenses — locked "coming soon" until Phase 2
+                (SHOW_COLLECTIONS_TO_COMPLETE). The tab stays visible and
+                clickable; tapping it lands on this frosted lock panel. */}
+            {profileTab === 'rewards' &&
+              !appConfig.SHOW_COLLECTIONS_TO_COMPLETE && (
+                <div
+                  className="relative overflow-hidden rounded-3xl"
+                  style={{ border: '1px solid var(--color-border)' }}
+                >
+                  <div
+                    aria-hidden
+                    className="absolute inset-0"
+                    style={{
+                      background: 'var(--color-glass)',
+                      backdropFilter: 'saturate(140%) blur(16px)',
+                      WebkitBackdropFilter: 'saturate(140%) blur(16px)',
+                    }}
+                  />
+                  <div
+                    className="relative flex flex-col items-center justify-center gap-4 px-8 py-16 text-center"
+                    style={{ minHeight: '300px' }}
+                  >
+                    <span
+                      className="flex h-14 w-14 items-center justify-center rounded-full bg-fg/[0.06]"
+                      style={{ border: '1px solid var(--color-border)' }}
+                    >
+                      <Lock className="h-6 w-6 text-fg2" strokeWidth={1.6} />
+                    </span>
+                    <p className="text-lg font-semibold text-fg">
+                      Bientôt disponible
+                    </p>
+                    <p className="max-w-[20rem] text-sm leading-relaxed text-fg2">
+                      Débloque des récompenses uniques et des accessoires
+                      physiques lors de la Phase 2.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+            {profileTab === 'rewards' &&
+              appConfig.SHOW_COLLECTIONS_TO_COMPLETE && (
               <div className="space-y-7">
                 {/* Gérer mon abonnement — paid users only */}
                 {plan && (
@@ -933,6 +974,20 @@ function CollectionDecks({ spots }: { spots: Spot[] }) {
                 className="pointer-events-none absolute inset-0 bg-gradient-to-r from-black/60 via-black/20 to-transparent"
               />
             </>
+          )}
+
+          {/* Card level-up teaser — a discreet "Lv.1" + greyed micro-lock
+              hinting the evolution system is coming. Shown until
+              SHOW_CARD_LEVEL_UP flips on. */}
+          {!appConfig.SHOW_CARD_LEVEL_UP && (
+            <span
+              className={`absolute right-3 top-3 z-10 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                d.cover ? 'bg-black/40 text-white/80' : 'bg-fg/[0.06] text-fg2'
+              }`}
+            >
+              Lv.1
+              <Lock className="h-2.5 w-2.5 opacity-70" strokeWidth={2.2} />
+            </span>
           )}
 
           <div className="relative z-10 min-w-0 flex-1">

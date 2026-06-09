@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { ArrowLeft, Check, Crown, Sparkles, Users } from 'lucide-react'
+import { ArrowLeft, Check, Crown, Lock, Sparkles, Users } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import {
   FREE_PERKS,
@@ -224,16 +224,18 @@ export default function Premium() {
             portalBusy={portalBusy}
             onPick={() => goCheckout('premium')}
           />
-          {SHOW_VIP_TIER && (
-            <VipCard
-              price={interval === 'year' ? YEARLY_PRICES.vip : MONTHLY_PRICES.vip}
-              interval={interval}
-              current={tier === 'vip'}
-              hasActive={hasActive}
-              portalBusy={portalBusy}
-              onPick={() => goCheckout('vip')}
-            />
-          )}
+          {/* VIP stays VISIBLE for hype but locked while SHOW_VIP_PLAN is
+              off — SOON badge + disabled CTA. The Premium card above is
+              untouched and stays fully purchasable. */}
+          <VipCard
+            price={interval === 'year' ? YEARLY_PRICES.vip : MONTHLY_PRICES.vip}
+            interval={interval}
+            current={tier === 'vip'}
+            hasActive={hasActive}
+            portalBusy={portalBusy}
+            onPick={() => goCheckout('vip')}
+            locked={!SHOW_VIP_TIER}
+          />
         </div>
 
         {/* Nav clearance handled by .stack-overlay CSS; this extra
@@ -369,6 +371,7 @@ function VipCard({
   hasActive,
   portalBusy,
   onPick,
+  locked = false,
 }: {
   price: string
   interval: Interval
@@ -376,6 +379,7 @@ function VipCard({
   hasActive: boolean
   portalBusy: boolean
   onPick: () => void
+  locked?: boolean
 }) {
   const ctaLabel = hasActive
     ? portalBusy
@@ -392,8 +396,14 @@ function VipCard({
           '0 12px 44px rgba(212,175,55,0.22), inset 0 0 0 1.5px rgba(212,175,55,0.6)',
       }}
     >
-      <span className="label-up absolute -top-px right-5 rounded-b-md bg-gradient-to-r from-[#d4af37] to-[#ffd700] px-2.5 py-1 text-[10px] text-black">
-        CERCLE FERMÉ
+      <span className="label-up absolute -top-px right-5 inline-flex items-center gap-1 rounded-b-md bg-gradient-to-r from-[#d4af37] to-[#ffd700] px-2.5 py-1 text-[10px] text-black">
+        {locked ? (
+          <>
+            <Lock className="h-3 w-3" strokeWidth={2.4} /> SOON
+          </>
+        ) : (
+          'CERCLE FERMÉ'
+        )}
       </span>
       <header className="flex items-baseline justify-between gap-3">
         <h3 className="flex items-center gap-1.5 font-display text-xl font-extrabold tracking-tighter text-fg">
@@ -443,8 +453,8 @@ function VipCard({
       </div>
 
       <button
-        onClick={onPick}
-        disabled={portalBusy}
+        onClick={locked ? undefined : onPick}
+        disabled={portalBusy || locked}
         className="tappable gold-shimmer relative mt-5 w-full overflow-hidden rounded-full py-3.5 text-sm font-extrabold tracking-wider text-black disabled:opacity-50"
         style={{
           background:
@@ -452,7 +462,10 @@ function VipCard({
           boxShadow: '0 10px 28px rgba(212,175,55,0.45)',
         }}
       >
-        <span className="relative z-10">{ctaLabel}</span>
+        <span className="relative z-10 flex items-center justify-center gap-1.5">
+          {locked && <Lock className="h-3.5 w-3.5" strokeWidth={2.4} />}
+          {locked ? 'Bientôt disponible' : ctaLabel}
+        </span>
       </button>
     </section>
   )
