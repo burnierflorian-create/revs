@@ -1,32 +1,47 @@
-import { useState, type ComponentType } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Camera, Sparkles, Users } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
-const STORAGE_KEY = 'revs_onboarded'
+// First-launch onboarding — accelerated 3-slide, Apple-style flow built
+// entirely from pure CSS/SVG geometry (no image assets, no AI art). Shows
+// only the first time a user reaches the app: gated by a localStorage flag
+// with profiles.onboarding_completed as the cross-device source of truth.
+// Self-managing — mounted once in App and renders null once the user is
+// past it.
 
-// localStorage can throw (private mode, blocked storage, sandboxed
-// context). This runs during render, so it must never crash the app.
-function isOnboarded(): boolean {
+const LS_KEY = 'onboarding_completed'
+// Legacy key from the previous onboarding — still honoured so users who
+// already onboarded never see the new flow again.
+const LS_LEGACY = 'revs_onboarded'
+const RED = '#E8203A'
+
+// Spring-physics easing for the inter-slide glide (gentle overshoot).
+const SPRING = 'transform 0.55s cubic-bezier(0.34, 1.56, 0.64, 1)'
+
+function isDoneLocally(): boolean {
   try {
-    return localStorage.getItem(STORAGE_KEY) === '1'
+    return (
+      localStorage.getItem(LS_KEY) === 'true' ||
+      localStorage.getItem(LS_LEGACY) === '1'
+    )
   } catch {
-    return true
+    return true // storage blocked → don't nag
   }
 }
 
-function markOnboarded() {
+function markDoneLocally() {
   try {
-    localStorage.setItem(STORAGE_KEY, '1')
+    localStorage.setItem(LS_KEY, 'true')
+    localStorage.setItem(LS_LEGACY, '1')
   } catch {
-    /* no-op */
+    /* ignore */
   }
 }
 
 // Fire the permission prompts in order — geolocation first (needed to
-// spot), then notifications. Must run synchronously from the click
-// (no await before) so iOS Safari / iOS PWA surface the geo prompt.
-// Refusal is fine: the app keeps working, changeable later in Settings.
+// spot), then notifications. Must run synchronously from the click (no
+// await before) so iOS Safari / iOS PWA surface the geo prompt. Refusal is
+// fine: the app keeps working, changeable later in Settings.
 function kickoffPermissions() {
   try {
     if (navigator.geolocation) {
@@ -44,228 +59,331 @@ function kickoffPermissions() {
       typeof Notification !== 'undefined' &&
       Notification.permission === 'default'
     ) {
-      Notification.requestPermission()
-        .then((p) => {
-          try {
-            localStorage.setItem(
-              'revs_notifications',
-              p === 'granted' ? '1' : '0',
-            )
-          } catch {
-            /* ignore */
-          }
-        })
-        .catch(() => {})
+      Notification.requestPermission().catch(() => {})
     }
   } catch {
     /* ignore */
   }
 }
 
-type IconProps = { className?: string; strokeWidth?: number }
-
-type Slide = {
-  icon: ComponentType<IconProps>
-  title: string
-  subtitle: string
+// ── Slide 1 · pulsing red beacon over a stylised CSS map grid ──
+function MapBeacon() {
+  return (
+    <div
+      className="relative h-56 w-56"
+      style={{ animation: 'onb-slide-up 0.6s ease-out' }}
+    >
+      <div
+        aria-hidden
+        className="absolute inset-0 rounded-3xl"
+        style={{
+          backgroundImage:
+            'linear-gradient(rgba(255,255,255,0.07) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.07) 1px, transparent 1px)',
+          backgroundSize: '26px 26px',
+          maskImage:
+            'radial-gradient(circle at center, black 38%, transparent 74%)',
+          WebkitMaskImage:
+            'radial-gradient(circle at center, black 38%, transparent 74%)',
+        }}
+      />
+      <span
+        aria-hidden
+        className="absolute left-1/2 top-1/2 h-24 w-24 -translate-x-1/2 -translate-y-1/2 animate-ping rounded-full"
+        style={{ background: 'rgba(232,32,58,0.20)' }}
+      />
+      <span
+        aria-hidden
+        className="absolute left-1/2 top-1/2 h-16 w-16 -translate-x-1/2 -translate-y-1/2 animate-ping rounded-full"
+        style={{ background: 'rgba(232,32,58,0.30)', animationDelay: '0.4s' }}
+      />
+      <span
+        aria-hidden
+        className="absolute left-1/2 top-1/2 h-6 w-6 -translate-x-1/2 -translate-y-1/2 rounded-full"
+        style={{ background: RED, boxShadow: '0 0 26px rgba(232,32,58,0.85)' }}
+      />
+    </div>
+  )
 }
+
+// ── Slide 2 · three fanned collection cards (matte grey / sport blue /
+//    neon violet) in CSS perspective, floating softly ──
+function DeckFan() {
+  const card = 'absolute inset-0 rounded-2xl'
+  return (
+    <div
+      className="relative h-60 w-44"
+      style={{
+        perspective: '900px',
+        animation: 'onb-float 4.5s ease-in-out infinite',
+      }}
+    >
+      <div
+        aria-hidden
+        className={card}
+        style={{
+          transform: 'rotateZ(-11deg) translateY(-16px) scale(0.9)',
+          border: '1.5px solid rgba(156,163,175,0.65)',
+          background: 'rgba(255,255,255,0.03)',
+        }}
+      />
+      <div
+        aria-hidden
+        className={card}
+        style={{
+          transform: 'rotateZ(-3deg) translateY(-6px) scale(0.95)',
+          border: '1.5px solid rgba(59,130,246,0.8)',
+          background: 'rgba(59,130,246,0.06)',
+        }}
+      />
+      <div
+        aria-hidden
+        className={`${card} flex items-center justify-center`}
+        style={{
+          transform: 'rotateZ(5deg)',
+          border: '1.5px solid rgba(168,85,247,0.9)',
+          background: 'rgba(168,85,247,0.08)',
+          boxShadow: '0 0 34px rgba(168,85,247,0.28)',
+        }}
+      >
+        <span
+          className="font-display text-5xl font-extrabold tracking-tighter"
+          style={{ color: 'rgba(216,180,254,0.9)' }}
+        >
+          R
+        </span>
+      </div>
+    </div>
+  )
+}
+
+// ── Slide 3 · minimalist white-line podium with three spotters + XP bars ──
+function Podium() {
+  const cols = [
+    { name: 'Léa', rank: 2, h: 64, fill: 70 },
+    { name: 'Marco', rank: 1, h: 92, fill: 96 },
+    { name: 'Tom', rank: 3, h: 46, fill: 54 },
+  ]
+  return (
+    <div className="flex items-end justify-center gap-3">
+      {cols.map((c, i) => (
+        <div key={c.name} className="flex w-16 flex-col items-center gap-2">
+          <span
+            className="text-xs font-semibold text-white"
+            style={{ animation: `onb-slide-up 0.5s ease-out ${0.15 + i * 0.1}s both` }}
+          >
+            {c.name}
+          </span>
+          <div
+            className="h-1 w-full overflow-hidden rounded-full bg-white/15"
+            style={{ animation: `onb-slide-up 0.5s ease-out ${0.15 + i * 0.1}s both` }}
+          >
+            <div
+              className="h-full rounded-full bg-white"
+              style={{ width: `${c.fill}%` }}
+            />
+          </div>
+          <div
+            className="flex w-full items-start justify-center rounded-t-md pt-1.5"
+            style={{
+              height: c.h,
+              border: '1px solid rgba(255,255,255,0.45)',
+              borderBottom: 'none',
+              background:
+                'linear-gradient(180deg, rgba(255,255,255,0.06) 0%, transparent 100%)',
+              transformOrigin: 'bottom',
+              animation: `onb-rise 0.55s cubic-bezier(0.34,1.56,0.64,1) ${i * 0.1}s both`,
+            }}
+          >
+            <span className="font-display text-sm font-extrabold text-white/80">
+              {c.rank}
+            </span>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+type Slide = { title: string; subtitle: string; visual: React.ReactNode }
 
 const SLIDES: Slide[] = [
   {
-    icon: Camera,
-    title: 'Spotte les supercars autour de toi',
-    subtitle: 'Chaque voiture exceptionnelle mérite d’être sur la carte',
+    title: 'Spotte les supercars',
+    subtitle:
+      "Prends une photo, l'IA identifie la voiture en quelques secondes et floute la plaque instantanément.",
+    visual: <MapBeacon />,
   },
   {
-    icon: Sparkles,
-    title: "L'IA reconnaît la voiture automatiquement",
-    subtitle: 'Marque, modèle, année, couleur — en quelques secondes',
+    title: 'Collectionne tes cartes',
+    subtitle:
+      'Chaque spot débloque une carte unique dans ton profil. Plus le modèle est rare dans le monde, plus ton deck devient précieux.',
+    visual: <DeckFan />,
   },
   {
-    icon: Users,
-    title: 'Rejoins la communauté REVS',
-    subtitle: 'Des passionnés de supercars, F1 et culture auto',
+    title: 'Domine le classement',
+    subtitle:
+      'Affronte les spotters de ta ville, maintient tes streaks quotidiens et grimpe au sommet de la ligue.',
+    visual: <Podium />,
   },
 ]
 
-// 3 info slides + a final profile form.
-const TOTAL = SLIDES.length + 1
-const FORM_INDEX = SLIDES.length
-
 export default function Onboarding() {
   const navigate = useNavigate()
-  const [visible, setVisible] = useState(() => !isOnboarded())
-  const [slide, setSlide] = useState(0)
-  const [pseudo, setPseudo] = useState('')
-  const [ville, setVille] = useState('')
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  // null = still deciding (no flash); false = hidden; true = show.
+  const [show, setShow] = useState<boolean | null>(null)
+  const [index, setIndex] = useState(0)
+  const startX = useRef<number | null>(null)
 
-  if (!visible) return null
-
-  const onForm = slide === FORM_INDEX
-  const canFinish = pseudo.trim().length > 0 && ville.trim().length > 0
-
-  async function finish() {
-    // Request permissions within the user gesture, before any await.
-    kickoffPermissions()
-    setError(null)
-    setSaving(true)
-    try {
-      const { data: auth, error: authErr } = await supabase.auth.getUser()
-      if (authErr || !auth.user) {
-        console.error('onboarding: not authenticated', authErr)
-        setError('Tu n’es pas connecté. Reconnecte-toi puis réessaie.')
-        setSaving(false)
-        return
-      }
-
-      const { error: upErr } = await supabase.from('profiles').upsert(
-        {
-          user_id: auth.user.id,
-          pseudo: pseudo.trim(),
-          ville: ville.trim(),
-        },
-        { onConflict: 'user_id' },
-      )
-
-      if (upErr) {
-        // Supabase returns a PostgrestError object (NOT an Error
-        // instance), so the message was being swallowed before.
-        console.error('profile upsert failed:', {
-          code: upErr.code,
-          message: upErr.message,
-          details: upErr.details,
-          hint: upErr.hint,
-        })
-        setError(
-          `Profil non enregistré (${upErr.code ?? 'erreur'}): ${upErr.message}`,
-        )
-        setSaving(false)
-        return
-      }
-
-      markOnboarded()
-      setVisible(false)
-      navigate('/map')
-    } catch (e) {
-      console.error('onboarding finish crashed:', e)
-      setError(
-        e instanceof Error ? e.message : 'Impossible d’enregistrer le profil',
-      )
-      setSaving(false)
-    }
-  }
-
-  function next() {
-    if (onForm) {
-      finish()
+  // First-launch decision: localStorage fast-path, then the profile flag.
+  useEffect(() => {
+    let active = true
+    if (isDoneLocally()) {
+      setShow(false)
       return
     }
-    setSlide((s) => s + 1)
+    ;(async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (!active) return
+      if (!user) {
+        setShow(false)
+        return
+      }
+      const { data } = await supabase
+        .from('profiles')
+        .select('onboarding_completed')
+        .eq('user_id', user.id)
+        .maybeSingle()
+      if (!active) return
+      if (
+        (data as { onboarding_completed?: boolean } | null)
+          ?.onboarding_completed
+      ) {
+        markDoneLocally()
+        setShow(false)
+      } else {
+        setShow(true)
+      }
+    })()
+    return () => {
+      active = false
+    }
+  }, [])
+
+  function complete(toMap: boolean) {
+    // Permission prompts must fire inside the gesture, before any await.
+    kickoffPermissions()
+    markDoneLocally()
+    setShow(false)
+    // Persist the flag to Supabase (fire-and-forget; localStorage already
+    // gates the next launch).
+    void (async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (user) {
+        await supabase
+          .from('profiles')
+          .update({ onboarding_completed: true })
+          .eq('user_id', user.id)
+      }
+    })()
+    if (toMap) navigate('/map')
   }
 
+  if (!show) return null
+
+  function onTouchStart(e: React.TouchEvent) {
+    startX.current = e.touches[0].clientX
+  }
+  function onTouchEnd(e: React.TouchEvent) {
+    if (startX.current == null) return
+    const dx = e.changedTouches[0].clientX - startX.current
+    startX.current = null
+    if (dx < -50 && index < SLIDES.length - 1) setIndex((i) => i + 1)
+    else if (dx > 50 && index > 0) setIndex((i) => i - 1)
+  }
+
+  const last = index === SLIDES.length - 1
+
   return (
-    <div className="fixed inset-0 z-[100] flex flex-col bg-bg text-fg">
-      <div className="flex-1 overflow-hidden">
+    <div
+      className="fixed inset-0 z-[100] flex flex-col"
+      style={{
+        background: '#0a0a0a',
+        color: '#fff',
+        fontFamily: 'var(--font-display, Inter, system-ui, sans-serif)',
+      }}
+    >
+      {/* Passer — discreet, top-right */}
+      <button
+        onClick={() => complete(false)}
+        className="tappable absolute right-5 z-10 text-sm font-medium text-white/45 transition-colors hover:text-white/80"
+        style={{ top: 'max(1.25rem, env(safe-area-inset-top))' }}
+      >
+        Passer
+      </button>
+
+      {/* Slides — horizontal spring track, swipeable */}
+      <div
+        className="flex-1 overflow-hidden"
+        onTouchStart={onTouchStart}
+        onTouchEnd={onTouchEnd}
+      >
         <div
-          className="flex h-full transition-transform duration-300 ease-out"
+          className="flex h-full"
           style={{
-            width: `${TOTAL * 100}%`,
-            transform: `translateX(-${slide * (100 / TOTAL)}%)`,
+            transform: `translateX(-${index * 100}%)`,
+            transition: SPRING,
           }}
         >
-          {SLIDES.map(({ icon: Icon, title, subtitle }) => (
+          {SLIDES.map((s) => (
             <section
-              key={title}
-              style={{ width: `${100 / TOTAL}%` }}
-              className="flex h-full shrink-0 flex-col items-center justify-center gap-7 px-10 text-center"
+              key={s.title}
+              className="flex h-full w-full min-w-full flex-col items-center justify-center px-9 text-center"
             >
-              <div
-                className="flex h-24 w-24 items-center justify-center rounded-full"
-                style={{
-                  background:
-                    'linear-gradient(155deg, rgba(232,32,58,0.22) 0%, rgba(232,32,58,0.06) 70%, rgba(20,20,20,0.95) 100%)',
-                  border: '1px solid rgba(232,32,58,0.40)',
-                  boxShadow: '0 12px 36px rgba(232,32,58,0.30)',
-                }}
-              >
-                <Icon className="h-11 w-11 text-accent" strokeWidth={1.6} />
+              <div className="mb-14 flex h-60 items-center justify-center">
+                {s.visual}
               </div>
-              <h1 className="font-display text-[34px] font-extrabold leading-[1.05] tracking-tighter text-fg">
-                {title}
+              <h1 className="font-display text-[30px] font-extrabold leading-tight tracking-tight">
+                {s.title}
               </h1>
-              <p className="max-w-xs text-base leading-relaxed text-fg2">
-                {subtitle}
+              <p className="mt-3 max-w-[20rem] text-[15px] leading-relaxed text-white/55">
+                {s.subtitle}
               </p>
             </section>
           ))}
-
-          <section
-            style={{ width: `${100 / TOTAL}%` }}
-            className="flex h-full shrink-0 flex-col justify-center gap-7 px-8"
-          >
-            <div className="space-y-2 text-center">
-              <h1 className="display-xl text-fg">Crée ton profil</h1>
-              <p className="text-sm text-fg2">
-                Ton pseudo et ta ville pour le classement des spotters
-              </p>
-            </div>
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <label className="label-up text-[10px] text-fg2">Pseudo</label>
-                <input
-                  value={pseudo}
-                  onChange={(e) => setPseudo(e.target.value)}
-                  maxLength={24}
-                  placeholder="ex: speedhunter_75"
-                  className="w-full rounded-2xl bg-card px-4 py-3.5 text-fg outline-none placeholder:text-fg2/40 focus:border-accent"
-                  style={{ border: '1px solid var(--color-border)' }}
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="label-up text-[10px] text-fg2">Ville</label>
-                <input
-                  value={ville}
-                  onChange={(e) => setVille(e.target.value)}
-                  maxLength={48}
-                  placeholder="ex: Annecy"
-                  className="w-full rounded-2xl bg-card px-4 py-3.5 text-fg outline-none placeholder:text-fg2/40 focus:border-accent"
-                  style={{ border: '1px solid var(--color-border)' }}
-                />
-              </div>
-              {error && <p className="text-sm text-accent">{error}</p>}
-            </div>
-          </section>
         </div>
       </div>
 
-      <footer className="space-y-7 px-8 pb-[max(2rem,env(safe-area-inset-bottom))] pt-4">
-        <div className="flex justify-center gap-2">
-          {Array.from({ length: TOTAL }).map((_, i) => (
-            <span
+      {/* Footer — dots + final CTA */}
+      <div className="px-8 pb-[max(2rem,env(safe-area-inset-bottom))] pt-2">
+        <div className="mb-7 flex items-center justify-center gap-2">
+          {SLIDES.map((_, i) => (
+            <button
               key={i}
-              className={`h-2 rounded-full transition-all duration-300 ${
-                i === slide ? 'w-7 bg-accent' : 'w-2 bg-fg2/30'
-              }`}
-              style={
-                i === slide
-                  ? { boxShadow: '0 0 10px rgba(232,32,58,0.55)' }
-                  : undefined
-              }
+              onClick={() => setIndex(i)}
+              aria-label={`Aller au slide ${i + 1}`}
+              className="h-2 rounded-full transition-all duration-300"
+              style={{
+                width: i === index ? '22px' : '8px',
+                background: i === index ? RED : 'rgba(255,255,255,0.25)',
+              }}
             />
           ))}
         </div>
 
-        <button
-          onClick={next}
-          disabled={onForm && (!canFinish || saving)}
-          className="tappable w-full rounded-full bg-accent py-4 text-sm font-extrabold tracking-wider text-fg disabled:opacity-50"
-          style={{ boxShadow: '0 12px 36px rgba(232,32,58,0.45)' }}
-        >
-          {onForm ? (saving ? '…' : 'COMMENCER') : 'CONTINUER'}
-        </button>
-      </footer>
+        {last && (
+          <button
+            onClick={() => complete(true)}
+            className="tappable w-full rounded-full py-4 text-base font-bold text-white transition-transform active:scale-[0.98]"
+            style={{ background: RED, boxShadow: '0 0 20px rgba(232,32,58,0.5)' }}
+          >
+            C'est parti !
+          </button>
+        )}
+      </div>
     </div>
   )
 }

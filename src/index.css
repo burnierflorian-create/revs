@@ -302,3 +302,34 @@ h4 {
 .mapboxgl-popup-anchor-right .mapboxgl-popup-tip {
   border-left-color: #ffffff !important;
 }
+
+/* ── Onboarding micro-animations (pure CSS, no assets) ── */
+@keyframes onb-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-7px);
+  }
+}
+@keyframes onb-rise {
+  from {
+    transform: scaleY(0.4);
+    opacity: 0;
+  }
+  to {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+}
+@keyframes onb-slide-up {
+  from {
+    transform: translateY(14px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}

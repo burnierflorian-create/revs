@@ -844,12 +844,25 @@ export default function Settings() {
     if (error) setNpref(npref)
   }
 
-  function resetOnboarding() {
+  async function resetOnboarding() {
     try {
+      localStorage.removeItem('onboarding_completed')
       localStorage.removeItem('revs_onboarded')
       localStorage.removeItem('revs_profile_done')
     } catch {
       /* ignore */
+    }
+    // Also clear the DB flag, otherwise the profile check re-hides the
+    // onboarding even after the local flags are gone.
+    try {
+      if (userId) {
+        await supabase
+          .from('profiles')
+          .update({ onboarding_completed: false })
+          .eq('user_id', userId)
+      }
+    } catch {
+      /* ignore — reload anyway */
     }
     window.location.reload()
   }
