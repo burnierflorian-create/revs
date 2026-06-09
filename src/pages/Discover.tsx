@@ -33,21 +33,21 @@ export default function Discover({ initial }: { initial?: 'events' }) {
   const isF1 = universe === 'f1'
   const sub = isF1 ? f1Sub : carsSub
 
-  // Full-width two-tab header — each title takes half the screen, centred,
-  // with a fluid active underline that fades in on click.
+  // Rigid 50/50 two-tab header — each title is centred in its grid half,
+  // with a fixed-width active underline centred under it (symmetric).
   const universeBtn = (u: Universe, label: string) => {
     const active = universe === u
     return (
       <button
         onClick={() => setUniverse(u)}
-        className="relative flex-1 pb-3 text-center text-[16px] transition-colors duration-300"
+        className="relative w-full pb-3 text-center text-[16px] transition-colors duration-300"
       >
         <span className={active ? 'font-semibold text-fg' : 'font-normal text-fg2'}>
           {label}
         </span>
         <span
           aria-hidden
-          className="absolute inset-x-0 -bottom-px mx-auto h-0.5 w-12 rounded-full bg-fg transition-opacity duration-300"
+          className="absolute inset-x-0 -bottom-px mx-auto h-0.5 w-16 rounded-full bg-fg transition-opacity duration-300"
           style={{ opacity: active ? 1 : 0 }}
         />
       </button>
@@ -73,36 +73,41 @@ export default function Discover({ initial }: { initial?: 'events' }) {
 
   return (
     <div className="min-h-screen bg-bg pt-[max(1rem,env(safe-area-inset-top))]">
-      {/* Niveau 1 — full-width universe switch: CarSpotting + F1 side by
-          side, each taking half the screen, fluid active underline. */}
+      {/* Niveau 1 — rigid 50/50 grid: CarSpotting anchored centre-left,
+          F1 anchored centre-right, full screen width. */}
       <div
-        className="flex px-2 pt-2"
+        className="grid w-full grid-cols-2 pt-2"
         style={{ borderBottom: '1px solid var(--color-divider)' }}
       >
         {universeBtn('cars', 'CarSpotting')}
         {universeBtn('f1', 'F1')}
       </div>
 
-      {/* Sous-onglets — barre de texte brut façon Apple News. */}
-      <div className="mt-1 flex gap-6 px-4 pt-3">
+      {/* Sous-onglets — rigid 3-col grid, full width, centred. Each label
+          fits one line (text-xs + tracking-tight handles "Écuries &
+          Pilotes"); the active underline is centred symmetrically in its
+          column. No horizontal scroll. */}
+      <div className="mt-1 grid w-full grid-cols-3 px-2 pt-3">
         {subTabs.map((t) => {
           const active = sub === t.key
           return (
             <button
               key={t.key}
               onClick={() => setSub(t.key)}
-              className="relative pb-2 text-sm transition-colors"
+              className="relative pb-2.5 text-center transition-colors"
             >
               <span
-                className={
-                  active ? 'font-medium text-fg' : 'font-normal text-fg2'
-                }
+                className={`whitespace-nowrap text-xs tracking-tight ${
+                  active ? 'font-semibold text-fg' : 'font-normal text-fg2'
+                }`}
               >
                 {t.label}
               </span>
-              {active && (
-                <span className="absolute inset-x-0 -bottom-px h-px bg-fg" />
-              )}
+              <span
+                aria-hidden
+                className="absolute inset-x-0 -bottom-px mx-auto h-0.5 w-10 rounded-full bg-fg transition-opacity duration-300"
+                style={{ opacity: active ? 1 : 0 }}
+              />
             </button>
           )
         })}
