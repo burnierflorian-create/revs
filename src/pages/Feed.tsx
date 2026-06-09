@@ -803,52 +803,12 @@ function FeedCard({
     // Content rows sit at the page container's inset; the photo bleeds to
     // the screen edges (-mx-4). pb-6 seals the post before the next one.
     <article className="feed-card pb-6">
-      {/* A · HEADER — sealed tight to the photo, single compact line */}
-      <button
-        onClick={() => navigate(`/u/${spot.user_id}`)}
-        className="tappable mb-2 flex w-full min-w-0 items-center gap-2.5 px-4 text-left"
-        aria-label={`Profil de ${pseudo}`}
-      >
-        <div
-          className="flex h-8 w-8 flex-none items-center justify-center overflow-hidden rounded-full bg-fg/10 text-[13px] font-extrabold text-fg"
-          style={{ border: '1px solid var(--color-border)' }}
-        >
-          {prof?.avatar ? (
-            <img
-              src={prof.avatar}
-              alt=""
-              loading="lazy"
-              decoding="async"
-              className="h-full w-full object-cover"
-            />
-          ) : (
-            pseudo.charAt(0).toUpperCase()
-          )}
-        </div>
-        <span
-          className="truncate font-semibold tracking-tight text-fg"
-          style={{ fontSize: '13px' }}
-        >
-          {pseudo}
-        </span>
-        {founder && (
-          <span
-            className="flex-none rounded uppercase tracking-wider text-red-400/70"
-            style={{
-              background: 'rgba(239, 68, 68, 0.07)',
-              padding: '1px 4px',
-              fontSize: '7px',
-              letterSpacing: '0.12em',
-            }}
-          >
-            Fondateur
-          </span>
-        )}
-      </button>
-
-      {/* B · PHOTO 4:5 — true edge-to-edge (root is px-0, so w-full reaches
-          the screen with NO overflow → no content-visibility clipping).
-          Double-tap to like; never navigates. */}
+      {/* PHOTO 4:5 — the post opens straight on the image (Instagram
+          embedded look): the user header floats in transparency over the
+          darkened top, no raw black cut above. A cinematic vignette
+          darkens the useless ground (bottom) + the top so the light
+          stays on the car silhouette. Edge-to-edge (root px-0 → w-full
+          with no overflow). Double-tap to like; never navigates. */}
       <div
         onClick={onPhotoTap}
         className="relative cursor-pointer select-none"
@@ -858,13 +818,66 @@ function FeedCard({
             src={spot.photo_url}
             alt={title}
             loading="lazy"
-            className="aspect-[4/5] w-full rounded-none object-cover"
+            className="aspect-[4/5] w-full rounded-none object-cover contrast-[1.03] brightness-[0.98]"
           />
         ) : (
           <div className="flex aspect-[4/5] w-full items-center justify-center bg-fg/5">
             <Car className="h-12 w-12 text-fg2/40" />
           </div>
         )}
+
+        {/* Cinematic vignette — opaque black at the bottom, transparent
+            through the middle, semi-opaque at the top (under the header). */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black via-transparent to-black/50"
+        />
+
+        {/* Floating user header — sits over the darkened top of the photo. */}
+        <button
+          onClick={(e) => {
+            e.stopPropagation()
+            navigate(`/u/${spot.user_id}`)
+          }}
+          className="absolute inset-x-0 top-0 z-20 flex min-w-0 items-center gap-2.5 px-4 pt-3 text-left"
+          aria-label={`Profil de ${pseudo}`}
+        >
+          <div
+            className="flex h-8 w-8 flex-none items-center justify-center overflow-hidden rounded-full bg-black/30 text-[13px] font-extrabold text-white"
+            style={{ border: '1px solid rgba(255,255,255,0.25)' }}
+          >
+            {prof?.avatar ? (
+              <img
+                src={prof.avatar}
+                alt=""
+                loading="lazy"
+                decoding="async"
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              pseudo.charAt(0).toUpperCase()
+            )}
+          </div>
+          <span
+            className="truncate font-semibold tracking-tight text-white"
+            style={{ fontSize: '13px', textShadow: '0 1px 3px rgba(0,0,0,0.55)' }}
+          >
+            {pseudo}
+          </span>
+          {founder && (
+            <span
+              className="flex-none rounded uppercase tracking-wider text-white"
+              style={{
+                background: 'rgba(239, 68, 68, 0.55)',
+                padding: '1px 4px',
+                fontSize: '7px',
+                letterSpacing: '0.12em',
+              }}
+            >
+              Fondateur
+            </span>
+          )}
+        </button>
 
         {heartPop && (
           <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center">
@@ -877,7 +890,7 @@ function FeedCard({
 
         {burstCount > 1 && (
           <span
-            className="absolute right-3 top-3 flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-bold text-white"
+            className="absolute right-3 top-3 z-20 flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-bold text-white"
             style={{
               background: 'rgba(0, 0, 0, 0.45)',
               border: '1px solid rgba(255, 255, 255, 0.12)',

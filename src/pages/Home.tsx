@@ -443,18 +443,19 @@ function RpmGauges({
           })}
         </svg>
 
-        {/* Start-tip icons — one per arc, pinned to the EXACT origin
-            (down-left start) of its own ring. The three rings start at
-            the same angle but only ~19px apart radially, so the badges
-            are sized 16px to sit cleanly on each tip without piling /
-            overlapping when the gauges are empty (0% cumulative). */}
+        {/* Start-tip icons — one per arc, pinned to the EXACT origin of
+            its own ring. The three rings share a start angle and sit only
+            ~19px apart radially, so an empty gauge would pile all three
+            badges in the same corner. Fix: an icon is hidden (opacity 0)
+            while its own ring's progress is 0 — at 0% cumulative nothing
+            shows, and each badge only appears once its arc has filled. */}
         {GAUGE_RADII.map((r, i) => {
           const p = polar(GAUGE_CX, GAUGE_CY, r, GAUGE_START)
           return (
             <span
               key={`ic-${r}`}
               aria-hidden
-              className="absolute flex items-center justify-center rounded-full"
+              className="absolute flex items-center justify-center rounded-full transition-opacity duration-500"
               style={{
                 left: `${(p.x / 200) * 100}%`,
                 top: `${(p.y / 175) * 100}%`,
@@ -463,6 +464,7 @@ function RpmGauges({
                 height: '16px',
                 fontSize: '9px',
                 lineHeight: 1,
+                opacity: slots[i].pct > 0 ? 1 : 0,
                 background: 'var(--color-glass-strong)',
                 border: '1px solid rgb(var(--color-fg) / 0.10)',
               }}
@@ -565,8 +567,10 @@ function SpotterAction() {
           padding: '12px 28px 12px 14px',
           background:
             'linear-gradient(135deg, #FF3B52 0%, #E8203A 58%, #C7172A 100%)',
+          // Tight neon halo (replaces the diffuse 32px drop) for a
+          // premium, minimalist red glow. Inset highlights kept.
           boxShadow:
-            '0 16px 32px rgba(232,32,58,0.42), inset 0 1px 0 rgba(255,255,255,0.28), inset 0 -2px 6px rgba(0,0,0,0.25)',
+            '0 0 15px rgba(239,68,68,0.5), inset 0 1px 0 rgba(255,255,255,0.28), inset 0 -2px 6px rgba(0,0,0,0.25)',
         }}
         aria-label="Spotter une voiture — ouvrir la caméra"
       >
