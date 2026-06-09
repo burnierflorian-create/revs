@@ -92,6 +92,7 @@ export const PREMIUM_PERKS = [
 
 export const VIP_PERKS = [
   'Tout le Premium inclus',
+  '🔥 Accès anticipé aux événements 48h avant tout le monde',
   'Badge Propriétaire certifié',
   'Events exclusifs et track days privés',
   'Badge VIP 👑',
