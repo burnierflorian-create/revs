@@ -85,7 +85,6 @@ export const PREMIUM_PERKS = [
   'Spots illimités',
   'Mode Radar — notif en temps réel quand une supercar est près de toi',
   'Statistiques avancées',
-  'Accès anticipé aux events 48 h avant tout le monde',
   'Profil mis en avant dans le classement',
   'Badge Premium ⚡',
 ]
@@ -127,11 +126,6 @@ export const PREMIUM_PERKS_DETAILED: DetailedPerk[] = [
     icon: '📊',
     title: 'Statistiques avancées',
     body: 'Carte de chaleur de tes spots, marques favorites, évolution XP semaine par semaine, heures de spotting.',
-  },
-  {
-    icon: '🏆',
-    title: 'Accès anticipé aux events',
-    body: 'Réserve ta place 48 h avant tout le monde sur tous les events CarSpotting.',
   },
   {
     icon: '👤',
