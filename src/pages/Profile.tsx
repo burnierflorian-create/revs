@@ -59,9 +59,12 @@ export default function Profile() {
   // Single segmented control across the lower half of Profile — replaces
   // the older flat scroll of Stats / Challenges / Subscription / Badges /
   // Collections / Garage. Each tab owns its own content block.
+  // Garage is the default active tab for the Phase 1 launch — the raw
+  // chronological spot history. Collection (stylised cards) is locked
+  // behind SHOW_CARD_COLLECTION until Phase 2.
   const [profileTab, setProfileTab] = useState<
     'collection' | 'garage' | 'rewards'
-  >('collection')
+  >('garage')
   // REVS RACE counters drive the race-* badges. Fetched once per
   // mount; absent until the call returns (badges just stay locked).
   const [raceStats, setRaceStats] = useState<{
@@ -559,7 +562,44 @@ export default function Profile() {
               (parent already carries px-4). Gives the 2-col collection
               grid breathing room so cards don't slam the phone edge. */}
           <div className="mt-5 px-2">
-            {profileTab === 'collection' && <CollectionDecks spots={spots} />}
+            {profileTab === 'collection' &&
+              (appConfig.SHOW_CARD_COLLECTION ? (
+                <CollectionDecks spots={spots} />
+              ) : (
+                // Phase 2 lock — the real decks render underneath but are
+                // frosted by the overlay's backdrop-blur (satin), so the
+                // card UI is teasingly visible without being usable.
+                <div className="relative">
+                  <div
+                    aria-hidden
+                    className="pointer-events-none select-none"
+                  >
+                    <CollectionDecks spots={spots} />
+                  </div>
+                  <div
+                    className="absolute inset-0 flex flex-col items-center justify-center gap-4 rounded-3xl px-8 text-center"
+                    style={{
+                      background: 'rgba(10,10,10,0.32)',
+                      backdropFilter: 'saturate(140%) blur(12px)',
+                      WebkitBackdropFilter: 'saturate(140%) blur(12px)',
+                    }}
+                  >
+                    <span
+                      className="flex h-14 w-14 items-center justify-center rounded-full bg-fg/[0.06]"
+                      style={{ border: '1px solid var(--color-border)' }}
+                    >
+                      <Lock className="h-6 w-6 text-fg2" strokeWidth={1.6} />
+                    </span>
+                    <p className="text-lg font-semibold text-fg">
+                      Bientôt disponible
+                    </p>
+                    <p className="max-w-[20rem] text-sm leading-relaxed text-fg2">
+                      Phase 2 — Tes spots seront transformés en cartes de
+                      collection uniques très bientôt.
+                    </p>
+                  </div>
+                </div>
+              ))}
 
             {profileTab === 'garage' &&
               (total === 0 ? (
