@@ -322,6 +322,86 @@ export function brandTagline(b: Brand): string {
   }
 }
 
+// Country-of-origin flag per brand (HQ / founding country). Shown on the
+// right of each row in the Marques list. Falls back to a white flag for
+// any brand not mapped here.
+const BRAND_FLAGS: Record<string, string> = {
+  bugatti: '🇫🇷',
+  pagani: '🇮🇹',
+  koenigsegg: '🇸🇪',
+  rimac: '🇭🇷',
+  ferrari: '🇮🇹',
+  lamborghini: '🇮🇹',
+  mclaren: '🇬🇧',
+  'aston-martin': '🇬🇧',
+  porsche: '🇩🇪',
+  lotus: '🇬🇧',
+  maserati: '🇮🇹',
+  bentley: '🇬🇧',
+  'rolls-royce': '🇬🇧',
+  'range-rover': '🇬🇧',
+  'mercedes-benz': '🇩🇪',
+  bmw: '🇩🇪',
+  audi: '🇩🇪',
+  alpine: '🇫🇷',
+  cupra: '🇪🇸',
+  'hyundai-n': '🇰🇷',
+  lexus: '🇯🇵',
+  'alfa-romeo': '🇮🇹',
+  toyota: '🇯🇵',
+  nissan: '🇯🇵',
+  honda: '🇯🇵',
+  subaru: '🇯🇵',
+  mazda: '🇯🇵',
+  mitsubishi: '🇯🇵',
+  chevrolet: '🇺🇸',
+  dodge: '🇺🇸',
+  ford: '🇺🇸',
+  shelby: '🇺🇸',
+  brabus: '🇩🇪',
+  mansory: '🇩🇪',
+  ruf: '🇩🇪',
+  abt: '🇩🇪',
+  hennessey: '🇺🇸',
+  ssc: '🇺🇸',
+  zenvo: '🇩🇰',
+  pininfarina: '🇮🇹',
+  apollo: '🇩🇪',
+  'w-motors': '🇦🇪',
+  noble: '🇬🇧',
+  tvr: '🇬🇧',
+  donkervoort: '🇳🇱',
+  radical: '🇬🇧',
+  'de-tomaso': '🇮🇹',
+  jaguar: '🇬🇧',
+  'land-rover': '🇬🇧',
+  infiniti: '🇯🇵',
+  genesis: '🇰🇷',
+  caterham: '🇬🇧',
+  ariel: '🇬🇧',
+  ktm: '🇦🇹',
+  suzuki: '🇯🇵',
+  kia: '🇰🇷',
+  cadillac: '🇺🇸',
+  gmc: '🇺🇸',
+  jeep: '🇺🇸',
+  novitec: '🇩🇪',
+  techart: '🇩🇪',
+  singer: '🇺🇸',
+  'g-power': '🇩🇪',
+  'ac-schnitzer': '🇩🇪',
+  alpina: '🇩🇪',
+  manhart: '🇩🇪',
+  larte: '🇷🇺',
+  'prior-design': '🇩🇪',
+  'liberty-walk': '🇯🇵',
+}
+
+/** Country flag emoji for a brand (origin / HQ). */
+export function brandFlag(b: Brand): string {
+  return BRAND_FLAGS[b.slug] ?? '🏳️'
+}
+
 export function brandsByCategory(): Record<BrandCategory, Brand[]> {
   const out = {} as Record<BrandCategory, Brand[]>
   for (const c of BRAND_CATEGORIES) out[c.key] = []

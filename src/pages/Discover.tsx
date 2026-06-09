@@ -4,7 +4,6 @@ import Meets from '../components/Meets'
 import F1Calendar from '../components/F1Calendar'
 import Brands from './Brands'
 import F1Roster from './F1Roster'
-import { appConfig } from '../config/appConfig'
 // Spot Wars temporarily pulled from the MVP launch — the component,
 // the 0032-spot-wars.sql migration and the spot_wars_leaderboard RPC
 // stay on the DB so the feature can be re-enabled by re-adding the
@@ -14,12 +13,8 @@ import { appConfig } from '../config/appConfig'
 type Universe = 'f1' | 'cars'
 
 export default function Discover({ initial }: { initial?: 'events' }) {
-  // F1 universe is phase-gated. When SHOW_F1_MOTORSPORT is off we never
-  // land on it: default to CarSpotting (the F1 code/components stay
-  // intact, just unreachable from the UI).
-  const [universe, setUniverse] = useState<Universe>(
-    !appConfig.SHOW_F1_MOTORSPORT || initial === 'events' ? 'cars' : 'f1',
-  )
+  // CarSpotting is the primary universe; F1 & Motorsport sits beside it.
+  const [universe, setUniverse] = useState<Universe>('cars')
   const [f1Sub, setF1Sub] = useState<'actu' | 'calendar' | 'roster'>('actu')
   const [carsSub, setCarsSub] = useState<
     'actu' | 'events' | 'brands'
@@ -35,25 +30,26 @@ export default function Discover({ initial }: { initial?: 'events' }) {
     }
   }, [initial])
 
-  const isF1 = appConfig.SHOW_F1_MOTORSPORT && universe === 'f1'
+  const isF1 = universe === 'f1'
   const sub = isF1 ? f1Sub : carsSub
 
-  // Apple News / Apple Sports nav: plain text, the active item in pure
-  // white (charcoal in light) under a 1px underline; inactive in muted
-  // grey. No pills, no gradients.
+  // Full-width two-tab header — each title takes half the screen, centred,
+  // with a fluid active underline that fades in on click.
   const universeBtn = (u: Universe, label: string) => {
     const active = universe === u
     return (
       <button
         onClick={() => setUniverse(u)}
-        className="relative pb-2 text-[15px] transition-colors"
+        className="relative flex-1 pb-3 text-center text-[16px] transition-colors duration-300"
       >
         <span className={active ? 'font-semibold text-fg' : 'font-normal text-fg2'}>
           {label}
         </span>
-        {active && (
-          <span className="absolute inset-x-0 -bottom-px h-px bg-fg" />
-        )}
+        <span
+          aria-hidden
+          className="absolute inset-x-0 -bottom-px mx-auto h-0.5 w-12 rounded-full bg-fg transition-opacity duration-300"
+          style={{ opacity: active ? 1 : 0 }}
+        />
       </button>
     )
   }
@@ -77,12 +73,14 @@ export default function Discover({ initial }: { initial?: 'events' }) {
 
   return (
     <div className="min-h-screen bg-bg pt-[max(1rem,env(safe-area-inset-top))]">
-      {/* Niveau 1 — bascule univers (Apple text nav). The F1 & Motorsport
-          tab is hidden while SHOW_F1_MOTORSPORT is off — only CarSpotting
-          remains. */}
-      <div className="flex gap-6 px-4 pt-2">
-        {appConfig.SHOW_F1_MOTORSPORT && universeBtn('f1', 'F1 & Motorsport')}
+      {/* Niveau 1 — full-width universe switch: CarSpotting + F1 side by
+          side, each taking half the screen, fluid active underline. */}
+      <div
+        className="flex px-2 pt-2"
+        style={{ borderBottom: '1px solid var(--color-divider)' }}
+      >
         {universeBtn('cars', 'CarSpotting')}
+        {universeBtn('f1', 'F1')}
       </div>
 
       {/* Sous-onglets — barre de texte brut façon Apple News. */}

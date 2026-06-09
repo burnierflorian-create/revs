@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, ChevronRight, Search as SearchIcon, X } from 'lucide-react'
-import { BRANDS, brandTagline, type Brand } from '../lib/brands'
+import { BRANDS, brandFlag, type Brand } from '../lib/brands'
 import BrandLogo from '../components/BrandLogo'
 
 // First letter for the A-Z section bucket; non-letters fall under '#'.
@@ -122,11 +122,19 @@ export default function Brands({ embedded = false }: { embedded?: boolean }) {
                 style={{ borderBottom: '1px solid var(--color-divider)' }}
               >
                 <BrandLogo brand={b} size={28} mono className="flex-none" />
-                <span className="flex-1 truncate text-sm font-medium uppercase tracking-wider text-fg">
-                  {b.name}
+                <span className="flex min-w-0 flex-1 items-baseline gap-1.5">
+                  <span className="truncate text-sm font-medium uppercase tracking-wider text-fg">
+                    {b.name}
+                  </span>
+                  {b.type === 'tuner' && (
+                    <span className="flex-none text-xs font-light text-fg2">
+                      (Préparateur)
+                    </span>
+                  )}
                 </span>
-                <span className="flex-none text-xs font-light text-fg2">
-                  {brandTagline(b)}
+                {/* Country flag — far right, replaces the old category text. */}
+                <span className="flex-none text-lg leading-none">
+                  {brandFlag(b)}
                 </span>
                 <ChevronRight className="h-4 w-4 flex-none text-fg2/50" />
               </button>
