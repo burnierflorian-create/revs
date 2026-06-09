@@ -4,6 +4,7 @@ import Meets from '../components/Meets'
 import F1Calendar from '../components/F1Calendar'
 import Brands from './Brands'
 import F1Roster from './F1Roster'
+import { appConfig } from '../config/appConfig'
 // Spot Wars temporarily pulled from the MVP launch — the component,
 // the 0032-spot-wars.sql migration and the spot_wars_leaderboard RPC
 // stay on the DB so the feature can be re-enabled by re-adding the
@@ -13,8 +14,11 @@ import F1Roster from './F1Roster'
 type Universe = 'f1' | 'cars'
 
 export default function Discover({ initial }: { initial?: 'events' }) {
+  // F1 universe is phase-gated. When SHOW_F1_MOTORSPORT is off we never
+  // land on it: default to CarSpotting (the F1 code/components stay
+  // intact, just unreachable from the UI).
   const [universe, setUniverse] = useState<Universe>(
-    initial === 'events' ? 'cars' : 'f1',
+    !appConfig.SHOW_F1_MOTORSPORT || initial === 'events' ? 'cars' : 'f1',
   )
   const [f1Sub, setF1Sub] = useState<'actu' | 'calendar' | 'roster'>('actu')
   const [carsSub, setCarsSub] = useState<
@@ -31,7 +35,7 @@ export default function Discover({ initial }: { initial?: 'events' }) {
     }
   }, [initial])
 
-  const isF1 = universe === 'f1'
+  const isF1 = appConfig.SHOW_F1_MOTORSPORT && universe === 'f1'
   const sub = isF1 ? f1Sub : carsSub
 
   // Apple News / Apple Sports nav: plain text, the active item in pure
@@ -73,9 +77,11 @@ export default function Discover({ initial }: { initial?: 'events' }) {
 
   return (
     <div className="min-h-screen bg-bg pt-[max(1rem,env(safe-area-inset-top))]">
-      {/* Niveau 1 — bascule univers (Apple text nav) */}
+      {/* Niveau 1 — bascule univers (Apple text nav). The F1 & Motorsport
+          tab is hidden while SHOW_F1_MOTORSPORT is off — only CarSpotting
+          remains. */}
       <div className="flex gap-6 px-4 pt-2">
-        {universeBtn('f1', 'F1 & Motorsport')}
+        {appConfig.SHOW_F1_MOTORSPORT && universeBtn('f1', 'F1 & Motorsport')}
         {universeBtn('cars', 'CarSpotting')}
       </div>
 

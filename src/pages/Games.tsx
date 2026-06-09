@@ -4,6 +4,7 @@ import { ArrowLeft, ChevronRight, Flag, Gamepad2, Zap } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import type { Spot } from '../lib/spots'
 import { Skeleton } from '../components/Skeleton'
+import { appConfig } from '../config/appConfig'
 
 /** Index page for in-app games. Hero spotlights the user's best spot
  *  (highest estimated_price with a photo); falls back to a gradient
@@ -133,6 +134,9 @@ export default function Games() {
 
       {/* ────── GAME CARDS ────── */}
       <section className="relative px-4 pt-5 pb-10">
+        {/* REVS RACE entry — phase-gated by SHOW_REVS_RACE (the feature,
+            its page and the back-end stay intact, just unreachable). */}
+        {appConfig.SHOW_REVS_RACE && (
         <button
           onClick={() => navigate('/race')}
           className="tappable relative block w-full overflow-hidden rounded-3xl text-left"
@@ -198,6 +202,7 @@ export default function Games() {
             </div>
           </div>
         </button>
+        )}
 
         {/* Coming-soon hint */}
         <div

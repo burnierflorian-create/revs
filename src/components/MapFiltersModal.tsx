@@ -3,6 +3,7 @@ import { Filter, X } from 'lucide-react'
 import { BRANDS } from '../lib/brands'
 import type { Rarity } from '../lib/spots'
 import { CARD_LEVELS } from '../lib/cardLevels'
+import { appConfig } from '../config/appConfig'
 
 // Advanced map filters — the BottomSheet behind the Carte filter icon.
 // Mirrors the Feed's FeedFiltersModal pattern (overlay → rounded-t sheet,
@@ -145,7 +146,8 @@ export default function MapFiltersModal({
             </div>
           </section>
 
-          {/* Niveau de carte */}
+          {/* Niveau de carte — phase-gated by SHOW_CARD_LEVEL_UP. */}
+          {appConfig.SHOW_CARD_LEVEL_UP && (
           <section>
             <p className="mb-2 text-xs uppercase tracking-[0.16em] text-fg/45">
               Niveau de carte
@@ -179,6 +181,7 @@ export default function MapFiltersModal({
               Affiche les spots des modèles que tu possèdes à ce niveau ou plus.
             </p>
           </section>
+          )}
 
           {/* Constructeur */}
           <section>

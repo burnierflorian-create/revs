@@ -13,13 +13,13 @@ import {
   type Interval,
 } from '../lib/plans'
 import { translateError } from '../lib/errors'
+import { appConfig } from '../config/appConfig'
 
-/** Feature flag — flip to `true` to surface the VIP tier card on the
- *  subscription grid again. The card component and all the supporting
- *  copy / checkout wiring are left intact so re-enabling is a one-line
- *  change. Existing VIP subscribers keep their perks regardless; this
- *  only hides the new-signup entry point. */
-const SHOW_VIP_TIER = false
+/** VIP tier visibility — now driven by the central phase config. The card
+ *  component and all the supporting copy / checkout wiring are left intact
+ *  so re-enabling is a one-line flip in appConfig. Existing VIP subscribers
+ *  keep their perks regardless; this only hides the new-signup entry point. */
+const SHOW_VIP_TIER = appConfig.SHOW_VIP_PLAN
 
 type Tier = 'premium' | 'vip'
 
