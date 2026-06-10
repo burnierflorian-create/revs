@@ -4,7 +4,6 @@ import { ChevronRight } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { setPendingPhoto } from '../lib/pendingPhoto'
 import { xpLevel, XP_LADDER } from '../lib/xp'
-import { xpForSpot, type Rarity } from '../lib/spots'
 import { GP_2026 } from '../lib/f1'
 import { Skeleton } from '../components/Skeleton'
 import {
@@ -22,14 +21,14 @@ type CommunityStats = {
   top_brand: string | null
 }
 
-type LastSpot = {
-  id: string
-  brand: string
-  model: string
-  photo_url: string | null
-  estimated_price: number | null
-  rarity: Rarity | null
+type CityRank = {
+  city: string
+  rank: number
+  total: number
+  gapToAbove: number
 }
+
+type CityRow = { user_id: string; xp: number }
 
 // Current daily streak: consecutive days (local) with at least one spot,
 // counting back from today (or yesterday if today has none yet).
@@ -59,7 +58,9 @@ export default function Home() {
   const [community, setCommunity] = useState<CommunityStats | null>(null)
   const [title, setTitle] = useState<string | null>(null)
   const [streak, setStreak] = useState(0)
-  const [lastSpot, setLastSpot] = useState<LastSpot | null | undefined>(undefined)
+  const [cityRank, setCityRank] = useState<CityRank | null | undefined>(
+    undefined,
+  )
   const [now, setNow] = useState(() => Date.now())
 
   // 1 Hz tick — feeds the Motorsport countdown frieze.
@@ -94,7 +95,7 @@ export default function Home() {
       const [profRes, xpRes] = await Promise.all([
         supabase
           .from('profiles')
-          .select('pseudo, title')
+          .select('pseudo, title, ville')
           .eq('user_id', user.id)
           .maybeSingle(),
         supabase.rpc('my_xp'),
@@ -136,18 +137,38 @@ export default function Home() {
           setStreak(computeStreak(rows.map((r) => r.created_at)))
         })
 
-      // Last spot — drives the "Ton dernier spot" card at the bottom.
-      supabase
-        .from('spots')
-        .select('id, brand, model, photo_url, estimated_price, rarity')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .then(({ data }) => {
-          if (!active) return
-          const arr = (data ?? []) as LastSpot[]
-          setLastSpot(arr[0] ?? null)
-        })
+      // City ranking — drives the "🏆 Classement <ville>" card. Uses the
+      // city_leaderboard RPC (sorted by XP desc) to derive my rank, the
+      // number of spotters and the XP gap to the rank just above me.
+      const ville =
+        (profRes.data?.ville as string | undefined)?.trim() || ''
+      if (!ville) {
+        if (active) setCityRank(null)
+      } else {
+        supabase
+          .rpc('city_leaderboard', { p_city: ville, p_limit: 500 })
+          .then(({ data }) => {
+            if (!active) return
+            const rows = (data ?? []) as CityRow[]
+            const idx = rows.findIndex((r) => r.user_id === user.id)
+            if (idx < 0) {
+              setCityRank({
+                city: ville,
+                rank: 0,
+                total: rows.length,
+                gapToAbove: 0,
+              })
+            } else {
+              setCityRank({
+                city: ville,
+                rank: idx + 1,
+                total: rows.length,
+                gapToAbove:
+                  idx > 0 ? Math.max(0, rows[idx - 1].xp - rows[idx].xp) : 0,
+              })
+            }
+          })
+      }
     })()
     return () => {
       active = false
@@ -281,10 +302,10 @@ export default function Home() {
           />
         )}
 
-        <LastSpotCard
-          spot={lastSpot}
-          onOpen={(id) => navigate(`/spot/${id}`)}
-          onSpot={() => navigate('/new-spot')}
+        <CityRankCard
+          rank={cityRank}
+          onTap={() => navigate('/classement')}
+          onSetCity={() => navigate('/settings')}
         />
       </div>
     </div>
@@ -411,7 +432,7 @@ const FORCED_ARCS: {
   },
   {
     label: "Roi de l'Audi",
-    emoji: '🛞',
+    emoji: '⚙️',
     match: (t, b) => b.includes('audi') || t.includes('audi'),
   },
 ]
@@ -430,17 +451,18 @@ function RpmGauges({
 }) {
   const { theme } = useTheme()
   const light = theme === 'light'
-  // [colour, glow] per arc — REVS red / gold / silver.
+  // [colour, glow] per arc, matching each challenge's perimeter emoji:
+  // Marathon = red, Youngtimer = yellow, Roi de l'Audi = blue.
   const palette: { c: string; glow: string }[] = light
     ? [
         { c: '#E8203A', glow: 'rgba(232,32,58,0.30)' },
-        { c: '#C99A12', glow: 'rgba(201,154,18,0.28)' },
-        { c: '#8A9099', glow: 'rgba(138,144,153,0.26)' },
+        { c: '#D4A017', glow: 'rgba(212,160,23,0.30)' },
+        { c: '#2563EB', glow: 'rgba(37,99,235,0.30)' },
       ]
     : [
         { c: '#FF2D46', glow: 'rgba(255,45,70,0.45)' },
-        { c: '#FFD700', glow: 'rgba(255,215,0,0.40)' },
-        { c: '#CBD0D8', glow: 'rgba(203,208,216,0.38)' },
+        { c: '#F5C518', glow: 'rgba(245,197,24,0.45)' },
+        { c: '#3B82F6', glow: 'rgba(59,130,246,0.45)' },
       ]
 
   // Bind each fixed slot to a real challenge: keyword match first, then
@@ -530,33 +552,31 @@ function RpmGauges({
           })}
         </svg>
 
-        {/* Start-tip icons — one per arc, pinned to the EXACT origin of
-            its own ring. The three rings share a start angle and sit only
-            ~19px apart radially, so an empty gauge would pile all three
-            badges in the same corner. Fix: an icon is hidden (opacity 0)
-            while its own ring's progress is 0 — at 0% cumulative nothing
-            shows, and each badge only appears once its arc has filled. */}
-        {GAUGE_RADII.map((r, i) => {
-          const p = polar(GAUGE_CX, GAUGE_CY, r, GAUGE_START)
+        {/* Challenge emojis evenly spaced (120°) around the ring, each
+            ringed in its own colour (red / yellow / blue) — turns green
+            once that challenge is completed. */}
+        {slots.map((s, i) => {
+          const p = polar(GAUGE_CX, GAUGE_CY, 80, i * 120)
+          const col = s.done ? '#22C55E' : palette[i].c
           return (
             <span
-              key={`ic-${r}`}
+              key={`ic-${i}`}
               aria-hidden
-              className="absolute flex items-center justify-center rounded-full transition-opacity duration-500"
+              className="absolute flex items-center justify-center rounded-full transition-colors duration-500"
               style={{
                 left: `${(p.x / 200) * 100}%`,
                 top: `${(p.y / 175) * 100}%`,
                 transform: 'translate(-50%, -50%)',
-                width: '16px',
-                height: '16px',
-                fontSize: '9px',
+                width: '26px',
+                height: '26px',
+                fontSize: '14px',
                 lineHeight: 1,
-                opacity: slots[i].pct > 0 ? 1 : 0,
-                background: 'var(--color-glass-strong)',
-                border: '1px solid rgb(var(--color-fg) / 0.10)',
+                background: '#141414',
+                border: `2px solid ${col}`,
+                boxShadow: `0 0 10px ${s.done ? 'rgba(34,197,94,0.45)' : palette[i].glow}`,
               }}
             >
-              {slots[i].emoji}
+              {s.emoji}
             </span>
           )
         })}
@@ -570,41 +590,22 @@ function RpmGauges({
             transform: 'translate(-50%,-50%)',
           }}
         >
-          {cumulative === 0 ? (
-            // Nothing started yet — an inviting red call-to-action instead
-            // of a cold grey "0% CUMULÉ".
-            <span
-              className="font-display font-extrabold leading-none"
-              style={{
-                fontSize: '19px',
-                color: '#E8203A',
-                letterSpacing: '-0.02em',
-              }}
-            >
-              Lance-toi !
+          {/* Cumulative progress — light grey, calm (never red). */}
+          <span
+            className="font-display font-extrabold leading-none text-fg/85"
+            style={{ fontSize: '30px', letterSpacing: '-0.03em' }}
+          >
+            {cumulative}
+            <span className="font-bold text-fg/45" style={{ fontSize: '15px' }}>
+              %
             </span>
-          ) : (
-            <>
-              <span
-                className="font-display font-extrabold leading-none text-fg"
-                style={{ fontSize: '30px', letterSpacing: '-0.03em' }}
-              >
-                {cumulative}
-                <span
-                  className="font-bold text-fg/55"
-                  style={{ fontSize: '15px' }}
-                >
-                  %
-                </span>
-              </span>
-              <span
-                className="mt-1 font-black uppercase text-fg2"
-                style={{ fontSize: '7px', letterSpacing: '0.22em' }}
-              >
-                Cumulé
-              </span>
-            </>
-          )}
+          </span>
+          <span
+            className="mt-1 font-black uppercase text-fg2"
+            style={{ fontSize: '7px', letterSpacing: '0.22em' }}
+          >
+            Cumulé
+          </span>
         </span>
       </div>
 
@@ -767,7 +768,7 @@ function GpCountdownCard({
   return (
     <button
       onClick={onTap}
-      className="home-section-enter tappable block w-full overflow-hidden rounded-2xl p-4 text-left transition-transform active:scale-[0.99]"
+      className="home-section-enter tappable block w-full overflow-hidden rounded-2xl p-5 text-left transition-transform active:scale-[0.99]"
       style={{
         background: '#141414',
         border: '1px solid rgba(255,255,255,0.06)',
@@ -775,45 +776,45 @@ function GpCountdownCard({
       }}
       aria-label={`Grand Prix — ${name}`}
     >
-      <div className="flex items-center gap-3">
-        <span aria-hidden style={{ fontSize: '30px', lineHeight: 1 }}>
+      {/* Line 1 — flag + GP name + discreet red F1 badge */}
+      <div className="flex items-center gap-2.5">
+        <span aria-hidden style={{ fontSize: '26px', lineHeight: 1 }}>
           {flag}
         </span>
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-[15px] font-bold text-white">{name}</p>
-          <p className="truncate text-[11px] text-white/45">{circuit}</p>
-        </div>
+        <p className="min-w-0 flex-1 truncate text-[15px] font-bold text-white">
+          {name}
+        </p>
         <span
-          className="font-black uppercase"
-          style={{
-            fontSize: '9px',
-            letterSpacing: '0.2em',
-            color: 'rgba(255,255,255,0.35)',
-          }}
+          className="flex-none rounded-md px-2 py-0.5 text-[10px] font-extrabold tracking-wide text-white"
+          style={{ background: '#E8203A', letterSpacing: '0.08em' }}
         >
           F1
         </span>
       </div>
 
+      {/* Line 2 — circuit */}
+      <p className="mt-1.5 truncate text-[12px] text-white/45">{circuit}</p>
+
+      {/* Line 3 — countdown, calm white (no aggressive red) */}
       <p
-        className="mt-3 font-display font-extrabold leading-none tracking-tight"
-        style={{ fontSize: '26px', color: '#E8203A' }}
+        className="mt-4 font-display font-bold leading-none tracking-tight text-white"
+        style={{ fontSize: '22px' }}
       >
         {gpDiff > 0
           ? `Dans ${cd.d}j ${String(cd.h).padStart(2, '0')}h ${String(cd.m).padStart(2, '0')}m`
           : 'En cours !'}
       </p>
 
+      {/* Thin red progress bar toward race day */}
       <div
-        className="mt-3 h-1.5 w-full overflow-hidden rounded-full"
+        className="mt-4 h-1 w-full overflow-hidden rounded-full"
         style={{ background: 'rgba(255,255,255,0.10)' }}
       >
         <div
           className="h-full rounded-full"
           style={{
             width: `${progressPct * 100}%`,
-            background:
-              'linear-gradient(90deg, rgba(232,32,58,0.45) 0%, #E8203A 100%)',
+            background: '#E8203A',
             boxShadow: '0 0 8px rgba(232,32,58,0.5)',
             transition: 'width 700ms cubic-bezier(0.22, 1, 0.36, 1)',
           }}
@@ -823,95 +824,93 @@ function GpCountdownCard({
   )
 }
 
-// ──────────────────────── LAST SPOT CARD ────────────────────────
+// ──────────────────────── CITY RANK CARD ────────────────────────
 
-/** "Ton dernier spot" — a mini card with the user's latest spot photo,
- *  car name and XP earned. Empty state nudges to post a first spot. */
-function LastSpotCard({
-  spot,
-  onOpen,
-  onSpot,
+/** "🏆 Classement <ville>" — the user's current position in their city,
+ *  the number of spotters, and the XP gap to the rank just above (a clear
+ *  nudge to keep spotting). First place gets a "👑 Tu domines" hero line.
+ *  When the profile has no city, it invites the user to set one. */
+function CityRankCard({
+  rank,
+  onTap,
+  onSetCity,
 }: {
-  spot: LastSpot | null | undefined
-  onOpen: (id: string) => void
-  onSpot: () => void
+  rank: CityRank | null | undefined
+  onTap: () => void
+  onSetCity: () => void
 }) {
-  if (spot === undefined) return null // still loading — no flash
+  if (rank === undefined) return null // still loading — no flash
 
-  const eyebrow = (
-    <p
-      className="mb-2 px-1 font-black uppercase text-fg2"
-      style={{ fontSize: '10px', letterSpacing: '0.22em' }}
-    >
-      Ton dernier spot
-    </p>
-  )
+  const cardStyle = {
+    background: '#141414',
+    border: '1px solid rgba(255,255,255,0.06)',
+    boxShadow: '0 8px 22px rgba(0,0,0,0.45)',
+  }
 
-  if (!spot) {
+  // No city set → invite to add one.
+  if (!rank) {
     return (
       <section className="home-section-enter">
-        {eyebrow}
-        <div
-          className="flex items-center justify-between gap-3 rounded-2xl p-4"
-          style={{
-            background: '#141414',
-            border: '1px solid rgba(255,255,255,0.06)',
-          }}
+        <button
+          onClick={onSetCity}
+          className="tappable flex w-full items-center justify-between gap-3 rounded-2xl p-4 text-left transition-transform active:scale-[0.99]"
+          style={cardStyle}
         >
           <p className="text-sm font-medium text-white/80">
-            Poste ton premier spot !
+            🏆 Ajoute ta ville pour voir ton classement
           </p>
-          <button
-            onClick={onSpot}
-            className="tappable flex-none rounded-full px-5 py-2.5 text-sm font-extrabold uppercase tracking-wider text-white"
-            style={{
-              background: '#E8203A',
-              boxShadow: '0 0 15px rgba(232,32,58,0.5)',
-              letterSpacing: '0.1em',
-            }}
-          >
-            Spotter
-          </button>
-        </div>
+          <ChevronRight className="h-5 w-5 flex-none text-white/30" />
+        </button>
       </section>
     )
   }
 
-  const title = [spot.brand, spot.model].filter(Boolean).join(' ') || 'Voiture'
-  const xp = xpForSpot(spot.estimated_price, spot.rarity)
+  const isFirst = rank.rank === 1
+  const inRanking = rank.rank > 0
 
   return (
     <section className="home-section-enter">
-      {eyebrow}
       <button
-        onClick={() => onOpen(spot.id)}
-        className="tappable flex w-full items-center gap-3 overflow-hidden rounded-2xl p-3 text-left transition-transform active:scale-[0.99]"
-        style={{
-          background: '#141414',
-          border: '1px solid rgba(255,255,255,0.06)',
-          boxShadow: '0 8px 22px rgba(0,0,0,0.45)',
-        }}
+        onClick={onTap}
+        className="tappable block w-full overflow-hidden rounded-2xl p-4 text-left transition-transform active:scale-[0.99]"
+        style={cardStyle}
       >
-        <div className="h-16 w-16 flex-none overflow-hidden rounded-xl bg-white/5">
-          {spot.photo_url ? (
-            <img
-              src={spot.photo_url}
-              alt={title}
-              loading="lazy"
-              className="h-full w-full object-cover"
-            />
-          ) : null}
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-[15px] font-bold text-white">{title}</p>
-          <p
-            className="mt-0.5 text-[13px] font-bold"
-            style={{ color: '#E8203A' }}
-          >
-            +{xp} XP
+        <div className="flex items-center gap-2">
+          <span aria-hidden style={{ fontSize: '18px' }}>
+            🏆
+          </span>
+          <p className="flex-1 truncate text-[15px] font-bold text-white">
+            Classement {rank.city}
           </p>
+          <span className="text-[11px] font-medium text-white/40">
+            {rank.total} spotter{rank.total > 1 ? 's' : ''}
+          </span>
         </div>
-        <ChevronRight className="h-5 w-5 flex-none text-white/30" />
+
+        {isFirst ? (
+          <p
+            className="mt-3 font-display text-[20px] font-extrabold tracking-tight text-white"
+          >
+            👑 Tu domines {rank.city} !
+          </p>
+        ) : inRanking ? (
+          <div className="mt-3 flex items-end justify-between gap-3">
+            <p className="font-display font-extrabold leading-none text-white">
+              <span style={{ fontSize: '30px' }}>#{rank.rank}</span>
+            </p>
+            <p className="pb-0.5 text-[13px] text-white/65">
+              Plus que{' '}
+              <span className="font-bold" style={{ color: '#E8203A' }}>
+                {rank.gapToAbove} XP
+              </span>{' '}
+              pour le rang #{rank.rank - 1}
+            </p>
+          </div>
+        ) : (
+          <p className="mt-3 text-[13px] text-white/65">
+            Spotte pour entrer dans le classement de {rank.city}.
+          </p>
+        )}
       </button>
     </section>
   )
