@@ -333,3 +333,15 @@ h4 {
     opacity: 1;
   }
 }
+/* Guided-tour spotlight — pulsing red halo around the highlighted tab. */
+@keyframes onb-spot {
+  0%,
+  100% {
+    outline: 0 solid rgba(232, 32, 58, 0);
+    outline-offset: 0;
+  }
+  50% {
+    outline: 6px solid rgba(232, 32, 58, 0.3);
+    outline-offset: 3px;
+  }
+}
