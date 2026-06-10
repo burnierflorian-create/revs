@@ -26,9 +26,10 @@ type CityRank = {
   rank: number
   total: number
   gapToAbove: number
+  abovePseudo: string | null
 }
 
-type CityRow = { user_id: string; xp: number }
+type CityRow = { user_id: string; xp: number; pseudo: string | null }
 
 // Current daily streak: consecutive days (local) with at least one spot,
 // counting back from today (or yesterday if today has none yet).
@@ -157,14 +158,16 @@ export default function Home() {
                 rank: 0,
                 total: rows.length,
                 gapToAbove: 0,
+                abovePseudo: null,
               })
             } else {
+              const above = idx > 0 ? rows[idx - 1] : null
               setCityRank({
                 city: ville,
                 rank: idx + 1,
                 total: rows.length,
-                gapToAbove:
-                  idx > 0 ? Math.max(0, rows[idx - 1].xp - rows[idx].xp) : 0,
+                gapToAbove: above ? Math.max(0, above.xp - rows[idx].xp) : 0,
+                abovePseudo: above?.pseudo ?? null,
               })
             }
           })
@@ -290,8 +293,14 @@ export default function Home() {
         </div>
       )}
 
-      {/* ─── 3 · COMPLÉMENTS — GP countdown card + last spot ─── */}
+      {/* ─── 3 · COMPLÉMENTS — city ranking first (personal), then GP ─── */}
       <div className="mt-10 space-y-4">
+        <CityRankCard
+          rank={cityRank}
+          onTap={() => navigate('/classement')}
+          onSetCity={() => navigate('/settings')}
+        />
+
         {nextGp && (
           <GpCountdownCard
             flag={nextGp.flag}
@@ -301,12 +310,6 @@ export default function Home() {
             onTap={() => navigate(`/f1/${nextGp.round}`)}
           />
         )}
-
-        <CityRankCard
-          rank={cityRank}
-          onTap={() => navigate('/classement')}
-          onSetCity={() => navigate('/settings')}
-        />
       </div>
     </div>
   )
@@ -390,11 +393,18 @@ function CockpitWidget({
 // Tachometer geometry: three concentric arcs opening at the bottom
 // (270° sweep, 90° gap), drawn clockwise from the down-left tip. Pure
 // functions of constants — safe in the module scope (no Date/random).
-const GAUGE_CX = 100
-const GAUGE_CY = 92
+// Single clean gauge in a 220×220 box: one thick arc (270° sweep, gap at
+// the bottom) at radius GAUGE_R. The three challenge emojis sit on the
+// arc's outer edge at fixed positions (top-centre / bottom-left /
+// bottom-right). Pure constants — safe at module scope.
+const GAUGE_CX = 110
+const GAUGE_CY = 110
 const GAUGE_START = 225 // down-left
-const GAUGE_SWEEP = 270 // to down-right, over the top
-const GAUGE_RADII = [78, 61, 44] as const
+const GAUGE_SWEEP = 270 // clockwise over the top to down-right
+const GAUGE_R = 88
+// Emoji positions on the arc edge (deg from up, clockwise): slot 0
+// bottom-left, slot 1 top-centre, slot 2 bottom-right.
+const EMOJI_ANGLES = [240, 0, 120]
 
 function polar(cx: number, cy: number, r: number, deg: number) {
   const a = (deg * Math.PI) / 180
@@ -497,66 +507,51 @@ function RpmGauges({
     slots.reduce((sum, s) => sum + s.pct, 0) / slots.length,
   )
 
-  // Empty rings sit a touch more visible now so the gauge reads even at 0%.
-  const trackStroke = 'rgb(var(--color-fg) / 0.20)'
-
   return (
     <button
       onClick={onTap}
       aria-label="Voir mes objectifs de la semaine"
-      className="tappable mx-auto mt-5 flex flex-col items-center"
+      className="tappable mx-auto mt-3 flex flex-col items-center"
     >
-      {/* The concentric tach */}
-      <div className="relative" style={{ width: '224px', height: '196px' }}>
-        <svg
-          viewBox="0 0 200 175"
-          width="100%"
-          height="100%"
-          style={{ overflow: 'visible' }}
-          aria-hidden
-        >
-          {GAUGE_RADII.map((r, i) => {
-            const pal = palette[i]
-            const { pct, done } = slots[i]
-            const stroke = done ? '#22C55E' : pal.c
-            const full = arcPath(r, GAUGE_START, GAUGE_START + GAUGE_SWEEP)
-            return (
-              <g key={r}>
-                <path
-                  d={full}
-                  fill="none"
-                  stroke={trackStroke}
-                  strokeWidth={9}
-                  strokeLinecap="round"
-                />
-                {/* Fill drawn on the FULL arc but revealed via dashoffset so
-                    it sweeps in smoothly (fluid red fill) as pct grows. */}
-                <path
-                  d={full}
-                  fill="none"
-                  stroke={stroke}
-                  strokeWidth={9}
-                  strokeLinecap="round"
-                  pathLength={1}
-                  style={{
-                    strokeDasharray: 1,
-                    strokeDashoffset: 1 - pct / 100,
-                    filter: `drop-shadow(0 0 6px ${done ? 'rgba(34,197,94,0.40)' : pal.glow})`,
-                    transition:
-                      'stroke-dashoffset 800ms cubic-bezier(0.22, 1, 0.36, 1)',
-                    opacity: pct > 0 ? 1 : 0,
-                  }}
-                />
-              </g>
-            )
-          })}
+      {/* Single clean 220px gauge — one thick arc; the cumulative % fills
+          it in a red gradient. Three challenge emojis sit on its outer
+          edge (bottom-left / top / bottom-right), each in a 36px coloured
+          disc that turns green when its challenge is complete. */}
+      <div className="relative" style={{ width: '220px', height: '220px' }}>
+        <svg viewBox="0 0 220 220" width="100%" height="100%" aria-hidden>
+          <defs>
+            <linearGradient id="gaugeRed" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="rgba(232,32,58,0.45)" />
+              <stop offset="100%" stopColor="#E8203A" />
+            </linearGradient>
+          </defs>
+          <path
+            d={arcPath(GAUGE_R, GAUGE_START, GAUGE_START + GAUGE_SWEEP)}
+            fill="none"
+            stroke="#2a2a2a"
+            strokeWidth={8}
+            strokeLinecap="round"
+          />
+          <path
+            d={arcPath(GAUGE_R, GAUGE_START, GAUGE_START + GAUGE_SWEEP)}
+            fill="none"
+            stroke="url(#gaugeRed)"
+            strokeWidth={8}
+            strokeLinecap="round"
+            pathLength={1}
+            style={{
+              strokeDasharray: 1,
+              strokeDashoffset: 1 - cumulative / 100,
+              filter: 'drop-shadow(0 0 6px rgba(232,32,58,0.45))',
+              transition:
+                'stroke-dashoffset 800ms cubic-bezier(0.22, 1, 0.36, 1)',
+              opacity: cumulative > 0 ? 1 : 0,
+            }}
+          />
         </svg>
 
-        {/* Challenge emojis evenly spaced (120°) around the ring, each
-            ringed in its own colour (red / yellow / blue) — turns green
-            once that challenge is completed. */}
         {slots.map((s, i) => {
-          const p = polar(GAUGE_CX, GAUGE_CY, 80, i * 120)
+          const p = polar(GAUGE_CX, GAUGE_CY, GAUGE_R, EMOJI_ANGLES[i])
           const col = s.done ? '#22C55E' : palette[i].c
           return (
             <span
@@ -564,16 +559,15 @@ function RpmGauges({
               aria-hidden
               className="absolute flex items-center justify-center rounded-full transition-colors duration-500"
               style={{
-                left: `${(p.x / 200) * 100}%`,
-                top: `${(p.y / 175) * 100}%`,
+                left: `${(p.x / 220) * 100}%`,
+                top: `${(p.y / 220) * 100}%`,
                 transform: 'translate(-50%, -50%)',
-                width: '26px',
-                height: '26px',
-                fontSize: '14px',
+                width: '36px',
+                height: '36px',
+                fontSize: '18px',
                 lineHeight: 1,
-                background: '#141414',
-                border: `2px solid ${col}`,
-                boxShadow: `0 0 10px ${s.done ? 'rgba(34,197,94,0.45)' : palette[i].glow}`,
+                background: s.done ? 'rgba(34,197,94,0.20)' : `${palette[i].c}2E`,
+                border: `1.5px solid ${col}`,
               }}
             >
               {s.emoji}
@@ -581,45 +575,40 @@ function RpmGauges({
           )
         })}
 
-        {/* Central focal readout — the cumulative % is the gauge's hero
-            figure. text-fg flips white↔charcoal with the theme. */}
+        {/* Center readout — big white %, grey CUMULÉ under it. */}
         <span
-          className="absolute left-1/2 flex flex-col items-center"
-          style={{
-            top: `${(GAUGE_CY / 175) * 100}%`,
-            transform: 'translate(-50%,-50%)',
-          }}
+          className="absolute left-1/2 top-1/2 flex flex-col items-center"
+          style={{ transform: 'translate(-50%,-50%)' }}
         >
-          {/* Cumulative progress — light grey, calm (never red). */}
           <span
-            className="font-display font-extrabold leading-none text-fg/85"
-            style={{ fontSize: '30px', letterSpacing: '-0.03em' }}
+            className="font-display font-extrabold leading-none text-fg"
+            style={{ fontSize: '32px', letterSpacing: '-0.03em' }}
           >
             {cumulative}
-            <span className="font-bold text-fg/45" style={{ fontSize: '15px' }}>
+            <span className="font-bold text-fg/50" style={{ fontSize: '16px' }}>
               %
             </span>
           </span>
           <span
-            className="mt-1 font-black uppercase text-fg2"
-            style={{ fontSize: '7px', letterSpacing: '0.22em' }}
+            className="mt-1.5 font-black uppercase text-fg2"
+            style={{ fontSize: '11px', letterSpacing: '0.18em' }}
           >
             Cumulé
           </span>
         </span>
       </div>
 
-      {/* Challenge list — 28px icon, bold name, red counter on the right,
-          and a thin red progress bar under each objective. */}
-      <div className="mt-3 flex w-full flex-col gap-3">
-        {slots.map((s) => {
+      {/* Challenge list — coloured 20px emoji, bold name, coloured counter,
+          a thin red progress bar; 12px between rows. */}
+      <div className="mt-2 flex w-full flex-col gap-3">
+        {slots.map((s, i) => {
           const pct =
             s.target > 0 ? Math.min(100, (s.progress / s.target) * 100) : 0
-          const col = s.done ? '#22C55E' : '#E8203A'
+          const counterCol = s.done ? '#22C55E' : palette[i].c
           return (
             <div key={s.label} className="flex flex-col gap-1.5">
-              <div className="flex items-center gap-3">
-                <span aria-hidden style={{ fontSize: '28px', lineHeight: 1 }}>
+              <div className="flex items-center gap-2.5">
+                <span aria-hidden style={{ fontSize: '20px', lineHeight: 1 }}>
                   {s.emoji}
                 </span>
                 <span
@@ -630,7 +619,7 @@ function RpmGauges({
                 </span>
                 <span
                   className="flex-none tabular-nums font-extrabold"
-                  style={{ fontSize: '13px', color: col }}
+                  style={{ fontSize: '13px', color: counterCol }}
                 >
                   {s.progress} / {s.target}
                 </span>
@@ -643,7 +632,7 @@ function RpmGauges({
                   className="h-full rounded-full"
                   style={{
                     width: `${pct}%`,
-                    background: col,
+                    background: '#E8203A',
                     transition: 'width 700ms cubic-bezier(0.22, 1, 0.36, 1)',
                   }}
                 />
@@ -768,7 +757,7 @@ function GpCountdownCard({
   return (
     <button
       onClick={onTap}
-      className="home-section-enter tappable block w-full overflow-hidden rounded-2xl p-5 text-left transition-transform active:scale-[0.99]"
+      className="home-section-enter tappable relative block w-full overflow-hidden rounded-2xl p-5 pb-6 text-left transition-transform active:scale-[0.99]"
       style={{
         background: '#141414',
         border: '1px solid rgba(255,255,255,0.06)',
@@ -795,23 +784,23 @@ function GpCountdownCard({
       {/* Line 2 — circuit */}
       <p className="mt-1.5 truncate text-[12px] text-white/45">{circuit}</p>
 
-      {/* Line 3 — countdown, calm white (no aggressive red) */}
+      {/* Line 3 — countdown, calm white 20px (no aggressive red) */}
       <p
         className="mt-4 font-display font-bold leading-none tracking-tight text-white"
-        style={{ fontSize: '22px' }}
+        style={{ fontSize: '20px' }}
       >
         {gpDiff > 0
           ? `Dans ${cd.d}j ${String(cd.h).padStart(2, '0')}h ${String(cd.m).padStart(2, '0')}m`
           : 'En cours !'}
       </p>
 
-      {/* Thin red progress bar toward race day */}
+      {/* Thin red progress bar flush at the very bottom of the card */}
       <div
-        className="mt-4 h-1 w-full overflow-hidden rounded-full"
+        className="absolute inset-x-0 bottom-0 h-1"
         style={{ background: 'rgba(255,255,255,0.10)' }}
       >
         <div
-          className="h-full rounded-full"
+          className="h-full"
           style={{
             width: `${progressPct * 100}%`,
             background: '#E8203A',
@@ -873,7 +862,13 @@ function CityRankCard({
       <button
         onClick={onTap}
         className="tappable block w-full overflow-hidden rounded-2xl p-4 text-left transition-transform active:scale-[0.99]"
-        style={cardStyle}
+        style={{
+          ...cardStyle,
+          // Thin gold border crowns the leader's card.
+          border: isFirst
+            ? '1px solid rgba(212,175,55,0.65)'
+            : cardStyle.border,
+        }}
       >
         <div className="flex items-center gap-2">
           <span aria-hidden style={{ fontSize: '18px' }}>
@@ -888,22 +883,24 @@ function CityRankCard({
         </div>
 
         {isFirst ? (
-          <p
-            className="mt-3 font-display text-[20px] font-extrabold tracking-tight text-white"
-          >
+          <p className="mt-3 font-display text-[20px] font-extrabold tracking-tight text-white">
             👑 Tu domines {rank.city} !
           </p>
         ) : inRanking ? (
-          <div className="mt-3 flex items-end justify-between gap-3">
-            <p className="font-display font-extrabold leading-none text-white">
-              <span style={{ fontSize: '30px' }}>#{rank.rank}</span>
-            </p>
-            <p className="pb-0.5 text-[13px] text-white/65">
-              Plus que{' '}
-              <span className="font-bold" style={{ color: '#E8203A' }}>
-                {rank.gapToAbove} XP
-              </span>{' '}
-              pour le rang #{rank.rank - 1}
+          <div className="mt-3 flex items-baseline gap-2.5">
+            <span
+              className="font-display font-extrabold leading-none"
+              style={{ fontSize: '28px', color: '#E8203A' }}
+            >
+              #{rank.rank}
+            </span>
+            <p className="min-w-0 flex-1 text-[13px] leading-snug text-white/65">
+              encore{' '}
+              <span className="font-bold text-white">{rank.gapToAbove} XP</span>{' '}
+              pour dépasser{' '}
+              <span className="font-semibold text-white">
+                {rank.abovePseudo ?? `#${rank.rank - 1}`}
+              </span>
             </p>
           </div>
         ) : (
