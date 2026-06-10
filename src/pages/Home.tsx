@@ -390,32 +390,22 @@ function CockpitWidget({
 
 // ─────────────────────────────── RPM GAUGES ───────────────────────────────
 
-// Tachometer geometry: three concentric arcs opening at the bottom
-// (270° sweep, 90° gap), drawn clockwise from the down-left tip. Pure
-// functions of constants — safe in the module scope (no Date/random).
-// Single clean gauge in a 220×220 box: one thick arc (270° sweep, gap at
-// the bottom) at radius GAUGE_R. The three challenge emojis sit on the
-// arc's outer edge at fixed positions (top-centre / bottom-left /
-// bottom-right). Pure constants — safe at module scope.
-const GAUGE_CX = 110
-const GAUGE_CY = 110
-const GAUGE_START = 225 // down-left
-const GAUGE_SWEEP = 270 // clockwise over the top to down-right
-const GAUGE_R = 88
-// Emoji positions on the arc edge (deg from up, clockwise): slot 0
-// bottom-left, slot 1 top-centre, slot 2 bottom-right.
-const EMOJI_ANGLES = [240, 0, 120]
-
-function polar(cx: number, cy: number, r: number, deg: number) {
+// Car-dashboard speedometer geometry — a 180° arc (left → top → right) of
+// evenly-spaced tick marks in a 240×150 box. Angles use the math
+// convention (0° = east, 90° = north). Fraction t in [0,1] maps to the
+// arc via deg = 180 − t·180. Pure constants — safe at module scope.
+const G_CX = 120
+const G_CY = 128
+const G_R = 98
+const G_TICKS = 40
+// Tick / needle position for a 0..1 fraction along the arc.
+function gaugePoint(t: number, r: number) {
+  const deg = 180 - t * 180
   const a = (deg * Math.PI) / 180
-  return { x: cx + r * Math.sin(a), y: cy - r * Math.cos(a) }
+  return { x: G_CX + r * Math.cos(a), y: G_CY - r * Math.sin(a) }
 }
-function arcPath(r: number, startDeg: number, endDeg: number): string {
-  const s = polar(GAUGE_CX, GAUGE_CY, r, startDeg)
-  const e = polar(GAUGE_CX, GAUGE_CY, r, endDeg)
-  const large = endDeg - startDeg > 180 ? 1 : 0
-  return `M ${s.x.toFixed(2)} ${s.y.toFixed(2)} A ${r} ${r} 0 ${large} 1 ${e.x.toFixed(2)} ${e.y.toFixed(2)}`
-}
+// Emoji slots: slot 0 left (t=0), slot 1 top (t=0.5), slot 2 right (t=1).
+const EMOJI_T = [0, 0.5, 1]
 
 // The three fixed cockpit objectives, in arc order (outer→inner =
 // red→gold→silver). Labels are FORCED — always shown verbatim — while
@@ -513,72 +503,101 @@ function RpmGauges({
       aria-label="Voir mes objectifs de la semaine"
       className="tappable mx-auto mt-3 flex flex-col items-center"
     >
-      {/* Single clean 220px gauge — one thick arc; the cumulative % fills
-          it in a red gradient. Three challenge emojis sit on its outer
-          edge (bottom-left / top / bottom-right), each in a 36px coloured
-          disc that turns green when its challenge is complete. */}
-      <div className="relative" style={{ width: '220px', height: '220px' }}>
-        <svg viewBox="0 0 220 220" width="100%" height="100%" aria-hidden>
-          <defs>
-            <linearGradient id="gaugeRed" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="rgba(232,32,58,0.45)" />
-              <stop offset="100%" stopColor="#E8203A" />
-            </linearGradient>
-          </defs>
-          <path
-            d={arcPath(GAUGE_R, GAUGE_START, GAUGE_START + GAUGE_SWEEP)}
-            fill="none"
-            stroke="#2a2a2a"
-            strokeWidth={8}
-            strokeLinecap="round"
-          />
-          <path
-            d={arcPath(GAUGE_R, GAUGE_START, GAUGE_START + GAUGE_SWEEP)}
-            fill="none"
-            stroke="url(#gaugeRed)"
-            strokeWidth={8}
-            strokeLinecap="round"
-            pathLength={1}
-            style={{
-              strokeDasharray: 1,
-              strokeDashoffset: 1 - cumulative / 100,
-              filter: 'drop-shadow(0 0 6px rgba(232,32,58,0.45))',
-              transition:
-                'stroke-dashoffset 800ms cubic-bezier(0.22, 1, 0.36, 1)',
-              opacity: cumulative > 0 ? 1 : 0,
-            }}
-          />
+      {/* Car-dashboard speedometer — 40 tick marks lighting up red as the
+          cumulative % rises, a thin spring-animated needle pointing at the
+          value, the % + DÉFIS centred, and the 3 challenge emojis on the
+          outer rim (🏎️ left / 🏁 top / ⚙️ right). */}
+      <div className="relative" style={{ width: '240px', height: '150px' }}>
+        <svg
+          viewBox="0 0 240 150"
+          width="100%"
+          height="100%"
+          style={{ overflow: 'visible' }}
+          aria-hidden
+        >
+          {Array.from({ length: G_TICKS }).map((_, i) => {
+            const t = i / (G_TICKS - 1)
+            const inner = gaugePoint(t, G_R - 11)
+            const outer = gaugePoint(t, G_R)
+            const lit = i < Math.round((cumulative / 100) * G_TICKS)
+            return (
+              <line
+                key={i}
+                x1={inner.x}
+                y1={inner.y}
+                x2={outer.x}
+                y2={outer.y}
+                stroke={lit ? '#E8203A' : '#2a2a2a'}
+                strokeWidth={3}
+                strokeLinecap="round"
+                style={{
+                  filter: lit
+                    ? 'drop-shadow(0 0 3px rgba(232,32,58,0.75))'
+                    : undefined,
+                  transition: 'stroke 350ms ease',
+                }}
+              />
+            )
+          })}
         </svg>
 
-        {slots.map((s, i) => {
-          const p = polar(GAUGE_CX, GAUGE_CY, GAUGE_R, EMOJI_ANGLES[i])
-          const col = s.done ? '#22C55E' : palette[i].c
-          return (
-            <span
-              key={`ic-${i}`}
-              aria-hidden
-              className="absolute flex items-center justify-center rounded-full transition-colors duration-500"
-              style={{
-                left: `${(p.x / 220) * 100}%`,
-                top: `${(p.y / 220) * 100}%`,
-                transform: 'translate(-50%, -50%)',
-                width: '36px',
-                height: '36px',
-                fontSize: '18px',
-                lineHeight: 1,
-                background: s.done ? 'rgba(34,197,94,0.20)' : `${palette[i].c}2E`,
-                border: `1.5px solid ${col}`,
-              }}
-            >
-              {s.emoji}
-            </span>
-          )
-        })}
+        {/* Needle — HTML element pivoting at the gauge centre, spring-eased.
+            rot = 0 at 50% (straight up), ±90° at the extremes. */}
+        <div
+          className="absolute"
+          style={{ left: `${(G_CX / 240) * 100}%`, top: `${(G_CY / 150) * 100}%` }}
+        >
+          {/* soft red glow under the pivot */}
+          <span
+            aria-hidden
+            className="absolute rounded-full"
+            style={{
+              left: '-22px',
+              top: '-22px',
+              width: '44px',
+              height: '44px',
+              background:
+                'radial-gradient(circle, rgba(232,32,58,0.45) 0%, transparent 70%)',
+            }}
+          />
+          <div
+            style={{
+              position: 'absolute',
+              left: '-2px',
+              bottom: '0px',
+              width: '4px',
+              height: '74px',
+              borderRadius: '2px',
+              background:
+                'linear-gradient(to top, rgba(232,32,58,0.15) 0%, #E8203A 100%)',
+              transformOrigin: 'bottom center',
+              transform: `rotate(${(cumulative / 100 - 0.5) * 180}deg)`,
+              transition: 'transform 900ms cubic-bezier(0.34, 1.56, 0.64, 1)',
+            }}
+          />
+          <span
+            aria-hidden
+            className="absolute rounded-full"
+            style={{
+              left: '-6px',
+              top: '-6px',
+              width: '12px',
+              height: '12px',
+              background: '#E8203A',
+              boxShadow: '0 0 12px rgba(232,32,58,0.85)',
+            }}
+          />
+        </div>
 
-        {/* Center readout — big white %, grey CUMULÉ under it. */}
+        {/* Center readout — big white %, grey DÉFIS under it (above needle). */}
         <span
-          className="absolute left-1/2 top-1/2 flex flex-col items-center"
-          style={{ transform: 'translate(-50%,-50%)' }}
+          className="absolute z-10 flex flex-col items-center"
+          style={{
+            left: 0,
+            right: 0,
+            top: '74px',
+            transform: 'translateY(-50%)',
+          }}
         >
           <span
             className="font-display font-extrabold leading-none text-fg"
@@ -593,9 +612,35 @@ function RpmGauges({
             className="mt-1.5 font-black uppercase text-fg2"
             style={{ fontSize: '11px', letterSpacing: '0.18em' }}
           >
-            Cumulé
+            Défis
           </span>
         </span>
+
+        {/* Challenge emojis on the outer rim. */}
+        {slots.map((s, i) => {
+          const p = gaugePoint(EMOJI_T[i], G_R)
+          const col = s.done ? '#22C55E' : palette[i].c
+          return (
+            <span
+              key={`ic-${i}`}
+              aria-hidden
+              className="absolute z-10 flex items-center justify-center rounded-full transition-colors duration-500"
+              style={{
+                left: `${(p.x / 240) * 100}%`,
+                top: `${(p.y / 150) * 100}%`,
+                transform: 'translate(-50%, -50%)',
+                width: '34px',
+                height: '34px',
+                fontSize: '17px',
+                lineHeight: 1,
+                background: s.done ? 'rgba(34,197,94,0.20)' : `${palette[i].c}2E`,
+                border: `1.5px solid ${col}`,
+              }}
+            >
+              {s.emoji}
+            </span>
+          )
+        })}
       </div>
 
       {/* Challenge list — coloured 20px emoji, bold name, coloured counter,
