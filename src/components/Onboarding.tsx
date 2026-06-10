@@ -3,40 +3,16 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 
 // First-launch onboarding — accelerated 3-slide, Apple-style flow built
-// entirely from pure CSS/SVG geometry (no image assets, no AI art). Shows
-// only the first time a user reaches the app: gated by a localStorage flag
-// with profiles.onboarding_completed as the cross-device source of truth.
-// Self-managing — mounted once in App and renders null once the user is
-// past it.
+// entirely from pure CSS/SVG geometry (no image assets). The SINGLE source
+// of truth for whether to show it is profiles.onboarding_completed in
+// Supabase: false (or a missing row) → show; true → skip. There is NO
+// localStorage gate, so a server-side reset of the flag force-replays the
+// tuto for everyone. Mounted once in App; renders null once past it.
 
-const LS_KEY = 'onboarding_completed'
-// Legacy key from the previous onboarding — still honoured so users who
-// already onboarded never see the new flow again.
-const LS_LEGACY = 'revs_onboarded'
 const RED = '#E8203A'
 
 // Spring-physics easing for the inter-slide glide (gentle overshoot).
 const SPRING = 'transform 0.55s cubic-bezier(0.34, 1.56, 0.64, 1)'
-
-function isDoneLocally(): boolean {
-  try {
-    return (
-      localStorage.getItem(LS_KEY) === 'true' ||
-      localStorage.getItem(LS_LEGACY) === '1'
-    )
-  } catch {
-    return true // storage blocked → don't nag
-  }
-}
-
-function markDoneLocally() {
-  try {
-    localStorage.setItem(LS_KEY, 'true')
-    localStorage.setItem(LS_LEGACY, '1')
-  } catch {
-    /* ignore */
-  }
-}
 
 // Fire the permission prompts in order — geolocation first (needed to
 // spot), then notifications. Must run synchronously from the click (no
@@ -101,6 +77,29 @@ function MapBeacon() {
         className="absolute left-1/2 top-1/2 h-6 w-6 -translate-x-1/2 -translate-y-1/2 rounded-full"
         style={{ background: RED, boxShadow: '0 0 26px rgba(232,32,58,0.85)' }}
       />
+      {/* Scattered spot pings — several red dots pulsing across the map. */}
+      {[
+        { top: '26%', left: '30%', d: '0s' },
+        { top: '32%', left: '70%', d: '0.8s' },
+        { top: '70%', left: '64%', d: '1.2s' },
+        { top: '66%', left: '32%', d: '0.5s' },
+      ].map((p, i) => (
+        <span
+          key={i}
+          aria-hidden
+          className="absolute"
+          style={{ top: p.top, left: p.left, transform: 'translate(-50%,-50%)' }}
+        >
+          <span
+            className="absolute left-1/2 top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 animate-ping rounded-full"
+            style={{ background: 'rgba(232,32,58,0.28)', animationDelay: p.d }}
+          />
+          <span
+            className="block h-2 w-2 rounded-full"
+            style={{ background: RED, boxShadow: '0 0 8px rgba(232,32,58,0.8)' }}
+          />
+        </span>
+      ))}
     </div>
   )
 }
@@ -137,7 +136,7 @@ function DeckFan() {
       />
       <div
         aria-hidden
-        className={`${card} flex items-center justify-center`}
+        className={`${card} flex items-center justify-center overflow-hidden`}
         style={{
           transform: 'rotateZ(5deg)',
           border: '1.5px solid rgba(168,85,247,0.9)',
@@ -145,9 +144,19 @@ function DeckFan() {
           boxShadow: '0 0 34px rgba(168,85,247,0.28)',
         }}
       >
+        {/* Holographic sheen — a shifting rainbow film over the rare card. */}
         <span
-          className="font-display text-5xl font-extrabold tracking-tighter"
-          style={{ color: 'rgba(216,180,254,0.9)' }}
+          aria-hidden
+          className="absolute inset-0"
+          style={{
+            background:
+              'linear-gradient(125deg, rgba(255,0,128,0.20) 0%, rgba(0,200,255,0.16) 35%, rgba(180,80,255,0.22) 65%, rgba(255,200,0,0.14) 100%)',
+            mixBlendMode: 'screen',
+          }}
+        />
+        <span
+          className="relative font-display text-5xl font-extrabold tracking-tighter"
+          style={{ color: 'rgba(216,180,254,0.95)' }}
         >
           R
         </span>
@@ -210,19 +219,19 @@ const SLIDES: Slide[] = [
   {
     title: 'Spotte les supercars',
     subtitle:
-      "Prends une photo, l'IA identifie la voiture en quelques secondes et floute la plaque instantanément.",
+      "Prends une photo, l'IA identifie la voiture en secondes et elle apparaît sur la carte en temps réel. Gagne de l'XP selon la rareté.",
     visual: <MapBeacon />,
   },
   {
     title: 'Collectionne tes cartes',
     subtitle:
-      'Chaque spot débloque une carte unique dans ton profil. Plus le modèle est rare dans le monde, plus ton deck devient précieux.',
+      'Chaque spot génère une carte unique. Commun, Rare, Ultra Rare ou Légendaire — plus la voiture est rare, plus ta carte est précieuse.',
     visual: <DeckFan />,
   },
   {
-    title: 'Domine le classement',
+    title: 'Deviens le meilleur spotter',
     subtitle:
-      'Affronte les spotters de ta ville, maintient tes streaks quotidiens et grimpe au sommet de la ligue.',
+      'Enchaîne les streaks, complète les challenges hebdomadaires et affronte les spotters de ta ville pour atteindre le sommet.',
     visual: <Podium />,
   },
 ]
@@ -234,13 +243,10 @@ export default function Onboarding() {
   const [index, setIndex] = useState(0)
   const startX = useRef<number | null>(null)
 
-  // First-launch decision: localStorage fast-path, then the profile flag.
+  // Single source of truth = the DB flag. Show whenever it isn't
+  // explicitly true (false / null / missing row → first launch).
   useEffect(() => {
     let active = true
-    if (isDoneLocally()) {
-      setShow(false)
-      return
-    }
     ;(async () => {
       const {
         data: { user },
@@ -256,15 +262,10 @@ export default function Onboarding() {
         .eq('user_id', user.id)
         .maybeSingle()
       if (!active) return
-      if (
+      const done =
         (data as { onboarding_completed?: boolean } | null)
-          ?.onboarding_completed
-      ) {
-        markDoneLocally()
-        setShow(false)
-      } else {
-        setShow(true)
-      }
+          ?.onboarding_completed === true
+      setShow(!done)
     })()
     return () => {
       active = false
@@ -274,10 +275,8 @@ export default function Onboarding() {
   function complete(toMap: boolean) {
     // Permission prompts must fire inside the gesture, before any await.
     kickoffPermissions()
-    markDoneLocally()
     setShow(false)
-    // Persist the flag to Supabase (fire-and-forget; localStorage already
-    // gates the next launch).
+    // Persist completion — the DB flag is what gates the next launch.
     void (async () => {
       const {
         data: { user },
