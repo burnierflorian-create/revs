@@ -13,7 +13,6 @@ import {
 } from '../lib/challenges'
 import { fetchLiveEvents, type LiveEvent } from '../lib/liveEvents'
 import TitleChip from '../components/TitleChip'
-import { useTheme } from '../lib/theme'
 
 type CommunityStats = {
   spots_today: number
@@ -407,41 +406,26 @@ function gaugePoint(t: number, r: number) {
 // Emoji slots: slot 0 left (t=0), slot 1 top (t=0.5), slot 2 right (t=1).
 const EMOJI_T = [0, 0.5, 1]
 
-// The three fixed cockpit objectives, in arc order (outer→inner =
-// red→gold→silver). Labels are FORCED — always shown verbatim — while
-// `match` ties each slot to a live challenge (by keyword) so the arc
-// fill still reflects real progress when that challenge exists.
-const FORCED_ARCS: {
-  label: string
-  emoji: string
-  match: (t: string, b: string, cat: string) => boolean
-}[] = [
-  {
-    label: 'Marathon du week-end',
-    emoji: '🏎️',
-    match: (t) => t.includes('marathon') || t.includes('week'),
-  },
-  {
-    label: 'Youngtimer Collector',
-    emoji: '🏁',
-    match: (t, _b, cat) =>
-      t.includes('youngtimer') ||
-      cat.includes('youngtimer') ||
-      cat.includes('classic') ||
-      t.includes('collector'),
-  },
-  {
-    label: "Roi de l'Audi",
-    emoji: '⚙️',
-    match: (t, b) => b.includes('audi') || t.includes('audi'),
-  },
-]
+// Local emoji + colour for a challenge, derived from its type / category /
+// brand — no catalogue change, no API. Keeps the adaptive challenge text
+// while giving each a distinctive dashboard identity.
+function challengeStyle(c: Challenge): { emoji: string; color: string } {
+  const cat = (c.target_category ?? '').toLowerCase()
+  if (c.type === 'spot_brand' || c.target_brand)
+    return { emoji: '⚙️', color: '#3B82F6' }
+  if (cat.includes('hypercar')) return { emoji: '👑', color: '#9B59B6' }
+  if (cat.includes('supercar')) return { emoji: '🏎️', color: '#E8203A' }
+  if (cat.includes('jdm')) return { emoji: '🏁', color: '#FF6B00' }
+  if (cat.includes('classic') || cat.includes('youngtimer'))
+    return { emoji: '🏁', color: '#F5C518' }
+  if (c.type === 'spot_count') return { emoji: '🔥', color: '#E8203A' }
+  return { emoji: '🎯', color: '#E8203A' }
+}
 
-/** Three concentric supercar-tach arcs: outer = REVS red, middle = gold,
- *  inner = silver. The three objective labels are fixed; each arc binds
- *  to a matching live challenge for its fill (falling back to the next
- *  unused challenge, else an empty gauge). Colours deepen in light mode
- *  so gold/silver still read on the alabaster widget. Tap → /challenges. */
+/** Dashboard speedometer bound to the user's REAL adaptive weekly
+ *  challenges (get_my_weekly_challenges — migrations 0042/0043): their
+ *  titles, live progress, and a locally-derived emoji/colour. The list
+ *  bars fill from the same live progress. Tap → /challenges. */
 function RpmGauges({
   challenges,
   onTap,
@@ -449,53 +433,24 @@ function RpmGauges({
   challenges: Challenge[]
   onTap: () => void
 }) {
-  const { theme } = useTheme()
-  const light = theme === 'light'
-  // [colour, glow] per arc, matching each challenge's perimeter emoji:
-  // Marathon = red, Youngtimer = yellow, Roi de l'Audi = blue.
-  const palette: { c: string; glow: string }[] = light
-    ? [
-        { c: '#E8203A', glow: 'rgba(232,32,58,0.30)' },
-        { c: '#D4A017', glow: 'rgba(212,160,23,0.30)' },
-        { c: '#2563EB', glow: 'rgba(37,99,235,0.30)' },
-      ]
-    : [
-        { c: '#FF2D46', glow: 'rgba(255,45,70,0.45)' },
-        { c: '#F5C518', glow: 'rgba(245,197,24,0.45)' },
-        { c: '#3B82F6', glow: 'rgba(59,130,246,0.45)' },
-      ]
-
-  // Bind each fixed slot to a real challenge: keyword match first, then
-  // the next still-unbound challenge, else none (empty arc).
-  const used = new Set<number>()
-  const slots = FORCED_ARCS.map((f) => {
-    let idx = challenges.findIndex(
-      (c, i) =>
-        !used.has(i) &&
-        f.match(
-          c.title.toLowerCase(),
-          (c.target_brand ?? '').toLowerCase(),
-          (c.target_category ?? '').toLowerCase(),
-        ),
-    )
-    if (idx < 0) idx = challenges.findIndex((_, i) => !used.has(i))
-    if (idx >= 0) used.add(idx)
-    const c = idx >= 0 ? challenges[idx] : null
+  // Up to three real challenges drive the gauge + the list below.
+  const slots = challenges.slice(0, 3).map((c) => {
+    const st = challengeStyle(c)
     return {
-      label: f.label,
-      emoji: f.emoji,
-      pct: c ? Math.min(100, Math.max(0, computeChallengePct(c))) : 0,
-      done: c ? c.claimed || c.completed : false,
-      // Real "Actuel / Objectif" counters for the legend.
-      progress: c ? Math.min(c.progress, c.target_value) : 0,
-      target: c ? c.target_value : 0,
+      label: c.title,
+      emoji: st.emoji,
+      color: st.color,
+      pct: Math.min(100, Math.max(0, computeChallengePct(c))),
+      done: c.claimed || c.completed,
+      progress: Math.min(c.progress, c.target_value),
+      target: c.target_value,
     }
   })
 
-  // Central focal readout — cumulative average progress of the 3 arcs.
-  const cumulative = Math.round(
-    slots.reduce((sum, s) => sum + s.pct, 0) / slots.length,
-  )
+  // Central readout — average progress across the (up to 3) challenges.
+  const cumulative = slots.length
+    ? Math.round(slots.reduce((sum, s) => sum + s.pct, 0) / slots.length)
+    : 0
 
   return (
     <button
@@ -619,7 +574,7 @@ function RpmGauges({
         {/* Challenge emojis on the outer rim. */}
         {slots.map((s, i) => {
           const p = gaugePoint(EMOJI_T[i], G_R)
-          const col = s.done ? '#22C55E' : palette[i].c
+          const col = s.done ? '#22C55E' : s.color
           return (
             <span
               key={`ic-${i}`}
@@ -633,7 +588,7 @@ function RpmGauges({
                 height: '34px',
                 fontSize: '17px',
                 lineHeight: 1,
-                background: s.done ? 'rgba(34,197,94,0.20)' : `${palette[i].c}2E`,
+                background: s.done ? 'rgba(34,197,94,0.20)' : `${s.color}2E`,
                 border: `1.5px solid ${col}`,
               }}
             >
@@ -646,10 +601,10 @@ function RpmGauges({
       {/* Challenge list — coloured 20px emoji, bold name, coloured counter,
           a thin red progress bar; 12px between rows. */}
       <div className="mt-2 flex w-full flex-col gap-3">
-        {slots.map((s, i) => {
+        {slots.map((s) => {
           const pct =
             s.target > 0 ? Math.min(100, (s.progress / s.target) * 100) : 0
-          const counterCol = s.done ? '#22C55E' : palette[i].c
+          const counterCol = s.done ? '#22C55E' : s.color
           return (
             <div key={s.label} className="flex flex-col gap-1.5">
               <div className="flex items-center gap-2.5">
