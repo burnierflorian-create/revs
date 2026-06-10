@@ -4,6 +4,7 @@ import { ChevronRight } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { setPendingPhoto } from '../lib/pendingPhoto'
 import { xpLevel, XP_LADDER } from '../lib/xp'
+import { xpForSpot, type Rarity } from '../lib/spots'
 import { GP_2026 } from '../lib/f1'
 import { Skeleton } from '../components/Skeleton'
 import {
@@ -21,6 +22,33 @@ type CommunityStats = {
   top_brand: string | null
 }
 
+type LastSpot = {
+  id: string
+  brand: string
+  model: string
+  photo_url: string | null
+  estimated_price: number | null
+  rarity: Rarity | null
+}
+
+// Current daily streak: consecutive days (local) with at least one spot,
+// counting back from today (or yesterday if today has none yet).
+function computeStreak(isoDates: string[]): number {
+  const fmt = (dt: Date) => dt.toLocaleDateString('en-CA') // YYYY-MM-DD
+  const days = new Set(isoDates.map((d) => fmt(new Date(d))))
+  const cursor = new Date()
+  if (!days.has(fmt(cursor))) {
+    cursor.setDate(cursor.getDate() - 1)
+    if (!days.has(fmt(cursor))) return 0
+  }
+  let streak = 0
+  while (days.has(fmt(cursor))) {
+    streak += 1
+    cursor.setDate(cursor.getDate() - 1)
+  }
+  return streak
+}
+
 export default function Home() {
   const navigate = useNavigate()
   const [loading, setLoading] = useState(true)
@@ -30,6 +58,8 @@ export default function Home() {
   const [liveEvents, setLiveEvents] = useState<LiveEvent[]>([])
   const [community, setCommunity] = useState<CommunityStats | null>(null)
   const [title, setTitle] = useState<string | null>(null)
+  const [streak, setStreak] = useState(0)
+  const [lastSpot, setLastSpot] = useState<LastSpot | null | undefined>(undefined)
   const [now, setNow] = useState(() => Date.now())
 
   // 1 Hz tick — feeds the Motorsport countdown frieze.
@@ -92,6 +122,32 @@ export default function Home() {
         .then(({ data }) => {
           if (active) setCommunity((data as CommunityStats | null) ?? null)
         })
+
+      // Streak — consecutive spotting days (from the user's recent spots).
+      supabase
+        .from('spots')
+        .select('created_at')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(200)
+        .then(({ data }) => {
+          if (!active) return
+          const rows = (data ?? []) as { created_at: string }[]
+          setStreak(computeStreak(rows.map((r) => r.created_at)))
+        })
+
+      // Last spot — drives the "Ton dernier spot" card at the bottom.
+      supabase
+        .from('spots')
+        .select('id, brand, model, photo_url, estimated_price, rarity')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .then(({ data }) => {
+          if (!active) return
+          const arr = (data ?? []) as LastSpot[]
+          setLastSpot(arr[0] ?? null)
+        })
     })()
     return () => {
       active = false
@@ -152,6 +208,22 @@ export default function Home() {
         </span>
       </div>
 
+      {/* ─── STREAK PILL — visible red badge above the cockpit ─── */}
+      {streak > 0 && (
+        <div className="mb-3 flex px-1">
+          <span
+            className="inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[13px] font-bold"
+            style={{
+              background: 'rgba(232,32,58,0.16)',
+              color: '#FF7080',
+              border: '1px solid rgba(232,32,58,0.40)',
+            }}
+          >
+            🔥 {streak} jour{streak > 1 ? 's' : ''} de streak
+          </span>
+        </div>
+      )}
+
       {/* ─── 2 · THE GIGA COCKPIT WIDGET ─── */}
       <CockpitWidget
         name={name}
@@ -197,16 +269,24 @@ export default function Home() {
         </div>
       )}
 
-      {/* ─── 3 · COMPLÉMENTS — floating on the page, massive breathing ─── */}
-      {nextGp && (
-        <div className="mt-12">
-          <MotorsportFrieze
+      {/* ─── 3 · COMPLÉMENTS — GP countdown card + last spot ─── */}
+      <div className="mt-10 space-y-4">
+        {nextGp && (
+          <GpCountdownCard
+            flag={nextGp.flag}
             name={nextGp.name}
+            circuit={nextGp.circuit}
             gpDiff={gpDiff}
             onTap={() => navigate(`/f1/${nextGp.round}`)}
           />
-        </div>
-      )}
+        )}
+
+        <LastSpotCard
+          spot={lastSpot}
+          onOpen={(id) => navigate(`/spot/${id}`)}
+          onSpot={() => navigate('/new-spot')}
+        />
+      </div>
     </div>
   )
 }
@@ -395,7 +475,8 @@ function RpmGauges({
     slots.reduce((sum, s) => sum + s.pct, 0) / slots.length,
   )
 
-  const trackStroke = 'rgb(var(--color-fg) / 0.08)'
+  // Empty rings sit a touch more visible now so the gauge reads even at 0%.
+  const trackStroke = 'rgb(var(--color-fg) / 0.20)'
 
   return (
     <button
@@ -416,28 +497,34 @@ function RpmGauges({
             const pal = palette[i]
             const { pct, done } = slots[i]
             const stroke = done ? '#22C55E' : pal.c
-            const fillEnd = GAUGE_START + (GAUGE_SWEEP * pct) / 100
+            const full = arcPath(r, GAUGE_START, GAUGE_START + GAUGE_SWEEP)
             return (
               <g key={r}>
                 <path
-                  d={arcPath(r, GAUGE_START, GAUGE_START + GAUGE_SWEEP)}
+                  d={full}
                   fill="none"
                   stroke={trackStroke}
                   strokeWidth={9}
                   strokeLinecap="round"
                 />
-                {pct > 0 && (
-                  <path
-                    d={arcPath(r, GAUGE_START, fillEnd)}
-                    fill="none"
-                    stroke={stroke}
-                    strokeWidth={9}
-                    strokeLinecap="round"
-                    style={{
-                      filter: `drop-shadow(0 0 6px ${done ? 'rgba(34,197,94,0.40)' : pal.glow})`,
-                    }}
-                  />
-                )}
+                {/* Fill drawn on the FULL arc but revealed via dashoffset so
+                    it sweeps in smoothly (fluid red fill) as pct grows. */}
+                <path
+                  d={full}
+                  fill="none"
+                  stroke={stroke}
+                  strokeWidth={9}
+                  strokeLinecap="round"
+                  pathLength={1}
+                  style={{
+                    strokeDasharray: 1,
+                    strokeDashoffset: 1 - pct / 100,
+                    filter: `drop-shadow(0 0 6px ${done ? 'rgba(34,197,94,0.40)' : pal.glow})`,
+                    transition:
+                      'stroke-dashoffset 800ms cubic-bezier(0.22, 1, 0.36, 1)',
+                    opacity: pct > 0 ? 1 : 0,
+                  }}
+                />
               </g>
             )
           })}
@@ -483,49 +570,86 @@ function RpmGauges({
             transform: 'translate(-50%,-50%)',
           }}
         >
-          <span
-            className="font-display font-extrabold leading-none text-fg"
-            style={{ fontSize: '30px', letterSpacing: '-0.03em' }}
-          >
-            {cumulative}
-            <span className="font-bold text-fg/55" style={{ fontSize: '15px' }}>
-              %
+          {cumulative === 0 ? (
+            // Nothing started yet — an inviting red call-to-action instead
+            // of a cold grey "0% CUMULÉ".
+            <span
+              className="font-display font-extrabold leading-none"
+              style={{
+                fontSize: '19px',
+                color: '#E8203A',
+                letterSpacing: '-0.02em',
+              }}
+            >
+              Lance-toi !
             </span>
-          </span>
-          <span
-            className="mt-1 font-black uppercase text-fg2"
-            style={{ fontSize: '7px', letterSpacing: '0.22em' }}
-          >
-            Cumulé
-          </span>
+          ) : (
+            <>
+              <span
+                className="font-display font-extrabold leading-none text-fg"
+                style={{ fontSize: '30px', letterSpacing: '-0.03em' }}
+              >
+                {cumulative}
+                <span
+                  className="font-bold text-fg/55"
+                  style={{ fontSize: '15px' }}
+                >
+                  %
+                </span>
+              </span>
+              <span
+                className="mt-1 font-black uppercase text-fg2"
+                style={{ fontSize: '7px', letterSpacing: '0.22em' }}
+              >
+                Cumulé
+              </span>
+            </>
+          )}
         </span>
       </div>
 
-      {/* Forced-label legend — auto emoji + verbatim objective + the real
-          "Actuel / Objectif" counter (colour-coded to its arc). */}
-      <div className="mt-1 flex w-full flex-col gap-1.5">
-        {slots.map((s, i) => (
-          <div key={s.label} className="flex items-center gap-2">
-            <span aria-hidden style={{ fontSize: '12px' }}>
-              {s.emoji}
-            </span>
-            <span
-              className="flex-1 truncate font-bold uppercase tracking-wide text-fg/75"
-              style={{ fontSize: '10.5px', letterSpacing: '0.04em' }}
-            >
-              {s.label}
-            </span>
-            <span
-              className="flex-none tabular-nums font-extrabold"
-              style={{
-                fontSize: '11px',
-                color: s.done ? '#22C55E' : palette[i].c,
-              }}
-            >
-              {s.progress} / {s.target}
-            </span>
-          </div>
-        ))}
+      {/* Challenge list — 28px icon, bold name, red counter on the right,
+          and a thin red progress bar under each objective. */}
+      <div className="mt-3 flex w-full flex-col gap-3">
+        {slots.map((s) => {
+          const pct =
+            s.target > 0 ? Math.min(100, (s.progress / s.target) * 100) : 0
+          const col = s.done ? '#22C55E' : '#E8203A'
+          return (
+            <div key={s.label} className="flex flex-col gap-1.5">
+              <div className="flex items-center gap-3">
+                <span aria-hidden style={{ fontSize: '28px', lineHeight: 1 }}>
+                  {s.emoji}
+                </span>
+                <span
+                  className="flex-1 truncate font-bold text-fg"
+                  style={{ fontSize: '14px' }}
+                >
+                  {s.label}
+                </span>
+                <span
+                  className="flex-none tabular-nums font-extrabold"
+                  style={{ fontSize: '13px', color: col }}
+                >
+                  {s.progress} / {s.target}
+                </span>
+              </div>
+              <div
+                className="h-1 w-full overflow-hidden rounded-full"
+                style={{ background: 'rgb(var(--color-fg) / 0.10)' }}
+              >
+                <div
+                  className="h-full rounded-full"
+                  style={{
+                    width: `${pct}%`,
+                    background: col,
+                    transition: 'width 700ms cubic-bezier(0.22, 1, 0.36, 1)',
+                  }}
+                />
+              </div>
+            </div>
+          )
+        })}
       </div>
     </button>
   )
@@ -611,18 +735,21 @@ function SpotterAction() {
   )
 }
 
-// ──────────────────────── MOTORSPORT FRIEZE ────────────────────────
+// ──────────────────────── GP COUNTDOWN CARD ────────────────────────
 
-/** Box-less motorsport block: a thin grey "Motorsport • <GP>" eyebrow
- *  over the linear countdown frieze where the F1 car slides toward the
- *  chequered flag as race day approaches. No card, no border — floats on
- *  the page per the cockpit clean-up. */
-function MotorsportFrieze({
+/** A proper #141414 card for the next Grand Prix: country flag, GP name,
+ *  a large red "Dans Xj Xh Xm" countdown and a progress bar that fills as
+ *  race day approaches (14-day perceptual window). */
+function GpCountdownCard({
+  flag,
   name,
+  circuit,
   gpDiff,
   onTap,
 }: {
+  flag: string
   name: string
+  circuit: string
   gpDiff: number
   onTap: () => void
 }) {
@@ -631,68 +758,160 @@ function MotorsportFrieze({
     h: Math.max(0, Math.floor((gpDiff % 86400000) / 3600000)),
     m: Math.max(0, Math.floor((gpDiff % 3600000) / 60000)),
   }
-  // 14-day perceptual window — the car only starts creeping once the GP
-  // is within a fortnight; further out it idles at the start gate.
   const WINDOW_MS = 14 * 86_400_000
-  const progressPct = Math.min(1, Math.max(0, 1 - Math.max(0, gpDiff) / WINDOW_MS))
-  const carLeft = `calc(12px + ${progressPct} * (100% - 24px))`
+  const progressPct = Math.min(
+    1,
+    Math.max(0, 1 - Math.max(0, gpDiff) / WINDOW_MS),
+  )
+
+  return (
+    <button
+      onClick={onTap}
+      className="home-section-enter tappable block w-full overflow-hidden rounded-2xl p-4 text-left transition-transform active:scale-[0.99]"
+      style={{
+        background: '#141414',
+        border: '1px solid rgba(255,255,255,0.06)',
+        boxShadow: '0 8px 22px rgba(0,0,0,0.45)',
+      }}
+      aria-label={`Grand Prix — ${name}`}
+    >
+      <div className="flex items-center gap-3">
+        <span aria-hidden style={{ fontSize: '30px', lineHeight: 1 }}>
+          {flag}
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[15px] font-bold text-white">{name}</p>
+          <p className="truncate text-[11px] text-white/45">{circuit}</p>
+        </div>
+        <span
+          className="font-black uppercase"
+          style={{
+            fontSize: '9px',
+            letterSpacing: '0.2em',
+            color: 'rgba(255,255,255,0.35)',
+          }}
+        >
+          F1
+        </span>
+      </div>
+
+      <p
+        className="mt-3 font-display font-extrabold leading-none tracking-tight"
+        style={{ fontSize: '26px', color: '#E8203A' }}
+      >
+        {gpDiff > 0
+          ? `Dans ${cd.d}j ${String(cd.h).padStart(2, '0')}h ${String(cd.m).padStart(2, '0')}m`
+          : 'En cours !'}
+      </p>
+
+      <div
+        className="mt-3 h-1.5 w-full overflow-hidden rounded-full"
+        style={{ background: 'rgba(255,255,255,0.10)' }}
+      >
+        <div
+          className="h-full rounded-full"
+          style={{
+            width: `${progressPct * 100}%`,
+            background:
+              'linear-gradient(90deg, rgba(232,32,58,0.45) 0%, #E8203A 100%)',
+            boxShadow: '0 0 8px rgba(232,32,58,0.5)',
+            transition: 'width 700ms cubic-bezier(0.22, 1, 0.36, 1)',
+          }}
+        />
+      </div>
+    </button>
+  )
+}
+
+// ──────────────────────── LAST SPOT CARD ────────────────────────
+
+/** "Ton dernier spot" — a mini card with the user's latest spot photo,
+ *  car name and XP earned. Empty state nudges to post a first spot. */
+function LastSpotCard({
+  spot,
+  onOpen,
+  onSpot,
+}: {
+  spot: LastSpot | null | undefined
+  onOpen: (id: string) => void
+  onSpot: () => void
+}) {
+  if (spot === undefined) return null // still loading — no flash
+
+  const eyebrow = (
+    <p
+      className="mb-2 px-1 font-black uppercase text-fg2"
+      style={{ fontSize: '10px', letterSpacing: '0.22em' }}
+    >
+      Ton dernier spot
+    </p>
+  )
+
+  if (!spot) {
+    return (
+      <section className="home-section-enter">
+        {eyebrow}
+        <div
+          className="flex items-center justify-between gap-3 rounded-2xl p-4"
+          style={{
+            background: '#141414',
+            border: '1px solid rgba(255,255,255,0.06)',
+          }}
+        >
+          <p className="text-sm font-medium text-white/80">
+            Poste ton premier spot !
+          </p>
+          <button
+            onClick={onSpot}
+            className="tappable flex-none rounded-full px-5 py-2.5 text-sm font-extrabold uppercase tracking-wider text-white"
+            style={{
+              background: '#E8203A',
+              boxShadow: '0 0 15px rgba(232,32,58,0.5)',
+              letterSpacing: '0.1em',
+            }}
+          >
+            Spotter
+          </button>
+        </div>
+      </section>
+    )
+  }
+
+  const title = [spot.brand, spot.model].filter(Boolean).join(' ') || 'Voiture'
+  const xp = xpForSpot(spot.estimated_price, spot.rarity)
 
   return (
     <section className="home-section-enter">
+      {eyebrow}
       <button
-        onClick={onTap}
-        className="tappable block w-full px-1 text-left"
-        aria-label={`Grand Prix — ${name}`}
+        onClick={() => onOpen(spot.id)}
+        className="tappable flex w-full items-center gap-3 overflow-hidden rounded-2xl p-3 text-left transition-transform active:scale-[0.99]"
+        style={{
+          background: '#141414',
+          border: '1px solid rgba(255,255,255,0.06)',
+          boxShadow: '0 8px 22px rgba(0,0,0,0.45)',
+        }}
       >
-        <p
-          className="mb-4 font-black uppercase text-fg2"
-          style={{ fontSize: '10px', letterSpacing: '0.22em' }}
-        >
-          Motorsport • {name}
-        </p>
-        <div className="relative">
-          <div
-            className="relative h-1 rounded-full"
-            style={{ background: 'rgb(var(--color-fg) / 0.08)' }}
-          >
-            <div
-              className="absolute inset-y-0 left-0 rounded-full"
-              style={{
-                width: `${progressPct * 100}%`,
-                background:
-                  'linear-gradient(90deg, rgba(232,32,58,0.25) 0%, rgba(232,32,58,0.85) 100%)',
-                boxShadow: '0 0 8px rgba(232, 32, 58, 0.45)',
-                transition: 'width 700ms cubic-bezier(0.22, 1, 0.36, 1)',
-              }}
+        <div className="h-16 w-16 flex-none overflow-hidden rounded-xl bg-white/5">
+          {spot.photo_url ? (
+            <img
+              src={spot.photo_url}
+              alt={title}
+              loading="lazy"
+              className="h-full w-full object-cover"
             />
-          </div>
-          <span
-            aria-hidden
-            className="absolute -translate-x-1/2 -translate-y-1/2"
-            style={{
-              left: carLeft,
-              top: '2px',
-              fontSize: '18px',
-              lineHeight: 1,
-              filter: 'drop-shadow(0 0 6px rgba(232, 32, 58, 0.55))',
-              transition: 'left 700ms cubic-bezier(0.22, 1, 0.36, 1)',
-            }}
-          >
-            🏎️
-          </span>
-          <span
-            aria-hidden
-            className="absolute -translate-y-1/2"
-            style={{ right: '-4px', top: '2px', fontSize: '14px', lineHeight: 1 }}
-          >
-            🏁
-          </span>
+          ) : null}
         </div>
-        <p className="mt-3 text-[11px] font-medium text-fg2">
-          {gpDiff > 0
-            ? `Dans ${cd.d}j · ${String(cd.h).padStart(2, '0')}h · ${String(cd.m).padStart(2, '0')}m`
-            : 'En cours !'}
-        </p>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[15px] font-bold text-white">{title}</p>
+          <p
+            className="mt-0.5 text-[13px] font-bold"
+            style={{ color: '#E8203A' }}
+          >
+            +{xp} XP
+          </p>
+        </div>
+        <ChevronRight className="h-5 w-5 flex-none text-white/30" />
       </button>
     </section>
   )
