@@ -26,6 +26,7 @@ type CityRank = {
   total: number
   gapToAbove: number
   abovePseudo: string | null
+  progressToNext: number // 0..1 toward the rank above (my XP / above XP)
 }
 
 type CityRow = { user_id: string; xp: number; pseudo: string | null }
@@ -158,6 +159,7 @@ export default function Home() {
                 total: rows.length,
                 gapToAbove: 0,
                 abovePseudo: null,
+                progressToNext: 0,
               })
             } else {
               const above = idx > 0 ? rows[idx - 1] : null
@@ -167,6 +169,9 @@ export default function Home() {
                 total: rows.length,
                 gapToAbove: above ? Math.max(0, above.xp - rows[idx].xp) : 0,
                 abovePseudo: above?.pseudo ?? null,
+                progressToNext: above
+                  ? Math.min(1, rows[idx].xp / Math.max(1, above.xp))
+                  : 1,
               })
             }
           })
@@ -389,22 +394,176 @@ function CockpitWidget({
 
 // ─────────────────────────────── RPM GAUGES ───────────────────────────────
 
-// Car-dashboard speedometer geometry — a 180° arc (left → top → right) of
-// evenly-spaced tick marks in a 240×150 box. Angles use the math
-// convention (0° = east, 90° = north). Fraction t in [0,1] maps to the
-// arc via deg = 180 − t·180. Pure constants — safe at module scope.
-const G_CX = 120
-const G_CY = 128
-const G_R = 98
-const G_TICKS = 40
-// Tick / needle position for a 0..1 fraction along the arc.
-function gaugePoint(t: number, r: number) {
-  const deg = 180 - t * 180
+// Mini-speedometer geometry (100×100 box, 270° arc with a bottom gap).
+// t in [0,1] maps the arc from −135° (bottom-left) to +135° (bottom-right)
+// measured from the top, clockwise. Pure constants — safe at module scope.
+const M_CX = 50
+const M_CY = 50
+const M_R = 40
+const M_TICKS = 45
+function mPoint(t: number, r: number) {
+  const deg = -135 + t * 270
   const a = (deg * Math.PI) / 180
-  return { x: G_CX + r * Math.cos(a), y: G_CY - r * Math.sin(a) }
+  return { x: M_CX + r * Math.sin(a), y: M_CY - r * Math.cos(a) }
 }
-// Emoji slots: slot 0 left (t=0), slot 1 top (t=0.5), slot 2 right (t=1).
-const EMOJI_T = [0, 0.5, 1]
+function mArc(t0: number, t1: number, r: number): string {
+  const s = mPoint(t0, r)
+  const e = mPoint(t1, r)
+  const large = t1 - t0 > 0.5 ? 1 : 0
+  return `M ${s.x.toFixed(2)} ${s.y.toFixed(2)} A ${r} ${r} 0 ${large} 1 ${e.x.toFixed(2)} ${e.y.toFixed(2)}`
+}
+// Fixed colour per gauge position + a subtle carbon-fibre disc texture.
+const GAUGE_COLORS = ['#E8203A', '#F0C040', '#4DA6FF']
+const CARBON =
+  'repeating-radial-gradient(circle at 50% 50%, rgba(255,255,255,0.035) 0px, rgba(255,255,255,0.035) 1px, transparent 1px, transparent 3px), #0d0d0d'
+
+/** One 100px supercar-dashboard speedometer. The needle, progress arc and
+ *  centre number are all driven by a JS spring tween that sweeps from 0 to
+ *  the real % over ~1s on mount (and on any later value change). */
+function MiniSpeedometer({
+  pct,
+  color,
+  done,
+}: {
+  pct: number
+  color: string
+  done: boolean
+}) {
+  const [disp, setDisp] = useState(0)
+  const fromRef = useRef(0)
+  useEffect(() => {
+    const from = fromRef.current
+    const to = pct
+    const start = performance.now()
+    const dur = 1000
+    let raf = 0
+    const easeOutBack = (k: number) => {
+      const c = 1.70158
+      return 1 + (c + 1) * Math.pow(k - 1, 3) + c * Math.pow(k - 1, 2)
+    }
+    const tick = (now: number) => {
+      const k = Math.min(1, (now - start) / dur)
+      const v = from + (to - from) * easeOutBack(k)
+      fromRef.current = v
+      setDisp(v)
+      if (k < 1) raf = requestAnimationFrame(tick)
+      else fromRef.current = to
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [pct])
+
+  const t = Math.max(0, Math.min(1, disp / 100))
+  const arcColor = done ? '#22C55E' : color
+  const needleDeg = -135 + t * 270
+
+  return (
+    <div className="relative" style={{ width: 100, height: 100 }}>
+      <div
+        aria-hidden
+        className="absolute inset-0 rounded-full"
+        style={{ background: CARBON, border: '1px solid rgba(255,255,255,0.05)' }}
+      />
+      <svg viewBox="0 0 100 100" width="100" height="100" className="absolute inset-0">
+        {Array.from({ length: M_TICKS }).map((_, i) => {
+          const tt = i / (M_TICKS - 1)
+          const major = i % 11 === 0
+          const inner = mPoint(tt, M_R - (major ? 7 : 4))
+          const outer = mPoint(tt, M_R)
+          return (
+            <line
+              key={i}
+              x1={inner.x}
+              y1={inner.y}
+              x2={outer.x}
+              y2={outer.y}
+              stroke="#3a3a3a"
+              strokeWidth={major ? 1.2 : 0.7}
+              strokeLinecap="round"
+            />
+          )
+        })}
+        {[0, 1, 2, 3, 4].map((m) => {
+          const p = mPoint(m / 4, M_R - 13)
+          return (
+            <text
+              key={m}
+              x={p.x}
+              y={p.y}
+              fill="#9a9a9a"
+              fontSize="6"
+              fontWeight="700"
+              textAnchor="middle"
+              dominantBaseline="central"
+            >
+              {m * 25}
+            </text>
+          )
+        })}
+        <path
+          d={mArc(0, 1, M_R)}
+          fill="none"
+          stroke="#2a2a2a"
+          strokeWidth={4}
+          strokeLinecap="round"
+        />
+        {t > 0.002 && (
+          <path
+            d={mArc(0, t, M_R)}
+            fill="none"
+            stroke={arcColor}
+            strokeWidth={4}
+            strokeLinecap="round"
+            style={{ filter: `drop-shadow(0 0 4px ${arcColor})` }}
+          />
+        )}
+      </svg>
+
+      {/* Needle (HTML) — driven each frame by the tween, no CSS transition. */}
+      <div className="absolute" style={{ left: '50%', top: '50%' }}>
+        <div
+          style={{
+            position: 'absolute',
+            left: '-0.75px',
+            bottom: '0px',
+            width: '1.5px',
+            height: `${M_R - 6}px`,
+            background: '#E8203A',
+            borderRadius: '1px',
+            transformOrigin: 'bottom center',
+            transform: `rotate(${needleDeg}deg)`,
+          }}
+        />
+        <span
+          aria-hidden
+          className="absolute rounded-full"
+          style={{
+            left: '-3px',
+            top: '-3px',
+            width: '6px',
+            height: '6px',
+            background: '#E8203A',
+            boxShadow: '0 0 6px rgba(232,32,58,0.9)',
+          }}
+        />
+      </div>
+
+      {/* Centre percentage */}
+      <span
+        className="absolute font-display font-extrabold text-white"
+        style={{
+          left: 0,
+          right: 0,
+          top: '56px',
+          textAlign: 'center',
+          fontSize: '14px',
+        }}
+      >
+        {Math.round(Math.max(0, Math.min(100, disp)))}%
+      </span>
+    </div>
+  )
+}
 
 // Local emoji + colour for a challenge, derived from its type / category /
 // brand — no catalogue change, no API. Keeps the adaptive challenge text
@@ -447,201 +606,38 @@ function RpmGauges({
     }
   })
 
-  // Central readout — average progress across the (up to 3) challenges.
-  const cumulative = slots.length
-    ? Math.round(slots.reduce((sum, s) => sum + s.pct, 0) / slots.length)
-    : 0
-
   return (
-    <button
-      onClick={onTap}
-      aria-label="Voir mes objectifs de la semaine"
-      className="tappable mx-auto mt-3 flex flex-col items-center"
-    >
-      {/* Car-dashboard speedometer — 40 tick marks lighting up red as the
-          cumulative % rises, a thin spring-animated needle pointing at the
-          value, the % + DÉFIS centred, and the 3 challenge emojis on the
-          outer rim (🏎️ left / 🏁 top / ⚙️ right). */}
-      <div className="relative" style={{ width: '240px', height: '150px' }}>
-        <svg
-          viewBox="0 0 240 150"
-          width="100%"
-          height="100%"
-          style={{ overflow: 'visible' }}
-          aria-hidden
-        >
-          {Array.from({ length: G_TICKS }).map((_, i) => {
-            const t = i / (G_TICKS - 1)
-            const inner = gaugePoint(t, G_R - 11)
-            const outer = gaugePoint(t, G_R)
-            const lit = i < Math.round((cumulative / 100) * G_TICKS)
-            return (
-              <line
-                key={i}
-                x1={inner.x}
-                y1={inner.y}
-                x2={outer.x}
-                y2={outer.y}
-                stroke={lit ? '#E8203A' : '#2a2a2a'}
-                strokeWidth={3}
-                strokeLinecap="round"
-                style={{
-                  filter: lit
-                    ? 'drop-shadow(0 0 3px rgba(232,32,58,0.75))'
-                    : undefined,
-                  transition: 'stroke 350ms ease',
-                }}
-              />
-            )
-          })}
-        </svg>
-
-        {/* Needle — HTML element pivoting at the gauge centre, spring-eased.
-            rot = 0 at 50% (straight up), ±90° at the extremes. */}
-        <div
-          className="absolute"
-          style={{ left: `${(G_CX / 240) * 100}%`, top: `${(G_CY / 150) * 100}%` }}
-        >
-          {/* soft red glow under the pivot */}
-          <span
-            aria-hidden
-            className="absolute rounded-full"
-            style={{
-              left: '-22px',
-              top: '-22px',
-              width: '44px',
-              height: '44px',
-              background:
-                'radial-gradient(circle, rgba(232,32,58,0.45) 0%, transparent 70%)',
-            }}
-          />
-          <div
-            style={{
-              position: 'absolute',
-              left: '-2px',
-              bottom: '0px',
-              width: '4px',
-              height: '74px',
-              borderRadius: '2px',
-              background:
-                'linear-gradient(to top, rgba(232,32,58,0.15) 0%, #E8203A 100%)',
-              transformOrigin: 'bottom center',
-              transform: `rotate(${(cumulative / 100 - 0.5) * 180}deg)`,
-              transition: 'transform 900ms cubic-bezier(0.34, 1.56, 0.64, 1)',
-            }}
-          />
-          <span
-            aria-hidden
-            className="absolute rounded-full"
-            style={{
-              left: '-6px',
-              top: '-6px',
-              width: '12px',
-              height: '12px',
-              background: '#E8203A',
-              boxShadow: '0 0 12px rgba(232,32,58,0.85)',
-            }}
-          />
-        </div>
-
-        {/* Center readout — big white %, grey DÉFIS under it (above needle). */}
-        <span
-          className="absolute z-10 flex flex-col items-center"
-          style={{
-            left: 0,
-            right: 0,
-            top: '74px',
-            transform: 'translateY(-50%)',
-          }}
-        >
-          <span
-            className="font-display font-extrabold leading-none text-fg"
-            style={{ fontSize: '32px', letterSpacing: '-0.03em' }}
+    <div className="mt-3 flex w-full items-start justify-between gap-2">
+      {slots.map((s, i) => {
+        const color = GAUGE_COLORS[i % GAUGE_COLORS.length]
+        const counterCol = s.done ? '#22C55E' : color
+        return (
+          <button
+            key={s.label}
+            onClick={onTap}
+            aria-label={s.label}
+            className="tappable flex min-w-0 flex-1 flex-col items-center"
           >
-            {cumulative}
-            <span className="font-bold text-fg/50" style={{ fontSize: '16px' }}>
-              %
-            </span>
-          </span>
-          <span
-            className="mt-1.5 font-black uppercase text-fg2"
-            style={{ fontSize: '11px', letterSpacing: '0.18em' }}
-          >
-            Défis
-          </span>
-        </span>
-
-        {/* Challenge emojis on the outer rim. */}
-        {slots.map((s, i) => {
-          const p = gaugePoint(EMOJI_T[i], G_R)
-          const col = s.done ? '#22C55E' : s.color
-          return (
-            <span
-              key={`ic-${i}`}
-              aria-hidden
-              className="absolute z-10 flex items-center justify-center rounded-full transition-colors duration-500"
-              style={{
-                left: `${(p.x / 240) * 100}%`,
-                top: `${(p.y / 150) * 100}%`,
-                transform: 'translate(-50%, -50%)',
-                width: '34px',
-                height: '34px',
-                fontSize: '17px',
-                lineHeight: 1,
-                background: s.done ? 'rgba(34,197,94,0.20)' : `${s.color}2E`,
-                border: `1.5px solid ${col}`,
-              }}
-            >
+            <MiniSpeedometer pct={s.pct} color={color} done={s.done} />
+            <span aria-hidden className="mt-2" style={{ fontSize: '20px', lineHeight: 1 }}>
               {s.emoji}
             </span>
-          )
-        })}
-      </div>
-
-      {/* Challenge list — coloured 20px emoji, bold name, coloured counter,
-          a thin red progress bar; 12px between rows. */}
-      <div className="mt-2 flex w-full flex-col gap-3">
-        {slots.map((s) => {
-          const pct =
-            s.target > 0 ? Math.min(100, (s.progress / s.target) * 100) : 0
-          const counterCol = s.done ? '#22C55E' : s.color
-          return (
-            <div key={s.label} className="flex flex-col gap-1.5">
-              <div className="flex items-center gap-2.5">
-                <span aria-hidden style={{ fontSize: '20px', lineHeight: 1 }}>
-                  {s.emoji}
-                </span>
-                <span
-                  className="flex-1 truncate font-bold text-fg"
-                  style={{ fontSize: '14px' }}
-                >
-                  {s.label}
-                </span>
-                <span
-                  className="flex-none tabular-nums font-extrabold"
-                  style={{ fontSize: '13px', color: counterCol }}
-                >
-                  {s.progress} / {s.target}
-                </span>
-              </div>
-              <div
-                className="h-1 w-full overflow-hidden rounded-full"
-                style={{ background: 'rgb(var(--color-fg) / 0.10)' }}
-              >
-                <div
-                  className="h-full rounded-full"
-                  style={{
-                    width: `${pct}%`,
-                    background: '#E8203A',
-                    transition: 'width 700ms cubic-bezier(0.22, 1, 0.36, 1)',
-                  }}
-                />
-              </div>
-            </div>
-          )
-        })}
-      </div>
-    </button>
+            <span
+              className="mt-1 line-clamp-2 text-center font-semibold text-white"
+              style={{ fontSize: '11px', lineHeight: 1.2 }}
+            >
+              {s.label}
+            </span>
+            <span
+              className="mt-0.5 tabular-nums font-extrabold"
+              style={{ fontSize: '12px', color: counterCol }}
+            >
+              {s.progress}/{s.target}
+            </span>
+          </button>
+        )
+      })}
+    </div>
   )
 }
 
@@ -748,67 +744,108 @@ function GpCountdownCard({
     h: Math.max(0, Math.floor((gpDiff % 86400000) / 3600000)),
     m: Math.max(0, Math.floor((gpDiff % 3600000) / 60000)),
   }
-  const WINDOW_MS = 14 * 86_400_000
-  const progressPct = Math.min(
-    1,
-    Math.max(0, 1 - Math.max(0, gpDiff) / WINDOW_MS),
-  )
+  const blocks = [
+    { v: String(cd.d), label: 'JOURS' },
+    { v: String(cd.h).padStart(2, '0'), label: 'HEURES' },
+    { v: String(cd.m).padStart(2, '0'), label: 'MINUTES' },
+  ]
 
   return (
     <button
       onClick={onTap}
-      className="home-section-enter tappable relative block w-full overflow-hidden rounded-2xl p-5 pb-6 text-left transition-transform active:scale-[0.99]"
+      className="home-section-enter tappable relative block w-full overflow-hidden rounded-2xl p-4 pb-6 text-left transition-transform active:scale-[0.99]"
       style={{
-        background: '#141414',
+        background:
+          'repeating-linear-gradient(45deg, rgba(255,255,255,0.03) 0px, rgba(255,255,255,0.03) 1px, transparent 1px, transparent 5px), #141414',
         border: '1px solid rgba(255,255,255,0.06)',
         boxShadow: '0 8px 22px rgba(0,0,0,0.45)',
       }}
       aria-label={`Grand Prix — ${name}`}
     >
-      {/* Line 1 — flag + GP name + discreet red F1 badge */}
+      {/* Top — big flag + GP name + red F1 pill */}
       <div className="flex items-center gap-2.5">
-        <span aria-hidden style={{ fontSize: '26px', lineHeight: 1 }}>
+        <span aria-hidden style={{ fontSize: '24px', lineHeight: 1 }}>
           {flag}
         </span>
-        <p className="min-w-0 flex-1 truncate text-[15px] font-bold text-white">
+        <p className="min-w-0 flex-1 truncate text-[17px] font-bold text-white">
           {name}
         </p>
         <span
-          className="flex-none rounded-md px-2 py-0.5 text-[10px] font-extrabold tracking-wide text-white"
+          className="flex-none rounded-full px-2.5 py-1 text-[10px] font-extrabold tracking-wide text-white"
           style={{ background: '#E8203A', letterSpacing: '0.08em' }}
         >
           F1
         </span>
       </div>
 
-      {/* Line 2 — circuit */}
-      <p className="mt-1.5 truncate text-[12px] text-white/45">{circuit}</p>
+      {/* Circuit — grey italic */}
+      <p className="mt-1 truncate text-[12px] italic text-white/45">{circuit}</p>
 
-      {/* Line 3 — countdown, calm white 20px (no aggressive red) */}
-      <p
-        className="mt-4 font-display font-bold leading-none tracking-tight text-white"
-        style={{ fontSize: '20px' }}
-      >
-        {gpDiff > 0
-          ? `Dans ${cd.d}j ${String(cd.h).padStart(2, '0')}h ${String(cd.m).padStart(2, '0')}m`
-          : 'En cours !'}
-      </p>
+      {/* Countdown — three F1-style square blocks with red separators */}
+      {gpDiff > 0 ? (
+        <div className="mt-3.5 flex items-stretch gap-2">
+          {blocks.map((b, i) => (
+            <div key={b.label} className="flex flex-1 items-stretch gap-2">
+              <div
+                className="flex flex-1 flex-col items-center justify-center rounded-lg py-2"
+                style={{ background: '#0d0d0d' }}
+              >
+                <span
+                  className="font-display font-extrabold leading-none text-white tabular-nums"
+                  style={{ fontSize: '24px' }}
+                >
+                  {b.v}
+                </span>
+                <span
+                  className="mt-1 font-bold uppercase text-white/40"
+                  style={{ fontSize: '9px', letterSpacing: '0.1em' }}
+                >
+                  {b.label}
+                </span>
+              </div>
+              {i < blocks.length - 1 && (
+                <span
+                  aria-hidden
+                  className="flex items-center font-display font-extrabold"
+                  style={{ fontSize: '22px', color: '#E8203A' }}
+                >
+                  :
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p
+          className="mt-3.5 font-display font-extrabold"
+          style={{ fontSize: '22px', color: '#E8203A' }}
+        >
+          En cours !
+        </p>
+      )}
 
-      {/* Thin red progress bar flush at the very bottom of the card */}
-      <div
-        className="absolute inset-x-0 bottom-0 h-1"
-        style={{ background: 'rgba(255,255,255,0.10)' }}
+      {/* Simplified circuit schematic — thin red lines, F1-logo style */}
+      <svg
+        aria-hidden
+        viewBox="0 0 120 34"
+        className="mt-4 w-full"
+        style={{ height: 34, opacity: 0.6 }}
+        fill="none"
       >
-        <div
-          className="h-full"
-          style={{
-            width: `${progressPct * 100}%`,
-            background: '#E8203A',
-            boxShadow: '0 0 8px rgba(232,32,58,0.5)',
-            transition: 'width 700ms cubic-bezier(0.22, 1, 0.36, 1)',
-          }}
+        <path
+          d="M8 24 C 2 12, 16 4, 30 8 C 40 11, 38 20, 50 21 C 64 22, 66 8, 82 9 C 98 10, 104 6, 112 12 C 118 17, 110 26, 96 25 C 74 23, 64 29, 44 28 C 26 27, 16 31, 8 24 Z"
+          stroke="#E8203A"
+          strokeWidth={1.4}
+          strokeLinecap="round"
         />
-      </div>
+      </svg>
+
+      {/* Fine red line flush at the very bottom of the card */}
+      <div
+        aria-hidden
+        className="absolute inset-x-0 bottom-0 h-[2px]"
+        style={{ background: '#E8203A', boxShadow: '0 0 8px rgba(232,32,58,0.6)' }}
+      />
     </button>
   )
 }
@@ -861,40 +898,66 @@ function CityRankCard({
     <section className="home-section-enter">
       <button
         onClick={onTap}
-        className="tappable block w-full overflow-hidden rounded-2xl p-4 text-left transition-transform active:scale-[0.99]"
-        style={{
-          ...cardStyle,
-          // Thin gold border crowns the leader's card.
-          border: isFirst
-            ? '1px solid rgba(212,175,55,0.65)'
-            : cardStyle.border,
-        }}
+        className="tappable relative block w-full overflow-hidden rounded-2xl py-4 pl-5 pr-4 text-left transition-transform active:scale-[0.99]"
+        style={cardStyle}
       >
-        <div className="flex items-center gap-2">
-          <span aria-hidden style={{ fontSize: '18px' }}>
-            🏆
+        {/* 3px gold gradient left border */}
+        <span
+          aria-hidden
+          className="absolute inset-y-0 left-0"
+          style={{
+            width: '3px',
+            background: 'linear-gradient(180deg, #C8A96E 0%, transparent 100%)',
+          }}
+        />
+        {/* Discreet podium backdrop */}
+        <svg
+          aria-hidden
+          viewBox="0 0 60 40"
+          className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2"
+          style={{ width: 72, height: 48, opacity: 0.06 }}
+        >
+          <rect x="2" y="20" width="16" height="20" rx="1" fill="#fff" />
+          <rect x="22" y="8" width="16" height="32" rx="1" fill="#fff" />
+          <rect x="42" y="26" width="16" height="14" rx="1" fill="#fff" />
+        </svg>
+
+        <div className="relative flex items-center">
+          <span className="flex-1 text-[14px] font-bold text-white">
+            🏆 Classement
           </span>
-          <p className="flex-1 truncate text-[15px] font-bold text-white">
-            Classement {rank.city}
-          </p>
-          <span className="text-[11px] font-medium text-white/40">
-            {rank.total} spotter{rank.total > 1 ? 's' : ''}
+          <span
+            className="text-[14px] font-extrabold"
+            style={{ color: '#E8203A' }}
+          >
+            {rank.city}
           </span>
         </div>
 
         {isFirst ? (
-          <p className="mt-3 font-display text-[20px] font-extrabold tracking-tight text-white">
-            👑 Tu domines {rank.city} !
-          </p>
+          <>
+            <p
+              className="relative mt-1 font-display font-extrabold italic leading-none text-white"
+              style={{ fontSize: '64px', letterSpacing: '-0.04em' }}
+            >
+              #1
+            </p>
+            <p
+              className="relative mt-2 text-[14px] font-bold"
+              style={{ color: '#C8A96E' }}
+            >
+              👑 Tu domines {rank.city} !
+            </p>
+          </>
         ) : inRanking ? (
-          <div className="mt-3 flex items-baseline gap-2.5">
-            <span
-              className="font-display font-extrabold leading-none"
-              style={{ fontSize: '28px', color: '#E8203A' }}
+          <>
+            <p
+              className="relative mt-1 font-display font-extrabold italic leading-none text-white"
+              style={{ fontSize: '64px', letterSpacing: '-0.04em' }}
             >
               #{rank.rank}
-            </span>
-            <p className="min-w-0 flex-1 text-[13px] leading-snug text-white/65">
+            </p>
+            <p className="relative mt-2 text-[13px] text-white/55">
               encore{' '}
               <span className="font-bold text-white">{rank.gapToAbove} XP</span>{' '}
               pour dépasser{' '}
@@ -902,12 +965,29 @@ function CityRankCard({
                 {rank.abovePseudo ?? `#${rank.rank - 1}`}
               </span>
             </p>
-          </div>
+            <div
+              className="relative mt-2.5 h-1 w-full overflow-hidden rounded-full"
+              style={{ background: 'rgba(255,255,255,0.10)' }}
+            >
+              <div
+                className="h-full rounded-full"
+                style={{
+                  width: `${Math.round(rank.progressToNext * 100)}%`,
+                  background: '#E8203A',
+                  transition: 'width 800ms cubic-bezier(0.22, 1, 0.36, 1)',
+                }}
+              />
+            </div>
+          </>
         ) : (
-          <p className="mt-3 text-[13px] text-white/65">
+          <p className="relative mt-3 text-[13px] text-white/65">
             Spotte pour entrer dans le classement de {rank.city}.
           </p>
         )}
+
+        <p className="relative mt-2 text-right text-[11px] font-medium text-white/35">
+          {rank.total} spotter{rank.total > 1 ? 's' : ''}
+        </p>
       </button>
     </section>
   )
