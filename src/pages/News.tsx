@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { timeAgo } from '../lib/spots'
-import { SkeletonCard } from '../components/Skeleton'
+import { Skeleton } from '../components/Skeleton'
+import { categoryBadge } from '../lib/categoryStyle'
 
 // Opening Discover silently pings /api/fetch-news (server-throttled) if
 // the freshest article is older than this, so news stays fresh without
@@ -192,83 +193,150 @@ export default function News({ categories }: { categories: string[] }) {
           )}
         </div>
       )}
-      <div className="px-1 pb-3 pt-2 label-up text-[10px] text-fg2">
+      {/* "MIS À JOUR IL Y A X MIN" — discreet italic line under the
+          sub-tabs. */}
+      <p className="px-1 pb-3 pt-1 text-[11px] italic text-white/35">
         {items && items.length > 0
-          ? `Mis à jour ${timeAgo(newestStamp(items) ?? items[0].created_at)}`
+          ? `MIS À JOUR ${timeAgo(newestStamp(items) ?? items[0].created_at).toUpperCase()}`
           : ''}
-      </div>
+      </p>
 
       {items === null ? (
-        <div className="space-y-4">
+        // Animated skeleton loaders — one hero + a few medium cards.
+        <div className="flex flex-col gap-2.5 pt-1">
+          <Skeleton className="h-[248px] w-full rounded-2xl" />
           {Array.from({ length: 4 }).map((_, i) => (
-            <SkeletonCard key={i} />
+            <div
+              key={i}
+              className="flex gap-3 rounded-xl p-[14px]"
+              style={{ background: '#141414' }}
+            >
+              <div className="flex min-w-0 flex-1 flex-col gap-2">
+                <Skeleton className="h-3 w-16 rounded-full" />
+                <Skeleton className="h-3.5 w-full rounded-full" />
+                <Skeleton className="h-3.5 w-3/4 rounded-full" />
+                <Skeleton className="mt-auto h-2.5 w-24 rounded-full" />
+              </div>
+              <Skeleton className="h-[90px] w-[90px] flex-none rounded-[10px]" />
+            </div>
           ))}
         </div>
       ) : items.length === 0 ? (
         <div
-          className="rounded-3xl bg-card p-6 text-center"
-          style={{ border: '1px solid var(--color-border)' }}
+          className="rounded-2xl p-6 text-center"
+          style={{ background: '#141414' }}
         >
-          <p className="text-sm text-fg2">Pas d'actu pour le moment.</p>
+          <p className="text-sm text-white/55">Pas d'actu pour le moment.</p>
           <button
             onClick={() => load(false)}
-            className="tappable mt-4 rounded-full bg-accent px-6 py-3 text-sm font-extrabold tracking-wider text-fg"
-            style={{ boxShadow: '0 8px 24px rgba(232,32,58,0.45)' }}
+            className="tappable mt-4 rounded-full px-6 py-3 text-sm font-bold text-white"
+            style={{
+              background: '#E8203A',
+              boxShadow: '0 8px 24px rgba(232,32,58,0.45)',
+            }}
           >
             Rafraîchir
           </button>
         </div>
       ) : visible && visible.length === 0 ? (
-        <p className="px-1 py-8 text-center text-sm text-fg2">
+        <p className="px-1 py-8 text-center text-sm text-white/45">
           Aucun article pour le moment.
         </p>
       ) : (
-        // Apple News editorial layout — boxless. Each article floats on
-        // the page, separated by a hairline. Tiny grey category eyebrow,
-        // pure-white title, a crisp larger thumbnail on the right, and
-        // source · time unified on one fine line.
-        <div>
-          {(visible ?? []).map((n) => (
-            <a
-              key={n.id}
-              href={n.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="tappable flex items-start gap-4 py-4 text-left"
-              style={{ borderBottom: '1px solid var(--color-divider)' }}
-            >
-              <div className="min-w-0 flex-1">
-                <p
-                  className="font-bold uppercase text-fg2"
-                  style={{ fontSize: '10px', letterSpacing: '0.14em' }}
+        // Apple News premium layout — a large hero card then medium
+        // horizontal cards, spaced by a 10px gap (no separators).
+        <div className="flex flex-col gap-2.5">
+          {(visible ?? []).map((n, i) => {
+            const b = categoryBadge(n.category) ?? {
+              label: n.category.toUpperCase(),
+              color: '#6B7280',
+            }
+            const meta = [n.source, timeAgo(n.published_at ?? n.created_at)]
+              .filter(Boolean)
+              .join(' · ')
+            const img = n.image_url || fallbackImg(n.category)
+
+            if (i === 0) {
+              // HERO — full-width, 200px image, title over a dark gradient.
+              return (
+                <a
+                  key={n.id}
+                  href={n.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="tappable block overflow-hidden rounded-2xl"
+                  style={{
+                    background: '#141414',
+                    boxShadow: '0 6px 18px rgba(0,0,0,0.45)',
+                  }}
                 >
-                  {n.category.toUpperCase()}
-                  {isNew(n) && (
-                    <span className="text-accent"> · Nouveau</span>
-                  )}
-                </p>
-                <h2
-                  className="mt-1 line-clamp-3 font-display font-bold leading-snug tracking-tight text-fg"
-                  style={{ fontSize: '15px' }}
-                >
-                  {n.title}
-                </h2>
-                <p className="mt-1.5 truncate text-[11px] font-medium text-fg2">
-                  {[n.source, timeAgo(n.published_at ?? n.created_at)]
-                    .filter(Boolean)
-                    .join(' · ')}
-                </p>
-              </div>
-              {/* Crisp, larger thumbnail (96px), softly rounded. */}
-              <img
-                src={n.image_url || fallbackImg(n.category)}
-                alt={n.title}
-                loading="lazy"
-                decoding="async"
-                className="h-24 w-24 flex-none rounded-lg object-cover"
-              />
-            </a>
-          ))}
+                  <div className="relative h-[200px] w-full">
+                    <img
+                      src={img}
+                      alt={n.title}
+                      loading="lazy"
+                      decoding="async"
+                      className="h-full w-full object-cover"
+                    />
+                    <span
+                      className="absolute left-3 top-3 rounded-md px-2 py-1 text-[10px] font-extrabold text-white"
+                      style={{ background: b.color, letterSpacing: '0.06em' }}
+                    >
+                      {b.label}
+                      {isNew(n) && ' · NOUVEAU'}
+                    </span>
+                    <div
+                      aria-hidden
+                      className="absolute inset-x-0 bottom-0 h-3/4"
+                      style={{
+                        background:
+                          'linear-gradient(to top, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.4) 45%, transparent 100%)',
+                      }}
+                    />
+                    <h2 className="absolute inset-x-0 bottom-0 line-clamp-3 px-4 pb-3 text-[18px] font-bold leading-snug text-white">
+                      {n.title}
+                    </h2>
+                  </div>
+                  <p className="px-4 py-2.5 text-xs text-white/45">{meta}</p>
+                </a>
+              )
+            }
+
+            // MEDIUM — horizontal card, 90×90 image on the right.
+            return (
+              <a
+                key={n.id}
+                href={n.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="tappable flex gap-3 rounded-xl p-[14px]"
+                style={{
+                  background: '#141414',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
+                }}
+              >
+                <div className="flex min-w-0 flex-1 flex-col">
+                  <span
+                    className="self-start rounded px-1.5 py-0.5 text-[9px] font-extrabold text-white"
+                    style={{ background: b.color, letterSpacing: '0.06em' }}
+                  >
+                    {b.label}
+                  </span>
+                  <h3 className="mt-1.5 line-clamp-2 text-[15px] font-semibold leading-snug text-white">
+                    {n.title}
+                  </h3>
+                  <p className="mt-auto pt-2 text-xs text-white/45">{meta}</p>
+                </div>
+                <img
+                  src={img}
+                  alt={n.title}
+                  loading="lazy"
+                  decoding="async"
+                  className="h-[90px] w-[90px] flex-none rounded-[10px] object-cover"
+                />
+              </a>
+            )
+          })}
         </div>
       )}
     </div>

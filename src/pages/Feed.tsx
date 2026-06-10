@@ -3,12 +3,13 @@ import { useNavigate } from 'react-router-dom'
 import { Car, Heart, Layers, Loader2, MessageCircle, Search as SearchIcon, SlidersHorizontal, X, Zap } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import {
-  categoryLabel,
   distanceMeters,
   timeAgo,
   xpForSpot,
   type Spot,
 } from '../lib/spots'
+import { categoryBadge } from '../lib/categoryStyle'
+import { rarityBadge } from '../lib/rarityStyle'
 import { SkeletonCard } from '../components/Skeleton'
 import CommentsSheet from '../components/CommentsSheet'
 import { hapticTap } from '../lib/haptic'
@@ -28,17 +29,6 @@ import { isFounder } from '../lib/founders'
 
 const PAGE = 10
 const POOL_SIZE = 200
-
-// Distinct badge colour per category. `other` is omitted on purpose:
-// when the spot is genuinely uncategorised we don't render any chip at
-// all so the photo stays clean (instead of a meaningless grey "AUTRE").
-const CAT_COLOR: Record<string, string> = {
-  supercar: '#F59E0B',
-  hypercar: '#8B5CF6',
-  JDM: '#3B82F6',
-  classic: '#A0522D',
-  youngtimer: '#14B8A6',
-}
 
 const SLIDES = [
   {
@@ -691,8 +681,10 @@ function FeedCard({
   const [myInitial, setMyInitial] = useState('?')
 
   const pseudo = prof?.pseudo || 'Spotter'
+  const ville = prof?.ville?.trim() || ''
   const founder = isFounder(spot.user_id)
-  const catColor = CAT_COLOR[spot.category]
+  const cat = categoryBadge(spot.category)
+  const rb = rarityBadge(spot.rarity)
   const title = [spot.brand, spot.model].filter(Boolean).join(' ') || 'Voiture'
 
   useEffect(() => {
@@ -791,28 +783,14 @@ function FeedCard({
     }
   }
 
-  const sub = [
-    spot.year,
-    catColor ? categoryLabel(spot.category).toUpperCase() : null,
-    timeAgo(spot.created_at),
-  ]
-    .filter(Boolean)
-    .join(' · ')
-
   return (
-    // Content rows sit at the page container's inset; the photo bleeds to
-    // the screen edges (-mx-4). pb-6 seals the post before the next one.
-    <article className="feed-card pb-6">
-      {/* PHOTO 4:5 — the post opens straight on the image (Instagram
-          embedded look): the user header floats in transparency over the
-          darkened top, no raw black cut above. A cinematic vignette
-          darkens the useless ground (bottom) + the top so the light
-          stays on the car silhouette. Edge-to-edge (root px-0 → w-full
-          with no overflow). Double-tap to like; never navigates. */}
-      <div
-        onClick={onPhotoTap}
-        className="relative cursor-pointer select-none"
-      >
+    // 8px gap between posts on the #0a0a0a page; each post's interactions
+    // live on a clean #141414 block so they never bleed into the next one.
+    <article className="feed-card" style={{ marginBottom: '8px' }}>
+      {/* PHOTO 4:5 — full-bleed. Rarity badge top-right, 44px floating
+          header, and the car identity over a bottom gradient that keeps
+          the text legible on any photo. Double-tap likes; never navigates. */}
+      <div onClick={onPhotoTap} className="relative cursor-pointer select-none">
         {spot.photo_url ? (
           <img
             src={spot.photo_url}
@@ -826,25 +804,35 @@ function FeedCard({
           </div>
         )}
 
-        {/* Cinematic vignette — opaque black at the bottom, transparent
-            through the middle, semi-opaque at the top (under the header). */}
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black via-transparent to-black/50"
-        />
+        {/* Rarity badge — same identity as the Collection (gold + animated
+            for the top tier). Top-right. */}
+        <span
+          className={`absolute right-3 top-3 z-20 overflow-hidden rounded-md px-2 py-1 text-[10px] font-extrabold ${
+            rb.animated ? 'gold-shimmer' : ''
+          }`}
+          style={{
+            background: rb.bg,
+            color: rb.fg,
+            border: `1px solid ${rb.border}`,
+            letterSpacing: '0.06em',
+          }}
+        >
+          {rb.label}
+        </span>
 
-        {/* Floating user header — sits over the darkened top of the photo. */}
+        {/* Floating header — 44px avatar + pseudo on a semi-transparent
+            pill so it reads on any photo. */}
         <button
           onClick={(e) => {
             e.stopPropagation()
             navigate(`/u/${spot.user_id}`)
           }}
-          className="absolute inset-x-0 top-0 z-20 flex min-w-0 items-center gap-2.5 px-4 pt-3 text-left"
+          className="absolute inset-x-0 top-0 z-20 flex min-w-0 items-center gap-2.5 px-3 pt-3 text-left"
           aria-label={`Profil de ${pseudo}`}
         >
           <div
-            className="flex h-8 w-8 flex-none items-center justify-center overflow-hidden rounded-full bg-black/30 text-[13px] font-extrabold text-white"
-            style={{ border: '1px solid rgba(255,255,255,0.25)' }}
+            className="flex h-11 w-11 flex-none items-center justify-center overflow-hidden rounded-full bg-black/35 text-[15px] font-extrabold text-white"
+            style={{ border: '1.5px solid rgba(255,255,255,0.30)' }}
           >
             {prof?.avatar ? (
               <img
@@ -859,24 +847,67 @@ function FeedCard({
             )}
           </div>
           <span
-            className="truncate font-semibold tracking-tight text-white"
-            style={{ fontSize: '13px', textShadow: '0 1px 3px rgba(0,0,0,0.55)' }}
+            className="inline-flex min-w-0 items-center gap-1.5 rounded-full px-2.5 py-1"
+            style={{
+              background: 'rgba(0,0,0,0.38)',
+              backdropFilter: 'blur(4px)',
+              WebkitBackdropFilter: 'blur(4px)',
+            }}
           >
-            {pseudo}
-          </span>
-          {founder && (
-            <span
-              className="flex-none rounded uppercase tracking-wider text-white"
-              style={{
-                background: 'rgba(239, 68, 68, 0.55)',
-                padding: '1px 4px',
-                fontSize: '7px',
-                letterSpacing: '0.12em',
-              }}
-            >
-              Fondateur
+            <span className="truncate text-[13px] font-semibold tracking-tight text-white">
+              {pseudo}
             </span>
-          )}
+            {founder && (
+              <span
+                className="flex-none rounded uppercase tracking-wider text-white"
+                style={{
+                  background: 'rgba(239,68,68,0.6)',
+                  padding: '1px 4px',
+                  fontSize: '7px',
+                  letterSpacing: '0.12em',
+                }}
+              >
+                Fondateur
+              </span>
+            )}
+          </span>
+        </button>
+
+        {/* Bottom legibility gradient — transparent → #0a0a0a over 120px. */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 bottom-0"
+          style={{
+            height: '120px',
+            background:
+              'linear-gradient(to top, #0a0a0a 0%, rgba(10,10,10,0.55) 45%, rgba(10,10,10,0) 100%)',
+          }}
+        />
+
+        {/* Car identity — name + year · category · ville · time. Tapping
+            this block opens the detail (the photo itself never navigates). */}
+        <button
+          onClick={(e) => {
+            e.stopPropagation()
+            navigate(`/spot/${spot.id}`)
+          }}
+          className="absolute inset-x-0 bottom-0 z-10 px-4 pb-3 text-left"
+          aria-label={`Voir ${title}`}
+        >
+          <p className="truncate text-[16px] font-bold text-white">{title}</p>
+          <p className="mt-0.5 truncate text-[13px] text-white/70">
+            {spot.year ? <>{spot.year} · </> : null}
+            {cat ? (
+              <>
+                <span className="font-semibold" style={{ color: cat.color }}>
+                  {cat.label}
+                </span>
+                {' · '}
+              </>
+            ) : null}
+            {ville ? <>{ville} · </> : null}
+            {timeAgo(spot.created_at)}
+          </p>
         </button>
 
         {heartPop && (
@@ -890,8 +921,10 @@ function FeedCard({
 
         {burstCount > 1 && (
           <span
-            className="absolute right-3 top-3 z-20 flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-bold text-white"
+            className="absolute z-20 flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-bold text-white"
             style={{
+              right: 12,
+              top: 52,
               background: 'rgba(0, 0, 0, 0.45)',
               border: '1px solid rgba(255, 255, 255, 0.12)',
               backdropFilter: 'saturate(160%) blur(12px)',
@@ -904,65 +937,54 @@ function FeedCard({
         )}
       </div>
 
-      {/* C · TOOLS ROW — hairline icons, compact counters, discreet XP */}
-      <div className="mt-2 flex items-center gap-5 px-4">
-        <button
-          onClick={() => setLikeState(!liked)}
-          aria-label={liked ? 'Retirer le like' : 'Liker'}
-          aria-pressed={liked}
-          className="tappable flex items-center gap-1.5"
-        >
-          <Heart
-            strokeWidth={1.2}
-            className={`h-6 w-6 transition-colors ${liked ? 'fill-accent text-accent' : 'text-fg'}`}
-          />
-          <span className="text-sm font-medium text-fg">{likeCount}</span>
-        </button>
+      {/* Interactions block — own #141414 surface so likes / comments / XP
+          + the comment bar clearly belong to THIS post. */}
+      <div style={{ background: '#141414' }}>
+        <div className="flex items-center gap-5 px-4 pt-3">
+          <button
+            onClick={() => setLikeState(!liked)}
+            aria-label={liked ? 'Retirer le like' : 'Liker'}
+            aria-pressed={liked}
+            className="tappable flex items-center gap-1.5"
+          >
+            <Heart
+              strokeWidth={1.2}
+              className={`h-6 w-6 transition-colors ${liked ? 'fill-accent text-accent' : 'text-white'}`}
+            />
+            <span className="text-sm font-medium text-white">{likeCount}</span>
+          </button>
+          <button
+            onClick={() => setSheetOpen(true)}
+            aria-label="Commentaires"
+            className="tappable flex items-center gap-1.5"
+          >
+            <MessageCircle strokeWidth={1.2} className="h-6 w-6 text-white" />
+            <span className="text-sm font-medium text-white">{commentCount}</span>
+          </button>
+          <span className="ml-auto flex items-center gap-1 text-white/50">
+            <Zap strokeWidth={1.2} className="h-[18px] w-[18px] text-accent" />
+            <span className="text-xs font-medium tabular-nums">
+              +{xpForSpot(spot.estimated_price, spot.rarity)} XP
+            </span>
+          </span>
+        </div>
+
+        {/* Comment bar — directly under the actions, inside the same block. */}
         <button
           onClick={() => setSheetOpen(true)}
-          aria-label="Commentaires"
-          className="tappable flex items-center gap-1.5"
+          className="tappable mt-2 flex w-full items-center gap-2.5 px-4 pb-3.5 text-left"
+          aria-label="Ajouter un commentaire"
         >
-          <MessageCircle strokeWidth={1.2} className="h-6 w-6 text-fg" />
-          <span className="text-sm font-medium text-fg">{commentCount}</span>
+          <div className="flex h-7 w-7 flex-none items-center justify-center overflow-hidden rounded-full bg-white/10 text-[11px] font-extrabold text-white/70">
+            {myAvatar ? (
+              <img src={myAvatar} alt="" className="h-full w-full object-cover" />
+            ) : (
+              myInitial
+            )}
+          </div>
+          <span className="text-[13px] text-white/45">Ajouter un commentaire…</span>
         </button>
-        {/* Performance marker — a thin bolt + ultra-discreet XP, no badge */}
-        <span className="ml-auto flex items-center gap-1 text-fg2">
-          <Zap strokeWidth={1.2} className="h-[18px] w-[18px] text-accent" />
-          <span className="text-xs font-medium tabular-nums">
-            +{xpForSpot(spot.estimated_price, spot.rarity)} XP
-          </span>
-        </span>
       </div>
-
-      {/* D · CAPTION (Instagram) — bold pseudo + car name, tappable → detail */}
-      <button
-        onClick={() => navigate(`/spot/${spot.id}`)}
-        className="tappable mt-2 block w-full px-4 text-left"
-        aria-label={`Voir ${title}`}
-      >
-        <p className="text-sm leading-snug">
-          <span className="mr-1.5 font-semibold text-fg">{pseudo}</span>
-          <span className="font-normal text-fg/90">{title}</span>
-        </p>
-        {sub && <p className="mt-0.5 truncate text-xs text-fg2">{sub}</p>}
-      </button>
-
-      {/* E · QUICK COMMENT — opens the sheet */}
-      <button
-        onClick={() => setSheetOpen(true)}
-        className="tappable mt-2.5 flex w-full items-center gap-2.5 px-4 text-left"
-        aria-label="Ajouter un commentaire"
-      >
-        <div className="flex h-7 w-7 flex-none items-center justify-center overflow-hidden rounded-full bg-fg/10 text-[11px] font-extrabold text-fg2">
-          {myAvatar ? (
-            <img src={myAvatar} alt="" className="h-full w-full object-cover" />
-          ) : (
-            myInitial
-          )}
-        </div>
-        <span className="text-[13px] text-fg2">Ajouter un commentaire…</span>
-      </button>
 
       <CommentsSheet
         spotId={spot.id}
