@@ -599,41 +599,45 @@ export default function Profile() {
             </div>
           </div>
 
-          {/* Badge preview — 3 latest unlocked badges (padded with locked
-              greyed if fewer than 3). Tap → badge detail. Visible always. */}
+          {/* Badge preview — 3 badges (prefer unlocked). Tapping any of
+              them, or the "Voir tous" link below, opens the full
+              /badges page. */}
           {badgeCatalogue.length > 0 && (
-            <div className="mt-5 flex items-center justify-center gap-2.5">
-              {[...unlocked, ...locked].slice(0, 3).map((b) => {
-                const isU = unlocks.has(b.slug)
-                return (
-                  <button
-                    key={b.slug}
-                    onClick={() => navigate(`/badges/${b.slug}`)}
-                    className="tappable flex h-10 w-10 items-center justify-center rounded-full text-lg"
-                    style={{
-                      background: isU
-                        ? b.gold
-                          ? 'rgba(224,179,65,0.14)'
-                          : 'rgba(232,32,58,0.12)'
-                        : 'rgba(255,255,255,0.04)',
-                      border: isU
-                        ? b.gold
-                          ? '1px solid rgba(224,179,65,0.45)'
-                          : '1px solid rgba(232,32,58,0.35)'
-                        : '1px solid rgb(var(--color-fg) / 0.06)',
-                      opacity: isU ? 1 : 0.5,
-                    }}
-                    aria-label={b.name}
-                  >
-                    {isU ? b.emoji : <Lock className="h-4 w-4 text-fg2/50" />}
-                  </button>
-                )
-              })}
-              {unlocked.length > 3 && (
-                <span className="text-[12px] font-bold text-fg2">
-                  +{unlocked.length - 3}
-                </span>
-              )}
+            <div className="mt-5 flex flex-col items-center gap-2">
+              <div className="flex items-center justify-center gap-2.5">
+                {[...unlocked, ...locked].slice(0, 3).map((b) => {
+                  const isU = unlocks.has(b.slug)
+                  return (
+                    <button
+                      key={b.slug}
+                      onClick={() => navigate('/badges')}
+                      className="tappable flex h-10 w-10 items-center justify-center rounded-full text-lg"
+                      style={{
+                        background: isU
+                          ? b.gold
+                            ? 'rgba(224,179,65,0.14)'
+                            : 'rgba(232,32,58,0.12)'
+                          : 'rgba(255,255,255,0.04)',
+                        border: isU
+                          ? b.gold
+                            ? '1px solid rgba(224,179,65,0.45)'
+                            : '1px solid rgba(232,32,58,0.35)'
+                          : '1px solid rgb(var(--color-fg) / 0.06)',
+                        opacity: isU ? 1 : 0.5,
+                      }}
+                      aria-label={b.name}
+                    >
+                      {isU ? b.emoji : <Lock className="h-4 w-4 text-fg2/50" />}
+                    </button>
+                  )
+                })}
+              </div>
+              <button
+                onClick={() => navigate('/badges')}
+                className="tappable text-[12px] font-semibold text-fg2 hover:text-fg"
+              >
+                Voir tous les badges →
+              </button>
             </div>
           )}
         </div>
@@ -698,23 +702,37 @@ export default function Profile() {
                     <CollectionDecks spots={spots} />
                   </div>
                   <div
-                    className="absolute inset-0 flex flex-col items-center justify-center gap-4 rounded-3xl px-8 text-center"
+                    className="absolute inset-0 flex flex-col items-center justify-center gap-4 rounded-3xl text-center"
                     style={{
-                      background: 'rgba(10,10,10,0.32)',
-                      backdropFilter: 'saturate(140%) blur(12px)',
-                      WebkitBackdropFilter: 'saturate(140%) blur(12px)',
+                      background: 'rgba(10,10,10,0.92)',
+                      backdropFilter: 'blur(16px)',
+                      WebkitBackdropFilter: 'blur(16px)',
                     }}
                   >
                     <span
-                      className="flex h-14 w-14 items-center justify-center rounded-full bg-fg/[0.06]"
-                      style={{ border: '1px solid var(--color-border)' }}
+                      className="flex h-14 w-14 items-center justify-center rounded-full"
+                      style={{
+                        background: 'rgba(255,255,255,0.06)',
+                        border: '1px solid #333',
+                      }}
                     >
-                      <Lock className="h-6 w-6 text-fg2" strokeWidth={1.6} />
+                      <Lock className="h-6 w-6 text-white/70" strokeWidth={1.6} />
                     </span>
-                    <p className="text-lg font-semibold text-fg">
+                    <p
+                      className="font-bold text-white"
+                      style={{ fontSize: '18px' }}
+                    >
                       Bientôt disponible
                     </p>
-                    <p className="max-w-[20rem] text-sm leading-relaxed text-fg2">
+                    <p
+                      className="leading-relaxed"
+                      style={{
+                        fontSize: '14px',
+                        color: '#999999',
+                        paddingLeft: '24px',
+                        paddingRight: '24px',
+                      }}
+                    >
                       Phase 2 — Tes spots seront transformés en cartes de
                       collection uniques très bientôt.
                     </p>
@@ -1502,14 +1520,15 @@ function GarageCoverFlow({
               }}
             />
 
-            {/* Brand — red, top-left */}
+            {/* Brand — white with a strong drop shadow so it stays legible
+                over any photo (light or dark). */}
             <span
               className="absolute left-3 top-3 font-extrabold uppercase"
               style={{
-                color: '#E8203A',
+                color: '#FFFFFF',
                 fontSize: '10px',
                 letterSpacing: '0.12em',
-                textShadow: '0 1px 3px rgba(0,0,0,0.6)',
+                textShadow: '0 1px 4px rgba(0,0,0,0.8)',
               }}
             >
               {s.brand}
