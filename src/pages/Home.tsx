@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { ChevronRight } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { setPendingPhoto } from '../lib/pendingPhoto'
-import { xpLevel, XP_LADDER } from '../lib/xp'
+import { xpLevel } from '../lib/xp'
 import { GP_2026 } from '../lib/f1'
 import { Skeleton } from '../components/Skeleton'
 import {
@@ -30,6 +30,14 @@ type CityRank = {
 }
 
 type CityRow = { user_id: string; xp: number; pseudo: string | null }
+
+// Time-of-day greeting from the device's local hour.
+function greetingFor(name: string): string {
+  const h = new Date().getHours()
+  if (h >= 23 || h < 12) return h >= 23 ? `Bonne nuit ${name}` : `Bonjour ${name}`
+  if (h < 18) return `Bon après-midi ${name}`
+  return `Bonsoir ${name}`
+}
 
 // Current daily streak: consecutive days (local) with at least one spot,
 // counting back from today (or yesterday if today has none yet).
@@ -59,6 +67,7 @@ export default function Home() {
   const [community, setCommunity] = useState<CommunityStats | null>(null)
   const [title, setTitle] = useState<string | null>(null)
   const [streak, setStreak] = useState(0)
+  const [spotsThisWeek, setSpotsThisWeek] = useState(0)
   const [cityRank, setCityRank] = useState<CityRank | null | undefined>(
     undefined,
   )
@@ -136,6 +145,11 @@ export default function Home() {
           if (!active) return
           const rows = (data ?? []) as { created_at: string }[]
           setStreak(computeStreak(rows.map((r) => r.created_at)))
+          const weekAgo = Date.now() - 7 * 86_400_000
+          setSpotsThisWeek(
+            rows.filter((r) => new Date(r.created_at).getTime() >= weekAgo)
+              .length,
+          )
         })
 
       // City ranking — drives the "🏆 Classement <ville>" card. Uses the
@@ -183,15 +197,12 @@ export default function Home() {
   }, [])
 
   const lvl = xpLevel(xp)
-  // In-tier XP numbers for the "x / y XP" micro-stat, derived from the
-  // ladder thresholds (xpLevel only exposes pct + toNext).
-  const tier =
-    XP_LADDER.find((t) => t.max === null || xp < t.max) ?? XP_LADDER[0]
-  const inTier = Math.max(0, Math.floor(xp) - tier.min)
-  const tierSpan = tier.max == null ? inTier : tier.max - tier.min
 
   const upcomingGp = GP_2026.find((g) => new Date(g.date).getTime() >= now)
   const gpDiff = upcomingGp ? new Date(upcomingGp.date).getTime() - now : 0
+  const daysToNextGp = upcomingGp
+    ? Math.max(0, Math.ceil(gpDiff / 86_400_000))
+    : null
   // Only surface the GP frieze when the race is within the next 7 days.
   const nextGp = upcomingGp && gpDiff <= 7 * 86_400_000 ? upcomingGp : null
 
@@ -223,17 +234,32 @@ export default function Home() {
           <span className="tabular-nums">{community?.online_now ?? 0}</span>
           <span className="text-fg/45">passionnés en ligne</span>
         </span>
-        <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-fg/70">
-          <span aria-hidden>🎯</span>
-          {lvl.isMax ? (
-            <span className="font-bold tracking-wide text-fg/80">MAX</span>
-          ) : (
-            <>
-              <span className="tabular-nums">{inTier}</span>
-              <span className="text-fg/40">/ {tierSpan} XP</span>
-            </>
-          )}
-        </span>
+        <button
+          onClick={() => navigate('/profile')}
+          className="tappable inline-flex items-center gap-1.5"
+          style={{
+            background: '#141414',
+            borderRadius: '20px',
+            padding: '6px 12px',
+            border: '1px solid rgba(255,255,255,0.06)',
+          }}
+          aria-label="Voir mon profil"
+        >
+          <span aria-hidden style={{ fontSize: '13px' }}>🎯</span>
+          <span
+            className="font-bold"
+            style={{ fontSize: '12px', color: '#E8203A' }}
+          >
+            {lvl.name}
+          </span>
+          <span className="text-white/30" style={{ fontSize: '12px' }}>·</span>
+          <span
+            className="font-extrabold tabular-nums text-white"
+            style={{ fontSize: '12px' }}
+          >
+            {new Intl.NumberFormat('fr-FR').format(Math.floor(xp))} XP
+          </span>
+        </button>
       </div>
 
       {/* ─── STREAK PILL — visible red badge above the cockpit ─── */}
@@ -301,6 +327,8 @@ export default function Home() {
       <div className="mt-10 space-y-4">
         <CityRankCard
           rank={cityRank}
+          daysToNextGp={daysToNextGp}
+          spotsThisWeek={spotsThisWeek}
           onTap={() => navigate('/classement')}
           onSetCity={() => navigate('/settings')}
         />
@@ -311,6 +339,7 @@ export default function Home() {
             name={nextGp.name}
             circuit={nextGp.circuit}
             gpDiff={gpDiff}
+            lastWinner={nextGp.winners?.[0]?.driver ?? null}
             onTap={() => navigate(`/f1/${nextGp.round}`)}
           />
         )}
@@ -376,7 +405,7 @@ function CockpitWidget({
           className="font-display font-extrabold tracking-tighter text-fg"
           style={{ fontSize: '30px', lineHeight: 1, letterSpacing: '-0.03em' }}
         >
-          Bonjour {name}
+          {greetingFor(name)}
         </h1>
         <div className="mt-2.5">
           <TitleChip xp={xp} title={title} size="sm" />
@@ -565,18 +594,33 @@ function MiniSpeedometer({
   )
 }
 
-// Local emoji + colour for a challenge, derived from its type / category /
-// brand — no catalogue change, no API. Keeps the adaptive challenge text
-// while giving each a distinctive dashboard identity.
+// Local emoji + colour for a challenge, derived by reading its title /
+// brand / category — no catalogue change, no API. Brand-specific emojis
+// take priority (a Ferrari challenge gets 🐴, a McLaren one 🧡, …), then
+// fall back to type/category (hypercar 🚀, supercar 🏎️, streak 🔥, …).
 function challengeStyle(c: Challenge): { emoji: string; color: string } {
-  const cat = (c.target_category ?? '').toLowerCase()
-  if (c.type === 'spot_brand' || c.target_brand)
-    return { emoji: '⚙️', color: '#3B82F6' }
-  if (cat.includes('hypercar')) return { emoji: '👑', color: '#9B59B6' }
-  if (cat.includes('supercar')) return { emoji: '🏎️', color: '#E8203A' }
-  if (cat.includes('jdm')) return { emoji: '🏁', color: '#FF6B00' }
-  if (cat.includes('classic') || cat.includes('youngtimer'))
-    return { emoji: '🏁', color: '#F5C518' }
+  const hay = [c.title ?? '', c.target_brand ?? '', c.target_category ?? '']
+    .join(' ')
+    .toLowerCase()
+  const has = (...ks: string[]) => ks.some((k) => hay.includes(k))
+
+  // Brand-specific (most distinctive) first.
+  if (has('ferrari')) return { emoji: '🐴', color: '#E8203A' }
+  if (has('lamborghini', 'lambo')) return { emoji: '🐂', color: '#F0C040' }
+  if (has('mclaren')) return { emoji: '🧡', color: '#FF6B00' }
+  if (has('porsche')) return { emoji: '🐎', color: '#F5C518' }
+  if (has('mercedes', 'amg')) return { emoji: '⭐', color: '#4DA6FF' }
+  if (has('bmw')) return { emoji: '🔵', color: '#3B82F6' }
+  if (has('audi')) return { emoji: '💎', color: '#4DA6FF' }
+  if (has('rolls-royce', 'rolls royce', 'rolls')) return { emoji: '👑', color: '#C8A96E' }
+
+  // Type / category.
+  if (has('jdm', 'japon')) return { emoji: '🎌', color: '#FF6B00' }
+  if (has('électrique', 'electrique', 'electric', 'ev ')) return { emoji: '⚡', color: '#22C55E' }
+  if (has('hypercar')) return { emoji: '🚀', color: '#9B59B6' }
+  if (has('supercar')) return { emoji: '🏎️', color: '#E8203A' }
+  if (has('streak', 'série', 'serie', 'jours', 'régularité', "d'affilée")) return { emoji: '🔥', color: '#E8203A' }
+  if (has('marque', 'différent', 'differ', 'variété', 'variete')) return { emoji: '🎯', color: '#E8203A' }
   if (c.type === 'spot_count') return { emoji: '🔥', color: '#E8203A' }
   return { emoji: '🎯', color: '#E8203A' }
 }
@@ -731,12 +775,14 @@ function GpCountdownCard({
   name,
   circuit,
   gpDiff,
+  lastWinner,
   onTap,
 }: {
   flag: string
   name: string
   circuit: string
   gpDiff: number
+  lastWinner: string | null
   onTap: () => void
 }) {
   const cd = {
@@ -756,7 +802,7 @@ function GpCountdownCard({
       className="home-section-enter tappable relative block w-full overflow-hidden rounded-2xl p-4 pb-6 text-left transition-transform active:scale-[0.99]"
       style={{
         background:
-          'repeating-linear-gradient(45deg, rgba(255,255,255,0.03) 0px, rgba(255,255,255,0.03) 1px, transparent 1px, transparent 5px), #141414',
+          'repeating-linear-gradient(45deg, rgba(255,255,255,0.04) 0px, rgba(255,255,255,0.04) 1px, transparent 1px, transparent 5px), #141414',
         border: '1px solid rgba(255,255,255,0.06)',
         boxShadow: '0 8px 22px rgba(0,0,0,0.45)',
       }}
@@ -787,18 +833,18 @@ function GpCountdownCard({
           {blocks.map((b, i) => (
             <div key={b.label} className="flex flex-1 items-stretch gap-2">
               <div
-                className="flex flex-1 flex-col items-center justify-center rounded-lg py-2"
-                style={{ background: '#0d0d0d' }}
+                className="flex flex-1 flex-col items-center justify-center py-2.5"
+                style={{ background: '#0d0d0d', borderRadius: '10px' }}
               >
                 <span
                   className="font-display font-extrabold leading-none text-white tabular-nums"
-                  style={{ fontSize: '24px' }}
+                  style={{ fontSize: '28px' }}
                 >
                   {b.v}
                 </span>
                 <span
                   className="mt-1 font-bold uppercase text-white/40"
-                  style={{ fontSize: '9px', letterSpacing: '0.1em' }}
+                  style={{ fontSize: '10px', letterSpacing: '0.1em' }}
                 >
                   {b.label}
                 </span>
@@ -807,7 +853,7 @@ function GpCountdownCard({
                 <span
                   aria-hidden
                   className="flex items-center font-display font-extrabold"
-                  style={{ fontSize: '22px', color: '#E8203A' }}
+                  style={{ fontSize: '18px', color: '#E8203A' }}
                 >
                   :
                 </span>
@@ -824,21 +870,11 @@ function GpCountdownCard({
         </p>
       )}
 
-      {/* Simplified circuit schematic — thin red lines, F1-logo style */}
-      <svg
-        aria-hidden
-        viewBox="0 0 120 34"
-        className="mt-4 w-full"
-        style={{ height: 34, opacity: 0.6 }}
-        fill="none"
-      >
-        <path
-          d="M8 24 C 2 12, 16 4, 30 8 C 40 11, 38 20, 50 21 C 64 22, 66 8, 82 9 C 98 10, 104 6, 112 12 C 118 17, 110 26, 96 25 C 74 23, 64 29, 44 28 C 26 27, 16 31, 8 24 Z"
-          stroke="#E8203A"
-          strokeWidth={1.4}
-          strokeLinecap="round"
-        />
-      </svg>
+      {/* Contextual info line — replaces the fake circuit schematic */}
+      <p className="mt-4 text-[11px] text-white/45">
+        🏁 Course dans {cd.d} jour{cd.d > 1 ? 's' : ''}
+        {lastWinner && ` · Dernier vainqueur : ${lastWinner}`}
+      </p>
 
       {/* Fine red line flush at the very bottom of the card */}
       <div
@@ -858,10 +894,14 @@ function GpCountdownCard({
  *  When the profile has no city, it invites the user to set one. */
 function CityRankCard({
   rank,
+  daysToNextGp,
+  spotsThisWeek,
   onTap,
   onSetCity,
 }: {
   rank: CityRank | null | undefined
+  daysToNextGp: number | null
+  spotsThisWeek: number
   onTap: () => void
   onSetCity: () => void
 }) {
@@ -910,17 +950,17 @@ function CityRankCard({
             background: 'linear-gradient(180deg, #C8A96E 0%, transparent 100%)',
           }}
         />
-        {/* Discreet podium backdrop */}
-        <svg
-          aria-hidden
-          viewBox="0 0 60 40"
-          className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2"
-          style={{ width: 72, height: 48, opacity: 0.06 }}
-        >
-          <rect x="2" y="20" width="16" height="20" rx="1" fill="#fff" />
-          <rect x="22" y="8" width="16" height="32" rx="1" fill="#fff" />
-          <rect x="42" y="26" width="16" height="14" rx="1" fill="#fff" />
-        </svg>
+        {/* Soft golden glow at the centre (replaces the podium SVG) */}
+        {isFirst && (
+          <span
+            aria-hidden
+            className="pointer-events-none absolute inset-0"
+            style={{
+              background:
+                'radial-gradient(circle at 50% 50%, rgba(200,169,110,0.06) 0%, transparent 60%)',
+            }}
+          />
+        )}
 
         <div className="relative flex items-center">
           <span className="flex-1 text-[14px] font-bold text-white">
@@ -937,8 +977,13 @@ function CityRankCard({
         {isFirst ? (
           <>
             <p
-              className="relative mt-1 font-display font-extrabold italic leading-none text-white"
-              style={{ fontSize: '64px', letterSpacing: '-0.04em' }}
+              className="relative mt-1 font-display italic leading-none text-white"
+              style={{
+                fontSize: '72px',
+                fontWeight: 900,
+                letterSpacing: '-0.04em',
+                textShadow: '0 0 30px rgba(200,169,110,0.3)',
+              }}
             >
               #1
             </p>
@@ -947,6 +992,10 @@ function CityRankCard({
               style={{ color: '#C8A96E' }}
             >
               👑 Tu domines {rank.city} !
+            </p>
+            <p className="relative mt-1.5 text-[11px] text-white/40">
+              {daysToNextGp != null && `Prochain GP dans ${daysToNextGp} jour${daysToNextGp > 1 ? 's' : ''} · `}
+              {spotsThisWeek} spot{spotsThisWeek > 1 ? 's' : ''} cette semaine
             </p>
           </>
         ) : inRanking ? (
