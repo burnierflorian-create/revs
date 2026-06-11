@@ -3,14 +3,17 @@ import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import {
   ArrowLeft,
+  Check,
   ChevronRight,
+  Copy,
   Lock,
   Settings,
+  Share,
   Warehouse,
   X,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { categoryLabel, type Rarity, type Spot } from '../lib/spots'
+import { type Rarity, type Spot } from '../lib/spots'
 import { planDisplayName, planTier } from '../lib/plans'
 import { allBadges, computeUnlocks, type Badge } from '../lib/badges'
 import { fetchRaceStats } from '../lib/race'
@@ -54,6 +57,7 @@ export default function Profile() {
   // stay always-visible; this gate controls the slide-up sheet that
   // surfaces the remaining N-4 trophies.
   const [badgesSheetOpen, setBadgesSheetOpen] = useState(false)
+  const [shareOpen, setShareOpen] = useState(false)
   // Local-only UI state: which of the two sub-tabs (Garage vs
   // Collection) is currently visible at the bottom of the profile.
   // Single segmented control across the lower half of Profile — replaces
@@ -263,6 +267,22 @@ export default function Profile() {
 
   const total = spots.length
   const daysWithSpot = new Set(spots.map((s) => s.created_at.slice(0, 10)))
+  // Current daily streak — consecutive UTC days with a spot, counting
+  // back from today (or yesterday if today has none yet).
+  const streak = (() => {
+    const fmt = (dt: Date) => dt.toISOString().slice(0, 10)
+    const cur = new Date()
+    if (!daysWithSpot.has(fmt(cur))) {
+      cur.setUTCDate(cur.getUTCDate() - 1)
+      if (!daysWithSpot.has(fmt(cur))) return 0
+    }
+    let n = 0
+    while (daysWithSpot.has(fmt(cur))) {
+      n += 1
+      cur.setUTCDate(cur.getUTCDate() - 1)
+    }
+    return n
+  })()
   const badgeCtx = {
     spots,
     hasEvent,
@@ -340,6 +360,19 @@ export default function Profile() {
               'linear-gradient(180deg, transparent 0%, rgb(var(--color-bg)) 100%)',
           }}
         />
+        {/* Share profile — round button left of the settings gear. */}
+        <button
+          onClick={() => setShareOpen(true)}
+          aria-label="Partager le profil"
+          className="tappable absolute top-[max(1rem,env(safe-area-inset-top))] flex h-9 w-9 items-center justify-center rounded-full text-white/80 backdrop-blur transition-colors hover:text-white"
+          style={{
+            right: '60px',
+            background: '#222',
+            border: '1px solid rgb(var(--color-fg) / 0.10)',
+          }}
+        >
+          <Share className="h-[18px] w-[18px]" />
+        </button>
         <button
           onClick={() => navigate('/settings')}
           aria-label="Paramètres"
@@ -374,7 +407,7 @@ export default function Profile() {
                 border:
                   tier === 'vip'
                     ? '2px solid rgba(255, 215, 0, 0.55)'
-                    : '2px solid rgb(var(--color-fg) / 0.20)',
+                    : '3px solid #E8203A',
                 boxShadow:
                   tier === 'vip'
                     ? '0 18px 38px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 215, 0, 0.18)'
@@ -440,80 +473,99 @@ export default function Profile() {
       <div className="space-y-7 px-4 pb-40 pt-20">
         {/* Identité */}
         <div className="text-center">
-          <h1 className="display-xl text-fg">{pseudo}</h1>
-          {/* Furtive identity line — status • level • ville, all in one
-              thin steel-grey row (no stacked gold/red badges). */}
+          <h1
+            className="font-display font-extrabold tracking-tight text-fg"
+            style={{ fontSize: '24px' }}
+          >
+            {pseudo}
+          </h1>
+          {/* Furtive identity line — status • level • ville. */}
           {idLine && (
             <p
-              className="mt-2.5 text-xs font-normal text-fg2"
+              className="mt-1.5 text-[11px] font-normal text-fg2"
               style={{ letterSpacing: '0.18em' }}
             >
               {idLine}
             </p>
           )}
-          {/* Unified stats pill — replaces both the followers/following
-              card and the section-3 stats row per the 2026-06-01 profile
-              refocus. Four tappable stats on one line (spots, marques,
-              rang, abonnés), separated by tiny dot bullets. Each stat
-              keeps its own deep-link target, the pill is just shared
-              chrome. */}
-          <div className="mt-4 flex justify-center">
-            <div
-              className="inline-flex items-center gap-3.5 rounded-full"
-              style={{
-                background: 'var(--color-glass)',
-                border: '1px solid rgb(var(--color-fg) / 0.05)',
-                padding: '8px 16px',
-              }}
-            >
-              <ProfileStatTiny
-                value={String(total)}
-                label="spots"
-                onClick={() => navigate('/ma-galerie')}
-              />
-              <span className="h-1 w-1 rounded-full bg-fg2/40" aria-hidden />
-              <ProfileStatTiny
-                value={String(uniqueBrands)}
-                label="marques"
-                onClick={() => navigate('/mes-marques')}
-              />
-              <span className="h-1 w-1 rounded-full bg-fg2/40" aria-hidden />
-              <ProfileStatTiny
-                value={rank ? `#${rank}` : '—'}
-                label="rang"
-                onClick={() => navigate('/classement')}
-              />
-              {meId && (
-                <>
-                  <span
-                    className="h-1 w-1 rounded-full bg-fg2/40"
-                    aria-hidden
-                  />
-                  <ProfileStatTiny
-                    value={String(followers)}
-                    label={followers === 1 ? 'abonné' : 'abonnés'}
-                    onClick={() => navigate(`/u/${meId}`)}
-                  />
-                </>
-              )}
+          {/* Streak — visible red pill right under the title. */}
+          {streak > 0 && (
+            <div className="mt-2.5 flex justify-center">
+              <span
+                className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[12px] font-bold"
+                style={{
+                  background: 'rgba(232,32,58,0.16)',
+                  color: '#FF7080',
+                  border: '1px solid rgba(232,32,58,0.40)',
+                }}
+              >
+                🔥 {streak} jour{streak > 1 ? 's' : ''}
+              </span>
             </div>
+          )}
+
+          {/* Stats — four big animated counters; tap deep-links each. */}
+          <div className="mx-auto mt-5 flex max-w-[320px] items-stretch">
+            <StatCounter
+              value={total}
+              label="spots"
+              onClick={() => navigate('/ma-galerie')}
+            />
+            <span className="w-px self-center bg-fg/10" style={{ height: 28 }} />
+            <StatCounter
+              value={uniqueBrands}
+              label="marques"
+              onClick={() => navigate('/mes-marques')}
+            />
+            <span className="w-px self-center bg-fg/10" style={{ height: 28 }} />
+            <StatCounter
+              value={rank ?? 0}
+              prefix="#"
+              empty={!rank}
+              label="rang"
+              onClick={() => navigate('/classement')}
+            />
+            {meId && (
+              <>
+                <span
+                  className="w-px self-center bg-fg/10"
+                  style={{ height: 28 }}
+                />
+                <StatCounter
+                  value={followers}
+                  label={followers === 1 ? 'abonné' : 'abonnés'}
+                  onClick={() => navigate(`/u/${meId}`)}
+                />
+              </>
+            )}
           </div>
 
-          {/* Hairline XP — a 2px jet track filling pure white, right under
-              the stats line; tiny unified caption below. Replaces the big
-              central "Niveau" card. */}
-          <div className="mx-auto mt-4 max-w-[280px]">
-            <div className="h-1 w-full overflow-hidden rounded-full bg-fg/[0.10]">
+          {/* Premium XP bar — #222 track, red→#ff4d4d gradient fill. */}
+          <div className="mx-auto mt-5 max-w-[300px]">
+            <div className="mb-1.5 grid grid-cols-3 items-baseline text-[11px]">
+              <span className="text-left font-bold" style={{ color: '#E8203A' }}>
+                {level.name}
+              </span>
+              <span className="text-center font-bold text-fg">
+                {new Intl.NumberFormat('fr-FR').format(xp)} XP
+              </span>
+              <span className="text-right font-normal text-fg2">
+                {level.isMax ? 'MAX' : level.next}
+              </span>
+            </div>
+            <div
+              className="h-1.5 w-full overflow-hidden rounded-full"
+              style={{ background: '#222' }}
+            >
               <div
-                className="h-full rounded-full bg-fg transition-[width] duration-1000 ease-out"
-                style={{ width: `${animPct}%` }}
+                className="h-full rounded-full"
+                style={{
+                  width: `${animPct}%`,
+                  background: 'linear-gradient(90deg, #E8203A 0%, #ff4d4d 100%)',
+                  transition: 'width 1000ms cubic-bezier(0.22, 1, 0.36, 1)',
+                }}
               />
             </div>
-            <p className="mt-1.5 text-xs font-normal text-fg2">
-              {level.isMax
-                ? `${level.name} — ${new Intl.NumberFormat('fr-FR').format(xp)} XP`
-                : `${level.name} — ${new Intl.NumberFormat('fr-FR').format(xp)} XP (Plus que ${level.toNext} XP avant ${level.next})`}
-            </p>
           </div>
         </div>
 
@@ -792,11 +844,12 @@ export default function Profile() {
           </div>
         </section>
 
-        {/* PREMIUM BANNER (free users only) — relegated to the very
-            bottom per the 2026-06-01 cleanup. The user lands on a
-            dense identity + stats + tab area first; the paid CTA
-            sits as a soft anchor at the end of the scroll. */}
-        {!plan && <PremiumTopBanner onTap={() => navigate('/premium')} />}
+        {/* PREMIUM CARD — upsell for free users, active-status for
+            subscribers. */}
+        <PremiumTopBanner
+          onTap={() => navigate('/premium')}
+          plan={plan}
+        />
 
       </div>
 
@@ -806,96 +859,228 @@ export default function Profile() {
         badges={badgeCatalogue}
         unlocks={unlocks}
       />
+
+      <ShareSheet
+        open={shareOpen}
+        onClose={() => setShareOpen(false)}
+        pseudo={pseudo}
+        userId={meId}
+      />
     </div>
+  )
+}
+
+// ────────────────────────── SHARE SHEET ─────────────────────────
+
+/** Slide-up sheet to share the profile: the vanity link to copy + the
+ *  native iOS/Android share sheet. The link points at the public profile
+ *  route that already exists (/u/:id). */
+function ShareSheet({
+  open,
+  onClose,
+  pseudo,
+  userId,
+}: {
+  open: boolean
+  onClose: () => void
+  pseudo: string
+  userId: string | null
+}) {
+  const [copied, setCopied] = useState(false)
+  if (!open) return null
+
+  const handle = `revs.app/@${pseudo.toLowerCase().replace(/\s+/g, '')}`
+  const url = userId
+    ? `${window.location.origin}/u/${userId}`
+    : window.location.origin
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(url)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1600)
+    } catch {
+      /* clipboard blocked */
+    }
+  }
+  const share = async () => {
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: `${pseudo} sur REVS`, url })
+      } else {
+        void copy()
+      }
+    } catch {
+      /* user cancelled */
+    }
+  }
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center"
+      role="dialog"
+      aria-modal="true"
+      onClick={onClose}
+    >
+      <div
+        className="absolute inset-0"
+        style={{ background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(6px)' }}
+      />
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="relative w-full max-w-md rounded-t-3xl p-5 pb-[max(1.5rem,env(safe-area-inset-bottom))]"
+        style={{ background: '#141414', border: '1px solid rgba(255,255,255,0.06)' }}
+      >
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-lg font-bold text-white">Partager le profil</h2>
+          <button onClick={onClose} aria-label="Fermer" className="text-white/50 hover:text-white">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        {/* Link to copy */}
+        <button
+          onClick={copy}
+          className="tappable flex w-full items-center gap-3 rounded-2xl px-4 py-3.5 text-left"
+          style={{ background: '#0d0d0d', border: '1px solid rgba(255,255,255,0.06)' }}
+        >
+          <span className="min-w-0 flex-1 truncate text-[13px] text-white/80">
+            {handle}
+          </span>
+          {copied ? (
+            <Check className="h-5 w-5 flex-none" style={{ color: '#22C55E' }} />
+          ) : (
+            <Copy className="h-5 w-5 flex-none text-white/45" />
+          )}
+        </button>
+        <p className="mt-1.5 px-1 text-[11px] text-white/35">
+          {copied ? 'Lien copié !' : 'Touche pour copier le lien'}
+        </p>
+
+        {/* Native share */}
+        <button
+          onClick={share}
+          className="tappable mt-4 flex w-full items-center justify-center gap-2 rounded-full py-3.5 text-sm font-extrabold text-white"
+          style={{ background: '#E8203A', boxShadow: '0 8px 24px rgba(232,32,58,0.45)' }}
+        >
+          <Share className="h-[18px] w-[18px]" />
+          Partager
+        </button>
+      </div>
+    </div>,
+    document.body,
   )
 }
 
 // ─────────────────────── Profile helpers (post-restructure) ───────────────────────
 
-/** Tiny tappable stat used inside the unified pill that replaced the
- *  followers/following card AND the old section-3 stats row. Compact
- *  one-line format — bold white number, semibold neutral label, same
- *  baseline. Dots between stats are owned by the parent. */
-function ProfileStatTiny({
+/** Tappable stat with a count-up animation: the number tweens from 0 to
+ *  its value over ~1s (easeOutCubic) the first time the profile renders.
+ *  `prefix` is prepended (e.g. "#" for rank); `empty` shows "—" instead. */
+function StatCounter({
   value,
   label,
+  prefix = '',
+  empty = false,
   onClick,
 }: {
-  value: string
+  value: number
   label: string
+  prefix?: string
+  empty?: boolean
   onClick: () => void
 }) {
+  const [disp, setDisp] = useState(0)
+  useEffect(() => {
+    if (empty) return
+    const start = performance.now()
+    const dur = 1000
+    let raf = 0
+    const ease = (k: number) => 1 - Math.pow(1 - k, 3)
+    const tick = (now: number) => {
+      const k = Math.min(1, (now - start) / dur)
+      setDisp(Math.round(value * ease(k)))
+      if (k < 1) raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [value, empty])
   return (
     <button
       onClick={onClick}
-      className="tappable inline-flex items-baseline gap-1 text-fg2"
-      style={{ fontSize: '11px', fontWeight: 600 }}
+      className="tappable flex flex-1 flex-col items-center justify-center"
     >
       <span
-        className="font-black tabular-nums text-fg"
-        style={{ fontSize: '12px' }}
+        className="font-display font-extrabold tabular-nums text-fg"
+        style={{ fontSize: '22px', lineHeight: 1 }}
       >
-        {value}
+        {empty ? '—' : `${prefix}${disp}`}
       </span>
-      <span className="lowercase">{label}</span>
+      <span className="mt-1 text-[11px] text-fg2">{label}</span>
     </button>
   )
 }
 
-/** Monochrome list line nudging free users toward /premium — no gold
- *  border, gradient or shimmer. Reads as a quiet settings row: a label
- *  with a thin grey subtitle and a chevron, separated from the page by
- *  a single hairline. */
-function PremiumTopBanner({ onTap }: { onTap: () => void }) {
+/** Premium card — a real dark-red gradient card (logo + REVS PREMIUM +
+ *  perks + red "Découvrir" CTA). When already subscribed, it shows the
+ *  active tier + renewal date instead of the upsell. */
+function PremiumTopBanner({
+  onTap,
+  plan,
+  renewsAt,
+}: {
+  onTap: () => void
+  plan?: string | null
+  renewsAt?: string | null
+}) {
+  const active = !!plan
+  const renew = renewsAt
+    ? new Intl.DateTimeFormat('fr-FR', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+      }).format(new Date(renewsAt))
+    : null
   return (
     <button
       onClick={onTap}
-      className="tappable flex w-full items-center justify-between gap-3 py-4 text-left"
-      style={{ borderTop: '1px solid var(--color-divider)' }}
+      className="tappable flex w-full items-center gap-4 rounded-2xl p-5 text-left transition-transform active:scale-[0.99]"
+      style={{
+        background: 'linear-gradient(135deg, #1a0a0a 0%, #2a0a0a 100%)',
+        border: '1px solid #E8203A',
+        boxShadow: '0 10px 30px rgba(232,32,58,0.18)',
+      }}
     >
-      <div className="min-w-0">
-        <p className="text-base font-semibold text-fg">Club REVS Premium</p>
-        <p className="mt-0.5 text-xs font-normal text-fg2">
-          Mode Radar temps réel & spots illimités
+      <span
+        className="flex h-11 w-11 flex-none items-center justify-center rounded-xl font-display text-lg font-black tracking-tighter text-white"
+        style={{ background: 'rgba(232,32,58,0.18)', border: '1px solid rgba(232,32,58,0.45)' }}
+        aria-hidden
+      >
+        R
+      </span>
+      <div className="min-w-0 flex-1">
+        <p
+          className="font-display font-extrabold tracking-tight"
+          style={{ color: '#E8203A', fontSize: '15px' }}
+        >
+          REVS PREMIUM
+        </p>
+        <p className="mt-0.5 truncate text-[12px] text-white/55">
+          {active
+            ? renew
+              ? `${planDisplayName(plan)} · renouvellement le ${renew}`
+              : `${planDisplayName(plan)} actif`
+            : 'Spots illimités · Mode Radar · Expérience sans limite'}
         </p>
       </div>
-      <ChevronRight className="h-5 w-5 flex-none text-fg2" />
+      <span
+        className="flex-none rounded-full px-4 py-2 text-[13px] font-extrabold text-white"
+        style={{ background: '#E8203A' }}
+      >
+        {active ? 'Gérer' : 'Découvrir →'}
+      </span>
     </button>
   )
-}
-
-/** Brand-aware glow used as a soft halo on the GarageCoverFlow horizontal
- *  cards. Lowercase substring match against the brand string keeps
- *  the table small while covering enough variants. Default fallback
- *  is the REVS accent red. */
-function brandGlow(brand: string | null | undefined): string {
-  const b = (brand ?? '').toLowerCase()
-  if (b.includes('ferrari')) return 'rgba(232, 32, 58, 0.30)'
-  if (b.includes('lamborghini') || b.includes('lambo'))
-    return 'rgba(255, 215, 0, 0.28)'
-  if (b.includes('porsche')) return 'rgba(220, 220, 220, 0.25)'
-  if (b.includes('mclaren')) return 'rgba(255, 138, 0, 0.30)'
-  if (b.includes('audi')) return 'rgba(232, 32, 58, 0.25)'
-  if (b.includes('bmw')) return 'rgba(59, 130, 246, 0.28)'
-  if (b.includes('mercedes')) return 'rgba(220, 220, 220, 0.25)'
-  if (b.includes('bentley')) return 'rgba(34, 139, 34, 0.25)'
-  if (b.includes('aston')) return 'rgba(0, 100, 0, 0.25)'
-  if (b.includes('rolls')) return 'rgba(160, 100, 200, 0.25)'
-  if (b.includes('bugatti')) return 'rgba(20, 70, 180, 0.28)'
-  if (b.includes('koenigsegg')) return 'rgba(255, 255, 255, 0.22)'
-  if (b.includes('pagani')) return 'rgba(255, 0, 128, 0.25)'
-  if (b.includes('toyota') || b.includes('lexus'))
-    return 'rgba(140, 140, 140, 0.22)'
-  if (b.includes('honda') || b.includes('acura'))
-    return 'rgba(220, 220, 220, 0.22)'
-  if (b.includes('nissan') || b.includes('nismo'))
-    return 'rgba(170, 0, 0, 0.25)'
-  if (b.includes('volkswagen') || b.includes('vw'))
-    return 'rgba(40, 90, 170, 0.22)'
-  if (b.includes('volvo')) return 'rgba(30, 90, 130, 0.22)'
-  if (b.includes('mazda')) return 'rgba(200, 0, 0, 0.22)'
-  if (b.includes('subaru')) return 'rgba(0, 100, 200, 0.22)'
-  return 'rgba(232, 32, 58, 0.20)'
 }
 
 // ─────────────────────────── COLLECTION DECKS ───────────────────────────
@@ -1076,7 +1261,6 @@ function GarageCoverFlow({
   onOpen: (id: string) => void
 }) {
   const scrollerRef = useRef<HTMLDivElement | null>(null)
-  const [activeIdx, setActiveIdx] = useState(0)
 
   const cars = useMemo(() => {
     const map = new Map<string, Spot>()
@@ -1093,160 +1277,103 @@ function GarageCoverFlow({
     )
   }, [spots])
 
-  useEffect(() => {
-    const scroller = scrollerRef.current
-    if (!scroller) return
-    const cards = scroller.querySelectorAll('[data-cover-card]')
-    if (!cards.length) return
-
-    const obs = new IntersectionObserver(
-      (entries) => {
-        let bestIdx = activeIdx
-        let bestRatio = 0
-        entries.forEach((e) => {
-          if (e.intersectionRatio > bestRatio) {
-            bestRatio = e.intersectionRatio
-            bestIdx = Number(e.target.getAttribute('data-idx'))
-          }
-        })
-        if (bestRatio > 0) setActiveIdx(bestIdx)
-      },
-      { root: scroller, threshold: [0.5, 0.7, 0.9, 1.0] },
-    )
-    cards.forEach((c) => obs.observe(c))
-    return () => obs.disconnect()
-    // activeIdx omitted on purpose — observer is idempotent re-runs
-    // would just churn the observation set.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cars.length])
-
   return (
     <div className="-mx-2">
-      {/* Negative margin neutralises the parent's px-2 so the carousel
-          can full-bleed under the screen edges; padding inside the
-          scroller restores the breathing room at the actual content. */}
+      {/* Garage — horizontal scroll of 160×200 photo cards. Each uses the
+          best (highest-rarity) spot photo of that model as its background,
+          with a dark gradient + brand / year / model overlays. */}
       <div
         ref={scrollerRef}
-        className="no-scrollbar flex snap-x snap-mandatory items-stretch gap-4 overflow-x-auto py-4"
+        className="no-scrollbar flex items-stretch gap-3 overflow-x-auto py-2"
         style={{
-          paddingInline: 'max(env(safe-area-inset-left), 24px)',
-          scrollPaddingInline: '24px',
-          // WebKit needs this for smooth snap recovery on momentum
-          // swipes when the scroller is nested inside another
-          // scrolling container.
+          paddingInline: 'max(env(safe-area-inset-left), 16px)',
           WebkitOverflowScrolling: 'touch',
         }}
       >
-        {cars.map((s, i) => {
-          const active = i === activeIdx
-          const glow = brandGlow(s.brand)
-          return (
-            <button
-              key={s.id}
-              data-cover-card
-              data-idx={i}
-              onClick={() => onOpen(s.id)}
-              className="snap-center flex-shrink-0 overflow-hidden rounded-3xl text-left transition-all duration-300 ease-out"
-              style={{
-                width: '280px',
-                height: '160px',
-                background:
-                  'linear-gradient(135deg, rgb(var(--color-card)) 0%, rgb(var(--color-card)) 60%, rgb(var(--color-card)) 100%)',
-                border: active
-                  ? '1px solid rgb(var(--color-fg) / 0.10)'
-                  : '1px solid rgb(var(--color-fg) / 0.05)',
-                transform: active ? 'scale(1)' : 'scale(0.90)',
-                opacity: active ? 1 : 0.4,
-                boxShadow: active
-                  ? `0 0 30px ${glow.replace('0.22', '0.35')}, 0 20px 40px rgba(0, 0, 0, 0.55)`
-                  : '0 12px 24px rgba(0, 0, 0, 0.40)',
-                willChange: 'transform, opacity',
-              }}
-              aria-label={`${s.brand ?? ''} ${s.model ?? ''}`}
-            >
+        {cars.map((s) => (
+          <button
+            key={s.id}
+            onClick={() => onOpen(s.id)}
+            className="relative flex-shrink-0 overflow-hidden rounded-2xl text-left transition-transform active:scale-[0.97]"
+            style={{
+              width: 160,
+              height: 200,
+              background: 'linear-gradient(160deg, #141414 0%, #1a1a1a 100%)',
+              border: '1px solid rgba(255,255,255,0.06)',
+            }}
+            aria-label={`${s.brand ?? ''} ${s.model ?? ''}`}
+          >
+            {s.photo_url ? (
+              <img
+                src={s.photo_url}
+                alt=""
+                loading="lazy"
+                decoding="async"
+                className="absolute inset-0 h-full w-full object-cover"
+              />
+            ) : (
               <span
                 aria-hidden
-                className="pointer-events-none absolute"
+                className="pointer-events-none absolute inset-0 flex items-center justify-center px-2 text-center font-display font-black uppercase"
                 style={{
-                  bottom: '-40px',
-                  right: '-40px',
-                  width: '180px',
-                  height: '180px',
-                  borderRadius: '50%',
-                  background: glow,
-                  filter: 'blur(48px)',
-                  opacity: active ? 1 : 0.6,
+                  color: 'rgba(255,255,255,0.07)',
+                  fontSize: '30px',
+                  letterSpacing: '-0.02em',
+                  lineHeight: 1,
                 }}
-              />
-              <div className="relative z-10 flex h-full flex-col justify-between p-5">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p
-                      className="font-black uppercase"
-                      style={{
-                        color: active ? '#EF4444' : 'rgb(var(--color-fg-2))',
-                        fontSize: '9px',
-                        letterSpacing: '0.20em',
-                      }}
-                    >
-                      {s.brand}
-                    </p>
-                    <h3
-                      className="mt-0.5 truncate font-display font-black tracking-tight text-fg"
-                      style={{
-                        fontSize: '18px',
-                        letterSpacing: '-0.02em',
-                      }}
-                    >
-                      {s.model}
-                    </h3>
-                  </div>
-                  {typeof s.year === 'number' && s.year > 1900 && (
-                    <span
-                      className="flex-none rounded-md font-bold text-fg2"
-                      style={{
-                        background: 'rgb(var(--color-fg) / 0.05)',
-                        padding: '2px 8px',
-                        fontSize: '9px',
-                      }}
-                    >
-                      {s.year}
-                    </span>
-                  )}
-                </div>
-                <p
-                  className="text-fg2/70"
-                  style={{ fontSize: '11px', fontWeight: 500 }}
-                >
-                  {categoryLabel(s.category)}
-                </p>
-              </div>
-            </button>
-          )
-        })}
-      </div>
+              >
+                {s.brand}
+              </span>
+            )}
 
-      {/* Dot indicator — keeps users oriented when many cars are
-          in the garage. Hidden when only one car is present. */}
-      {cars.length > 1 && (
-        <div className="mt-1 flex justify-center gap-1.5">
-          {cars.map((_, i) => (
-            <span
-              key={i}
-              className="rounded-full transition-all duration-200"
-              style={{
-                width: i === activeIdx ? '16px' : '5px',
-                height: '5px',
-                background:
-                  i === activeIdx
-                    ? 'rgb(var(--color-accent))'
-                    : 'rgb(var(--color-fg) / 0.15)',
-              }}
+            {/* Dark bottom gradient for legibility */}
+            <div
               aria-hidden
+              className="pointer-events-none absolute inset-x-0 bottom-0"
+              style={{
+                height: '60%',
+                background:
+                  'linear-gradient(to top, #0a0a0a 0%, rgba(10,10,10,0.4) 55%, transparent 100%)',
+              }}
             />
-          ))}
-        </div>
-      )}
+
+            {/* Brand — red, top-left */}
+            <span
+              className="absolute left-3 top-3 font-extrabold uppercase"
+              style={{
+                color: '#E8203A',
+                fontSize: '10px',
+                letterSpacing: '0.12em',
+                textShadow: '0 1px 3px rgba(0,0,0,0.6)',
+              }}
+            >
+              {s.brand}
+            </span>
+
+            {/* Year — grey badge top-right */}
+            {typeof s.year === 'number' && s.year > 1900 && (
+              <span
+                className="absolute right-3 top-3 rounded-md px-1.5 py-0.5 text-[9px] font-bold text-white/75"
+                style={{
+                  background: 'rgba(0,0,0,0.45)',
+                  backdropFilter: 'blur(4px)',
+                  WebkitBackdropFilter: 'blur(4px)',
+                }}
+              >
+                {s.year}
+              </span>
+            )}
+
+            {/* Model — white bold, bottom */}
+            <h3
+              className="absolute inset-x-0 bottom-0 line-clamp-2 px-3 pb-3 font-display font-extrabold leading-tight text-white"
+              style={{ fontSize: '15px', letterSpacing: '-0.01em' }}
+            >
+              {s.model}
+            </h3>
+          </button>
+        ))}
+      </div>
     </div>
   )
 }
