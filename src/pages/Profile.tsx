@@ -23,6 +23,7 @@ import { appConfig } from '../config/appConfig'
 import { Skeleton } from '../components/Skeleton'
 import MyCollection from '../components/MyCollection'
 import { rarityRank } from '../components/CollectorCard'
+import { rarityBadge } from '../lib/rarityStyle'
 import {
   COLLECTIONS,
   claimCollection,
@@ -58,6 +59,9 @@ export default function Profile() {
   // surfaces the remaining N-4 trophies.
   const [badgesSheetOpen, setBadgesSheetOpen] = useState(false)
   const [shareOpen, setShareOpen] = useState(false)
+  const [xpHistory, setXpHistory] = useState<
+    { amount: number; reason: string; created_at: string }[]
+  >([])
   // Local-only UI state: which of the two sub-tabs (Garage vs
   // Collection) is currently visible at the bottom of the profile.
   // Single segmented control across the lower half of Profile — replaces
@@ -239,6 +243,34 @@ export default function Profile() {
     return () => cancelAnimationFrame(id)
   }, [loading, level.pct])
 
+  // Last 10 XP transactions for the Récompenses history list.
+  useEffect(() => {
+    let active = true
+    ;(async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (!user || !active) return
+      const { data } = await supabase
+        .from('xp_transactions')
+        .select('amount, reason, created_at')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(10)
+      if (active)
+        setXpHistory(
+          (data ?? []) as {
+            amount: number
+            reason: string
+            created_at: string
+          }[],
+        )
+    })()
+    return () => {
+      active = false
+    }
+  }, [])
+
   if (loading) {
     return (
       <div className="min-h-screen bg-bg">
@@ -300,7 +332,6 @@ export default function Profile() {
   // first locked ones so the row is always 4 wide.
   const unlocked = badgeCatalogue.filter((b) => unlocks.has(b.slug))
   const locked = badgeCatalogue.filter((b) => !unlocks.has(b.slug))
-  const topBadges = [...unlocked, ...locked].slice(0, 4)
 
   return (
     <div className="min-h-screen bg-bg text-fg">
@@ -567,6 +598,44 @@ export default function Profile() {
               />
             </div>
           </div>
+
+          {/* Badge preview — 3 latest unlocked badges (padded with locked
+              greyed if fewer than 3). Tap → badge detail. Visible always. */}
+          {badgeCatalogue.length > 0 && (
+            <div className="mt-5 flex items-center justify-center gap-2.5">
+              {[...unlocked, ...locked].slice(0, 3).map((b) => {
+                const isU = unlocks.has(b.slug)
+                return (
+                  <button
+                    key={b.slug}
+                    onClick={() => navigate(`/badges/${b.slug}`)}
+                    className="tappable flex h-10 w-10 items-center justify-center rounded-full text-lg"
+                    style={{
+                      background: isU
+                        ? b.gold
+                          ? 'rgba(224,179,65,0.14)'
+                          : 'rgba(232,32,58,0.12)'
+                        : 'rgba(255,255,255,0.04)',
+                      border: isU
+                        ? b.gold
+                          ? '1px solid rgba(224,179,65,0.45)'
+                          : '1px solid rgba(232,32,58,0.35)'
+                        : '1px solid rgb(var(--color-fg) / 0.06)',
+                      opacity: isU ? 1 : 0.5,
+                    }}
+                    aria-label={b.name}
+                  >
+                    {isU ? b.emoji : <Lock className="h-4 w-4 text-fg2/50" />}
+                  </button>
+                )
+              })}
+              {unlocked.length > 3 && (
+                <span className="text-[12px] font-bold text-fg2">
+                  +{unlocked.length - 3}
+                </span>
+              )}
+            </div>
+          )}
         </div>
 
         {/* PREMIUM BANNER moved to the very bottom of the profile
@@ -754,72 +823,57 @@ export default function Profile() {
                   </button>
                 )}
 
-                {/* SECTION 1 — Trophées équipés. Horizontal scroll of
-                    the 4 featured badges in 64×64 glass squares, with
-                    a tiny inline "Voir les N" trigger that opens the
-                    BadgesBottomSheet drawer. Replaces the previous
-                    grid-cols-4 + full-width pill layout. */}
+                {/* Badges — full 4-col grid; unlocked are coloured, locked
+                    greyed with a cadenas. Tap → badge detail (condition). */}
                 <section>
-                  <div className="flex items-center justify-between">
+                  <div className="mb-3 flex items-baseline justify-between">
                     <h4
                       className="font-black uppercase text-fg2/55"
-                      style={{
-                        fontSize: '10px',
-                        letterSpacing: '0.20em',
-                      }}
+                      style={{ fontSize: '10px', letterSpacing: '0.20em' }}
                     >
-                      Trophées équipés
+                      Badges
                     </h4>
-                    <button
-                      onClick={() => setBadgesSheetOpen(true)}
-                      className="tappable font-bold text-accent hover:underline"
-                      style={{ fontSize: '10px' }}
-                    >
-                      Voir les {badgeCatalogue.length}
-                    </button>
+                    <span className="text-[10px] font-bold text-fg2">
+                      {unlocked.length} / {badgeCatalogue.length} débloqués
+                    </span>
                   </div>
-                  <div className="no-scrollbar mt-3 flex gap-3 overflow-x-auto py-1">
-                    {topBadges.map((b) => {
-                      const isUnlocked = unlocks.has(b.slug)
+                  <div className="grid grid-cols-4 gap-3">
+                    {[...unlocked, ...locked].map((b) => {
+                      const isU = unlocks.has(b.slug)
                       return (
                         <button
                           key={b.slug}
                           onClick={() => navigate(`/badges/${b.slug}`)}
-                          className="tappable flex flex-shrink-0 flex-col items-center justify-center gap-1.5 rounded-2xl p-2 text-center"
-                          style={{
-                            width: '64px',
-                            height: '64px',
-                            background: 'var(--color-glass-strong)',
-                            border: isUnlocked
-                              ? b.gold
-                                ? '1px solid rgba(224,179,65,0.40)'
-                                : '1px solid rgba(232,32,58,0.30)'
-                              : '1px solid rgb(var(--color-fg) / 0.05)',
-                            backdropFilter: 'saturate(160%) blur(12px)',
-                            WebkitBackdropFilter: 'saturate(160%) blur(12px)',
-                            boxShadow:
-                              isUnlocked && !b.gold
-                                ? '0 8px 22px rgba(232,32,58,0.16)'
-                                : isUnlocked && b.gold
-                                  ? '0 8px 22px rgba(224,179,65,0.20)'
-                                  : 'inset 0 1px 0 rgb(var(--color-fg) / 0.03)',
-                          }}
+                          className="tappable flex flex-col items-center gap-1.5"
                           aria-label={b.name}
                         >
-                          {isUnlocked ? (
-                            <span className="text-xl">{b.emoji}</span>
-                          ) : (
-                            <Lock className="h-4 w-4 text-fg2/50" />
-                          )}
                           <span
-                            className="w-full truncate font-bold leading-tight"
+                            className="flex h-16 w-16 items-center justify-center rounded-full text-2xl"
                             style={{
-                              fontSize: '8px',
-                              color: isUnlocked
+                              background: isU
+                                ? b.gold
+                                  ? 'rgba(224,179,65,0.14)'
+                                  : 'rgba(232,32,58,0.12)'
+                                : 'rgba(255,255,255,0.04)',
+                              border: isU
+                                ? b.gold
+                                  ? '1px solid rgba(224,179,65,0.45)'
+                                  : '1px solid rgba(232,32,58,0.35)'
+                                : '1px solid rgb(var(--color-fg) / 0.06)',
+                              opacity: isU ? 1 : 0.55,
+                            }}
+                          >
+                            {isU ? b.emoji : <Lock className="h-5 w-5 text-fg2/50" />}
+                          </span>
+                          <span
+                            className="line-clamp-2 text-center font-semibold leading-tight"
+                            style={{
+                              fontSize: '9px',
+                              color: isU
                                 ? b.gold
                                   ? '#E0B341'
-                                  : 'rgb(var(--color-accent))'
-                                : 'rgb(var(--color-fg) / 0.40)',
+                                  : 'rgb(var(--color-fg))'
+                                : 'rgb(var(--color-fg) / 0.4)',
                             }}
                           >
                             {b.name}
@@ -830,15 +884,63 @@ export default function Profile() {
                   </div>
                 </section>
 
-                {/* SECTION 2 — Défis en cours. Renders the top 2
-                    collections by completion ratio (claimed ones are
-                    skipped). Compact h-1 progress bar; the RÉCLAMER
-                    button is enabled only at 100%. */}
+                {/* Collections to complete */}
                 <TopChallenges
                   spots={spots}
                   count={2}
                   onShowAll={() => navigate('/challenges')}
                 />
+
+                {/* Historique XP — last 10 transactions */}
+                {xpHistory.length > 0 && (
+                  <section>
+                    <h4
+                      className="mb-3 font-black uppercase text-fg2/55"
+                      style={{ fontSize: '10px', letterSpacing: '0.20em' }}
+                    >
+                      Historique XP
+                    </h4>
+                    <div className="space-y-1.5">
+                      {xpHistory.map((t, i) => {
+                        const r = xpReasonLabel(t.reason)
+                        const date = new Intl.DateTimeFormat('fr-FR', {
+                          day: 'numeric',
+                          month: 'short',
+                        }).format(new Date(t.created_at))
+                        return (
+                          <div
+                            key={i}
+                            className="flex items-center gap-3 rounded-xl bg-card px-3 py-2.5"
+                            style={{ border: '1px solid var(--color-border)' }}
+                          >
+                            <span className="text-lg" aria-hidden>
+                              {r.emoji}
+                            </span>
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-[13px] font-medium text-fg">
+                                {r.label}
+                              </p>
+                              <p className="text-[11px] text-fg2">{date}</p>
+                            </div>
+                            <span
+                              className="flex-none font-display font-extrabold tabular-nums"
+                              style={{
+                                color:
+                                  t.amount >= 0
+                                    ? '#E8203A'
+                                    : 'rgb(var(--color-fg) / 0.4)',
+                                fontSize: '14px',
+                              }}
+                            >
+                              {t.amount >= 0 ? '+' : ''}
+                              {t.amount} XP
+                            </span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </section>
+                )}
               </div>
             )}
           </div>
@@ -973,6 +1075,24 @@ function ShareSheet({
 }
 
 // ─────────────────────── Profile helpers (post-restructure) ───────────────────────
+
+/** Human-readable label + emoji for an xp_transactions.reason. */
+function xpReasonLabel(reason: string): { emoji: string; label: string } {
+  if (reason === 'spot') return { emoji: '📸', label: 'Spot publié' }
+  if (reason === 'daily_first')
+    return { emoji: '☀️', label: 'Premier spot du jour' }
+  if (reason === 'streak') return { emoji: '🔥', label: 'Bonus streak' }
+  if (reason.startsWith('collection:'))
+    return { emoji: '🃏', label: 'Collection complétée' }
+  if (reason.startsWith('referral'))
+    return { emoji: '🤝', label: 'Parrainage' }
+  if (reason.startsWith('challenge') || reason.startsWith('weekly'))
+    return { emoji: '🎯', label: 'Défi réussi' }
+  if (reason.startsWith('like')) return { emoji: '❤️', label: 'Like reçu' }
+  if (reason.startsWith('event')) return { emoji: '🎪', label: 'Event' }
+  if (reason === 'reconcile') return { emoji: '⚙️', label: 'Ajustement' }
+  return { emoji: '✨', label: reason }
+}
 
 /** Tappable stat with a count-up animation: the number tweens from 0 to
  *  its value over ~1s (easeOutCubic) the first time the profile renders.
@@ -1169,6 +1289,51 @@ function CollectionDecks({ spots }: { spots: Spot[] }) {
 
   return (
     <div className="space-y-3">
+      {/* Collection summary — total cards + rarity distribution pills,
+          ordered Légendaire-first like the decks below. */}
+      <div
+        className="rounded-2xl px-5 py-4"
+        style={{
+          background: 'rgb(var(--color-card))',
+          border: '1px solid var(--color-border)',
+        }}
+      >
+        <div className="flex items-baseline justify-between">
+          <span
+            className="text-[10px] font-black uppercase text-fg2/55"
+            style={{ letterSpacing: '0.2em' }}
+          >
+            Collection
+          </span>
+          <span className="font-display text-2xl font-extrabold leading-none text-fg">
+            {spots.length}
+            <span className="ml-1.5 text-[11px] font-bold text-fg2">
+              carte{spots.length > 1 ? 's' : ''}
+            </span>
+          </span>
+        </div>
+        <div className="no-scrollbar mt-3 flex gap-2 overflow-x-auto py-0.5">
+          {decks.map((d) => {
+            const rb = rarityBadge(d.rarity)
+            return (
+              <span
+                key={d.rarity}
+                className="flex flex-none items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-black uppercase"
+                style={{
+                  background: rb.bg,
+                  color: rb.fg,
+                  border: `1px solid ${rb.border}`,
+                  letterSpacing: '0.04em',
+                }}
+              >
+                {rb.label}
+                <span className="font-extrabold opacity-80">{d.count}</span>
+              </span>
+            )
+          })}
+        </div>
+      </div>
+
       {decks.map((d) => (
         <button
           key={d.rarity}
