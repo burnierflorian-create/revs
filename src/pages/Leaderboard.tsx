@@ -21,6 +21,8 @@ type CityStats = {
   top_spotter_id: string | null
   top_spotter_pseudo: string | null
 }
+// One row of the world "Pays" board — a whole country aggregated.
+type CountryStanding = { country: string; spotters: number; xp: number }
 
 type Scope = 'global' | 'country' | 'city'
 
@@ -192,6 +194,57 @@ function RankList({
   )
 }
 
+// ─────────────────────── Country standing row ───────────────────────
+function CountryRow({
+  rank,
+  row,
+  isMine,
+}: {
+  rank: number
+  row: CountryStanding
+  isMine: boolean
+}) {
+  const medalColor =
+    rank === 1 ? GOLD : rank === 2 ? SILVER : rank === 3 ? BRONZE : null
+  return (
+    <div
+      className="relative flex items-center gap-3 overflow-hidden rounded-2xl px-3 py-3"
+      style={{
+        background: isMine ? 'rgba(232,32,58,0.10)' : '#141414',
+        border: isMine
+          ? '1px solid rgba(232,32,58,0.6)'
+          : '1px solid rgba(255,255,255,0.06)',
+      }}
+    >
+      <span
+        className="flex w-7 flex-none items-center justify-center font-display text-base font-extrabold tabular-nums"
+        style={{ color: medalColor ?? 'rgba(255,255,255,0.4)' }}
+      >
+        {rank}
+      </span>
+      <span aria-hidden style={{ fontSize: '26px', lineHeight: 1 }}>
+        {countryFlag(row.country)}
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="flex items-center gap-1.5 truncate text-sm font-semibold text-white">
+          {row.country}
+          {isMine && <span className="text-white/45">(toi)</span>}
+        </p>
+        <p className="mt-0.5 truncate text-[11px] text-white/45">
+          {row.spotters} spotter{row.spotters > 1 ? 's' : ''}
+        </p>
+      </div>
+      <span
+        className="font-display text-base font-extrabold tabular-nums"
+        style={{ color: '#E8203A' }}
+      >
+        {new Intl.NumberFormat('fr-FR').format(row.xp)}
+        <span className="ml-0.5 text-[11px] font-bold text-white/40">XP</span>
+      </span>
+    </div>
+  )
+}
+
 // ─────────────────────────── Page ───────────────────────────
 export default function Leaderboard() {
   const navigate = useNavigate()
@@ -202,7 +255,9 @@ export default function Leaderboard() {
   const [myCountry, setMyCountry] = useState<string | null>(null)
 
   const [globalRows, setGlobalRows] = useState<Row[] | null>(null)
-  const [countryRows, setCountryRows] = useState<Row[] | null>(null)
+  const [countryBoard, setCountryBoard] = useState<CountryStanding[] | null>(
+    null,
+  )
   const [cityRows, setCityRows] = useState<Row[] | null>(null)
   const [cityStats, setCityStats] = useState<CityStats | null>(null)
 
@@ -250,19 +305,20 @@ export default function Leaderboard() {
     }
   }, [])
 
-  // Lazy-fetch the country board.
+  // Lazy-fetch the world board grouped by country.
   useEffect(() => {
-    if (scope !== 'country' || !myCountry || countryRows !== null) return
+    if (scope !== 'country' || countryBoard !== null) return
     let active = true
-    supabase
-      .rpc('country_leaderboard', { p_country: myCountry, p_limit: 500 })
-      .then(({ data }) => {
-        if (active) setCountryRows(Array.isArray(data) ? (data as Row[]) : [])
-      })
+    supabase.rpc('countries_leaderboard').then(({ data }) => {
+      if (active)
+        setCountryBoard(
+          Array.isArray(data) ? (data as CountryStanding[]) : [],
+        )
+    })
     return () => {
       active = false
     }
-  }, [scope, myCountry, countryRows])
+  }, [scope, countryBoard])
 
   // Lazy-fetch the city board + stats.
   useEffect(() => {
@@ -284,7 +340,7 @@ export default function Leaderboard() {
 
   const tabs: { key: Scope; label: string }[] = [
     { key: 'global', label: '🌍 Global' },
-    { key: 'country', label: `${countryFlag(myCountry)} Mon Pays` },
+    { key: 'country', label: '🌍 Pays' },
     { key: 'city', label: '📍 Ma Ville' },
   ]
 
@@ -348,18 +404,25 @@ export default function Leaderboard() {
           <RankList rows={globalRows} meId={meId} onOpen={open} />
         ))}
 
-      {/* MON PAYS */}
+      {/* PAYS — world board grouped by country */}
       {scope === 'country' &&
-        (!myCountry ? (
+        (countryBoard === null ? (
           loadingSkeleton
-        ) : countryRows === null ? (
-          loadingSkeleton
-        ) : countryRows.length === 0 ? (
+        ) : countryBoard.length === 0 ? (
           <p className="py-16 text-center text-sm text-white/40">
-            Personne en {myCountry} pour l'instant.
+            Pas encore de spotters.
           </p>
         ) : (
-          <RankList rows={countryRows} meId={meId} onOpen={open} />
+          <div className="space-y-2 pb-8">
+            {countryBoard.map((c, i) => (
+              <CountryRow
+                key={c.country}
+                rank={i + 1}
+                row={c}
+                isMine={!!myCountry && c.country === myCountry}
+              />
+            ))}
+          </div>
         ))}
 
       {/* MA VILLE */}

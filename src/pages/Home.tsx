@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ChevronRight } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { setPendingPhoto } from '../lib/pendingPhoto'
 import { xpLevel } from '../lib/xp'
 import { GP_2026 } from '../lib/f1'
+import { circuitPath, CIRCUIT_VIEWBOX } from '../lib/circuits'
 import { Skeleton } from '../components/Skeleton'
 import {
   challengePct as computeChallengePct,
@@ -335,6 +336,7 @@ export default function Home() {
 
         {nextGp && (
           <GpCountdownCard
+            round={nextGp.round}
             flag={nextGp.flag}
             name={nextGp.name}
             circuit={nextGp.circuit}
@@ -423,56 +425,44 @@ function CockpitWidget({
 
 // ─────────────────────────────── RPM GAUGES ───────────────────────────────
 
-// Mini-speedometer geometry (100×100 box, 270° arc with a bottom gap).
-// t in [0,1] maps the arc from −135° (bottom-left) to +135° (bottom-right)
-// measured from the top, clockwise. Pure constants — safe at module scope.
-const M_CX = 50
-const M_CY = 50
-const M_R = 40
-const M_TICKS = 45
-function mPoint(t: number, r: number) {
-  const deg = -135 + t * 270
-  const a = (deg * Math.PI) / 180
-  return { x: M_CX + r * Math.sin(a), y: M_CY - r * Math.cos(a) }
+// Mini-speedometer geometry — 110×110 box, 270° sweep with a bottom gap.
+// t in [0,1] maps the arc from −135° (bottom-left, t=0) through 0° (top,
+// t=0.5) to +135° (bottom-right, t=1), measured clockwise from the top.
+const S_BOX = 110
+const S_CX = 55
+const S_CY = 55
+const S_R_TICK = 48 // outer radius of the tick ring
+const S_NEEDLE = 41 // needle length (~85% of tick radius)
+function sPoint(t: number, r: number) {
+  const a = ((-135 + t * 270) * Math.PI) / 180
+  return { x: S_CX + r * Math.sin(a), y: S_CY - r * Math.cos(a) }
 }
-function mArc(t0: number, t1: number, r: number): string {
-  const s = mPoint(t0, r)
-  const e = mPoint(t1, r)
+function sArc(t0: number, t1: number, r: number): string {
+  const s = sPoint(t0, r)
+  const e = sPoint(t1, r)
   const large = t1 - t0 > 0.5 ? 1 : 0
   return `M ${s.x.toFixed(2)} ${s.y.toFixed(2)} A ${r} ${r} 0 ${large} 1 ${e.x.toFixed(2)} ${e.y.toFixed(2)}`
 }
-// Fixed colour per gauge position + a subtle carbon-fibre disc texture.
+// Fixed colour per gauge position (gauge index → accent).
 const GAUGE_COLORS = ['#E8203A', '#F0C040', '#4DA6FF']
-const CARBON =
-  'repeating-radial-gradient(circle at 50% 50%, rgba(255,255,255,0.035) 0px, rgba(255,255,255,0.035) 1px, transparent 1px, transparent 3px), #0d0d0d'
 
-/** One 100px supercar-dashboard speedometer. The needle, progress arc and
- *  centre number are all driven by a JS spring tween that sweeps from 0 to
- *  the real % over ~1s on mount (and on any later value change). */
-function MiniSpeedometer({
-  pct,
-  color,
-  done,
-}: {
-  pct: number
-  color: string
-  done: boolean
-}) {
+/** One 110px supercar-dashboard speedometer: brushed-metal frame, radial
+ *  black face, 60-tick scale with a red danger zone, and a thin gradient
+ *  needle that sweeps from −135° to the live % over 1.2s (ease-out). */
+function MiniSpeedometer({ pct, done }: { pct: number; done: boolean }) {
+  const uid = useId().replace(/:/g, '')
   const [disp, setDisp] = useState(0)
   const fromRef = useRef(0)
   useEffect(() => {
     const from = fromRef.current
     const to = pct
     const start = performance.now()
-    const dur = 1000
+    const dur = 1200
     let raf = 0
-    const easeOutBack = (k: number) => {
-      const c = 1.70158
-      return 1 + (c + 1) * Math.pow(k - 1, 3) + c * Math.pow(k - 1, 2)
-    }
+    const easeOut = (k: number) => 1 - Math.pow(1 - k, 3)
     const tick = (now: number) => {
       const k = Math.min(1, (now - start) / dur)
-      const v = from + (to - from) * easeOutBack(k)
+      const v = from + (to - from) * easeOut(k)
       fromRef.current = v
       setDisp(v)
       if (k < 1) raf = requestAnimationFrame(tick)
@@ -483,22 +473,70 @@ function MiniSpeedometer({
   }, [pct])
 
   const t = Math.max(0, Math.min(1, disp / 100))
-  const arcColor = done ? '#22C55E' : color
   const needleDeg = -135 + t * 270
 
   return (
-    <div className="relative" style={{ width: 100, height: 100 }}>
-      <div
-        aria-hidden
-        className="absolute inset-0 rounded-full"
-        style={{ background: CARBON, border: '1px solid rgba(255,255,255,0.05)' }}
-      />
-      <svg viewBox="0 0 100 100" width="100" height="100" className="absolute inset-0">
-        {Array.from({ length: M_TICKS }).map((_, i) => {
-          const tt = i / (M_TICKS - 1)
-          const major = i % 11 === 0
-          const inner = mPoint(tt, M_R - (major ? 7 : 4))
-          const outer = mPoint(tt, M_R)
+    <div
+      className="relative"
+      style={{
+        width: S_BOX,
+        height: S_BOX,
+        filter: 'drop-shadow(0 4px 20px rgba(0,0,0,0.8))',
+      }}
+    >
+      <svg
+        viewBox={`0 0 ${S_BOX} ${S_BOX}`}
+        width={S_BOX}
+        height={S_BOX}
+        className="absolute inset-0"
+      >
+        <defs>
+          <radialGradient id={`face-${uid}`} cx="50%" cy="42%" r="60%">
+            <stop offset="0%" stopColor="#0a0a0a" />
+            <stop offset="100%" stopColor="#1a1a1a" />
+          </radialGradient>
+          <linearGradient id={`frame-${uid}`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#333" />
+            <stop offset="50%" stopColor="#555" />
+            <stop offset="100%" stopColor="#333" />
+          </linearGradient>
+        </defs>
+
+        {/* Black radial face */}
+        <circle cx={S_CX} cy={S_CY} r={51} fill={`url(#face-${uid})`} />
+        {/* Brushed-metal outer frame */}
+        <circle
+          cx={S_CX}
+          cy={S_CY}
+          r={52}
+          fill="none"
+          stroke={`url(#frame-${uid})`}
+          strokeWidth={2}
+        />
+        {/* Soft reflection arc across the top */}
+        <path
+          d={sArc(0.33, 0.67, 46)}
+          fill="none"
+          stroke="rgba(255,255,255,0.04)"
+          strokeWidth={6}
+          strokeLinecap="round"
+        />
+        {/* Red danger zone — last 20% (80→100) */}
+        <path
+          d={sArc(0.8, 1, S_R_TICK - 2)}
+          fill="none"
+          stroke="#E8203A"
+          strokeOpacity={0.15}
+          strokeWidth={6}
+        />
+        {/* 60-tick scale: long at 0/25/50/75/100, medium every 25%, short else */}
+        {Array.from({ length: 61 }).map((_, i) => {
+          const tt = i / 60
+          const isLong = i % 15 === 0
+          const isMed = !isLong && i % 5 === 0
+          const len = isLong ? 9 : isMed ? 6 : 3
+          const outer = sPoint(tt, S_R_TICK)
+          const inner = sPoint(tt, S_R_TICK - len)
           return (
             <line
               key={i}
@@ -506,21 +544,22 @@ function MiniSpeedometer({
               y1={inner.y}
               x2={outer.x}
               y2={outer.y}
-              stroke="#3a3a3a"
-              strokeWidth={major ? 1.2 : 0.7}
+              stroke={isLong ? '#cfcfcf' : isMed ? '#8a8a8a' : '#555'}
+              strokeWidth={isLong ? 1.4 : isMed ? 1 : 0.7}
               strokeLinecap="round"
             />
           )
         })}
+        {/* Key numbers */}
         {[0, 1, 2, 3, 4].map((m) => {
-          const p = mPoint(m / 4, M_R - 13)
+          const p = sPoint(m / 4, S_R_TICK - 17)
           return (
             <text
               key={m}
               x={p.x}
               y={p.y}
-              fill="#9a9a9a"
-              fontSize="6"
+              fill="#ffffff"
+              fontSize="7"
               fontWeight="700"
               textAnchor="middle"
               dominantBaseline="central"
@@ -529,35 +568,18 @@ function MiniSpeedometer({
             </text>
           )
         })}
-        <path
-          d={mArc(0, 1, M_R)}
-          fill="none"
-          stroke="#2a2a2a"
-          strokeWidth={4}
-          strokeLinecap="round"
-        />
-        {t > 0.002 && (
-          <path
-            d={mArc(0, t, M_R)}
-            fill="none"
-            stroke={arcColor}
-            strokeWidth={4}
-            strokeLinecap="round"
-            style={{ filter: `drop-shadow(0 0 4px ${arcColor})` }}
-          />
-        )}
       </svg>
 
-      {/* Needle (HTML) — driven each frame by the tween, no CSS transition. */}
+      {/* Needle (HTML) — thin red gradient, driven each frame by the tween */}
       <div className="absolute" style={{ left: '50%', top: '50%' }}>
         <div
           style={{
             position: 'absolute',
-            left: '-0.75px',
+            left: '-0.5px',
             bottom: '0px',
-            width: '1.5px',
-            height: `${M_R - 6}px`,
-            background: '#E8203A',
+            width: '1px',
+            height: `${S_NEEDLE}px`,
+            background: 'linear-gradient(to top, #E8203A 0%, #ff6b6b 100%)',
             borderRadius: '1px',
             transformOrigin: 'bottom center',
             transform: `rotate(${needleDeg}deg)`,
@@ -567,29 +589,36 @@ function MiniSpeedometer({
           aria-hidden
           className="absolute rounded-full"
           style={{
-            left: '-3px',
-            top: '-3px',
-            width: '6px',
-            height: '6px',
+            left: '-2.5px',
+            top: '-2.5px',
+            width: '5px',
+            height: '5px',
             background: '#E8203A',
-            boxShadow: '0 0 6px rgba(232,32,58,0.9)',
+            boxShadow: '0 0 8px rgba(232,32,58,0.95)',
           }}
         />
       </div>
 
-      {/* Centre percentage */}
-      <span
-        className="absolute font-display font-extrabold text-white"
+      {/* Centre hub + live percentage */}
+      <div
+        className="absolute flex items-center justify-center rounded-full"
         style={{
-          left: 0,
-          right: 0,
-          top: '56px',
-          textAlign: 'center',
-          fontSize: '14px',
+          left: '50%',
+          top: '50%',
+          width: 32,
+          height: 32,
+          transform: 'translate(-50%, -50%)',
+          background: '#000',
+          border: '1px solid rgba(255,255,255,0.08)',
         }}
       >
-        {Math.round(Math.max(0, Math.min(100, disp)))}%
-      </span>
+        <span
+          className="font-display tabular-nums text-white"
+          style={{ fontSize: '13px', fontWeight: 800, color: done ? '#22C55E' : '#fff' }}
+        >
+          {Math.round(Math.max(0, Math.min(100, disp)))}
+        </span>
+      </div>
     </div>
   )
 }
@@ -662,7 +691,7 @@ function RpmGauges({
             aria-label={s.label}
             className="tappable flex min-w-0 flex-1 flex-col items-center"
           >
-            <MiniSpeedometer pct={s.pct} color={color} done={s.done} />
+            <MiniSpeedometer pct={s.pct} done={s.done} />
             <span aria-hidden className="mt-2" style={{ fontSize: '20px', lineHeight: 1 }}>
               {s.emoji}
             </span>
@@ -771,6 +800,7 @@ function SpotterAction() {
  *  a large red "Dans Xj Xh Xm" countdown and a progress bar that fills as
  *  race day approaches (14-day perceptual window). */
 function GpCountdownCard({
+  round,
   flag,
   name,
   circuit,
@@ -778,6 +808,7 @@ function GpCountdownCard({
   lastWinner,
   onTap,
 }: {
+  round: number
   flag: string
   name: string
   circuit: string
@@ -870,8 +901,27 @@ function GpCountdownCard({
         </p>
       )}
 
-      {/* Contextual info line — replaces the fake circuit schematic */}
-      <p className="mt-4 text-[11px] text-white/45">
+      {/* Real(istic) circuit silhouette — stylised per-track SVG */}
+      <svg
+        aria-hidden
+        viewBox={CIRCUIT_VIEWBOX}
+        preserveAspectRatio="xMidYMid meet"
+        className="mt-4 w-full"
+        style={{ height: 60 }}
+        fill="none"
+      >
+        <path
+          d={circuitPath(round)}
+          stroke="#E8203A"
+          strokeOpacity={0.7}
+          strokeWidth={2}
+          strokeLinejoin="round"
+          strokeLinecap="round"
+        />
+      </svg>
+
+      {/* Contextual info line under the circuit */}
+      <p className="mt-2 text-[11px] text-white/45">
         🏁 Course dans {cd.d} jour{cd.d > 1 ? 's' : ''}
         {lastWinner && ` · Dernier vainqueur : ${lastWinner}`}
       </p>
@@ -975,29 +1025,53 @@ function CityRankCard({
         </div>
 
         {isFirst ? (
-          <>
-            <p
-              className="relative mt-1 font-display italic leading-none text-white"
-              style={{
-                fontSize: '72px',
-                fontWeight: 900,
-                letterSpacing: '-0.04em',
-                textShadow: '0 0 30px rgba(200,169,110,0.3)',
-              }}
-            >
-              #1
-            </p>
-            <p
-              className="relative mt-2 text-[14px] font-bold"
-              style={{ color: '#C8A96E' }}
-            >
-              👑 Tu domines {rank.city} !
-            </p>
-            <p className="relative mt-1.5 text-[11px] text-white/40">
-              {daysToNextGp != null && `Prochain GP dans ${daysToNextGp} jour${daysToNextGp > 1 ? 's' : ''} · `}
-              {spotsThisWeek} spot{spotsThisWeek > 1 ? 's' : ''} cette semaine
-            </p>
-          </>
+          <div className="relative flex items-end justify-between gap-3">
+            <div className="min-w-0">
+              <p
+                className="font-display italic leading-none text-white"
+                style={{
+                  fontSize: '48px',
+                  fontWeight: 900,
+                  letterSpacing: '-0.04em',
+                  textShadow: '0 0 30px rgba(200,169,110,0.3)',
+                }}
+              >
+                #1
+              </p>
+              <p
+                className="mt-2 text-[14px] font-bold"
+                style={{ color: '#C8A96E' }}
+              >
+                👑 Tu domines {rank.city} !
+              </p>
+              <p className="mt-1.5 text-[11px] text-white/40">
+                {daysToNextGp != null && `Prochain GP dans ${daysToNextGp} jour${daysToNextGp > 1 ? 's' : ''} · `}
+                {spotsThisWeek} spot{spotsThisWeek > 1 ? 's' : ''} cette semaine
+              </p>
+            </div>
+
+            {/* Mini podium — your rank (#1) in red, the next two greyed */}
+            <div className="flex flex-none items-end gap-1.5" aria-hidden>
+              {[
+                { h: 60, me: true },
+                { h: 45, me: false },
+                { h: 30, me: false },
+              ].map((b, i) => (
+                <span
+                  key={i}
+                  className="rounded-t-[3px]"
+                  style={{
+                    width: 11,
+                    height: b.h,
+                    background: b.me ? '#E8203A' : '#222',
+                    boxShadow: b.me
+                      ? '0 0 12px rgba(232,32,58,0.5)'
+                      : undefined,
+                  }}
+                />
+              ))}
+            </div>
+          </div>
         ) : inRanking ? (
           <>
             <p
