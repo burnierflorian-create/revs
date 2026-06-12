@@ -125,7 +125,9 @@ export default function Discover({ initial }: { initial?: 'events' }) {
             <F1Roster embedded />
           )
         ) : carsSub === 'actu' ? (
-          <News categories={['Supercar', 'Hypercar']} />
+          <News
+            categories={['Hypercar', 'Supercar', 'Électrique', 'JDM', 'Classique', 'SUV']}
+          />
         ) : carsSub === 'events' ? (
           <Meets />
         ) : (

@@ -14,10 +14,6 @@ const TRIGGER_COOLDOWN_MS = 15 * 60 * 1000
 const TRIGGER_KEY = 'revs_news_triggered_at'
 // "NOUVEAU" badge for articles published in the last hour.
 const NEW_MS = 60 * 60 * 1000
-// When a category has fewer than this, top it up with other recent
-// articles instead of showing a near-empty page.
-const MIN_VISIBLE = 5
-const FILL_WINDOW_MS = 48 * 60 * 60 * 1000
 
 function newestStamp(list: { created_at: string }[]): string | null {
   let max = 0
@@ -142,26 +138,12 @@ export default function News({ categories }: { categories: string[] }) {
     startY.current = null
   }
 
-  // Category first; if fewer than MIN_VISIBLE, top up with the most
-  // recent other articles (last 48h) so the page is never near-empty.
-  let visible: NewsItem[] | null = null
-  if (items) {
-    const inCat = items.filter((n) => categories.includes(n.category))
-    if (inCat.length >= MIN_VISIBLE) {
-      visible = inCat
-    } else {
-      const cutoff = Date.now() - FILL_WINDOW_MS
-      const fill = items.filter(
-        (n) =>
-          !categories.includes(n.category) &&
-          new Date(n.published_at ?? n.created_at).getTime() >= cutoff,
-      )
-      visible = [...inCat, ...fill].slice(
-        0,
-        Math.max(MIN_VISIBLE, inCat.length),
-      )
-    }
-  }
+  // Strict category filter — the CarSpotting and F1 tabs must stay fully
+  // separated (no cross-category top-up), so each universe only ever shows
+  // its own articles.
+  const visible: NewsItem[] | null = items
+    ? items.filter((n) => categories.includes(n.category))
+    : null
 
   function isNew(n: NewsItem): boolean {
     return (

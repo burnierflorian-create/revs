@@ -7,99 +7,39 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 // 2026-06-15); using its current drop-in replacement.
 const MODEL = 'claude-sonnet-4-6'
 
-// `category` is only a fallback hint — Claude reclassifies every
-// article into exactly F1 | Supercar | Hypercar (strict separation),
-// so an F1 story from a generalist car feed still lands in F1.
-// Feeds with no RSS (Bugatti, Rimac, McLaren auto) are intentionally
-// omitted: they 404 reliably and burn timeout budget on every run.
+// `category` is only a fallback hint. The real category is decided later
+// by categorize(): Claude separates motorsport from road cars, then a
+// keyword pass picks the finest bucket (Hypercar / Supercar / Électrique
+// / JDM / Classique / SUV). 20+ specialist auto/motorsport feeds — broad
+// coverage so the Explorer never runs dry between hourly refreshes.
 const FEEDS: { url: string; source: string; category: string }[] = [
-  // — F1 / Motorsport —
-  {
-    url: 'https://www.formula1.com/content/fom-website/en/latest/all.xml',
-    source: 'Formula 1',
-    category: 'F1',
-  },
-  {
-    url: 'https://www.autosport.com/rss/feed/f1',
-    source: 'Autosport',
-    category: 'F1',
-  },
-  {
-    url: 'https://www.racefans.net/feed/',
-    source: 'RaceFans',
-    category: 'F1',
-  },
-  {
-    url: 'https://the-race.com/feed/',
-    source: 'The Race',
-    category: 'F1',
-  },
-  {
-    url: 'https://www.planetf1.com/feed',
-    source: 'PlanetF1',
-    category: 'F1',
-  },
-  {
-    url: 'https://www.motorsport.com/rss/f1/news/',
-    source: 'Motorsport',
-    category: 'F1',
-  },
-  // — Road cars: marques & magazines —
-  {
-    url: 'https://www.ferrari.com/en-EN/rss/news',
-    source: 'Ferrari',
-    category: 'Hypercar',
-  },
-  {
-    url: 'https://www.lamborghini.com/rss',
-    source: 'Lamborghini',
-    category: 'Hypercar',
-  },
-  {
-    url: 'https://newsroom.porsche.com/en.rss',
-    source: 'Porsche Newsroom',
-    category: 'Supercar',
-  },
-  {
-    url: 'https://www.autocar.co.uk/rss/cars',
-    source: 'Autocar',
-    category: 'Supercar',
-  },
-  {
-    url: 'https://www.autocar.co.uk/rss/cars/supercar',
-    source: 'Autocar Supercar',
-    category: 'Supercar',
-  },
-  {
-    url: 'https://www.evo.co.uk/rss',
-    source: 'Evo',
-    category: 'Supercar',
-  },
-  {
-    url: 'https://www.topgear.com/car-news/feed',
-    source: 'Top Gear',
-    category: 'Supercar',
-  },
-  {
-    url: 'https://www.caranddriver.com/rss/all.xml',
-    source: 'Car and Driver',
-    category: 'Supercar',
-  },
-  {
-    url: 'https://www.motortrend.com/feeds/all/',
-    source: 'MotorTrend',
-    category: 'Supercar',
-  },
-  {
-    url: 'https://www.supercars.net/blog/feed/',
-    source: 'Supercars.net',
-    category: 'Hypercar',
-  },
-  {
-    url: 'https://jalopnik.com/rss',
-    source: 'Jalopnik',
-    category: 'Supercar',
-  },
+  // — Generalist & supercar magazines —
+  { url: 'https://www.autocar.co.uk/rss', source: 'Autocar', category: 'Supercar' },
+  { url: 'https://www.evo.co.uk/rss', source: 'Evo', category: 'Supercar' },
+  { url: 'https://www.topgear.com/rss', source: 'Top Gear', category: 'Supercar' },
+  { url: 'https://www.caranddriver.com/rss/all.xml', source: 'Car and Driver', category: 'Supercar' },
+  { url: 'https://www.motortrend.com/feeds/', source: 'MotorTrend', category: 'Supercar' },
+  { url: 'https://www.roadandtrack.com/rss/all.xml', source: 'Road & Track', category: 'Supercar' },
+  { url: 'https://jalopnik.com/rss', source: 'Jalopnik', category: 'Supercar' },
+  { url: 'https://www.autoblog.com/rss.xml', source: 'Autoblog', category: 'Supercar' },
+  { url: 'https://www.carscoops.com/feed', source: 'Carscoops', category: 'Supercar' },
+  { url: 'https://www.motor1.com/rss/news/all/', source: 'Motor1', category: 'Supercar' },
+  { url: 'https://www.autoevolution.com/rss/news.xml', source: 'autoevolution', category: 'Supercar' },
+  { url: 'https://www.gtspirit.com/feed', source: 'GTspirit', category: 'Hypercar' },
+  { url: 'https://www.supercars.net/blog/feed', source: 'Supercars.net', category: 'Hypercar' },
+  { url: 'https://www.speedhunters.com/feed', source: 'Speedhunters', category: 'JDM' },
+  { url: 'https://www.pistonheads.com/rss/news', source: 'PistonHeads', category: 'Supercar' },
+  // — Motorsport / F1 —
+  { url: 'https://www.autosport.com/rss/feed/all', source: 'Autosport', category: 'F1' },
+  { url: 'https://www.motorsport.com/rss/all/', source: 'Motorsport', category: 'F1' },
+  { url: 'https://the-race.com/feed', source: 'The Race', category: 'F1' },
+  { url: 'https://racer.com/feed', source: 'Racer', category: 'F1' },
+  { url: 'https://www.crash.net/rss/f1', source: 'Crash.net', category: 'F1' },
+  // — Sources françaises —
+  { url: 'https://www.largus.fr/rss', source: "L'Argus", category: 'Supercar' },
+  { url: 'https://www.caradisiac.com/rss/rss.xml', source: 'Caradisiac', category: 'Supercar' },
+  { url: 'https://www.automobile-magazine.fr/rss/rss.xml', source: 'Automobile Magazine', category: 'Supercar' },
+  { url: 'https://www.turbo.fr/rss', source: 'Turbo', category: 'Supercar' },
 ]
 
 // Several publishers block non-browser User-Agents (403/Access Denied).
@@ -305,7 +245,15 @@ function stripMarkdown(s: string): string {
     .trim()
 }
 
-const CATEGORIES = ['F1', 'Supercar', 'Hypercar'] as const
+const CATEGORIES = [
+  'F1',
+  'Supercar',
+  'Hypercar',
+  'Électrique',
+  'JDM',
+  'Classique',
+  'SUV',
+] as const
 type NewsCategory = (typeof CATEGORIES)[number]
 
 function normCategory(v: unknown, fallback: string): NewsCategory {
@@ -315,6 +263,36 @@ function normCategory(v: unknown, fallback: string): NewsCategory {
     return fallback as NewsCategory
   return 'Supercar'
 }
+
+// Keyword categoriser. Claude already makes the critical motorsport↔road
+// split (its strict F1 vs road-car call), so F1 wins when Claude says F1
+// or the text carries explicit race signals; otherwise the finest road-car
+// bucket is chosen by keyword. Order = priority (first match wins).
+const KW_RULES: { cat: NewsCategory; words: string[] }[] = [
+  { cat: 'Hypercar', words: ['bugatti', 'koenigsegg', 'pagani', 'rimac', 'chiron', 'veyron', 'tourbillon', 'nevera', 'hypercar'] },
+  { cat: 'Électrique', words: ['électrique', 'electrique', 'electric', ' ev ', 'tesla', 'rivian', 'batterie', 'battery', 'autonomie', 'kwh', 'bev', 'lucid'] },
+  { cat: 'JDM', words: ['toyota', 'nissan', 'honda', 'mazda', 'subaru', 'mitsubishi', 'lexus', 'jdm', 'japonais', 'japanese', 'supra', 'skyline', 'gt-r', ' gtr', 'civic'] },
+  { cat: 'Classique', words: ['vintage', 'classique', 'classic', 'youngtimer', 'oldtimer', 'restauration', 'restoration', 'collection', 'concours', 'barn find', 'heritage'] },
+  { cat: 'SUV', words: ['suv', ' crossover', 'cayenne', 'urus', 'cullinan', ' dbx', 'bentayga', 'purosangue', 'macan'] },
+  { cat: 'Supercar', words: ['ferrari', 'lamborghini', 'mclaren', 'porsche', 'aston martin', 'maserati', 'supercar', 'sportcar', 'sports car', '911', 'huracan', 'gt3'] },
+]
+const F1_WORDS = ['formula 1', 'formula one', 'formule 1', 'grand prix', ' f1 ', 'fia ', ' drs ', ' pit stop', 'qualifying', 'pole position', 'verstappen', 'leclerc', 'piastri', ' norris', ' hamilton', 'championnat du monde']
+
+function categorize(
+  aiCat: NewsCategory,
+  title: string,
+  description: string,
+): NewsCategory {
+  const hay = ` ${(title + ' ' + description).toLowerCase()} `
+  const hit = (w: string) => hay.includes(w)
+  if (aiCat === 'F1' || F1_WORDS.some(hit)) return 'F1'
+  for (const { cat, words } of KW_RULES) if (words.some(hit)) return cat
+  return 'Supercar'
+}
+
+// Commercial / classifieds filter — drop pricing & sales pieces (applied
+// to road-car articles only; "Grand Prix" legitimately contains "prix").
+const COMMERCIAL_RE = /\b(prix|occasion|vente|acheter|achat|cote|argus)\b/i
 
 const SUMMARY_SCHEMA = {
   type: 'object',
@@ -814,6 +792,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       continue
     }
 
+    // Final category (keyword pass over title + description) and the
+    // commercial/classifieds filter — sales pieces never reach the feed.
+    const finalCat = categorize(category, `${title} ${c.title}`, c.description)
+    if (finalCat !== 'F1' && COMMERCIAL_RE.test(`${title} ${c.title}`)) {
+      qualitySkipped += 1
+      continue
+    }
+
     const frTitle = title
     const frSummary = summary
 
@@ -848,8 +834,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       title: frTitle,
       summary: frSummary,
       source: c.source,
-      // Claude's strict classification, not the feed hint.
-      category,
+      // Keyword category (F1 stays F1 via Claude's motorsport call).
+      category: finalCat,
       url: c.url,
       image_url: c.image_url,
       published_at: c.published_at,
@@ -882,6 +868,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
   }
 
+  // Cap the table at the 60 freshest articles (newest by published_at,
+  // then created_at). Everything past index 60 is overflow and deleted,
+  // so the Explorer always reads from a tight, recent set.
+  let trimmed = 0
+  {
+    const { data: overflow } = await admin
+      .from('news')
+      .select('id')
+      .order('published_at', { ascending: false, nullsFirst: false })
+      .order('created_at', { ascending: false })
+      .range(60, 999)
+    const overflowIds = ((overflow ?? []) as { id: string }[]).map((r) => r.id)
+    if (overflowIds.length) {
+      const { count } = await admin
+        .from('news')
+        .delete({ count: 'exact' })
+        .in('id', overflowIds)
+      trimmed = count ?? 0
+    }
+  }
+
   const { count: tableTotal, error: countError } = await admin
     .from('news')
     .select('*', { count: 'exact', head: true })
@@ -894,6 +901,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     qualitySkipped,
     englishDropped,
     replaced,
+    trimmed,
     lateTranslated,
     processed: rows.length,
     perFeed,

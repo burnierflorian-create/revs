@@ -19,5 +19,7 @@ export function categoryBadge(
     return { label: 'ÉLECTRIQUE', color: '#4DA6FF' }
   if (c === 'classic' || c === 'classique' || c === 'youngtimer')
     return { label: 'CLASSIQUE', color: '#C8A96E' }
+  if (c === 'suv' || c === 'crossover')
+    return { label: 'SUV', color: '#2FAE74' }
   return null
 }
