@@ -1,13 +1,15 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import {
   F1_DRIVERS,
   F1_TEAMS,
   proxyImage,
+  splitStatValue,
   type F1Team,
   type F1Driver,
 } from '../lib/f1team'
+import { supabase } from '../lib/supabase'
 
 type Tab = 'teams' | 'drivers'
 
@@ -21,6 +23,28 @@ export default function F1Roster({
 }) {
   const navigate = useNavigate()
   const [tab, setTab] = useState<Tab>('teams')
+  // Championship points per team, pulled from the cached f1_teams sheet
+  // (public-read). currentPoints is a free-text Claude field, so we
+  // extract the leading integer with splitStatValue.
+  const [points, setPoints] = useState<Record<string, string>>({})
+  useEffect(() => {
+    let active = true
+    supabase
+      .from('f1_teams')
+      .select('slug, data')
+      .then(({ data }) => {
+        if (!active || !data) return
+        const m: Record<string, string> = {}
+        for (const row of data as { slug: string; data: { currentPoints?: string } | null }[]) {
+          const raw = row.data?.currentPoints
+          if (raw) m[row.slug] = splitStatValue(raw).number
+        }
+        setPoints(m)
+      })
+    return () => {
+      active = false
+    }
+  }, [])
 
   const grid = (
     <div className="px-4 pb-8">
@@ -47,7 +71,11 @@ export default function F1Roster({
         })}
       </div>
 
-      {tab === 'teams' ? <TeamsGrid teams={F1_TEAMS} /> : <DriversGrid />}
+      {tab === 'teams' ? (
+        <TeamsGrid teams={F1_TEAMS} points={points} />
+      ) : (
+        <DriversGrid />
+      )}
     </div>
   )
 
@@ -70,34 +98,41 @@ export default function F1Roster({
   )
 }
 
-function TeamsGrid({ teams }: { teams: F1Team[] }) {
+function TeamsGrid({
+  teams,
+  points,
+}: {
+  teams: F1Team[]
+  points: Record<string, string>
+}) {
   return (
     <div className="grid grid-cols-2 gap-3">
       {teams.map((t) => (
-        <TeamCard key={t.slug} team={t} />
+        <TeamCard key={t.slug} team={t} pts={points[t.slug]} />
       ))}
     </div>
   )
 }
 
-// Uniform jet card — no colour gradient, no giant background letters. The
-// monoplace floats on the surface; the team name sits below in clean caps.
-function TeamCard({ team }: { team: F1Team }) {
+// #141414 card with a 3px left border in the team's official livery
+// colour. The monoplace sits on top; a footer row carries the team name
+// (white, bold) on the left and the championship points (red) on the right.
+function TeamCard({ team, pts }: { team: F1Team; pts?: string }) {
   const navigate = useNavigate()
   const [photoFailed, setPhotoFailed] = useState(false)
   const photoUrl = !photoFailed ? proxyImage(team.carPhoto) : undefined
+  const hasPts = pts && pts !== '—'
   return (
     <button
       onClick={() => navigate(`/f1-team/${team.slug}`)}
-      className="tappable group flex flex-col"
+      className="tappable group flex flex-col overflow-hidden rounded-xl text-left"
+      style={{
+        background: '#141414',
+        border: '1px solid rgba(255,255,255,0.06)',
+        borderLeft: `3px solid ${team.color}`,
+      }}
     >
-      <div
-        className="relative aspect-[5/4] w-full overflow-hidden rounded-xl"
-        style={{
-          background: 'rgb(var(--color-card))',
-          border: '1px solid var(--color-border)',
-        }}
-      >
+      <div className="relative aspect-[5/4] w-full overflow-hidden">
         {photoUrl && (
           <img
             src={photoUrl}
@@ -109,9 +144,17 @@ function TeamCard({ team }: { team: F1Team }) {
           />
         )}
       </div>
-      <span className="mt-2 line-clamp-1 text-center text-xs font-medium uppercase tracking-wide text-fg2">
-        {team.name}
-      </span>
+      <div className="flex items-center justify-between gap-2 px-3 py-2.5">
+        <span className="line-clamp-1 text-[13px] font-bold text-white">
+          {team.name}
+        </span>
+        <span
+          className="flex-none font-display text-[13px] font-extrabold tabular-nums"
+          style={{ color: hasPts ? '#E8203A' : 'rgba(255,255,255,0.25)' }}
+        >
+          {hasPts ? `${pts} pts` : '—'}
+        </span>
+      </div>
     </button>
   )
 }
