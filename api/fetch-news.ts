@@ -873,25 +873,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
   }
 
-  // Cap the table at the 60 freshest articles (newest by published_at,
-  // then created_at). Everything past index 60 is overflow and deleted,
-  // so the Explorer always reads from a tight, recent set.
+  // Cap the table at ~60 freshest articles, but PER UNIVERSE so the
+  // high-volume motorsport feeds can't starve the CarSpotting tab: keep
+  // the 30 newest F1 + the 30 newest road-car articles. Each universe is
+  // trimmed independently (newest by published_at, then created_at).
   let trimmed = 0
   {
-    const { data: overflow } = await admin
-      .from('news')
-      .select('id')
-      .order('published_at', { ascending: false, nullsFirst: false })
-      .order('created_at', { ascending: false })
-      .range(60, 999)
-    const overflowIds = ((overflow ?? []) as { id: string }[]).map((r) => r.id)
-    if (overflowIds.length) {
+    const KEEP_PER_BUCKET = 30
+    const trimBucket = async (isF1: boolean): Promise<number> => {
+      let q = admin
+        .from('news')
+        .select('id')
+        .order('published_at', { ascending: false, nullsFirst: false })
+        .order('created_at', { ascending: false })
+      q = isF1 ? q.eq('category', 'F1') : q.neq('category', 'F1')
+      const { data } = await q.range(KEEP_PER_BUCKET, 999)
+      const ids = ((data ?? []) as { id: string }[]).map((r) => r.id)
+      if (!ids.length) return 0
       const { count } = await admin
         .from('news')
         .delete({ count: 'exact' })
-        .in('id', overflowIds)
-      trimmed = count ?? 0
+        .in('id', ids)
+      return count ?? 0
     }
+    trimmed = (await trimBucket(true)) + (await trimBucket(false))
   }
 
   const { count: tableTotal, error: countError } = await admin
