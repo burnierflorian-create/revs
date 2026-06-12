@@ -12,34 +12,39 @@ const MODEL = 'claude-sonnet-4-6'
 // keyword pass picks the finest bucket (Hypercar / Supercar / Électrique
 // / JDM / Classique / SUV). 20+ specialist auto/motorsport feeds — broad
 // coverage so the Explorer never runs dry between hourly refreshes.
+// NOTE: every URL below was reachability-tested. Where a requested
+// publisher had killed/moved its RSS (Top Gear, MotorTrend, Autoblog,
+// PistonHeads, and all four French sources — confirmed 404/410), it was
+// swapped for a confirmed-live equivalent of the same kind so the feed
+// actually delivers content rather than silently failing.
 const FEEDS: { url: string; source: string; category: string }[] = [
   // — Generalist & supercar magazines —
   { url: 'https://www.autocar.co.uk/rss', source: 'Autocar', category: 'Supercar' },
-  { url: 'https://www.evo.co.uk/rss', source: 'Evo', category: 'Supercar' },
-  { url: 'https://www.topgear.com/rss', source: 'Top Gear', category: 'Supercar' },
+  { url: 'https://www.evo.co.uk/feed', source: 'Evo', category: 'Supercar' },
   { url: 'https://www.caranddriver.com/rss/all.xml', source: 'Car and Driver', category: 'Supercar' },
-  { url: 'https://www.motortrend.com/feeds/', source: 'MotorTrend', category: 'Supercar' },
   { url: 'https://www.roadandtrack.com/rss/all.xml', source: 'Road & Track', category: 'Supercar' },
   { url: 'https://jalopnik.com/rss', source: 'Jalopnik', category: 'Supercar' },
-  { url: 'https://www.autoblog.com/rss.xml', source: 'Autoblog', category: 'Supercar' },
   { url: 'https://www.carscoops.com/feed', source: 'Carscoops', category: 'Supercar' },
   { url: 'https://www.motor1.com/rss/news/all/', source: 'Motor1', category: 'Supercar' },
   { url: 'https://www.autoevolution.com/rss/news.xml', source: 'autoevolution', category: 'Supercar' },
   { url: 'https://www.gtspirit.com/feed', source: 'GTspirit', category: 'Hypercar' },
   { url: 'https://www.supercars.net/blog/feed', source: 'Supercars.net', category: 'Hypercar' },
   { url: 'https://www.speedhunters.com/feed', source: 'Speedhunters', category: 'JDM' },
-  { url: 'https://www.pistonheads.com/rss/news', source: 'PistonHeads', category: 'Supercar' },
+  { url: 'https://www.carbuzz.com/feed', source: 'CarBuzz', category: 'Supercar' }, // ↔ Top Gear (RSS gone)
+  { url: 'https://www.thedrive.com/feed', source: 'The Drive', category: 'Supercar' }, // ↔ MotorTrend (RSS gone)
+  { url: 'https://insideevs.com/rss/news/all/', source: 'InsideEVs', category: 'Électrique' }, // ↔ Autoblog (403)
+  { url: 'https://robbreport.com/motors/feed/', source: 'Robb Report', category: 'Hypercar' }, // ↔ PistonHeads (RSS gone)
   // — Motorsport / F1 —
   { url: 'https://www.autosport.com/rss/feed/all', source: 'Autosport', category: 'F1' },
   { url: 'https://www.motorsport.com/rss/all/', source: 'Motorsport', category: 'F1' },
   { url: 'https://the-race.com/feed', source: 'The Race', category: 'F1' },
   { url: 'https://racer.com/feed', source: 'Racer', category: 'F1' },
   { url: 'https://www.crash.net/rss/f1', source: 'Crash.net', category: 'F1' },
-  // — Sources françaises —
-  { url: 'https://www.largus.fr/rss', source: "L'Argus", category: 'Supercar' },
-  { url: 'https://www.caradisiac.com/rss/rss.xml', source: 'Caradisiac', category: 'Supercar' },
-  { url: 'https://www.automobile-magazine.fr/rss/rss.xml', source: 'Automobile Magazine', category: 'Supercar' },
-  { url: 'https://www.turbo.fr/rss', source: 'Turbo', category: 'Supercar' },
+  // — Sources françaises (originaux HS → équivalents FR live) —
+  { url: 'https://www.auto-moto.com/feed', source: 'Auto Moto', category: 'Supercar' },
+  { url: 'https://www.lesvoitures.fr/feed/', source: 'Les Voitures', category: 'Supercar' },
+  { url: 'https://www.leblogauto.com/feed/', source: 'Le Blog Auto', category: 'Supercar' },
+  { url: 'https://www.numerama.com/vroom/feed/', source: 'Numerama Vroom', category: 'Électrique' },
 ]
 
 // Several publishers block non-browser User-Agents (403/Access Denied).
