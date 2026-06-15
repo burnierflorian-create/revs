@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, type ChangeEvent } from 'react'
 import {
   NavLink,
   Outlet,
@@ -7,7 +7,15 @@ import {
   useNavigationType,
   useSearchParams,
 } from 'react-router-dom'
-import { Map as MapIcon, Newspaper, Home, Compass, User } from 'lucide-react'
+import {
+  Map as MapIcon,
+  Newspaper,
+  Home,
+  Compass,
+  User,
+  Camera,
+} from 'lucide-react'
+import { setPendingPhoto } from '../lib/pendingPhoto'
 import UpdateNotification from '../components/UpdateNotification'
 import InstallBanner from '../components/InstallBanner'
 import WelcomeCelebration from '../components/WelcomeCelebration'
@@ -22,9 +30,7 @@ import { useMyTier } from '../lib/tier'
 import { hapticSelection } from '../lib/haptic'
 
 const tabClass = ({ isActive }: { isActive: boolean }) =>
-  `tappable flex items-center justify-center h-full transition-colors ${
-    isActive ? 'text-accent' : 'text-[#555]'
-  }`
+  `liquid-tab ${isActive ? 'text-[#E8203A]' : 'text-white/40'}`
 
 // Map a pathname to one of the 5 always-mounted tabs. Returns null for
 // stack routes (spot detail, new-spot, public profile, etc.) — those
@@ -69,6 +75,18 @@ export default function MainLayout() {
   const lastTabRef = useRef<TabKey | null>(null)
   if (tab) lastTabRef.current = tab
   const onStack = tab === null
+
+  // Central camera button — fires the native camera synchronously inside
+  // the tap (iOS requirement), stashes the photo and lands on /new-spot.
+  const camInputRef = useRef<HTMLInputElement>(null)
+  function onCamCapture(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    hapticSelection()
+    setPendingPhoto(file)
+    navigate('/new-spot')
+  }
 
   // Redeem a pending referral code on first authenticated mount.
   // Two sources, checked in order:
@@ -163,45 +181,75 @@ export default function MainLayout() {
         />
       )}
 
-      {/* Bottom fade — softens scroll content (esp. the edge-to-edge feed
-          photos) into the page background right above the tab bar instead
-          of cutting off abruptly. Theme-aware via from-bg (near-black in
-          dark, alabaster in light); non-interactive. */}
-      <div
-        aria-hidden
-        className="pointer-events-none fixed inset-x-0 z-30 bg-gradient-to-t from-bg to-transparent"
-        style={{
-          bottom: 'calc(3.125rem + var(--safe-bottom))',
-          height: '4rem',
-        }}
-      />
+      {/* Liquid-glass floating nav — a centred 280px pill with a separate
+          red camera button hovering above it. Both float over the
+          content, which scrolls (blurred) underneath. */}
+      <div className="liquid-nav-wrap">
+        <input
+          ref={camInputRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          onChange={onCamCapture}
+          className="hidden"
+        />
+        <nav className="liquid-nav" aria-label="Navigation principale">
+          {/* Camera — separate, floating 12px above the pill */}
+          <button
+            type="button"
+            onClick={() => camInputRef.current?.click()}
+            className="liquid-cam"
+            aria-label="Spotter une voiture"
+          >
+            <Camera className="h-6 w-6 text-white" strokeWidth={2} />
+          </button>
 
-      <nav className="app-nav glass fixed bottom-0 left-0 right-0 z-40">
-        {/* Label-less, hairline-stroke icons perfectly centred on the
-            bar. 50px raw container height (Instagram-exact comfort); the
-            iOS safe-area inset is added BELOW via .app-nav padding. */}
-        <div className="grid grid-cols-5 items-center h-[50px] max-w-md mx-auto px-1">
           <NavLink to="/map" onClick={hapticSelection} className={tabClass} aria-label="Carte">
-            <MapIcon className="h-6 w-6" strokeWidth={1.2} />
+            {({ isActive }) => (
+              <>
+                <MapIcon className="h-[22px] w-[22px]" strokeWidth={2} />
+                {isActive && <span className="liquid-dot" />}
+              </>
+            )}
           </NavLink>
 
           <NavLink to="/feed" onClick={hapticSelection} className={tabClass} aria-label="Fil">
-            <Newspaper className="h-6 w-6" strokeWidth={1.2} />
+            {({ isActive }) => (
+              <>
+                <Newspaper className="h-[22px] w-[22px]" strokeWidth={2} />
+                {isActive && <span className="liquid-dot" />}
+              </>
+            )}
           </NavLink>
 
           <NavLink to="/" end onClick={hapticSelection} className={tabClass} aria-label="Accueil">
-            <Home className="h-6 w-6" strokeWidth={1.2} />
+            {({ isActive }) => (
+              <>
+                <Home className="h-[22px] w-[22px]" strokeWidth={2} />
+                {isActive && <span className="liquid-dot" />}
+              </>
+            )}
           </NavLink>
 
           <NavLink to="/discover" onClick={hapticSelection} className={tabClass} aria-label="Explorer">
-            <Compass className="h-6 w-6" strokeWidth={1.2} />
+            {({ isActive }) => (
+              <>
+                <Compass className="h-[22px] w-[22px]" strokeWidth={2} />
+                {isActive && <span className="liquid-dot" />}
+              </>
+            )}
           </NavLink>
 
           <NavLink to="/profile" onClick={hapticSelection} className={tabClass} aria-label="Profil">
-            <User className="h-6 w-6" strokeWidth={1.2} />
+            {({ isActive }) => (
+              <>
+                <User className="h-[22px] w-[22px]" strokeWidth={2} />
+                {isActive && <span className="liquid-dot" />}
+              </>
+            )}
           </NavLink>
-        </div>
-      </nav>
+        </nav>
+      </div>
     </div>
   )
 }

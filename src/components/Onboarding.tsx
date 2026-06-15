@@ -319,7 +319,7 @@ export default function Onboarding() {
     if (phase !== 'tour') return
     function measure() {
       const el = document.querySelector(
-        `nav.app-nav [aria-label="${TOUR[tourStep].label}"]`,
+        `nav.liquid-nav [aria-label="${TOUR[tourStep].label}"]`,
       )
       if (el) {
         const r = el.getBoundingClientRect()

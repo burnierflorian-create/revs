@@ -35,7 +35,7 @@ body {
   background: rgb(var(--color-bg));
   /* pb-28 equivalent — leaves enough air above the bottom nav so
      stats blocks / cards never sit flush against the glass strip. */
-  padding-bottom: calc(3.5rem + var(--safe-bottom));
+  padding-bottom: calc(7.5rem + env(safe-area-inset-bottom));
   transition: opacity 150ms ease-out;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-y: contain;
@@ -56,7 +56,7 @@ body {
   overflow-y: auto;
   background: rgb(var(--color-bg));
   /* Mirrors .tab-pane — 7rem of clearance above the bottom nav. */
-  padding-bottom: calc(3.5rem + var(--safe-bottom));
+  padding-bottom: calc(7.5rem + env(safe-area-inset-bottom));
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-y: contain;
 }
@@ -118,6 +118,101 @@ h4 {
    le contenu (panes & stack overlay) gère son propre padding-bottom. */
 .app-nav {
   padding-bottom: var(--safe-bottom);
+}
+
+/* ───────────────── Liquid-glass floating bottom nav ─────────────────
+   A centred 280px pill that floats 20px above the home-indicator inset,
+   with a separate red camera button hovering 12px above it. The pill
+   blurs the content scrolling underneath (true "liquid glass"). */
+.liquid-nav-wrap {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: calc(20px + env(safe-area-inset-bottom));
+  z-index: 40;
+  display: flex;
+  justify-content: center;
+  pointer-events: none; /* only the pill + camera capture taps */
+  animation: navRise 400ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes navRise {
+  from {
+    opacity: 0;
+    transform: translateY(22px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.liquid-nav {
+  position: relative;
+  pointer-events: auto;
+  width: 280px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  border-radius: 40px;
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.4),
+    0 0 0 0.5px rgba(255, 255, 255, 0.05);
+}
+/* Each icon-only tab. Spring scale-down on press. */
+.liquid-tab {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.liquid-tab:active {
+  transform: scale(0.85);
+}
+/* 4px red dot under the active icon. */
+.liquid-dot {
+  position: absolute;
+  bottom: -6px;
+  left: 50%;
+  width: 4px;
+  height: 4px;
+  margin-left: -2px;
+  border-radius: 50%;
+  background: #e8203a;
+}
+/* Central camera button — floats 12px above the pill, gentle pulse. */
+.liquid-cam {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 12px);
+  margin-left: -28px;
+  pointer-events: auto;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: #e8203a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 20px rgba(232, 32, 58, 0.5);
+  transition: transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  animation: camPulse 2.6s ease-in-out infinite;
+}
+.liquid-cam:active {
+  transform: scale(0.9);
+}
+@keyframes camPulse {
+  0%,
+  100% {
+    box-shadow: 0 4px 20px rgba(232, 32, 58, 0.5);
+  }
+  50% {
+    box-shadow: 0 6px 28px rgba(232, 32, 58, 0.7);
+  }
 }
 
 * {
