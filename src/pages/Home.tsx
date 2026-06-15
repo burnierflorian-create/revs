@@ -205,7 +205,9 @@ export default function Home() {
     ? Math.max(0, Math.ceil(gpDiff / 86_400_000))
     : null
   // Only surface the GP frieze when the race is within the next 7 days.
-  const nextGp = upcomingGp && gpDiff <= 7 * 86_400_000 ? upcomingGp : null
+  // Always surface the next Grand Prix (no 7-day window) so the card never
+  // disappears between races.
+  const nextGp = upcomingGp ?? null
 
   if (loading) {
     return (
@@ -907,13 +909,13 @@ function GpCountdownCard({
         viewBox={CIRCUIT_VIEWBOX}
         preserveAspectRatio="xMidYMid meet"
         className="mt-4 w-full"
-        style={{ height: 60 }}
+        style={{ height: 70 }}
         fill="none"
       >
         <path
           d={circuitPath(round)}
           stroke="#E8203A"
-          strokeOpacity={0.7}
+          strokeOpacity={0.8}
           strokeWidth={2}
           strokeLinejoin="round"
           strokeLinecap="round"

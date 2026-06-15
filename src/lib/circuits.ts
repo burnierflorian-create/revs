@@ -26,8 +26,11 @@ const PATHS: Record<number, string> = {
   7: 'M12 26 L40 24 C50 24 50 18 60 20 L84 24 C92 26 92 34 84 36 L74 35 C66 34 66 40 58 39 L20 36 C10 35 8 28 12 26 Z',
   // 8 — Monaco (the iconic inverted-U: harbour straight, Loews hairpin)
   8: 'M20 46 L22 24 C22 14 32 12 40 16 C46 19 44 26 52 25 C60 24 58 16 66 16 C78 16 82 26 78 34 C75 40 66 38 64 44 L62 47 C62 50 56 50 56 46 L57 36 C57 31 50 31 50 36 L50 46 C50 50 44 50 44 46 L44 34 C44 30 38 30 38 34 L37 47 C37 50 30 50 30 47 L31 30 C31 26 26 26 26 30 L26 46 C26 50 20 50 20 46 Z',
-  // 9 — Espagne · Barcelona-Catalunya (long straight, Repsol, final chicane)
-  9: 'M14 34 C12 22 22 16 36 16 L70 16 C84 16 92 22 90 30 C88 37 80 40 70 38 C62 36 60 42 52 42 L40 42 C34 42 34 47 28 46 C20 45 16 42 14 34 Z',
+  // 9 — Espagne · Barcelona-Catalunya. Faithful silhouette: long pit
+  //   straight along the top, T1 hard right into the Repsol/right-side
+  //   bulges, the fast sweep across the bottom, and the sector-3 chicane
+  //   notch bottom-left before T13 climbs the left side back to the line.
+  9: 'M16 12 L70 12 C80 12 86 16 84 22 C82 28 76 28 78 33 C80 39 86 38 84 44 C82 49 74 49 68 49 L46 49 C38 49 36 53 30 52 C25 51 27 46 22 46 C17 46 16 40 16 34 Z',
   // 10 — Autriche · Red Bull Ring (short, three long straights, triangular)
   10: 'M16 24 C18 16 28 16 34 22 L58 40 C64 45 74 44 80 38 C86 32 80 24 72 26 L40 32 C30 34 24 30 24 24 C24 20 18 20 16 24 Z',
   // 11 — Grande-Bretagne · Silverstone (fast flowing, wide arena)
