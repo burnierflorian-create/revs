@@ -4,6 +4,7 @@ import Meets from '../components/Meets'
 import F1Calendar from '../components/F1Calendar'
 import Brands from './Brands'
 import F1Roster from './F1Roster'
+import { hapticSelection } from '../lib/haptic'
 // Spot Wars temporarily pulled from the MVP launch — the component,
 // the 0032-spot-wars.sql migration and the spot_wars_leaderboard RPC
 // stay on the DB so the feature can be re-enabled by re-adding the
@@ -39,7 +40,10 @@ export default function Discover({ initial }: { initial?: 'events' }) {
     const active = universe === u
     return (
       <button
-        onClick={() => setUniverse(u)}
+        onClick={() => {
+          hapticSelection()
+          setUniverse(u)
+        }}
         className="relative w-full pb-3 text-center text-[16px] transition-colors duration-300"
       >
         <span className={active ? 'font-semibold text-fg' : 'font-normal text-fg2'}>
@@ -67,6 +71,7 @@ export default function Discover({ initial }: { initial?: 'events' }) {
       ]
 
   function setSub(k: string) {
+    hapticSelection()
     if (isF1) setF1Sub(k as 'actu' | 'calendar' | 'roster')
     else setCarsSub(k as 'actu' | 'events' | 'brands')
   }

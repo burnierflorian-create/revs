@@ -550,6 +550,7 @@ export default function NewSpot() {
               result.estimated_price ?? null,
               (result.rarity ?? 'standard') as Rarity,
             ),
+            result.rarity ?? 'standard',
           )
         }
       } catch (floaterErr) {

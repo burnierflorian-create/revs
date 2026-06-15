@@ -19,6 +19,7 @@ import {
 } from '../lib/referrals'
 import { supabase } from '../lib/supabase'
 import { useMyTier } from '../lib/tier'
+import { hapticSelection } from '../lib/haptic'
 
 const tabClass = ({ isActive }: { isActive: boolean }) =>
   `tappable flex items-center justify-center h-full transition-colors ${
@@ -180,23 +181,23 @@ export default function MainLayout() {
             bar. 50px raw container height (Instagram-exact comfort); the
             iOS safe-area inset is added BELOW via .app-nav padding. */}
         <div className="grid grid-cols-5 items-center h-[50px] max-w-md mx-auto px-1">
-          <NavLink to="/map" className={tabClass} aria-label="Carte">
+          <NavLink to="/map" onClick={hapticSelection} className={tabClass} aria-label="Carte">
             <MapIcon className="h-6 w-6" strokeWidth={1.2} />
           </NavLink>
 
-          <NavLink to="/feed" className={tabClass} aria-label="Fil">
+          <NavLink to="/feed" onClick={hapticSelection} className={tabClass} aria-label="Fil">
             <Newspaper className="h-6 w-6" strokeWidth={1.2} />
           </NavLink>
 
-          <NavLink to="/" end className={tabClass} aria-label="Accueil">
+          <NavLink to="/" end onClick={hapticSelection} className={tabClass} aria-label="Accueil">
             <Home className="h-6 w-6" strokeWidth={1.2} />
           </NavLink>
 
-          <NavLink to="/discover" className={tabClass} aria-label="Explorer">
+          <NavLink to="/discover" onClick={hapticSelection} className={tabClass} aria-label="Explorer">
             <Compass className="h-6 w-6" strokeWidth={1.2} />
           </NavLink>
 
-          <NavLink to="/profile" className={tabClass} aria-label="Profil">
+          <NavLink to="/profile" onClick={hapticSelection} className={tabClass} aria-label="Profil">
             <User className="h-6 w-6" strokeWidth={1.2} />
           </NavLink>
         </div>

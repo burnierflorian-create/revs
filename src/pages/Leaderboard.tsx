@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase'
 import { Skeleton } from '../components/Skeleton'
 import { xpLevel } from '../lib/xp'
 import { detectCountry, countryFlag } from '../lib/country'
+import { hapticSelection } from '../lib/haptic'
 
 // Uniform leaderboard row (all three RPCs return the same shape now).
 type Row = {
@@ -374,7 +375,10 @@ export default function Leaderboard() {
           return (
             <button
               key={t.key}
-              onClick={() => setScope(t.key)}
+              onClick={() => {
+                hapticSelection()
+                setScope(t.key)
+              }}
               className="tappable flex-1 rounded-full py-2.5 text-center text-[13px] font-bold transition-colors"
               style={
                 active

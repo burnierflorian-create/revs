@@ -53,6 +53,13 @@ export function hapticTap(): void {
   vibrateSafely(12)
 }
 
+/** Ultra-light "selection" tick — the mechanical-luxury click fired on
+ *  every tab switch / filter change (mirrors iOS selectionAsync). 6 ms,
+ *  so rapid tabbing never feels buzzy. */
+export function hapticSelection(): void {
+  vibrateSafely(6)
+}
+
 /** Starts a heartbeat that pulses every ~580 ms while the scan
  *  laser animation runs. Returns a cancel function — call it when
  *  the analyze response lands or the user aborts. Internally guards
