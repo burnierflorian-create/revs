@@ -89,6 +89,11 @@ export default function NewSpot() {
   const [image, setImage] = useState<{ blob: Blob; base64: string } | null>(
     null,
   )
+  // A separate, smaller (800px / q0.7) JPEG sent ONLY to the Claude vision
+  // calls (identify-car + detect-plate). The full-res `image` blob is kept
+  // for storage/display + plate blur; the AI never sees the heavy original,
+  // which cuts vision token cost ~60% without hurting display quality.
+  const [aiBase64, setAiBase64] = useState<string | null>(null)
 
   const [result, setResult] = useState<IdentifyResult>(EMPTY_RESULT)
   const [brand, setBrand] = useState('')
@@ -182,12 +187,21 @@ export default function NewSpot() {
     setPubError(null)
     setPreviewUrl(URL.createObjectURL(file))
     setImage(null)
+    setAiBase64(null)
     // EXIF must be read from the original file: resizing re-encodes via
     // canvas and strips all metadata.
     setPhotoMeta(await readPhotoMeta(file))
     try {
       const resized = await resizeImageToJpeg(file)
       setImage(resized)
+      // AI-only downscale (800px / q0.7). Best-effort: if it fails we fall
+      // back to image.base64 in analyze(), so capture is never blocked.
+      try {
+        const ai = await resizeImageToJpeg(file, 800, 0.7)
+        setAiBase64(ai.base64)
+      } catch {
+        /* keep aiBase64 null → analyze() uses the full-res base64 */
+      }
     } catch {
       setPubError('Impossible de lire cette image.')
     }
@@ -285,7 +299,9 @@ export default function NewSpot() {
     // out the still-running sibling call.
     const timer = setTimeout(() => ctrl.abort(), 25000)
     const body = JSON.stringify({
-      imageBase64: image.base64,
+      // Send the lightweight 800px AI image; fall back to the full-res
+      // base64 only if the downscale failed.
+      imageBase64: aiBase64 ?? image.base64,
       mimeType: 'image/jpeg',
     })
     const fetchJson = (path: string) =>

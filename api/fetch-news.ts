@@ -71,7 +71,9 @@ async function fetchWithTimeout(url: string): Promise<Response | null> {
 }
 
 const PER_FEED = 5
-const MAX_TOTAL = 50
+// Cost cap: only the 10 most-recent NEW articles are summarised/translated
+// by Claude per run (one call each). Older new ones wait for the next run.
+const MAX_TRANSLATE = 10
 // Articles older than 48h are dropped before they ever reach Claude.
 const MAX_AGE_MS = 48 * 60 * 60 * 1000
 // Article time-to-live in DB (matches the 48h DB default — keeps the
@@ -693,7 +695,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   )
 
   // Hard 48h cap: drop anything we can date that's older than 48h
-  // before spending Claude calls on it.
+  // before spending Claude calls on it. Then keep only the MAX_TRANSLATE
+  // MOST RECENT new articles for this run — every kept candidate costs one
+  // Claude summarize+translate call, so capping at 10 (was 50) cuts the
+  // per-run cost ~5×. The url-dedup above means each article is only ever
+  // translated once across runs; the hourly cadence drains the backlog.
   const cutoff = Date.now() - MAX_AGE_MS
   const candidates = candidateLists
     .flat()
@@ -701,7 +707,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       (c) =>
         !c.published_at || new Date(c.published_at).getTime() >= cutoff,
     )
-    .slice(0, MAX_TOTAL)
+    .sort(
+      (a, b) =>
+        new Date(b.published_at ?? 0).getTime() -
+        new Date(a.published_at ?? 0).getTime(),
+    )
+    .slice(0, MAX_TRANSLATE)
 
   const summarized = await Promise.all(
     candidates.map(async (c) => ({
@@ -733,6 +744,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     url: string
     image_url: string | null
     published_at: string | null
+    translated: boolean
     expires_at: string
   }
   const accepted: ReadyRow[] = []
@@ -844,6 +856,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       url: c.url,
       image_url: c.image_url,
       published_at: c.published_at,
+      // Inserted already French (summarize translated it), so flag it so
+      // any future re-translation pass skips rows where translated = true.
+      translated: true,
       expires_at: new Date(base.getTime() + TTL_MS).toISOString(),
     })
   }
