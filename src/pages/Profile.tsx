@@ -81,18 +81,6 @@ export default function Profile() {
     perfectStarts: number
   } | null>(null)
 
-  // Cover backdrop: the user's most valuable spot becomes the hero
-  // image, blurred + dimmed. Falls back to the brand red gradient when
-  // the user has no spot with a photo + price. Computed up here (above
-  // the `if (loading) return …` guard) so hook order stays stable
-  // across the loading → ready transition.
-  const bestSpot = useMemo(() => {
-    return spots
-      .filter((s) => s.photo_url && (s.estimated_price ?? 0) > 0)
-      .sort(
-        (a, b) => (b.estimated_price ?? 0) - (a.estimated_price ?? 0),
-      )[0]
-  }, [spots])
 
   useEffect(() => {
     let active = true
@@ -340,59 +328,13 @@ export default function Profile() {
           (heavy blur + dim overlay). Falls back to the brand red
           gradient when the garage is empty. */}
       <div className="relative">
-        {bestSpot?.photo_url ? (
-          <div
-            className="relative w-full overflow-hidden"
-            style={{ height: '200px' }}
-          >
-            <img
-              src={bestSpot.photo_url}
-              alt=""
-              aria-hidden
-              // LCP candidate on the profile route — keep eager and
-              // hint the browser to fetch with high priority.
-              fetchPriority="high"
-              decoding="async"
-              className="pointer-events-none absolute inset-0 h-full w-full object-cover"
-              style={{
-                // Heavy blur + 30% opacity per the 2026-06-02 immersive
-                // spec — the photo reads as ambient atmosphere rather
-                // than a recognisable scene. scale(1.15) hides the
-                // blur fringe on the edges.
-                filter: 'blur(24px) saturate(1.10)',
-                transform: 'scale(1.15)',
-                opacity: 0.30,
-              }}
-            />
-            {/* Vertical transparent → black gradient overlay so the
-                backdrop fades smoothly into the dark body of the
-                profile. Replaces the flat 40% scrim. */}
-            <div
-              aria-hidden
-              className="absolute inset-0"
-              style={{
-                background:
-                  'linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.85) 70%, rgba(0,0,0,1) 100%)',
-              }}
-            />
-          </div>
-        ) : (
-          <div
-            className="w-full"
-            style={{
-              height: '200px',
-              background:
-                'radial-gradient(ellipse 80% 100% at 50% 0%, rgba(232,32,58,0.35) 0%, transparent 60%), linear-gradient(180deg, #4a0f16 0%, #1a060a 55%, rgb(var(--color-bg)) 100%)',
-            }}
-          />
-        )}
-        {/* Bottom edge softener — blends the cover into the page bg */}
+        {/* Plain gradient header (no cover photo) so the avatar can never
+            be clipped by an immersive backdrop. */}
         <div
-          aria-hidden
-          className="pointer-events-none absolute inset-x-0 bottom-0 h-16"
+          className="w-full"
           style={{
-            background:
-              'linear-gradient(180deg, transparent 0%, rgb(var(--color-bg)) 100%)',
+            height: '120px',
+            background: 'linear-gradient(180deg, #0a0a0a 0%, #141414 100%)',
           }}
         />
         {/* Share profile — round button left of the settings gear. */}
@@ -418,7 +360,7 @@ export default function Profile() {
         </button>
         <div
           className="absolute left-1/2 z-10 -translate-x-1/2"
-          style={{ bottom: '-45px' }}
+          style={{ bottom: '-44px' }}
         >
           {/* Avatar with thin white liseré — replaces the conic-gradient
               ring per the immersive header polish. VIP / Premium tier
@@ -442,8 +384,8 @@ export default function Profile() {
             <div
               className="relative z-20 flex items-center justify-center overflow-hidden rounded-full bg-card"
               style={{
-                width: '90px',
-                height: '90px',
+                width: '88px',
+                height: '88px',
                 border:
                   tier === 'vip'
                     ? '3px solid rgba(255, 215, 0, 0.6)'
@@ -511,7 +453,7 @@ export default function Profile() {
           Collection grid / Garage cover flow / Récompenses drawer
           never slide under the tab bar even on the longest profiles
           (early-adopters with 100+ cards). */}
-      <div className="space-y-7 px-4 pb-40 pt-[55px]">
+      <div className="space-y-7 px-4 pb-40 pt-[54px]">
         {/* Identité */}
         <div className="text-center">
           <h1

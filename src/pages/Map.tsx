@@ -1439,17 +1439,19 @@ export default function MapPage() {
     const map = mapRef.current
     if (!map || !navigator.geolocation) return
 
+    // Outer wrapper = Mapbox-positioned element (Mapbox owns its
+    // transform). Inner #user-location-marker carries the compass
+    // rotation, so we never clobber the positioning transform.
     const el = document.createElement('div')
-    el.className = 'user-loc'
     el.innerHTML =
-      '<div class="user-loc-dot"></div>' +
-      '<div class="user-loc-rot">' +
-      '<svg class="user-loc-arrow" width="10" height="14" viewBox="0 0 10 14">' +
-      '<path d="M5 1 L9.25 12.5 L0.75 12.5 Z" fill="#4DA6FF" stroke="#ffffff" stroke-width="1.5" stroke-linejoin="round"/>' +
-      '</svg></div>'
-    const rotEl = el.querySelector('.user-loc-rot') as HTMLElement | null
-    const arrowEl = el.querySelector('.user-loc-arrow') as SVGElement | null
-    const marker = new mapboxgl.Marker({ element: el })
+      '<div id="user-location-marker">' +
+      '<div class="direction-cone"></div>' +
+      '<div class="location-dot"></div>' +
+      '</div>'
+    const innerEl = el.querySelector(
+      '#user-location-marker',
+    ) as HTMLElement | null
+    const marker = new mapboxgl.Marker({ element: el, anchor: 'center' })
     userMarkerRef.current = marker
     let added = false
 
@@ -1471,7 +1473,8 @@ export default function MapPage() {
     )
     watchIdRef.current = watchId
 
-    // Compass heading → rotate the arrow (north-up map: subtract bearing).
+    // Compass heading → rotate the whole inner marker (dot + cone), like
+    // Apple Maps. webkitCompassHeading on iOS, alpha on Android.
     const onOrientation = (ev: Event) => {
       const e = ev as DeviceOrientationEvent & {
         webkitCompassHeading?: number
@@ -1479,12 +1482,9 @@ export default function MapPage() {
       let heading: number | null = null
       if (typeof e.webkitCompassHeading === 'number')
         heading = e.webkitCompassHeading
-      else if (e.absolute && typeof e.alpha === 'number')
-        heading = 360 - e.alpha
-      if (heading == null || !rotEl) return
-      const rot = heading - (map.getBearing() || 0)
-      rotEl.style.transform = `rotate(${rot}deg)`
-      if (arrowEl) arrowEl.style.opacity = '1'
+      else if (typeof e.alpha === 'number') heading = 360 - e.alpha
+      if (heading == null || !innerEl) return
+      innerEl.style.transform = `rotate(${heading}deg)`
     }
     function attachOrientation() {
       window.addEventListener('deviceorientationabsolute', onOrientation, true)

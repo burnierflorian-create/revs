@@ -171,13 +171,6 @@ export default function PublicProfile() {
     spots.map((s) => (s.brand ?? '').toLowerCase().trim()).filter(Boolean),
   ).size
 
-  // Best photo = priciest photographed spot — used as the cover banner.
-  const cover =
-    spots
-      .filter((s) => s.photo_url)
-      .sort((a, b) => (b.estimated_price ?? 0) - (a.estimated_price ?? 0))[0]
-      ?.photo_url ?? null
-
   // Earned badges (public view only shows what's unlocked).
   const badgeCtx = {
     spots,
@@ -194,53 +187,48 @@ export default function PublicProfile() {
 
   return (
     <div className="min-h-screen bg-bg pt-[max(1rem,env(safe-area-inset-top))] text-fg">
-      {/* Cover banner — the user's best car, darkened, with a back
-          button floating on top. Falls back to a red→dark gradient. */}
-      <div className="relative h-40 w-full overflow-hidden">
-        {cover ? (
-          <img
-            src={cover}
-            alt=""
-            aria-hidden
-            loading="lazy"
-            className="absolute inset-0 h-full w-full object-cover"
-            style={{ filter: 'brightness(0.62)' }}
-          />
-        ) : (
-          <div
-            className="absolute inset-0"
-            style={{
-              background:
-                'linear-gradient(135deg, #2a0a0a 0%, #141414 60%, #0a0a0a 100%)',
-            }}
-          />
-        )}
-        <span
-          aria-hidden
-          className="absolute inset-0"
-          style={{
-            background:
-              'linear-gradient(to bottom, rgba(0,0,0,0.25) 0%, rgba(10,10,10,0.85) 100%)',
-          }}
-        />
+      {/* Plain gradient header (no cover photo) so the avatar is never
+          clipped. The avatar overhangs the header bottom. */}
+      <div
+        className="relative w-full"
+        style={{
+          height: '120px',
+          background: 'linear-gradient(180deg, #0a0a0a 0%, #141414 100%)',
+        }}
+      >
         <button
           onClick={() => navigate(-1)}
           aria-label="Retour"
-          className="absolute left-4 top-4 flex h-9 w-9 items-center justify-center rounded-full bg-black/40 text-white backdrop-blur"
+          className="absolute left-4 top-[max(1rem,env(safe-area-inset-top))] flex h-9 w-9 items-center justify-center rounded-full bg-black/40 text-white backdrop-blur"
         >
           <ArrowLeft className="h-5 w-5" />
         </button>
+        <div
+          className="absolute left-1/2 z-10 flex -translate-x-1/2 items-center justify-center overflow-hidden rounded-full bg-card text-4xl font-bold"
+          style={{
+            bottom: '-44px',
+            width: '88px',
+            height: '88px',
+            border: '3px solid #E8203A',
+          }}
+        >
+          {prof?.avatar ? (
+            <img
+              src={prof.avatar}
+              alt=""
+              loading="lazy"
+              decoding="async"
+              className="h-full w-full object-cover"
+              style={{ objectPosition: 'center top' }}
+            />
+          ) : (
+            name.charAt(0).toUpperCase()
+          )}
+        </div>
       </div>
 
       <div className="px-4">
-        <div className="-mt-12 flex flex-col items-center text-center">
-          <div className="flex h-24 w-24 items-center justify-center overflow-hidden rounded-full bg-card text-4xl font-bold ring-4 ring-accent">
-            {prof?.avatar ? (
-              <img src={prof.avatar} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover object-top" />
-            ) : (
-              name.charAt(0).toUpperCase()
-            )}
-          </div>
+        <div className="flex flex-col items-center pt-[54px] text-center">
           <h2 className="mt-3 flex items-center gap-2 font-display text-2xl font-bold">
             <span>{name}</span>
             {tier && (
