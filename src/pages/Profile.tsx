@@ -341,7 +341,10 @@ export default function Profile() {
           gradient when the garage is empty. */}
       <div className="relative">
         {bestSpot?.photo_url ? (
-          <div className="relative h-48 w-full overflow-hidden">
+          <div
+            className="relative w-full overflow-hidden"
+            style={{ height: '200px' }}
+          >
             <img
               src={bestSpot.photo_url}
               alt=""
@@ -375,8 +378,9 @@ export default function Profile() {
           </div>
         ) : (
           <div
-            className="h-48 w-full"
+            className="w-full"
             style={{
+              height: '200px',
               background:
                 'radial-gradient(ellipse 80% 100% at 50% 0%, rgba(232,32,58,0.35) 0%, transparent 60%), linear-gradient(180deg, #4a0f16 0%, #1a060a 55%, rgb(var(--color-bg)) 100%)',
             }}
@@ -412,7 +416,10 @@ export default function Profile() {
         >
           <Settings className="h-5 w-5" />
         </button>
-        <div className="absolute inset-x-0 -bottom-14 flex justify-center">
+        <div
+          className="absolute left-1/2 z-10 -translate-x-1/2"
+          style={{ bottom: '-45px' }}
+        >
           {/* Avatar with thin white liseré — replaces the conic-gradient
               ring per the immersive header polish. VIP / Premium tier
               still gets its overlay badge at the corner so paid status
@@ -504,7 +511,7 @@ export default function Profile() {
           Collection grid / Garage cover flow / Récompenses drawer
           never slide under the tab bar even on the longest profiles
           (early-adopters with 100+ cards). */}
-      <div className="space-y-7 px-4 pb-40 pt-20">
+      <div className="space-y-7 px-4 pb-40 pt-[55px]">
         {/* Identité */}
         <div className="text-center">
           <h1

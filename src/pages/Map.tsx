@@ -1440,14 +1440,15 @@ export default function MapPage() {
     if (!map || !navigator.geolocation) return
 
     const el = document.createElement('div')
-    el.className = 'user-location-marker'
+    el.className = 'user-loc'
     el.innerHTML =
-      '<div class="user-location-pulse"></div>' +
-      '<div class="user-location-heading"><div class="user-location-arrow"></div></div>' +
-      '<div class="user-location-dot"></div>'
-    const headingEl = el.querySelector(
-      '.user-location-heading',
-    ) as HTMLElement | null
+      '<div class="user-loc-dot"></div>' +
+      '<div class="user-loc-rot">' +
+      '<svg class="user-loc-arrow" width="10" height="14" viewBox="0 0 10 14">' +
+      '<path d="M5 1 L9.25 12.5 L0.75 12.5 Z" fill="#4DA6FF" stroke="#ffffff" stroke-width="1.5" stroke-linejoin="round"/>' +
+      '</svg></div>'
+    const rotEl = el.querySelector('.user-loc-rot') as HTMLElement | null
+    const arrowEl = el.querySelector('.user-loc-arrow') as SVGElement | null
     const marker = new mapboxgl.Marker({ element: el })
     userMarkerRef.current = marker
     let added = false
@@ -1480,10 +1481,10 @@ export default function MapPage() {
         heading = e.webkitCompassHeading
       else if (e.absolute && typeof e.alpha === 'number')
         heading = 360 - e.alpha
-      if (heading == null || !headingEl) return
+      if (heading == null || !rotEl) return
       const rot = heading - (map.getBearing() || 0)
-      headingEl.style.transform = `rotate(${rot}deg)`
-      headingEl.style.opacity = '1'
+      rotEl.style.transform = `rotate(${rot}deg)`
+      if (arrowEl) arrowEl.style.opacity = '1'
     }
     function attachOrientation() {
       window.addEventListener('deviceorientationabsolute', onOrientation, true)

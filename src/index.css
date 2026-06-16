@@ -218,63 +218,67 @@ h4 {
 /* ───────────── User location dot (Apple-Maps style) on the map ─────────
    Blue 14px dot, white 3px ring, with an expanding pulsing halo. Distinct
    from the red spot markers so the two never get confused. */
-.user-location-marker {
+/* Root sits on the GPS point (Mapbox centres it). Its children are the
+   pulsing dot + a rotating cone wrapper carrying the compass arrow. We
+   rotate the INNER wrapper (not the Mapbox root, whose transform Mapbox
+   owns for positioning) so the arrow orbits the dot like a compass. */
+.user-loc {
   position: relative;
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   pointer-events: none;
 }
-.user-location-dot {
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  border-radius: 50%;
-  background: #4da6ff;
-  border: 2px solid #ffffff;
-  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.45);
-}
-.user-location-pulse {
+.user-loc-dot {
   position: absolute;
   left: 50%;
   top: 50%;
-  z-index: 1;
-  width: 16px;
-  height: 16px;
-  margin: -8px 0 0 -8px;
+  z-index: 2;
+  width: 18px;
+  height: 18px;
+  margin: -9px 0 0 -9px;
   border-radius: 50%;
-  background: rgba(77, 166, 255, 0.2);
-  animation: userPulse 2s ease-out infinite;
+  background: #4da6ff;
+  border: 3px solid #ffffff;
+  box-shadow:
+    0 0 0 4px rgba(77, 166, 255, 0.2),
+    0 2px 8px rgba(0, 0, 0, 0.4);
 }
-/* Heading cone — rotates with the compass; hidden until a heading lands. */
-.user-location-heading {
+/* Pulsing halo (1 → 2.5) behind the dot. */
+.user-loc-dot::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 18px;
+  height: 18px;
+  margin: -9px 0 0 -9px;
+  border-radius: 50%;
+  background: rgba(77, 166, 255, 0.15);
+  z-index: -1;
+  animation: userLocPulse 2s ease-in-out infinite;
+}
+.user-loc-rot {
   position: absolute;
   inset: 0;
   z-index: 3;
-  opacity: 0;
   transform-origin: 50% 50%;
-  transition:
-    transform 120ms linear,
-    opacity 250ms ease;
+  transition: transform 120ms linear;
 }
-.user-location-arrow {
+.user-loc-arrow {
   position: absolute;
   left: 50%;
-  top: -10px;
-  margin-left: -5px;
-  width: 0;
-  height: 0;
-  border-left: 5px solid transparent;
-  border-right: 5px solid transparent;
-  border-bottom: 8px solid #4da6ff;
-  filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.45));
+  bottom: 100%;
+  margin: 0 0 1px -5px;
+  opacity: 0; /* shown once a compass heading arrives */
+  transition: opacity 250ms ease;
 }
-@keyframes userPulse {
+@keyframes userLocPulse {
   0% {
     transform: scale(1);
-    opacity: 1;
+    opacity: 0.9;
   }
   100% {
-    transform: scale(4.5);
+    transform: scale(2.5);
     opacity: 0;
   }
 }
