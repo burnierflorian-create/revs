@@ -236,7 +236,7 @@ export default function PublicProfile() {
         <div className="-mt-12 flex flex-col items-center text-center">
           <div className="flex h-24 w-24 items-center justify-center overflow-hidden rounded-full bg-card text-4xl font-bold ring-4 ring-accent">
             {prof?.avatar ? (
-              <img src={prof.avatar} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" />
+              <img src={prof.avatar} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover object-top" />
             ) : (
               name.charAt(0).toUpperCase()
             )}
@@ -356,7 +356,7 @@ export default function PublicProfile() {
               >
                 <div className="flex h-9 w-9 flex-none items-center justify-center overflow-hidden rounded-full bg-accent text-sm font-bold">
                   {r.avatar ? (
-                    <img src={r.avatar} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" />
+                    <img src={r.avatar} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover object-top" />
                   ) : (
                     (r.pseudo || 'S').charAt(0).toUpperCase()
                   )}

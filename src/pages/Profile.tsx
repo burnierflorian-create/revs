@@ -464,7 +464,7 @@ export default function Profile() {
                     fetchPriority="high"
                     decoding="async"
                     className="h-full w-full object-cover"
-                    style={{ objectPosition: 'center' }}
+                    style={{ objectPosition: 'top' }}
                   />
                 ) : (
                   pseudo.charAt(0).toUpperCase()

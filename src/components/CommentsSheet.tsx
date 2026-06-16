@@ -179,7 +179,7 @@ export default function CommentsSheet({
                         src={p.avatar}
                         alt=""
                         loading="lazy"
-                        className="h-full w-full object-cover"
+                        className="h-full w-full object-cover object-top"
                       />
                     ) : (
                       pseudo.charAt(0).toUpperCase()

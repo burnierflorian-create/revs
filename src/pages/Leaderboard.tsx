@@ -110,7 +110,7 @@ function RankRow({
             alt=""
             loading="lazy"
             decoding="async"
-            className="h-full w-full object-cover"
+            className="h-full w-full object-cover object-top"
           />
         ) : (
           name.charAt(0).toUpperCase()

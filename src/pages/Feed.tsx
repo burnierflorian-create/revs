@@ -854,7 +854,7 @@ function FeedCard({
                 loading="lazy"
                 decoding="async"
                 className="h-full w-full rounded-full object-cover"
-                style={{ objectPosition: 'center' }}
+                style={{ objectPosition: 'top' }}
               />
             ) : (
               pseudo.charAt(0).toUpperCase()
@@ -991,7 +991,7 @@ function FeedCard({
         >
           <div className="flex h-7 w-7 flex-none items-center justify-center overflow-hidden rounded-full bg-white/10 text-[11px] font-extrabold text-white/70">
             {myAvatar ? (
-              <img src={myAvatar} alt="" className="h-full w-full object-cover" />
+              <img src={myAvatar} alt="" className="h-full w-full object-cover object-top" />
             ) : (
               myInitial
             )}

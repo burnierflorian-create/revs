@@ -676,7 +676,7 @@ export default function SpotDetail() {
                 alt=""
                 loading="lazy"
                 decoding="async"
-                className="h-full w-full object-cover"
+                className="h-full w-full object-cover object-top"
               />
             ) : (
               (owner?.pseudo || 'Spotter').charAt(0).toUpperCase()
@@ -732,7 +732,7 @@ export default function SpotDetail() {
                           alt=""
                           loading="lazy"
                           decoding="async"
-                          className="h-full w-full object-cover"
+                          className="h-full w-full object-cover object-top"
                         />
                       ) : (
                         nm.charAt(0).toUpperCase()
