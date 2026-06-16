@@ -220,33 +220,58 @@ h4 {
    from the red spot markers so the two never get confused. */
 .user-location-marker {
   position: relative;
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
   pointer-events: none;
 }
 .user-location-dot {
   position: absolute;
   inset: 0;
+  z-index: 2;
   border-radius: 50%;
   background: #4da6ff;
-  border: 3px solid #ffffff;
+  border: 2px solid #ffffff;
   box-shadow: 0 1px 5px rgba(0, 0, 0, 0.45);
 }
 .user-location-pulse {
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 14px;
-  height: 14px;
-  margin: -7px 0 0 -7px;
+  z-index: 1;
+  width: 16px;
+  height: 16px;
+  margin: -8px 0 0 -8px;
   border-radius: 50%;
-  background: rgba(77, 166, 255, 0.35);
+  background: rgba(77, 166, 255, 0.2);
   animation: userPulse 2s ease-out infinite;
+}
+/* Heading cone — rotates with the compass; hidden until a heading lands. */
+.user-location-heading {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  opacity: 0;
+  transform-origin: 50% 50%;
+  transition:
+    transform 120ms linear,
+    opacity 250ms ease;
+}
+.user-location-arrow {
+  position: absolute;
+  left: 50%;
+  top: -10px;
+  margin-left: -5px;
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-bottom: 8px solid #4da6ff;
+  filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.45));
 }
 @keyframes userPulse {
   0% {
     transform: scale(1);
-    opacity: 0.6;
+    opacity: 1;
   }
   100% {
     transform: scale(4.5);

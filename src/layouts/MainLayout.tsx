@@ -194,15 +194,20 @@ export default function MainLayout() {
           className="hidden"
         />
         <nav className="liquid-nav" aria-label="Navigation principale">
-          {/* Camera — separate, floating 12px above the pill */}
-          <button
-            type="button"
-            onClick={() => camInputRef.current?.click()}
-            className="liquid-cam"
-            aria-label="Spotter une voiture"
-          >
-            <Camera className="h-6 w-6 text-white" strokeWidth={2} />
-          </button>
+          {/* Camera — separate, floating 12px above the pill. ONLY on the
+              Carte tab; every other tab (and stack routes) hides it
+              entirely. The Home SPOTTER button is a different element and
+              is unaffected. */}
+          {tab === 'map' && (
+            <button
+              type="button"
+              onClick={() => camInputRef.current?.click()}
+              className="liquid-cam"
+              aria-label="Spotter une voiture"
+            >
+              <Camera className="h-6 w-6 text-white" strokeWidth={2} />
+            </button>
+          )}
 
           <NavLink to="/map" onClick={hapticSelection} className={tabClass} aria-label="Carte">
             {({ isActive }) => (

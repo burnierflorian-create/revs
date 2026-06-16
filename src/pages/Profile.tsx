@@ -433,11 +433,13 @@ export default function Profile() {
               }}
             />
             <div
-              className="relative z-10 flex h-28 w-28 items-center justify-center overflow-hidden rounded-full bg-card"
+              className="relative z-20 flex items-center justify-center overflow-hidden rounded-full bg-card"
               style={{
+                width: '90px',
+                height: '90px',
                 border:
                   tier === 'vip'
-                    ? '2px solid rgba(255, 215, 0, 0.55)'
+                    ? '3px solid rgba(255, 215, 0, 0.6)'
                     : '3px solid #E8203A',
                 boxShadow:
                   tier === 'vip'
@@ -455,6 +457,7 @@ export default function Profile() {
                     fetchPriority="high"
                     decoding="async"
                     className="h-full w-full object-cover"
+                    style={{ objectPosition: 'center' }}
                   />
                 ) : (
                   pseudo.charAt(0).toUpperCase()

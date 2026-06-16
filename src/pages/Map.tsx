@@ -1429,9 +1429,11 @@ export default function MapPage() {
     if (mapReady && mapRef.current) applyMode(mapRef.current, mode)
   }, [mode, mapReady])
 
-  // ── Live user-location dot ──
+  // ── Live user-location dot + heading cone ──
   // A blue pulsing dot (Apple-Maps style), deliberately distinct from the
-  // red spot pins, kept in sync with the device via watchPosition.
+  // red spot pins, kept in sync via watchPosition. A small arrow above the
+  // dot rotates to the compass heading (DeviceOrientation); it stays hidden
+  // when no compass is available.
   useEffect(() => {
     if (!mapReady) return
     const map = mapRef.current
@@ -1441,7 +1443,11 @@ export default function MapPage() {
     el.className = 'user-location-marker'
     el.innerHTML =
       '<div class="user-location-pulse"></div>' +
+      '<div class="user-location-heading"><div class="user-location-arrow"></div></div>' +
       '<div class="user-location-dot"></div>'
+    const headingEl = el.querySelector(
+      '.user-location-heading',
+    ) as HTMLElement | null
     const marker = new mapboxgl.Marker({ element: el })
     userMarkerRef.current = marker
     let added = false
@@ -1464,11 +1470,60 @@ export default function MapPage() {
     )
     watchIdRef.current = watchId
 
+    // Compass heading → rotate the arrow (north-up map: subtract bearing).
+    const onOrientation = (ev: Event) => {
+      const e = ev as DeviceOrientationEvent & {
+        webkitCompassHeading?: number
+      }
+      let heading: number | null = null
+      if (typeof e.webkitCompassHeading === 'number')
+        heading = e.webkitCompassHeading
+      else if (e.absolute && typeof e.alpha === 'number')
+        heading = 360 - e.alpha
+      if (heading == null || !headingEl) return
+      const rot = heading - (map.getBearing() || 0)
+      headingEl.style.transform = `rotate(${rot}deg)`
+      headingEl.style.opacity = '1'
+    }
+    function attachOrientation() {
+      window.addEventListener('deviceorientationabsolute', onOrientation, true)
+      window.addEventListener('deviceorientation', onOrientation, true)
+    }
+    const DOE = window.DeviceOrientationEvent as
+      | (typeof DeviceOrientationEvent & {
+          requestPermission?: () => Promise<'granted' | 'denied'>
+        })
+      | undefined
+    let gestureCleanup: (() => void) | null = null
+    if (DOE && typeof DOE.requestPermission === 'function') {
+      // iOS — permission must be requested from a user gesture.
+      const onGesture = () => {
+        DOE.requestPermission?.()
+          .then((res) => {
+            if (res === 'granted') attachOrientation()
+          })
+          .catch(() => {})
+        gestureCleanup?.()
+      }
+      window.addEventListener('touchend', onGesture, { once: true })
+      window.addEventListener('click', onGesture, { once: true })
+      gestureCleanup = () => {
+        window.removeEventListener('touchend', onGesture)
+        window.removeEventListener('click', onGesture)
+        gestureCleanup = null
+      }
+    } else if (DOE) {
+      attachOrientation()
+    }
+
     return () => {
       if (watchIdRef.current != null) {
         navigator.geolocation.clearWatch(watchIdRef.current)
         watchIdRef.current = null
       }
+      window.removeEventListener('deviceorientationabsolute', onOrientation, true)
+      window.removeEventListener('deviceorientation', onOrientation, true)
+      gestureCleanup?.()
       marker.remove()
       userMarkerRef.current = null
     }
