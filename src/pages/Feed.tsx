@@ -672,6 +672,9 @@ function FeedCard({
   const meRef = useRef<string | null>(null)
   const busyRef = useRef(false)
   const lastTapRef = useRef(0)
+  // Pending single-tap → open detail. Cancelled if a 2nd tap (double-tap
+  // like) lands within the 300 ms window.
+  const tapNavRef = useRef<number | null>(null)
   const [liked, setLiked] = useState(false)
   const [likeCount, setLikeCount] = useState(0)
   const [commentCount, setCommentCount] = useState(0)
@@ -768,18 +771,28 @@ function FeedCard({
     busyRef.current = false
   }
 
-  // Single tap does nothing (per spec — the photo never navigates). A
-  // second tap within 300 ms is a double-tap → like + spring heart pop.
+  // Single tap → open the spot detail (after a 300 ms wait to rule out a
+  // double-tap). A second tap within 300 ms is a double-tap → like + spring
+  // heart pop, and cancels the pending navigation.
   function onPhotoTap() {
     const now = Date.now()
     if (now - lastTapRef.current < 300) {
       lastTapRef.current = 0
+      if (tapNavRef.current) {
+        clearTimeout(tapNavRef.current)
+        tapNavRef.current = null
+      }
       setHeartPop(true)
       hapticTap()
       window.setTimeout(() => setHeartPop(false), 380)
       void setLikeState(true) // double-tap always likes, never unlikes
     } else {
       lastTapRef.current = now
+      if (tapNavRef.current) clearTimeout(tapNavRef.current)
+      tapNavRef.current = window.setTimeout(() => {
+        tapNavRef.current = null
+        navigate(`/spot/${spot.id}`)
+      }, 300)
     }
   }
 
@@ -832,7 +845,7 @@ function FeedCard({
         >
           <div
             className="flex h-11 w-11 flex-none items-center justify-center overflow-hidden rounded-full bg-black/35 text-[15px] font-extrabold text-white"
-            style={{ border: '1.5px solid rgba(255,255,255,0.30)' }}
+            style={{ border: '2px solid #E8203A' }}
           >
             {prof?.avatar ? (
               <img
@@ -840,7 +853,8 @@ function FeedCard({
                 alt=""
                 loading="lazy"
                 decoding="async"
-                className="h-full w-full object-cover"
+                className="h-full w-full rounded-full object-cover"
+                style={{ objectPosition: 'center' }}
               />
             ) : (
               pseudo.charAt(0).toUpperCase()

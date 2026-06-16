@@ -108,6 +108,8 @@ export default function NewSpot() {
   const [pubError, setPubError] = useState<string | null>(null)
   const [limitReached, setLimitReached] = useState(false)
   const [pubStatus, setPubStatus] = useState('')
+  // "Saved to gallery" confirmation flash (2s).
+  const [savedToGallery, setSavedToGallery] = useState(false)
   // Gate: a pseudo is required before spotting (no "Anonyme" spots).
   const [profileOk, setProfileOk] = useState<boolean | null>(null)
   const [gpPseudo, setGpPseudo] = useState('')
@@ -379,6 +381,39 @@ export default function NewSpot() {
     setLimitReached(false)
     setPubStatus('')
     publish()
+  }
+
+  /** Save the (already plate-blurred) photo to the device gallery —
+   *  independent of publishing. Prefers the Web Share sheet with a file
+   *  (iOS lets the user "Save Image"); falls back to a download link
+   *  (Android / desktop). Cancelling the share sheet is a silent no-op. */
+  async function saveToGallery(): Promise<void> {
+    if (!image) return
+    const file = new File([image.blob], `revs-${Date.now()}.jpg`, {
+      type: 'image/jpeg',
+    })
+    try {
+      const nav = navigator as Navigator & {
+        canShare?: (data?: { files?: File[] }) => boolean
+      }
+      if (nav.canShare?.({ files: [file] }) && nav.share) {
+        await nav.share({ files: [file] })
+      } else {
+        const url = URL.createObjectURL(image.blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = file.name
+        document.body.appendChild(a)
+        a.click()
+        a.remove()
+        window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+      }
+      hapticSuccess()
+      setSavedToGallery(true)
+      window.setTimeout(() => setSavedToGallery(false), 2000)
+    } catch {
+      /* user dismissed the share sheet — no feedback, no error */
+    }
   }
 
   async function publish() {
@@ -955,6 +990,20 @@ export default function NewSpot() {
               </p>
             </div>
           </div>
+
+          {/* Save to gallery — independent of publishing. The photo here
+              already has the plate blur applied. */}
+          <button
+            onClick={saveToGallery}
+            className="tappable flex w-full items-center justify-center gap-2 rounded-full py-3.5 text-sm font-bold tracking-wide transition-colors"
+            style={
+              savedToGallery
+                ? { background: 'rgba(52,211,153,0.12)', border: '1px solid rgba(52,211,153,0.5)', color: '#34D399' }
+                : { background: '#141414', border: '1px solid var(--color-border)', color: 'rgb(var(--color-fg))' }
+            }
+          >
+            {savedToGallery ? '✓ Photo enregistrée !' : '💾 Enregistrer dans ma galerie'}
+          </button>
 
           <button
             onClick={() => setStep(4)}

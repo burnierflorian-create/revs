@@ -215,6 +215,45 @@ h4 {
   }
 }
 
+/* ───────────── User location dot (Apple-Maps style) on the map ─────────
+   Blue 14px dot, white 3px ring, with an expanding pulsing halo. Distinct
+   from the red spot markers so the two never get confused. */
+.user-location-marker {
+  position: relative;
+  width: 14px;
+  height: 14px;
+  pointer-events: none;
+}
+.user-location-dot {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: #4da6ff;
+  border: 3px solid #ffffff;
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.45);
+}
+.user-location-pulse {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
+  border-radius: 50%;
+  background: rgba(77, 166, 255, 0.35);
+  animation: userPulse 2s ease-out infinite;
+}
+@keyframes userPulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.6;
+  }
+  100% {
+    transform: scale(4.5);
+    opacity: 0;
+  }
+}
+
 * {
   -webkit-tap-highlight-color: transparent;
 }

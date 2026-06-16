@@ -1176,43 +1176,56 @@ function PremiumTopBanner({
     ? new Intl.DateTimeFormat('fr-FR', {
         day: 'numeric',
         month: 'long',
-        year: 'numeric',
       }).format(new Date(renewsAt))
     : null
   return (
     <button
       onClick={onTap}
-      className="tappable flex w-full items-center gap-4 rounded-2xl p-5 text-left transition-transform active:scale-[0.99]"
+      className="tappable flex w-full items-center gap-3 text-left transition-transform active:scale-[0.99]"
       style={{
-        background: 'linear-gradient(135deg, #1a0a0a 0%, #2a0a0a 100%)',
-        border: '1px solid #E8203A',
-        boxShadow: '0 10px 30px rgba(232,32,58,0.18)',
+        background: '#141414',
+        borderRadius: '16px',
+        padding: '16px',
+        border: active ? '1px solid #E8203A' : '1px solid rgba(255,255,255,0.06)',
       }}
     >
+      {/* Small REVS logo */}
       <span
-        className="flex h-11 w-11 flex-none items-center justify-center rounded-xl font-display text-lg font-black tracking-tighter text-white"
-        style={{ background: 'rgba(232,32,58,0.18)', border: '1px solid rgba(232,32,58,0.45)' }}
+        className="flex h-9 w-9 flex-none items-center justify-center rounded-lg font-display text-base font-black tracking-tighter text-white"
+        style={{
+          background: 'rgba(232,32,58,0.18)',
+          border: '1px solid rgba(232,32,58,0.45)',
+        }}
         aria-hidden
       >
         R
       </span>
+
       <div className="min-w-0 flex-1">
         <p
           className="font-display font-extrabold tracking-tight"
-          style={{ color: '#E8203A', fontSize: '15px' }}
+          style={{ color: '#E8203A', fontSize: '14px' }}
         >
           REVS PREMIUM
         </p>
-        <p className="mt-0.5 truncate text-[12px] text-white/55">
-          {active
-            ? renew
-              ? `${planDisplayName(plan)} · renouvellement le ${renew}`
-              : `${planDisplayName(plan)} actif`
-            : 'Spots illimités · Mode Radar · Expérience sans limite'}
-        </p>
+        {active ? (
+          <p className="mt-0.5 truncate text-[12px]">
+            <span className="font-bold" style={{ color: '#34D399' }}>
+              ✓ Premium actif
+            </span>
+            {renew && (
+              <span className="text-white/45"> · renouv. {renew}</span>
+            )}
+          </p>
+        ) : (
+          <p className="mt-0.5 text-[13px] font-bold text-white">
+            7,99€<span className="font-medium text-white/50">/mois</span>
+          </p>
+        )}
       </div>
+
       <span
-        className="flex-none rounded-full px-4 py-2 text-[13px] font-extrabold text-white"
+        className="flex-none rounded-full px-3.5 py-2 text-[12px] font-extrabold text-white"
         style={{ background: '#E8203A' }}
       >
         {active ? 'Gérer' : 'Découvrir →'}

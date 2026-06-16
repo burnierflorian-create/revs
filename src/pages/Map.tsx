@@ -545,6 +545,9 @@ export default function MapPage() {
   const navRef = useRef(navigate)
   navRef.current = navigate
   const posRef = useRef<{ lat: number; lng: number } | null>(null)
+  // Live user-location dot + its geolocation watch (see effect below).
+  const userMarkerRef = useRef<mapboxgl.Marker | null>(null)
+  const watchIdRef = useRef<number | null>(null)
 
   const [error, setError] = useState<string | null>(null)
   // Map-only state — search + filters live entirely here and touch ONLY
@@ -1425,6 +1428,51 @@ export default function MapPage() {
     }
     if (mapReady && mapRef.current) applyMode(mapRef.current, mode)
   }, [mode, mapReady])
+
+  // ── Live user-location dot ──
+  // A blue pulsing dot (Apple-Maps style), deliberately distinct from the
+  // red spot pins, kept in sync with the device via watchPosition.
+  useEffect(() => {
+    if (!mapReady) return
+    const map = mapRef.current
+    if (!map || !navigator.geolocation) return
+
+    const el = document.createElement('div')
+    el.className = 'user-location-marker'
+    el.innerHTML =
+      '<div class="user-location-pulse"></div>' +
+      '<div class="user-location-dot"></div>'
+    const marker = new mapboxgl.Marker({ element: el })
+    userMarkerRef.current = marker
+    let added = false
+
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        const lng = pos.coords.longitude
+        const lat = pos.coords.latitude
+        posRef.current = { lat, lng }
+        marker.setLngLat([lng, lat])
+        if (!added) {
+          marker.addTo(map)
+          added = true
+        }
+      },
+      () => {
+        /* permission denied / unavailable → no dot, silent */
+      },
+      { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 },
+    )
+    watchIdRef.current = watchId
+
+    return () => {
+      if (watchIdRef.current != null) {
+        navigator.geolocation.clearWatch(watchIdRef.current)
+        watchIdRef.current = null
+      }
+      marker.remove()
+      userMarkerRef.current = null
+    }
+  }, [mapReady])
 
   return (
     <div className="fixed inset-0">

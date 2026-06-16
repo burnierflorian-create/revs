@@ -1,9 +1,15 @@
-import { useEffect, useRef, useState } from 'react'
+import {
+  useEffect,
+  useRef,
+  useState,
+  type TouchEvent,
+  type TouchList,
+} from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import mapboxgl from 'mapbox-gl'
 import 'mapbox-gl/dist/mapbox-gl.css'
 import {
-  ArrowLeft,
+  X,
   Car,
   Navigation,
   Zap,
@@ -13,6 +19,7 @@ import {
   ChevronDown,
   Info,
   Loader2,
+  MapPin,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import {
@@ -24,6 +31,7 @@ import {
   type CarInfo,
   type Spot,
 } from '../lib/spots'
+import { fetchCardSpecs } from '../lib/cardSpecs'
 import LikeButton from '../components/LikeButton'
 import RarityBadge from '../components/RarityBadge'
 import { myPseudo, notifyPush } from '../lib/push'
@@ -62,8 +70,13 @@ export default function SpotDetail() {
   const [owner, setOwner] = useState<{
     pseudo: string | null
     avatar: string | null
+    ville: string | null
     tier: 'premium' | 'vip' | null
   } | null>(null)
+  const [funFact, setFunFact] = useState<string | null>(null)
+  // Swipe-down-to-close drag offset (px).
+  const [dragY, setDragY] = useState(0)
+  const dragStartRef = useRef<number | null>(null)
   const [aboutOpen, setAboutOpen] = useState(false)
   const [carInfo, setCarInfo] = useState<CarInfo | null>(null)
   const [infoBusy, setInfoBusy] = useState(false)
@@ -278,7 +291,7 @@ export default function SpotDetail() {
           .eq('user_id', s.user_id),
         supabase
           .from('profiles')
-          .select('pseudo, avatar')
+          .select('pseudo, avatar, ville')
           .eq('user_id', s.user_id)
           .maybeSingle(),
         supabase.rpc('user_tier', { p_user: s.user_id }),
@@ -290,13 +303,36 @@ export default function SpotDetail() {
       setOwner({
         pseudo: (prof?.pseudo as string | undefined) ?? null,
         avatar: (prof?.avatar as string | undefined) ?? null,
+        ville: (prof?.ville as string | undefined)?.trim() || null,
         tier,
+      })
+
+      // Fun fact — pulled from the per-model cached card specs (no extra
+      // Claude cost: the model's specs are cached site-wide).
+      fetchCardSpecs(s.brand, s.model, s.year).then((specs) => {
+        if (active && specs?.fun_fact) setFunFact(specs.fun_fact)
       })
     })()
     return () => {
       active = false
     }
   }, [id])
+
+  // Swipe-down-to-close — single-finger drag starting on the hero photo.
+  function onDragStart(e: TouchEvent) {
+    if (e.touches.length === 1) dragStartRef.current = e.touches[0].clientY
+  }
+  function onDragMove(e: TouchEvent) {
+    if (dragStartRef.current == null || e.touches.length !== 1) return
+    const dy = e.touches[0].clientY - dragStartRef.current
+    if (dy > 0) setDragY(dy)
+  }
+  function onDragEnd() {
+    if (dragStartRef.current == null) return
+    dragStartRef.current = null
+    if (dragY > 120) navigate(-1)
+    else setDragY(0)
+  }
 
   // Mini-carte non interactive avec le pin du spot.
   useEffect(() => {
@@ -370,23 +406,32 @@ export default function SpotDetail() {
   ]
 
   return (
-    <div className="min-h-screen bg-bg text-fg">
-      {/* Photo plein écran, edge-to-edge. Floating back / share buttons
-          sit on a subtle top gradient so they stay readable against any
-          source image. The rarity badge moved INTO the content area
-          (below the H1) so it reads as a structural element instead of
-          a transient overlay. */}
-      <div className="relative h-[56vh] w-full overflow-hidden bg-card">
+    <div
+      className="min-h-screen bg-bg text-fg"
+      style={{
+        transform: dragY ? `translateY(${dragY}px)` : undefined,
+        transition:
+          dragStartRef.current == null
+            ? 'transform 320ms cubic-bezier(0.22, 1, 0.36, 1)'
+            : 'none',
+        borderTopLeftRadius: dragY ? 22 : undefined,
+        borderTopRightRadius: dragY ? 22 : undefined,
+        overflow: dragY ? 'hidden' : undefined,
+      }}
+    >
+      {/* Photo plein écran, edge-to-edge. Pinch-to-zoom on the image;
+          single-finger drag down on the hero closes the page (spring).
+          Glassmorphism close + share buttons float on a top gradient. */}
+      <div
+        className="relative h-[60vh] w-full overflow-hidden bg-card"
+        onTouchStart={onDragStart}
+        onTouchMove={onDragMove}
+        onTouchEnd={onDragEnd}
+      >
         {spot.photo_url ? (
-          <img
+          <ZoomablePhoto
             src={spot.photo_url}
             alt={`${spot.brand} ${spot.model}`}
-            // Hero of the spot detail route — keep eager + high
-            // priority so the LCP candidate paints fast on
-            // navigation.
-            fetchPriority="high"
-            decoding="async"
-            className="h-full w-full object-cover"
           />
         ) : (
           <div className="flex h-full w-full items-center justify-center bg-card">
@@ -403,11 +448,16 @@ export default function SpotDetail() {
         />
         <button
           onClick={() => navigate(-1)}
-          aria-label="Retour"
-          className="tappable absolute left-4 top-[max(1rem,env(safe-area-inset-top))] flex h-11 w-11 items-center justify-center rounded-full bg-black/55 backdrop-blur"
-          style={{ border: '1px solid rgba(255,255,255,0.14)' }}
+          aria-label="Fermer"
+          className="tappable absolute left-4 top-[max(1rem,env(safe-area-inset-top))] flex h-11 w-11 items-center justify-center rounded-full"
+          style={{
+            background: 'rgba(255,255,255,0.12)',
+            backdropFilter: 'blur(16px) saturate(180%)',
+            WebkitBackdropFilter: 'blur(16px) saturate(180%)',
+            border: '1px solid rgba(255,255,255,0.18)',
+          }}
         >
-          <ArrowLeft className="h-5 w-5 text-fg" />
+          <X className="h-5 w-5 text-white" />
         </button>
         <button
           onClick={share}
@@ -510,6 +560,28 @@ export default function SpotDetail() {
             </div>
           ))}
         </div>
+
+        {/* Fun fact (IA, cached per model) */}
+        {funFact && (
+          <p
+            className="text-[15px] italic leading-relaxed text-fg2"
+            style={{ fontFamily: 'var(--font-display, inherit)' }}
+          >
+            «&nbsp;{funFact}&nbsp;»
+          </p>
+        )}
+
+        {/* Location line */}
+        <p className="flex items-center gap-1.5 text-[13px] text-fg2">
+          <MapPin className="h-4 w-4 flex-none text-accent" />
+          {owner?.ville ? (
+            <span>{owner.ville}, France</span>
+          ) : (
+            <span className="tabular-nums">
+              {spot.lat.toFixed(4)}, {spot.lng.toFixed(4)}
+            </span>
+          )}
+        </p>
 
         <section
           className="overflow-hidden rounded-3xl bg-card"
@@ -719,5 +791,54 @@ export default function SpotDetail() {
         </section>
       </div>
     </div>
+  )
+}
+
+// Hero photo with two-finger pinch-to-zoom (1×–4×) + double-tap toggle.
+// touch-action flips to "none" once zoomed so the page stops scrolling
+// under the gesture; back to "pan-y" at 1× so normal scroll resumes.
+function ZoomablePhoto({ src, alt }: { src: string; alt: string }) {
+  const [scale, setScale] = useState(1)
+  const startRef = useRef<{ dist: number; scale: number } | null>(null)
+
+  const dist = (t: TouchList) =>
+    Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY)
+
+  function onTouchStart(e: TouchEvent<HTMLImageElement>) {
+    if (e.touches.length === 2)
+      startRef.current = { dist: dist(e.touches), scale }
+  }
+  function onTouchMove(e: TouchEvent<HTMLImageElement>) {
+    if (e.touches.length === 2 && startRef.current) {
+      e.preventDefault()
+      const ratio = dist(e.touches) / startRef.current.dist
+      setScale(Math.min(4, Math.max(1, startRef.current.scale * ratio)))
+    }
+  }
+  function onTouchEnd(e: TouchEvent<HTMLImageElement>) {
+    if (e.touches.length < 2) {
+      startRef.current = null
+      if (scale <= 1.05) setScale(1)
+    }
+  }
+
+  return (
+    <img
+      src={src}
+      alt={alt}
+      fetchPriority="high"
+      decoding="async"
+      draggable={false}
+      onTouchStart={onTouchStart}
+      onTouchMove={onTouchMove}
+      onTouchEnd={onTouchEnd}
+      onDoubleClick={() => setScale((s) => (s > 1 ? 1 : 2.5))}
+      className="h-full w-full select-none object-cover"
+      style={{
+        transform: `scale(${scale})`,
+        transition: startRef.current ? 'none' : 'transform 220ms ease-out',
+        touchAction: scale > 1 ? 'none' : 'pan-y',
+      }}
+    />
   )
 }
