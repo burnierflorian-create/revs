@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useLocation, useNavigate } from 'react-router-dom'
 import mapboxgl from 'mapbox-gl'
 import type { DataDrivenPropertyValueSpecification } from 'mapbox-gl'
@@ -35,6 +36,8 @@ import {
   type CardProgress,
 } from '../lib/cardLevels'
 import { BRANDS } from '../lib/brands'
+import { rarityRank } from '../components/CollectorCard'
+import { rarityBadge } from '../lib/rarityStyle'
 import { useTheme } from '../lib/theme'
 import {
   fetchSpottingPrediction,
@@ -94,6 +97,7 @@ function spotMarkerEl(p: SpotProps, remainingMs: number): HTMLDivElement {
 
   const outer = document.createElement('div')
   outer.style.cursor = 'pointer'
+  outer.className = 'map-marker-pop'
 
   const wrap = document.createElement('div')
   wrap.style.position = 'relative'
@@ -195,27 +199,53 @@ function spotMarkerEl(p: SpotProps, remainingMs: number): HTMLDivElement {
   return outer
 }
 
-function clusterMarkerEl(count: number): HTMLDivElement {
+type ClusterLeaf = {
+  id: string
+  brand: string
+  model: string
+  photo_url: string | null
+  spotter: string
+  created_at: string
+  rarity: Rarity
+}
+
+const RARITY_BY_SCORE: Rarity[] = [
+  'standard',
+  'premium',
+  'performance',
+  'exclusif',
+  'supercar',
+  'hypercar',
+]
+
+function clusterMarkerEl(count: number, maxRarity: number): HTMLDivElement {
   const outer = document.createElement('div')
   outer.style.cursor = 'pointer'
-  const size = count < 10 ? 38 : count < 50 ? 46 : 56
+  outer.className = 'map-marker-pop'
+  // Spec radii 20/25/30 → diameters 40/50/60 at 2-4 / 5-9 / 10+ spots.
+  const size = count < 5 ? 40 : count < 10 ? 50 : 60
+  const tint =
+    MAP_RARITY_COLOR[
+      RARITY_BY_SCORE[Math.max(0, Math.min(5, Math.round(maxRarity) - 1))]
+    ] ?? MAP_RARITY_COLOR.standard
+  // A rarity-coloured halo ring only when the cluster holds a supercar+.
+  const rareRing = maxRarity >= 5 ? `0 0 0 2px ${tint.stroke}, ` : ''
   const inner = document.createElement('div')
   inner.style.width = `${size}px`
   inner.style.height = `${size}px`
   inner.style.borderRadius = '9999px'
-  inner.style.background =
-    'radial-gradient(circle at 35% 30%, #ff4d62 0%, #E8203A 70%)'
-  inner.style.border = '1.5px solid rgba(255,255,255,0.9)'
+  inner.style.background = '#E8203A'
+  inner.style.border = '3px solid rgba(255,255,255,0.3)'
   inner.style.boxShadow =
-    '0 4px 16px rgba(232,32,58,0.35), 0 2px 6px rgba(0,0,0,0.45)'
+    rareRing + '0 4px 16px rgba(232,32,58,0.4), 0 2px 6px rgba(0,0,0,0.45)'
   inner.style.display = 'flex'
   inner.style.alignItems = 'center'
   inner.style.justifyContent = 'center'
   inner.style.color = '#fff'
   inner.style.fontWeight = '800'
-  inner.style.fontSize = '14px'
+  inner.style.fontSize = size >= 50 ? '15px' : '14px'
   inner.style.letterSpacing = '-0.3px'
-  inner.textContent = String(count)
+  inner.textContent = count < 1000 ? String(count) : `${Math.floor(count / 1000)}k`
   outer.appendChild(inner)
   return outer
 }
@@ -563,6 +593,8 @@ export default function MapPage() {
   const [geoError, setGeoError] = useState<string | null>(null)
   const [visibleCount, setVisibleCount] = useState(0)
   const [mapReady, setMapReady] = useState(false)
+  // Spots of a tapped same-place cluster, shown in a bottom sheet.
+  const [clusterSheet, setClusterSheet] = useState<ClusterLeaf[] | null>(null)
 
   const [mode, setMode] = useState<MapMode>(() => {
     try {
@@ -879,6 +911,9 @@ export default function MapPage() {
             created_at: sp.created_at,
             expires_at: sp.expires_at,
             rarity: sp.rarity ?? 'standard',
+            // 1 (standard) … 6 (hypercar) — reduced to max_rarity per
+            // cluster so the pill can flag a rare-bearing cluster.
+            rarity_score: rarityRank(sp.rarity) + 1,
           },
         })
       }
@@ -1060,18 +1095,41 @@ export default function MapPage() {
           marker = markers[key]
           if (!marker) {
             const count = Number(props.point_count ?? 0)
-            const el = clusterMarkerEl(count)
+            const el = clusterMarkerEl(count, Number(props.max_rarity ?? 1))
             el.addEventListener('click', () => {
               const src = map.getSource(
                 'spots',
               ) as mapboxgl.GeoJSONSource | null
-              src?.getClusterExpansionZoom(
-                Number(props.cluster_id),
-                (err, zoom) => {
-                  if (err == null && zoom != null)
-                    map.easeTo({ center: coords, zoom })
-                },
-              )
+              if (!src) return
+              const cid = Number(props.cluster_id)
+              const cur = map.getZoom()
+              src.getClusterExpansionZoom(cid, (err, zoom) => {
+                if (err == null && zoom != null && zoom > cur) {
+                  // Zooming in WILL break the cluster apart → do it.
+                  map.easeTo({ center: coords, zoom })
+                } else {
+                  // Same place / can't expand → list the spots in a sheet.
+                  src.getClusterLeaves(cid, 100, 0, (lerr, leaves) => {
+                    if (lerr || !leaves) return
+                    const items = leaves.map((f) => {
+                      const pr = (f.properties ?? {}) as Record<string, unknown>
+                      return {
+                        id: String(pr.id ?? ''),
+                        brand: String(pr.brand ?? ''),
+                        model: String(pr.model ?? ''),
+                        photo_url:
+                          typeof pr.photo_url === 'string' ? pr.photo_url : null,
+                        spotter: String(pr.spotter ?? 'Anonyme'),
+                        created_at: String(pr.created_at ?? ''),
+                        rarity: (typeof pr.rarity === 'string'
+                          ? pr.rarity
+                          : 'standard') as Rarity,
+                      }
+                    })
+                    setClusterSheet(items)
+                  })
+                }
+              })
             })
             marker = new mapboxgl.Marker({ element: el }).setLngLat(coords)
             markers[key] = marker
@@ -1187,8 +1245,12 @@ export default function MapPage() {
             type: 'geojson',
             data: featureCollection(),
             cluster: true,
-            clusterMaxZoom: 14,
-            clusterRadius: 50,
+            clusterMaxZoom: 16,
+            clusterRadius: 60,
+            clusterProperties: {
+              // Highest rarity tier present in the cluster (1…6).
+              max_rarity: ['max', ['get', 'rarity_score']],
+            },
           })
         }
         if (!map.getLayer('spot-src')) {
@@ -1742,7 +1804,162 @@ export default function MapPage() {
           saveMapFilters(next)
         }}
       />
+
+      {clusterSheet && (
+        <ClusterSheet
+          items={clusterSheet}
+          onClose={() => setClusterSheet(null)}
+          onOpenSpot={(id) => {
+            setClusterSheet(null)
+            navigate(`/spot/${id}`)
+          }}
+        />
+      )}
     </div>
+  )
+}
+
+// ───────────────────── Cluster contents bottom sheet ─────────────────────
+// Opened when a cluster can't be zoomed apart (multiple spots at the same
+// place). Lists every spot of the cluster, sorted by likes desc then
+// recency; tapping one opens its detail page.
+function ClusterSheet({
+  items,
+  onClose,
+  onOpenSpot,
+}: {
+  items: ClusterLeaf[]
+  onClose: () => void
+  onOpenSpot: (id: string) => void
+}) {
+  const [likes, setLikes] = useState<Record<string, number>>({})
+  useEffect(() => {
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    let active = true
+    const ids = items.map((i) => i.id)
+    if (ids.length) {
+      supabase
+        .from('spot_likes')
+        .select('spot_id')
+        .in('spot_id', ids)
+        .then(({ data }) => {
+          if (!active) return
+          const m: Record<string, number> = {}
+          for (const r of (data ?? []) as { spot_id: string }[])
+            m[r.spot_id] = (m[r.spot_id] ?? 0) + 1
+          setLikes(m)
+        })
+    }
+    return () => {
+      active = false
+      document.body.style.overflow = prev
+    }
+  }, [items])
+
+  const sorted = [...items].sort((a, b) => {
+    const diff = (likes[b.id] ?? 0) - (likes[a.id] ?? 0)
+    if (diff !== 0) return diff
+    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  })
+
+  return createPortal(
+    <div className="fixed inset-0 z-50" role="dialog" aria-modal="true">
+      <button
+        aria-label="Fermer"
+        onClick={onClose}
+        className="absolute inset-0"
+        style={{
+          background: 'rgba(0,0,0,0.7)',
+          backdropFilter: 'blur(6px)',
+          WebkitBackdropFilter: 'blur(6px)',
+          animation: 'sheet-backdrop-in 200ms ease-out both',
+        }}
+      />
+      <div
+        className="absolute bottom-0 left-0 right-0 px-4 pt-3"
+        style={{
+          background: '#141414',
+          borderTopLeftRadius: '24px',
+          borderTopRightRadius: '24px',
+          borderTop: '1px solid rgba(255,255,255,0.08)',
+          paddingBottom: 'max(env(safe-area-inset-bottom), 20px)',
+          maxHeight: '75vh',
+          overflowY: 'auto',
+          boxShadow: '0 -24px 60px rgba(0,0,0,0.65)',
+          animation: 'sheet-slide-up 280ms cubic-bezier(0.32,0.72,0,1) both',
+        }}
+      >
+        <div className="flex justify-center pt-1">
+          <span
+            aria-hidden
+            className="rounded-full"
+            style={{ width: 40, height: 4, background: 'rgba(255,255,255,0.18)' }}
+          />
+        </div>
+        <h3 className="mb-0.5 mt-3 font-display text-[17px] font-extrabold text-white">
+          {items.length} spots ici
+        </h3>
+        <p className="mb-3 text-[12px] text-white/45">Triés par likes</p>
+        <div className="space-y-2">
+          {sorted.map((s) => {
+            const rb = rarityBadge(s.rarity)
+            const lk = likes[s.id] ?? 0
+            return (
+              <button
+                key={s.id}
+                onClick={() => onOpenSpot(s.id)}
+                className="tappable flex w-full items-center gap-3 rounded-2xl p-2 text-left"
+                style={{
+                  background: '#0d0d0d',
+                  border: '1px solid rgba(255,255,255,0.06)',
+                }}
+              >
+                {s.photo_url ? (
+                  <img
+                    src={s.photo_url}
+                    alt=""
+                    loading="lazy"
+                    className="h-14 w-14 flex-none rounded-xl object-cover"
+                  />
+                ) : (
+                  <div className="flex h-14 w-14 flex-none items-center justify-center rounded-xl bg-white/5 text-white/30">
+                    —
+                  </div>
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[14px] font-bold text-white">
+                    {s.model || s.brand || 'Spot'}
+                  </p>
+                  <p className="truncate text-[12px] text-white/50">
+                    @{s.spotter} · {timeAgo(s.created_at)}
+                  </p>
+                </div>
+                {lk > 0 && (
+                  <span className="flex-none text-[11px] font-bold text-white/40">
+                    ♥ {lk}
+                  </span>
+                )}
+                <span
+                  className="flex-none rounded-full px-2 py-0.5 text-[9px] font-black uppercase"
+                  style={{ background: rb.bg, color: rb.fg, border: `1px solid ${rb.border}` }}
+                >
+                  {rb.label}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+        <button
+          onClick={onClose}
+          className="tappable mb-1 mt-4 w-full rounded-full py-3 text-[14px] font-semibold text-white"
+          style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.1)' }}
+        >
+          Fermer
+        </button>
+      </div>
+    </div>,
+    document.body,
   )
 }
 
