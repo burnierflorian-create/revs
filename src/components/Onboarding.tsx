@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 
 // First-launch onboarding — accelerated 3-slide, Apple-style flow built
@@ -302,6 +302,7 @@ type Rect = { top: number; left: number; width: number; height: number }
 
 export default function Onboarding() {
   const navigate = useNavigate()
+  const location = useLocation()
   // null = still deciding (no flash); false = hidden; true = show.
   const [show, setShow] = useState<boolean | null>(null)
   const [index, setIndex] = useState(0)
@@ -340,40 +341,47 @@ export default function Onboarding() {
     }
   }, [])
 
-  // For each tour step: navigate to its route, then poll for the target
-  // element (it may mount a frame or two later) and measure it. If it never
-  // appears (e.g. the streak pill when streak = 0), rect stays null and the
-  // bubble is shown centred without a spotlight cut-out.
+  // For each tour step: switch to its route only if we're not already
+  // there, then probe for the target a few times (it may mount a beat
+  // later as the tab loads). We DON'T blank the previous spotlight while
+  // searching — the box simply springs to the new element once found, so
+  // the tour stays fluid instead of flashing to a dark centre. If the
+  // target never appears (e.g. the streak pill at streak = 0) we fall back
+  // to a centred bubble after ~1.4 s. Light setTimeout probes (no rAF
+  // loop) keep the main thread free.
   useEffect(() => {
     if (phase !== 'tour') return
     const step = TOUR[tourStep]
-    navigate(step.route)
-    setRect(null)
-    let raf = 0
-    let tries = 0
+    if (location.pathname !== step.route) navigate(step.route)
     let cancelled = false
-    function tryMeasure() {
-      if (cancelled) return
+    let found = false
+    const timers: number[] = []
+    const attempt = () => {
+      if (cancelled || found) return
       const el = document.querySelector(step.selector)
       if (el) {
         const r = el.getBoundingClientRect()
-        if (r.width > 0 && r.height > 0) {
+        if (r.width > 1 && r.height > 1) {
+          found = true
           setRect({ top: r.top, left: r.left, width: r.width, height: r.height })
-          return
         }
       }
-      tries += 1
-      if (tries < 100) raf = requestAnimationFrame(tryMeasure)
-      // else: give up → centred bubble (rect stays null)
     }
-    raf = requestAnimationFrame(tryMeasure)
-    window.addEventListener('resize', tryMeasure)
+    ;[50, 180, 360, 650, 1000].forEach((d) =>
+      timers.push(window.setTimeout(attempt, d)),
+    )
+    timers.push(
+      window.setTimeout(() => {
+        if (!cancelled && !found) setRect(null)
+      }, 1400),
+    )
+    window.addEventListener('resize', attempt)
     return () => {
       cancelled = true
-      cancelAnimationFrame(raf)
-      window.removeEventListener('resize', tryMeasure)
+      timers.forEach((id) => clearTimeout(id))
+      window.removeEventListener('resize', attempt)
     }
-  }, [phase, tourStep, navigate])
+  }, [phase, tourStep, navigate, location.pathname])
 
   function nextTour() {
     if (tourStep < TOUR.length - 1) setTourStep((s) => s + 1)
