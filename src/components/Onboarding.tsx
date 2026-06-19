@@ -236,38 +236,65 @@ const SLIDES: Slide[] = [
   },
 ]
 
-// Guided tour steps — each spotlights a bottom-nav tab by its aria-label
-// (set in MainLayout). Runs right after the slides, before the flag flips.
-const TOUR: { label: string; emoji: string; title: string; body: string }[] = [
+// Guided tour steps — each navigates to its `route`, waits for `selector`
+// to mount, then spotlights it. Runs right after the slides, before the
+// onboarding_completed flag flips.
+type TourStep = {
+  route: string
+  selector: string
+  title: string
+  body: string
+  cta: string
+}
+const TOUR: TourStep[] = [
   {
-    label: 'Carte',
-    emoji: '🗺️',
-    title: 'La Carte',
-    body: "Vois en temps réel tous les spots autour de toi. Les zones rouges s'enflamment quand l'action est intense.",
+    route: '/map',
+    selector: '.liquid-cam',
+    title: '📸 Le bouton SPOTTER',
+    body: "Appuie ici dès que tu vois une belle voiture. L'IA identifie la marque, le modèle et la rareté en quelques secondes. Plus la voiture est rare, plus tu gagnes d'XP !",
+    cta: "J'ai compris →",
   },
   {
-    label: 'Fil',
-    emoji: '📸',
-    title: 'Le Fil',
-    body: 'Toute la communauté REVS en direct. Like et commente les spots des autres spotters.',
+    route: '/map',
+    selector: 'nav.liquid-nav [aria-label="Carte"]',
+    title: '🗺️ La Carte en temps réel',
+    body: "Vois tous les spots des autres passionnés autour de toi. Les zones rouges qui s'enflamment indiquent où l'action se passe en ce moment !",
+    cta: 'Suivant →',
   },
   {
-    label: 'Accueil',
-    emoji: '🏠',
-    title: "L'Accueil",
-    body: "Tes défis de la semaine, ton XP et tout ce qu'il faut savoir d'un coup d'œil.",
+    route: '/feed',
+    selector: 'nav.liquid-nav [aria-label="Fil"]',
+    title: '📱 Le Fil',
+    body: 'Toute la communauté REVS en direct. Like les spots des autres, commente, suis les meilleurs spotters. Plus tu interagis, plus tu montes dans le classement !',
+    cta: 'Suivant →',
   },
   {
-    label: 'Explorer',
-    emoji: '🔍',
-    title: "L'Explorer",
-    body: 'Toutes les marques, les actus CarSpotting et les événements près de toi.',
+    route: '/',
+    selector: '[data-tour="speedometers"]',
+    title: '⚡ Tes défis de la semaine',
+    body: 'Chaque semaine, 3 défis personnalisés selon ta ville et tes habitudes. Les compteurs se remplissent au fur et à mesure que tu complètes les défis. XP bonus à la clé !',
+    cta: 'Suivant →',
   },
   {
-    label: 'Profil',
-    emoji: '👤',
-    title: 'Ton Profil',
-    body: 'Tes spots, ta collection de cartes, tes badges et ton rang dans le classement.',
+    route: '/',
+    selector: '[data-tour="streak"]',
+    title: '🔥 Ton streak',
+    body: "Spotte au moins une voiture par jour pour maintenir ta série. Plus ton streak est long, plus tu gagnes de bonus XP. Ne laisse pas la flamme s'éteindre !",
+    cta: 'Suivant →',
+  },
+  {
+    route: '/profile',
+    selector: 'nav.liquid-nav [aria-label="Profil"]',
+    title: '🃏 Ta Collection de cartes',
+    body: 'Chaque voiture spottée devient une carte unique dans ta collection. Les cartes Légendaires ont un effet holographique spécial. Collectionne-les toutes !',
+    cta: 'Suivant →',
+  },
+  {
+    route: '/',
+    selector: '[data-tour="ranking"]',
+    title: '🏆 Le Classement',
+    body: 'Affronte les autres spotters de ta ville, de ton pays et du monde entier. Poste des voitures rares pour grimper dans le classement et devenir le meilleur spotter de ta région !',
+    cta: "C'est parti 🚀",
   },
 ]
 
@@ -313,23 +340,40 @@ export default function Onboarding() {
     }
   }, [])
 
-  // Measure the spotlighted nav tab whenever the tour step changes (and on
-  // resize / orientation), reading its on-screen rect from the live navbar.
+  // For each tour step: navigate to its route, then poll for the target
+  // element (it may mount a frame or two later) and measure it. If it never
+  // appears (e.g. the streak pill when streak = 0), rect stays null and the
+  // bubble is shown centred without a spotlight cut-out.
   useEffect(() => {
     if (phase !== 'tour') return
-    function measure() {
-      const el = document.querySelector(
-        `nav.liquid-nav [aria-label="${TOUR[tourStep].label}"]`,
-      )
+    const step = TOUR[tourStep]
+    navigate(step.route)
+    setRect(null)
+    let raf = 0
+    let tries = 0
+    let cancelled = false
+    function tryMeasure() {
+      if (cancelled) return
+      const el = document.querySelector(step.selector)
       if (el) {
         const r = el.getBoundingClientRect()
-        setRect({ top: r.top, left: r.left, width: r.width, height: r.height })
+        if (r.width > 0 && r.height > 0) {
+          setRect({ top: r.top, left: r.left, width: r.width, height: r.height })
+          return
+        }
       }
+      tries += 1
+      if (tries < 100) raf = requestAnimationFrame(tryMeasure)
+      // else: give up → centred bubble (rect stays null)
     }
-    measure()
-    window.addEventListener('resize', measure)
-    return () => window.removeEventListener('resize', measure)
-  }, [phase, tourStep])
+    raf = requestAnimationFrame(tryMeasure)
+    window.addEventListener('resize', tryMeasure)
+    return () => {
+      cancelled = true
+      cancelAnimationFrame(raf)
+      window.removeEventListener('resize', tryMeasure)
+    }
+  }, [phase, tourStep, navigate])
 
   function nextTour() {
     if (tourStep < TOUR.length - 1) setTourStep((s) => s + 1)
@@ -368,19 +412,33 @@ export default function Onboarding() {
     else if (dx > 50 && index > 0) setIndex((i) => i - 1)
   }
 
-  // ── Guided tour overlay (spotlight on each nav tab) ──
+  // ── Guided tour overlay (spotlight + bubble, cross-screen) ──
   if (phase === 'tour') {
     const t = TOUR[tourStep]
     const screenW = window.innerWidth
-    const BUBBLE_W = 290
+    const screenH = window.innerHeight
+    const BUBBLE_W = Math.min(300, screenW - 24)
     const cx = rect ? rect.left + rect.width / 2 : screenW / 2
     const bubbleLeft = Math.min(
       Math.max(cx - BUBBLE_W / 2, 12),
       Math.max(12, screenW - BUBBLE_W - 12),
     )
-    const bubbleBottom = rect ? window.innerHeight - rect.top + 16 : 140
     const arrowLeft = Math.min(Math.max(cx - bubbleLeft, 24), BUBBLE_W - 24)
-    const lastStep = tourStep === TOUR.length - 1
+    // Element in the top ~45% of the screen → bubble BELOW it (arrow up);
+    // otherwise → bubble ABOVE it (arrow down). No rect → centred.
+    const below = rect ? rect.top + rect.height / 2 < screenH * 0.45 : false
+    const SPRING_T =
+      'top .45s cubic-bezier(0.34,1.56,0.64,1), bottom .45s cubic-bezier(0.34,1.56,0.64,1), left .45s cubic-bezier(0.34,1.56,0.64,1)'
+
+    const bubblePos: React.CSSProperties = !rect
+      ? { left: bubbleLeft, top: '38%', width: BUBBLE_W }
+      : below
+        ? { left: bubbleLeft, top: rect.top + rect.height + 16, width: BUBBLE_W }
+        : {
+            left: bubbleLeft,
+            bottom: screenH - rect.top + 16,
+            width: BUBBLE_W,
+          }
 
     return (
       <div
@@ -388,8 +446,8 @@ export default function Onboarding() {
         className="fixed inset-0 z-[100]"
         style={{ fontFamily: 'var(--font-display, Inter, system-ui, sans-serif)' }}
       >
-        {/* Spotlight — transparent hole; the rest of the screen is darkened
-            by the huge box-shadow. Springs between steps; red halo pulse. */}
+        {/* Spotlight — transparent hole; rest darkened by the huge
+            box-shadow. Springs between steps; red halo pulse. */}
         {rect ? (
           <div
             aria-hidden
@@ -399,7 +457,7 @@ export default function Onboarding() {
               left: rect.left - 8,
               width: rect.width + 16,
               height: rect.height + 16,
-              boxShadow: '0 0 0 9999px rgba(0,0,0,0.75)',
+              boxShadow: '0 0 0 9999px rgba(0,0,0,0.8)',
               border: '2px solid rgba(232,32,58,0.9)',
               transition:
                 'top .45s cubic-bezier(0.34,1.56,0.64,1), left .45s cubic-bezier(0.34,1.56,0.64,1), width .45s cubic-bezier(0.34,1.56,0.64,1), height .45s cubic-bezier(0.34,1.56,0.64,1)',
@@ -409,79 +467,117 @@ export default function Onboarding() {
         ) : (
           <div
             className="absolute inset-0"
-            style={{ background: 'rgba(0,0,0,0.75)' }}
+            style={{ background: 'rgba(0,0,0,0.8)' }}
           />
         )}
 
-        {/* Progress 1/5 — discreet, top-right */}
-        <div
-          className="absolute right-5 text-sm font-semibold text-white/55"
+        {/* Passer — skip the whole tour */}
+        <button
+          onClick={(e) => {
+            e.stopPropagation()
+            complete(true)
+          }}
+          className="tappable absolute right-5 z-10 text-sm font-medium text-white/55 transition-colors hover:text-white"
           style={{ top: 'max(1.25rem, env(safe-area-inset-top))' }}
         >
-          {tourStep + 1}/{TOUR.length}
-        </div>
+          Passer
+        </button>
 
-        {/* Bubble + down-arrow, anchored above the spotlighted tab */}
+        {/* Bubble */}
         <div
           onClick={(e) => e.stopPropagation()}
           className="absolute"
-          style={{
-            left: bubbleLeft,
-            bottom: bubbleBottom,
-            width: BUBBLE_W,
-            transition:
-              'left .45s cubic-bezier(0.34,1.56,0.64,1), bottom .45s cubic-bezier(0.34,1.56,0.64,1)',
-          }}
+          style={{ ...bubblePos, transition: SPRING_T }}
         >
+          {/* Arrow ABOVE the bubble (when bubble is below the element) */}
+          {rect && below && (
+            <>
+              <span
+                aria-hidden
+                className="absolute"
+                style={{
+                  left: arrowLeft - 9,
+                  bottom: '100%',
+                  width: 0,
+                  height: 0,
+                  borderLeft: '9px solid transparent',
+                  borderRight: '9px solid transparent',
+                  borderBottom: '9px solid #E8203A',
+                }}
+              />
+              <span
+                aria-hidden
+                className="absolute"
+                style={{
+                  left: arrowLeft - 7,
+                  bottom: 'calc(100% - 2px)',
+                  width: 0,
+                  height: 0,
+                  borderLeft: '7px solid transparent',
+                  borderRight: '7px solid transparent',
+                  borderBottom: '7px solid #141414',
+                }}
+              />
+            </>
+          )}
+
           <div
-            className="rounded-2xl p-4"
+            className="relative rounded-[20px] p-5"
             style={{
               background: '#141414',
-              border: '1.5px solid #E8203A',
+              border: '1px solid #E8203A',
               boxShadow: '0 12px 40px rgba(0,0,0,0.6)',
             }}
           >
-            <p className="text-[15px] font-bold text-white">
-              {t.emoji} {t.title}
+            <span className="absolute right-4 top-4 text-[12px] font-semibold text-white/40">
+              {tourStep + 1}/{TOUR.length}
+            </span>
+            <p className="pr-8 text-[16px] font-bold leading-snug text-white">
+              {t.title}
             </p>
-            <p className="mt-1.5 text-[13px] leading-snug text-white/65">
+            <p className="mt-2 line-clamp-3 text-[13px] leading-snug text-white/60">
               {t.body}
             </p>
             <button
               onClick={nextTour}
-              className="tappable mt-3 w-full rounded-full py-2.5 text-sm font-bold text-white transition-transform active:scale-[0.98]"
+              className="tappable mt-4 w-full rounded-full py-3 text-sm font-bold text-white transition-transform active:scale-[0.97]"
               style={{ background: RED, boxShadow: '0 0 14px rgba(232,32,58,0.5)' }}
             >
-              {lastStep ? 'Allons-y 🚀' : 'Suivant →'}
+              {t.cta}
             </button>
           </div>
-          {/* CSS arrow pointing down to the tab (red border + dark fill) */}
-          <span
-            aria-hidden
-            className="absolute"
-            style={{
-              left: arrowLeft - 9,
-              top: '100%',
-              width: 0,
-              height: 0,
-              borderLeft: '9px solid transparent',
-              borderRight: '9px solid transparent',
-              borderTop: '9px solid #E8203A',
-            }}
-          />
-          <span
-            aria-hidden
-            className="absolute"
-            style={{
-              left: arrowLeft - 7,
-              top: 'calc(100% - 2px)',
-              width: 0,
-              height: 0,
-              borderLeft: '7px solid transparent',
-              borderRight: '7px solid transparent',
-              borderTop: '7px solid #141414',
-            }}
-          />
+
+          {/* Arrow BELOW the bubble (when bubble is above the element) */}
+          {rect && !below && (
+            <>
+              <span
+                aria-hidden
+                className="absolute"
+                style={{
+                  left: arrowLeft - 9,
+                  top: '100%',
+                  width: 0,
+                  height: 0,
+                  borderLeft: '9px solid transparent',
+                  borderRight: '9px solid transparent',
+                  borderTop: '9px solid #E8203A',
+                }}
+              />
+              <span
+                aria-hidden
+                className="absolute"
+                style={{
+                  left: arrowLeft - 7,
+                  top: 'calc(100% - 2px)',
+                  width: 0,
+                  height: 0,
+                  borderLeft: '7px solid transparent',
+                  borderRight: '7px solid transparent',
+                  borderTop: '7px solid #141414',
+                }}
+              />
+            </>
+          )}
         </div>
       </div>
     )

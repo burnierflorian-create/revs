@@ -267,7 +267,7 @@ export default function Home() {
 
       {/* ─── STREAK PILL — visible red badge above the cockpit ─── */}
       {streak > 0 && (
-        <div className="mb-3 flex px-1">
+        <div className="mb-3 flex px-1" data-tour="streak">
           <span
             className="inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[13px] font-bold"
             style={{
@@ -328,13 +328,15 @@ export default function Home() {
 
       {/* ─── 3 · COMPLÉMENTS — city ranking first (personal), then GP ─── */}
       <div className="mt-10 space-y-4">
-        <CityRankCard
-          rank={cityRank}
-          daysToNextGp={daysToNextGp}
-          spotsThisWeek={spotsThisWeek}
-          onTap={() => navigate('/classement')}
-          onSetCity={() => navigate('/settings')}
-        />
+        <div data-tour="ranking">
+          <CityRankCard
+            rank={cityRank}
+            daysToNextGp={daysToNextGp}
+            spotsThisWeek={spotsThisWeek}
+            onTap={() => navigate('/classement')}
+            onSetCity={() => navigate('/settings')}
+          />
+        </div>
 
         {nextGp && (
           <GpCountdownCard
@@ -682,7 +684,10 @@ function RpmGauges({
   })
 
   return (
-    <div className="mt-3 flex w-full items-start justify-between gap-2">
+    <div
+      data-tour="speedometers"
+      className="mt-3 flex w-full items-start justify-between gap-2"
+    >
       {slots.map((s, i) => {
         const color = GAUGE_COLORS[i % GAUGE_COLORS.length]
         const counterCol = s.done ? '#22C55E' : color

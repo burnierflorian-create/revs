@@ -88,6 +88,49 @@ export default function MainLayout() {
     navigate('/new-spot')
   }
 
+  // Hydrate the profile from signup metadata (pseudo / ville / country)
+  // on first authenticated mount. Email-confirm signups can't write the
+  // profile at signup time (no session yet), so the fields ride along in
+  // user_metadata and land here once. Idempotent: only writes when the
+  // profile has no pseudo yet, so it never overwrites later edits.
+  useEffect(() => {
+    let active = true
+    ;(async () => {
+      try {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser()
+        if (!active || !user) return
+        const meta = user.user_metadata as
+          | { pseudo?: string; ville?: string; country?: string }
+          | undefined
+        const metaPseudo = (meta?.pseudo ?? '').trim()
+        if (!metaPseudo) return
+        const { data: prof } = await supabase
+          .from('profiles')
+          .select('pseudo')
+          .eq('user_id', user.id)
+          .maybeSingle()
+        const existing = (prof?.pseudo as string | undefined)?.trim()
+        if (existing) return // already has a pseudo → leave it alone
+        await supabase.from('profiles').upsert(
+          {
+            user_id: user.id,
+            pseudo: metaPseudo,
+            ville: (meta?.ville ?? '').trim() || null,
+            country: (meta?.country ?? '').trim() || null,
+          },
+          { onConflict: 'user_id' },
+        )
+      } catch {
+        /* best-effort hydration */
+      }
+    })()
+    return () => {
+      active = false
+    }
+  }, [])
+
   // Redeem a pending referral code on first authenticated mount.
   // Two sources, checked in order:
   //   1) localStorage (instant claim on same-device email confirm)

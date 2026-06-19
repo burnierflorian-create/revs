@@ -63,3 +63,46 @@ export function detectCountry(): string {
 export function countryFlag(country: string | null | undefined): string {
   return (country && FLAG_BY_COUNTRY[country]) || '🌍'
 }
+
+// All known countries (French names) — for the signup country dropdown.
+export const COUNTRY_NAMES: string[] = Object.values(REGION_TO_COUNTRY).sort(
+  (a, b) => a.localeCompare(b, 'fr'),
+)
+
+/** Reverse-geocode a GPS point to { city, country } via the Mapbox
+ *  Geocoding API. Country is normalised to the app's French names when
+ *  the ISO code is known, else the Mapbox label is used. Returns null on
+ *  any failure (no token, network, no result) — callers fall back to
+ *  manual entry. */
+export async function reverseGeocode(
+  lat: number,
+  lng: number,
+): Promise<{ city: string; country: string } | null> {
+  const token = import.meta.env.VITE_MAPBOX_TOKEN as string | undefined
+  if (!token) return null
+  try {
+    const url =
+      `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json` +
+      `?types=place&language=fr&limit=1&access_token=${token}`
+    const res = await fetch(url)
+    if (!res.ok) return null
+    const json = (await res.json()) as {
+      features?: {
+        text?: string
+        context?: { id?: string; short_code?: string; text?: string }[]
+      }[]
+    }
+    const f = json.features?.[0]
+    if (!f) return null
+    const city = (f.text ?? '').trim()
+    const ctx = f.context ?? []
+    const countryCtx = ctx.find((c) => (c.id ?? '').startsWith('country'))
+    const iso = countryCtx?.short_code?.toUpperCase()
+    const country =
+      (iso && REGION_TO_COUNTRY[iso]) || countryCtx?.text || detectCountry()
+    if (!city) return null
+    return { city, country }
+  } catch {
+    return null
+  }
+}
