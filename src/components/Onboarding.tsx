@@ -213,26 +213,94 @@ function Podium() {
   )
 }
 
+// ── Slide 2 · phone → AI sparkle → collector card ──
+function ConceptVisual() {
+  return (
+    <div
+      className="relative flex h-56 w-56 items-center justify-center"
+      style={{ animation: 'onb-float 4.5s ease-in-out infinite' }}
+    >
+      <div
+        className="relative"
+        style={{
+          width: 96,
+          height: 180,
+          borderRadius: 20,
+          border: '2px solid rgba(255,255,255,0.3)',
+          background: 'rgba(255,255,255,0.03)',
+        }}
+      >
+        <span
+          aria-hidden
+          className="absolute inset-2 rounded-xl"
+          style={{
+            background:
+              'radial-gradient(circle at 50% 40%, rgba(232,32,58,0.4), transparent 70%)',
+          }}
+        />
+        <span
+          aria-hidden
+          className="absolute left-1/2 top-3 h-2 w-2 -translate-x-1/2 rounded-full"
+          style={{ background: 'rgba(255,255,255,0.45)' }}
+        />
+      </div>
+      <div
+        className="absolute -right-1 top-7 flex items-center justify-center"
+        style={{
+          width: 66,
+          height: 90,
+          borderRadius: 12,
+          border: '1.5px solid rgba(168,85,247,0.9)',
+          background: 'rgba(168,85,247,0.1)',
+          transform: 'rotate(9deg)',
+          boxShadow: '0 0 26px rgba(168,85,247,0.32)',
+          animation: 'onb-slide-up 0.6s ease-out 0.3s both',
+        }}
+      >
+        <span
+          className="font-display text-2xl font-extrabold"
+          style={{ color: 'rgba(216,180,254,0.95)' }}
+        >
+          R
+        </span>
+      </div>
+      <span
+        aria-hidden
+        className="absolute left-[42%] top-1/2 -translate-y-1/2 text-3xl"
+        style={{ animation: 'onb-spot 1.8s ease-in-out infinite' }}
+      >
+        ✨
+      </span>
+    </div>
+  )
+}
+
 type Slide = { title: string; subtitle: string; visual: React.ReactNode }
 
 const SLIDES: Slide[] = [
   {
-    title: 'Spotte les supercars',
+    title: 'Bienvenue sur REVS',
     subtitle:
-      "Prends une photo, l'IA identifie la voiture en secondes et elle apparaît sur la carte en temps réel. Gagne de l'XP selon la rareté.",
+      'Le premier réseau social de carspotting. Capture les supercars autour de toi, collectionne des cartes rares et deviens le meilleur spotter de ta ville.',
     visual: <MapBeacon />,
   },
   {
-    title: 'Collectionne tes cartes',
+    title: "L'IA identifie, toi tu collectes",
     subtitle:
-      'Chaque spot génère une carte unique. Commun, Rare, Ultra Rare ou Légendaire — plus la voiture est rare, plus ta carte est précieuse.',
-    visual: <DeckFan />,
+      "Prends une photo d'une belle voiture. En quelques secondes, notre IA reconnaît la marque, le modèle et attribue une rareté. Plus c'est rare, plus tu gagnes d'XP.",
+    visual: <ConceptVisual />,
   },
   {
-    title: 'Deviens le meilleur spotter',
+    title: 'Monte dans le classement',
     subtitle:
-      'Enchaîne les streaks, complète les challenges hebdomadaires et affronte les spotters de ta ville pour atteindre le sommet.',
+      'Chaque spot te rapporte de l’XP. Enchaîne les streaks, complète les défis hebdomadaires et affronte les spotters de ta région.',
     visual: <Podium />,
+  },
+  {
+    title: 'Collectionne des cartes uniques',
+    subtitle:
+      'Chaque voiture spottée devient une carte collector exclusive. Les cartes Légendaires brillent avec un effet holographique. Collectionne-les toutes.',
+    visual: <DeckFan />,
   },
 ]
 
@@ -244,57 +312,59 @@ type TourStep = {
   selector: string
   title: string
   body: string
-  cta: string
 }
+// Routes are chosen to MINIMISE navigation (the source of the old jank):
+// the tour mounts /map once (steps 1-3, nav tabs are always present there)
+// then / once (steps 4-8). Only one heavy screen mount across the whole
+// tour.
 const TOUR: TourStep[] = [
   {
     route: '/map',
-    selector: '.liquid-cam',
-    title: '📸 Le bouton SPOTTER',
-    body: "Appuie ici dès que tu vois une belle voiture. L'IA identifie la marque, le modèle et la rareté en quelques secondes. Plus la voiture est rare, plus tu gagnes d'XP !",
-    cta: "J'ai compris →",
+    selector: 'nav.liquid-nav [aria-label="Carte"]',
+    title: '🗺️ La Carte — Ton terrain de chasse',
+    body: "Vois en temps réel tous les spots des autres passionnés autour de toi. Les zones rouges qui s'enflamment indiquent les endroits les plus actifs du moment. Plus il y a de spots, plus le halo est intense.",
   },
   {
     route: '/map',
-    selector: 'nav.liquid-nav [aria-label="Carte"]',
-    title: '🗺️ La Carte en temps réel',
-    body: "Vois tous les spots des autres passionnés autour de toi. Les zones rouges qui s'enflamment indiquent où l'action se passe en ce moment !",
-    cta: 'Suivant →',
+    selector: '.liquid-cam',
+    title: '📸 SPOTTER — L’action principale',
+    body: "C'est le bouton le plus important. Appuie dessus dès que tu vois une belle voiture. L'IA analyse ta photo en quelques secondes et identifie la marque, le modèle, l'année et la rareté automatiquement.",
   },
   {
-    route: '/feed',
+    route: '/map',
     selector: 'nav.liquid-nav [aria-label="Fil"]',
-    title: '📱 Le Fil',
-    body: 'Toute la communauté REVS en direct. Like les spots des autres, commente, suis les meilleurs spotters. Plus tu interagis, plus tu montes dans le classement !',
-    cta: 'Suivant →',
+    title: '📱 Le Fil — La communauté en direct',
+    body: 'Toutes les voitures spottées par la communauté REVS. Fais défiler, like les spots des autres, laisse des commentaires. Chaque interaction te rapporte de l’XP et renforce le lien avec la communauté.',
   },
   {
     route: '/',
     selector: '[data-tour="speedometers"]',
-    title: '⚡ Tes défis de la semaine',
-    body: 'Chaque semaine, 3 défis personnalisés selon ta ville et tes habitudes. Les compteurs se remplissent au fur et à mesure que tu complètes les défis. XP bonus à la clé !',
-    cta: 'Suivant →',
+    title: '⚡ Tes défis — La motivation hebdo',
+    body: 'Chaque semaine, 3 défis personnalisés selon ta ville et tes habitudes de spotting. Les compteurs de vitesse se remplissent en temps réel quand tu complètes un défi. Termine les 3 pour un bonus XP massif.',
   },
   {
     route: '/',
     selector: '[data-tour="streak"]',
-    title: '🔥 Ton streak',
-    body: "Spotte au moins une voiture par jour pour maintenir ta série. Plus ton streak est long, plus tu gagnes de bonus XP. Ne laisse pas la flamme s'éteindre !",
-    cta: 'Suivant →',
+    title: '🔥 Le Streak — Garde la flamme',
+    body: 'Spotte au moins une voiture par jour pour maintenir ton streak. Plus ta série est longue, plus tu gagnes de bonus XP à chaque spot. Un streak de 7 jours débloque le badge Série 7 !',
   },
   {
-    route: '/profile',
+    route: '/',
+    selector: 'nav.liquid-nav [aria-label="Explorer"]',
+    title: '🔍 L’Explorer — Découvre et explore',
+    body: 'Retrouve toutes les actualités CarSpotting et F1 traduites en français, les events près de toi, et les pages dédiées à chaque marque avec tous les spots de la communauté. Reste connecté à l’univers automobile.',
+  },
+  {
+    route: '/',
     selector: 'nav.liquid-nav [aria-label="Profil"]',
-    title: '🃏 Ta Collection de cartes',
-    body: 'Chaque voiture spottée devient une carte unique dans ta collection. Les cartes Légendaires ont un effet holographique spécial. Collectionne-les toutes !',
-    cta: 'Suivant →',
+    title: '👤 Ton Profil — Ton identité',
+    body: 'Retrouve tes stats (spots, marques, rang), tes badges débloqués et ta Collection de cartes. Chaque voiture spottée génère une carte unique. Les Ultra Rare et Légendaires ont des effets spéciaux exclusifs.',
   },
   {
     route: '/',
     selector: '[data-tour="ranking"]',
-    title: '🏆 Le Classement',
-    body: 'Affronte les autres spotters de ta ville, de ton pays et du monde entier. Poste des voitures rares pour grimper dans le classement et devenir le meilleur spotter de ta région !',
-    cta: "C'est parti 🚀",
+    title: '🏆 Le Classement — Prouve ta valeur',
+    body: "Affronte les spotters de ta ville, de ton pays et du monde entier. Plus tu spots des voitures rares, plus tu gagnes d'XP et plus tu montes. Deviens le #1 de ta ville et domine le classement !",
   },
 ]
 
@@ -307,10 +377,12 @@ export default function Onboarding() {
   const [show, setShow] = useState<boolean | null>(null)
   const [index, setIndex] = useState(0)
   const startX = useRef<number | null>(null)
-  // Flow phase: the 3 slides, then the 5-step guided tour.
+  // Flow phase: the 4 slides, then the 8-step guided tour.
   const [phase, setPhase] = useState<'slides' | 'tour'>('slides')
   const [tourStep, setTourStep] = useState(0)
   const [rect, setRect] = useState<Rect | null>(null)
+  // Phase 3 — the "active les notifications" tip toast shown after the tour.
+  const [toast, setToast] = useState(false)
 
   // Single source of truth = the DB flag. Show whenever it isn't
   // explicitly true (false / null / missing row → first launch).
@@ -383,16 +455,7 @@ export default function Onboarding() {
     }
   }, [phase, tourStep, navigate, location.pathname])
 
-  function nextTour() {
-    if (tourStep < TOUR.length - 1) setTourStep((s) => s + 1)
-    else complete(true)
-  }
-
-  function complete(toMap: boolean) {
-    // Permission prompts must fire inside the gesture, before any await.
-    kickoffPermissions()
-    setShow(false)
-    // Persist completion — the DB flag is what gates the next launch.
+  function persistDone() {
     void (async () => {
       const {
         data: { user },
@@ -404,10 +467,77 @@ export default function Onboarding() {
           .eq('user_id', user.id)
       }
     })()
+  }
+
+  function nextTour() {
+    if (tourStep < TOUR.length - 1) setTourStep((s) => s + 1)
+    else finishTour()
+  }
+
+  // End of the tour → close, land on Carte, then surface the tip toast.
+  function finishTour() {
+    persistDone()
+    setShow(false)
+    navigate('/map')
+    setToast(true)
+    window.setTimeout(() => setToast(false), 4000)
+  }
+
+  // Skip everything (slides "Passer" or tour "Passer").
+  function complete(toMap: boolean) {
+    kickoffPermissions()
+    persistDone()
+    setShow(false)
     if (toMap) navigate('/map')
   }
 
-  if (!show) return null
+  // After the tour (show=false) the only thing left to render is the
+  // 4-second tip toast.
+  if (!show) {
+    if (!toast) return null
+    return (
+      <div
+        className="fixed inset-x-0 z-[120] flex justify-center px-4"
+        style={{
+          bottom: 'max(5.5rem, calc(env(safe-area-inset-bottom) + 5rem))',
+          fontFamily: 'var(--font-display, Inter, system-ui, sans-serif)',
+        }}
+      >
+        <div
+          className="flex max-w-sm items-center gap-3 rounded-2xl px-4 py-3"
+          style={{
+            background: '#141414',
+            border: '1px solid #E8203A',
+            boxShadow: '0 12px 40px rgba(0,0,0,0.6)',
+            animation: 'onb-slide-up 0.4s ease-out',
+          }}
+        >
+          <p className="min-w-0 flex-1 text-[12.5px] leading-snug text-white/85">
+            💡 Astuce : Active les notifications pour être alerté quand une
+            supercar est spottée près de toi !
+          </p>
+          <button
+            onClick={() => {
+              try {
+                if (
+                  typeof Notification !== 'undefined' &&
+                  Notification.permission === 'default'
+                )
+                  Notification.requestPermission().catch(() => {})
+              } catch {
+                /* ignore */
+              }
+              setToast(false)
+            }}
+            className="tappable flex-none rounded-full px-3.5 py-1.5 text-[12px] font-bold text-white"
+            style={{ background: RED }}
+          >
+            Activer
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   function onTouchStart(e: React.TouchEvent) {
     startX.current = e.touches[0].clientX
@@ -465,7 +595,7 @@ export default function Onboarding() {
               left: rect.left - 8,
               width: rect.width + 16,
               height: rect.height + 16,
-              boxShadow: '0 0 0 9999px rgba(0,0,0,0.8)',
+              boxShadow: '0 0 0 9999px rgba(0,0,0,0.85)',
               border: '2px solid rgba(232,32,58,0.9)',
               transition:
                 'top .45s cubic-bezier(0.34,1.56,0.64,1), left .45s cubic-bezier(0.34,1.56,0.64,1), width .45s cubic-bezier(0.34,1.56,0.64,1), height .45s cubic-bezier(0.34,1.56,0.64,1)',
@@ -475,7 +605,7 @@ export default function Onboarding() {
         ) : (
           <div
             className="absolute inset-0"
-            style={{ background: 'rgba(0,0,0,0.8)' }}
+            style={{ background: 'rgba(0,0,0,0.85)' }}
           />
         )}
 
@@ -530,20 +660,27 @@ export default function Onboarding() {
           )}
 
           <div
-            className="relative rounded-[20px] p-5"
+            className="relative rounded-[20px]"
             style={{
               background: '#141414',
               border: '1px solid #E8203A',
               boxShadow: '0 12px 40px rgba(0,0,0,0.6)',
+              padding: '20px 16px',
             }}
           >
-            <span className="absolute right-4 top-4 text-[12px] font-semibold text-white/40">
-              {tourStep + 1}/{TOUR.length}
+            <span
+              className="absolute right-4 top-4 text-[12px] font-bold"
+              style={{ color: RED }}
+            >
+              {tourStep + 1} / {TOUR.length}
             </span>
-            <p className="pr-8 text-[16px] font-bold leading-snug text-white">
+            <p className="pr-12 text-[17px] font-bold leading-snug text-white">
               {t.title}
             </p>
-            <p className="mt-2 line-clamp-3 text-[13px] leading-snug text-white/60">
+            <p
+              className="mt-2 line-clamp-4 text-[13px] text-white/60"
+              style={{ lineHeight: 1.6 }}
+            >
               {t.body}
             </p>
             <button
@@ -551,7 +688,9 @@ export default function Onboarding() {
               className="tappable mt-4 w-full rounded-full py-3 text-sm font-bold text-white transition-transform active:scale-[0.97]"
               style={{ background: RED, boxShadow: '0 0 14px rgba(232,32,58,0.5)' }}
             >
-              {t.cta}
+              {tourStep === TOUR.length - 1
+                ? 'C’est parti, je spotte ! 🚀'
+                : 'Compris →'}
             </button>
           </div>
 
@@ -624,15 +763,24 @@ export default function Onboarding() {
             transition: SPRING,
           }}
         >
-          {SLIDES.map((s) => (
+          {SLIDES.map((s, i) => (
             <section
               key={s.title}
               className="flex h-full w-full min-w-full flex-col items-center justify-center px-9 text-center"
             >
-              <div className="mb-14 flex h-60 items-center justify-center">
+              {i === 0 && (
+                <h2
+                  className="mb-4 font-display font-extrabold leading-none"
+                  style={{ fontSize: '40px', letterSpacing: '-1.5px' }}
+                >
+                  <span style={{ color: RED }}>R</span>
+                  <span className="text-white">EVS</span>
+                </h2>
+              )}
+              <div className="mb-12 flex h-56 items-center justify-center">
                 {s.visual}
               </div>
-              <h1 className="font-display text-[30px] font-extrabold leading-tight tracking-tight">
+              <h1 className="font-display text-[28px] font-extrabold leading-tight tracking-tight">
                 {s.title}
               </h1>
               <p className="mt-3 max-w-[20rem] text-[15px] leading-relaxed text-white/55">
@@ -660,15 +808,13 @@ export default function Onboarding() {
           ))}
         </div>
 
-        {last && (
-          <button
-            onClick={() => setPhase('tour')}
-            className="tappable w-full rounded-full py-4 text-base font-bold text-white transition-transform active:scale-[0.98]"
-            style={{ background: RED, boxShadow: '0 0 20px rgba(232,32,58,0.5)' }}
-          >
-            C'est parti !
-          </button>
-        )}
+        <button
+          onClick={() => (last ? setPhase('tour') : setIndex((i) => i + 1))}
+          className="tappable w-full rounded-full py-4 text-base font-bold text-white transition-transform active:scale-[0.98]"
+          style={{ background: RED, boxShadow: '0 0 20px rgba(232,32,58,0.5)' }}
+        >
+          {last ? 'Commencer le tour →' : 'Suivant →'}
+        </button>
       </div>
     </div>
   )

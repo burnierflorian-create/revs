@@ -88,6 +88,40 @@ export default function MainLayout() {
     navigate('/new-spot')
   }
 
+  // Force-relogin sweep: when an admin flips profiles.force_relogin = true
+  // (e.g. after a major auth/onboarding change), the user is signed out
+  // once. We clear the flag FIRST (while still authenticated) so re-login
+  // never loops, then sign out — App's guard redirects to /auth.
+  useEffect(() => {
+    let active = true
+    ;(async () => {
+      try {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser()
+        if (!active || !user) return
+        const { data } = await supabase
+          .from('profiles')
+          .select('force_relogin')
+          .eq('user_id', user.id)
+          .maybeSingle()
+        if (!active) return
+        if ((data as { force_relogin?: boolean } | null)?.force_relogin === true) {
+          await supabase
+            .from('profiles')
+            .update({ force_relogin: false })
+            .eq('user_id', user.id)
+          await supabase.auth.signOut()
+        }
+      } catch {
+        /* best-effort */
+      }
+    })()
+    return () => {
+      active = false
+    }
+  }, [])
+
   // Hydrate the profile from signup metadata (pseudo / ville / country)
   // on first authenticated mount. Email-confirm signups can't write the
   // profile at signup time (no session yet), so the fields ride along in

@@ -1,8 +1,9 @@
 import { Suspense, lazy, useEffect } from 'react'
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from './hooks/useAuth'
 import MainLayout from './layouts/MainLayout'
 import Auth from './pages/Auth'
+import ResetPassword from './pages/ResetPassword'
 import Onboarding from './components/Onboarding'
 
 // Every stack route is lazy: keeps the first paint chunk small. The
@@ -46,6 +47,7 @@ function lazyRoute(node: React.ReactNode) {
 
 export default function App() {
   const { session, loading, passwordRecovery } = useAuth()
+  const { pathname } = useLocation()
 
   // After the first idle window, warm-start the Map chunk so its
   // 469 KB gzipped mapbox-gl payload is already in the browser cache
@@ -93,6 +95,9 @@ export default function App() {
   return (
     <>
       <Routes>
+        {/* Public — landing page for the password-reset email link. Always
+            reachable (the recovery session is briefly non-null). */}
+        <Route path="/reset-password" element={<ResetPassword />} />
         <Route
           path="/auth"
           element={
@@ -169,7 +174,10 @@ export default function App() {
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
-      {session && <Onboarding />}
+      {session &&
+        !passwordRecovery &&
+        pathname !== '/auth' &&
+        pathname !== '/reset-password' && <Onboarding />}
     </>
   )
 }

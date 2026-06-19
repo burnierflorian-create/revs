@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { Eye, EyeOff } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { translateError } from '../lib/errors'
 import { stashPendingReferral } from '../lib/referrals'
@@ -51,7 +52,6 @@ export default function Auth() {
   const [error, setError] = useState<string | null>(null)
   const [info, setInfo] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
-  const [showPassword, setShowPassword] = useState(false)
   // Signup-only profile fields.
   const [pseudo, setPseudo] = useState('')
   const [pseudoStatus, setPseudoStatus] = useState<PseudoStatus>('idle')
@@ -182,14 +182,14 @@ export default function Auth() {
         // even if the email client strips the hash. The redirect
         // origin is forced to the prod URL when the request fires
         // from localhost so dev testing produces working email links.
-        const redirectTo = `${resetRedirectOrigin()}/auth?reset=1`
+        const redirectTo = `${resetRedirectOrigin()}/reset-password`
         const { error } = await supabase.auth.resetPasswordForEmail(
           email,
           { redirectTo },
         )
         if (error) throw error
         setInfo(
-          'Lien de réinitialisation envoyé sur votre adresse e-mail !',
+          "Un email t'a été envoyé avec un lien pour créer un nouveau mot de passe.",
         )
       } else if (mode === 'recover') {
         // User landed back from the email link. supabase-js already
@@ -371,34 +371,29 @@ export default function Auth() {
 
           {mode === 'recover' && (
             <>
-              <Field
+              <PasswordField
                 label="Nouveau mot de passe"
-                type="password"
                 autoComplete="new-password"
                 required
                 minLength={6}
                 value={password}
                 onChange={setPassword}
-                placeholder="••••••••"
               />
-              <Field
+              <PasswordField
                 label="Confirme le nouveau mot de passe"
-                type="password"
                 autoComplete="new-password"
                 required
                 minLength={6}
                 value={confirmPassword}
                 onChange={setConfirmPassword}
-                placeholder="••••••••"
               />
             </>
           )}
 
           {mode !== 'forgot' && (
             <div className="space-y-1.5">
-              <Field
+              <PasswordField
                 label="Mot de passe"
-                type={showPassword ? 'text' : 'password'}
                 autoComplete={
                   mode === 'login' ? 'current-password' : 'new-password'
                 }
@@ -406,21 +401,7 @@ export default function Auth() {
                 minLength={mode === 'signup' ? 8 : 6}
                 value={password}
                 onChange={setPassword}
-                placeholder="••••••••"
-                hint={
-                  mode === 'signup'
-                    ? 'Minimum 8 caractères.'
-                    : undefined
-                }
-                adornment={
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword((s) => !s)}
-                    className="tappable text-[11px] font-semibold text-fg2 hover:text-fg"
-                  >
-                    {showPassword ? 'Cacher' : 'Voir'}
-                  </button>
-                }
+                hint={mode === 'signup' ? 'Minimum 8 caractères.' : undefined}
               />
               {mode === 'login' && (
                 <div className="flex justify-end px-1">
@@ -653,5 +634,53 @@ function Field({
       </div>
       {hint && <span className="block px-1 text-[11px] text-fg2/80">{hint}</span>}
     </label>
+  )
+}
+
+// Password field with a built-in show/hide eye. Used for EVERY password
+// input across the app (login, signup, recover, reset) so the toggle is
+// always available.
+export function PasswordField({
+  label,
+  value,
+  onChange,
+  autoComplete,
+  minLength,
+  required,
+  placeholder = '••••••••',
+  hint,
+}: {
+  label: string
+  value: string
+  onChange: (v: string) => void
+  autoComplete?: string
+  minLength?: number
+  required?: boolean
+  placeholder?: string
+  hint?: string
+}) {
+  const [show, setShow] = useState(false)
+  return (
+    <Field
+      label={label}
+      type={show ? 'text' : 'password'}
+      autoComplete={autoComplete}
+      minLength={minLength}
+      required={required}
+      value={value}
+      onChange={onChange}
+      placeholder={placeholder}
+      hint={hint}
+      adornment={
+        <button
+          type="button"
+          onClick={() => setShow((s) => !s)}
+          aria-label={show ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+          className="tappable flex h-6 w-6 items-center justify-center text-fg2 hover:text-fg"
+        >
+          {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+        </button>
+      }
+    />
   )
 }
