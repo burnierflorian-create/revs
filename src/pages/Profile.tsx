@@ -1448,12 +1448,15 @@ function GarageCoverFlow({
         ref={scrollerRef}
         className="no-scrollbar flex items-stretch gap-3 overflow-x-auto py-2"
         style={{
-          paddingLeft: 'max(env(safe-area-inset-left), 16px)',
-          paddingRight: 'max(env(safe-area-inset-right), 16px)',
+          // No global horizontal padding — the row is full-bleed so the
+          // scroll spans the whole screen. Only the FIRST card carries a
+          // 16px left inset (below) so it doesn't sit flush against the
+          // screen edge at rest; the last card gets a matching trailing
+          // inset so the end of the scroll breathes.
           WebkitOverflowScrolling: 'touch',
         }}
       >
-        {cars.map((s) => (
+        {cars.map((s, i) => (
           <button
             key={s.id}
             onClick={() => onOpen(s.id)}
@@ -1463,6 +1466,12 @@ function GarageCoverFlow({
               height: 200,
               background: 'linear-gradient(160deg, #141414 0%, #1a1a1a 100%)',
               border: '1px solid rgba(255,255,255,0.06)',
+              marginLeft:
+                i === 0 ? 'max(env(safe-area-inset-left), 16px)' : undefined,
+              marginRight:
+                i === cars.length - 1
+                  ? 'max(env(safe-area-inset-right), 16px)'
+                  : undefined,
             }}
             aria-label={`${s.brand ?? ''} ${s.model ?? ''}`}
           >
