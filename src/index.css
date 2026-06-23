@@ -226,7 +226,8 @@ h4 {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: transform 120ms linear;
+  /* Rotation is smoothed per-frame by the rAF lerp in Map.tsx — a CSS
+     transition on top would compound the easing and add lag. */
 }
 .location-dot {
   width: 22px;
@@ -438,6 +439,15 @@ h4 {
 }
 .badge-new {
   animation: newPulse 1.5s ease-out infinite;
+}
+
+/* Hide the Mapbox logo + attribution controls completely. !important
+   beats mapbox-gl.css regardless of bundle order. */
+.mapboxgl-ctrl-logo,
+.mapboxgl-ctrl-attrib,
+.mapboxgl-ctrl-bottom-left,
+.mapboxgl-ctrl-bottom-right {
+  display: none !important;
 }
 
 /* !important beats mapbox-gl.css regardless of bundle order (its

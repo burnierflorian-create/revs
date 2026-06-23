@@ -635,10 +635,12 @@ export default function Profile() {
             })}
           </div>
 
-          {/* Tab content wrapper — px-2 nets px-6 from the screen edge
-              (parent already carries px-4). Gives the 2-col collection
-              grid breathing room so cards don't slam the phone edge. */}
-          <div className="mt-5 px-2">
+          {/* Tab content wrapper — the extra px-2 was removed 2026-06-23
+              so Collection / Garage / Récompenses span full width. The
+              parent's px-4 is the only horizontal gutter (16px); the
+              collection grid + garage scroll break out of it to reach the
+              screen edges where the spec asks for it. */}
+          <div className="mt-5">
             {profileTab === 'collection' &&
               (appConfig.SHOW_CARD_COLLECTION ? (
                 <CollectionDecks spots={spots} />
@@ -1170,8 +1172,9 @@ function PremiumTopBanner({
             )}
           </p>
         ) : (
-          <p className="mt-0.5 text-[13px] font-bold text-white">
-            7,99€<span className="font-medium text-white/50">/mois</span>
+          // No price on the card — the tariff lives on /premium only.
+          <p className="mt-0.5 truncate text-[12px] text-white/50">
+            Spots illimités & avantages exclusifs
           </p>
         )}
       </div>
@@ -1426,7 +1429,10 @@ function GarageCoverFlow({
   }, [spots])
 
   return (
-    <div className="-mx-2">
+    // -mx-4 cancels the profile's 16px gutter so the scroll starts from
+    // the left screen edge (16px padding on the first item) and the last
+    // cards can bleed off the right edge.
+    <div className="-mx-4">
       {/* Garage — horizontal scroll of 160×200 photo cards. Each uses the
           best (highest-rarity) spot photo of that model as its background,
           with a dark gradient + brand / year / model overlays. */}
@@ -1434,7 +1440,8 @@ function GarageCoverFlow({
         ref={scrollerRef}
         className="no-scrollbar flex items-stretch gap-3 overflow-x-auto py-2"
         style={{
-          paddingInline: 'max(env(safe-area-inset-left), 16px)',
+          paddingLeft: 'max(env(safe-area-inset-left), 16px)',
+          paddingRight: 'max(env(safe-area-inset-right), 16px)',
           WebkitOverflowScrolling: 'touch',
         }}
       >

@@ -36,6 +36,7 @@ import {
   type CardProgress,
 } from '../lib/cardLevels'
 import { BRANDS } from '../lib/brands'
+import { matchesPillCategory } from '../lib/spotCategory'
 import { rarityRank } from '../components/CollectorCard'
 import { rarityBadge } from '../lib/rarityStyle'
 import { useTheme } from '../lib/theme'
@@ -45,6 +46,17 @@ import {
   type SpotScore,
 } from '../lib/spotPredictions'
 import { xpLevel } from '../lib/xp'
+
+// Category filter pills shown under the search bar (same vocabulary as
+// the Fil's pills, minus "Près de moi" which is a feed-only sort).
+const MAP_CATEGORY_PILLS = [
+  'Tous',
+  'Supercars',
+  'Hypercars',
+  'JDM',
+  'Électrique',
+  'Classique',
+] as const
 
 const PARIS: [number, number] = [2.3522, 48.8566]
 const DEFAULT_ZOOM = 13
@@ -552,6 +564,9 @@ export default function MapPage() {
   const markersRef = useRef<Record<string, mapboxgl.Marker>>({})
   const onScreenRef = useRef<Record<string, mapboxgl.Marker>>({})
   const searchRef = useRef<string>('')
+  // Active category pill (Tous / Supercars / …). Mirrored into a ref so the
+  // marker-building loop reads the latest without re-subscribing.
+  const categoryRef = useRef<string>('Tous')
   // Hidden camera input for the centered "Spotter" FAB — clicked
   // synchronously inside the tap so iOS opens the native camera; the
   // captured photo is stashed and NewSpot consumes it on mount.
@@ -585,6 +600,7 @@ export default function MapPage() {
   // localStorage key (revs_map_filters), so nothing here ever reaches
   // the Fil. Restored from storage on mount.
   const [mapSearchQuery, setMapSearchQuery] = useState<string>('')
+  const [mapCategory, setMapCategory] = useState<string>('Tous')
   const [mapFilters, setMapFilters] = useState<MapFilters>(() =>
     loadMapFilters(),
   )
@@ -845,7 +861,10 @@ export default function MapPage() {
         center: initCenter,
         zoom: initZoom,
         pitch: 0,
-        attributionControl: true,
+        // Mapbox logo + attribution fully hidden (also forced off via the
+        // global .mapboxgl-ctrl-* CSS rules in index.css).
+        attributionControl: false,
+        logoPosition: 'bottom-left',
         fadeDuration: 0,
         refreshExpiredTiles: false,
         renderWorldCopies: false,
@@ -886,6 +905,9 @@ export default function MapPage() {
             .toLowerCase()
           if (!hay.includes(needle)) continue
         }
+        // Category pill filter (Tous = no filter).
+        const cat = categoryRef.current
+        if (cat && cat !== 'Tous' && !matchesPillCategory(sp, cat)) continue
         // Advanced filters — rarity / brand / card level.
         if (adv.rarity !== 'all' && (sp.rarity ?? 'standard') !== adv.rarity)
           continue
@@ -1360,6 +1382,11 @@ export default function MapPage() {
     refreshRef.current?.()
   }, [mapSearchQuery])
 
+  useEffect(() => {
+    categoryRef.current = mapCategory
+    refreshRef.current?.()
+  }, [mapCategory])
+
   // Load the viewer's card collection once so the "niveau de carte" filter
   // can resolve each spot's level. Read-own; empty map when logged out.
   useEffect(() => {
@@ -1513,6 +1540,10 @@ export default function MapPage() {
     const innerEl = el.querySelector(
       '#user-location-marker',
     ) as HTMLElement | null
+    const coneEl = el.querySelector('.direction-cone') as HTMLElement | null
+    // Arrow stays hidden until we get a real compass reading — a missing
+    // or null heading means "blue dot only, no rotation".
+    if (coneEl) coneEl.style.display = 'none'
     const marker = new mapboxgl.Marker({ element: el, anchor: 'center' })
     userMarkerRef.current = marker
     let added = false
@@ -1537,7 +1568,23 @@ export default function MapPage() {
 
     // Compass heading → rotate the whole inner marker (dot + cone), like
     // Apple Maps. webkitCompassHeading on iOS, alpha on Android.
+    //
+    // Fluidity rewrite (spec 2026-06-23): orientation events fire far too
+    // often and jitter, so we (1) throttle ingestion to one sample / 100 ms,
+    // (2) only stash a *target* heading, and (3) lerp the *current* heading
+    // toward it on every animation frame for buttery rotation. The arrow
+    // only appears once a valid heading lands.
+    let currentHeading = 0
+    let targetHeading = 0
+    let hasHeading = false
+    let lastSample = 0
+    let rafId = 0
+
     const onOrientation = (ev: Event) => {
+      const now = Date.now()
+      // Throttle — ignore everything inside a 100 ms window.
+      if (now - lastSample < 100) return
+      lastSample = now
       const e = ev as DeviceOrientationEvent & {
         webkitCompassHeading?: number
       }
@@ -1545,9 +1592,28 @@ export default function MapPage() {
       if (typeof e.webkitCompassHeading === 'number')
         heading = e.webkitCompassHeading
       else if (typeof e.alpha === 'number') heading = 360 - e.alpha
-      if (heading == null || !innerEl) return
-      innerEl.style.transform = `rotate(${heading}deg)`
+      if (heading == null || Number.isNaN(heading)) return
+      targetHeading = heading
+      if (!hasHeading) {
+        // First valid reading — snap the start angle and reveal the arrow.
+        currentHeading = heading
+        hasHeading = true
+        if (coneEl) coneEl.style.display = ''
+      }
     }
+
+    const animate = () => {
+      if (hasHeading && innerEl) {
+        // Smooth interpolation along the shortest arc so we never spin the
+        // long way round when the heading wraps past 0°/360°.
+        const diff = targetHeading - currentHeading
+        const shortestDiff = ((diff + 540) % 360) - 180
+        currentHeading += shortestDiff * 0.1
+        innerEl.style.transform = `rotate(${currentHeading}deg)`
+      }
+      rafId = requestAnimationFrame(animate)
+    }
+    rafId = requestAnimationFrame(animate)
     function attachOrientation() {
       window.addEventListener('deviceorientationabsolute', onOrientation, true)
       window.addEventListener('deviceorientation', onOrientation, true)
@@ -1586,6 +1652,7 @@ export default function MapPage() {
       }
       window.removeEventListener('deviceorientationabsolute', onOrientation, true)
       window.removeEventListener('deviceorientation', onOrientation, true)
+      if (rafId) cancelAnimationFrame(rafId)
       gestureCleanup?.()
       marker.remove()
       userMarkerRef.current = null
@@ -1670,10 +1737,37 @@ export default function MapPage() {
             stopReplay + the replay state) stays in the module so it
             can be reattached to a future UI surface without rewiring
             the marker animation. */}
-        {/* Category pill row (Tous/Supercars/Autre/JDM) removed
-            2026-06-07: superseded by the advanced-filters sheet behind
-            the SlidersHorizontal icon. The map now extends straight
-            under the search bar for maximum spotting surface. */}
+        {/* Category pills — glassmorphism, scrollable, sit just under
+            the search bar so they read over the map behind them. */}
+        <div className="mx-auto mt-2.5 max-w-md">
+          <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4">
+            {MAP_CATEGORY_PILLS.map((cat) => {
+              const active = mapCategory === cat
+              return (
+                <button
+                  key={cat}
+                  onClick={() => setMapCategory(cat)}
+                  className="tappable flex-none font-semibold tracking-tight transition-colors"
+                  style={{
+                    height: 34,
+                    borderRadius: 20,
+                    padding: '0 16px',
+                    fontSize: 13,
+                    color: active ? '#fff' : 'rgba(255,255,255,0.7)',
+                    background: active ? '#E8203A' : 'rgba(10,10,10,0.8)',
+                    border: active
+                      ? '1px solid #E8203A'
+                      : '1px solid rgba(255,255,255,0.14)',
+                    backdropFilter: 'blur(10px)',
+                    WebkitBackdropFilter: 'blur(10px)',
+                  }}
+                >
+                  {cat}
+                </button>
+              )
+            })}
+          </div>
+        </div>
       </div>
 
       {/* AI prediction Sparkles entry button — archived behind

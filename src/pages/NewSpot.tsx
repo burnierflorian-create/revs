@@ -974,20 +974,38 @@ export default function NewSpot() {
             </div>
 
             <div className="space-y-2">
-              <label className="label-up text-[10px] text-fg2">
-                Description (optionnel)
+              <label
+                className="block"
+                style={{ fontSize: '12px', color: '#888' }}
+              >
+                Ajoute une description (optionnel)
               </label>
-              <textarea
-                value={description}
-                maxLength={140}
-                onChange={(e) => setDescription(e.target.value)}
-                rows={3}
-                className="w-full resize-none rounded-2xl bg-card px-4 py-3.5 text-fg outline-none focus:border-accent"
-                style={{ border: '1px solid var(--color-border)' }}
-              />
-              <p className="text-right text-[11px] text-fg2/70">
-                {description.length}/140
-              </p>
+              <div className="relative">
+                <textarea
+                  value={description}
+                  maxLength={280}
+                  onChange={(e) => setDescription(e.target.value)}
+                  rows={3}
+                  placeholder="Ex: Elle roulait vers le lac, moteur en plein régime… 🔥"
+                  className="w-full resize-none outline-none placeholder:text-[#666]"
+                  style={{
+                    background: '#1a1a1a',
+                    borderRadius: '12px',
+                    border: '1px solid #333',
+                    // Extra bottom padding leaves room for the overlaid
+                    // counter so the last line never slides under it.
+                    padding: '12px 12px 26px',
+                    color: '#fff',
+                    fontSize: '14px',
+                  }}
+                />
+                <p
+                  className="absolute bottom-2 right-3 tabular-nums"
+                  style={{ fontSize: '11px', color: '#888' }}
+                >
+                  {description.length}/280
+                </p>
+              </div>
             </div>
           </div>
 

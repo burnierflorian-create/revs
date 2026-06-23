@@ -25,10 +25,24 @@ import PullIndicator from '../components/PullIndicator'
 import { usePullToRefresh } from '../hooks/usePullToRefresh'
 import { BRANDS } from '../lib/brands'
 import { bodyTypeFor } from '../lib/car-body-type'
+import { ELECTRIC_RE } from '../lib/spotCategory'
 import { isFounder } from '../lib/founders'
 
 const PAGE = 10
 const POOL_SIZE = 200
+
+// Header filter pills (single-select). Category pills drive
+// feedFilters.category; "Près de moi" drives the nearby sort.
+const FEED_PILLS = [
+  'Tout',
+  'Supercars',
+  'Hypercars',
+  'JDM',
+  'Électrique',
+  'Classique',
+  'Près de moi',
+] as const
+const PILL_CATEGORIES = ['Supercars', 'Hypercars', 'JDM', 'Électrique', 'Classique']
 
 const SLIDES = [
   {
@@ -78,6 +92,12 @@ function matchesCategory(s: Spot, cat: string): boolean {
   }
   if (cat === 'JDM') {
     return s.category === 'JDM' || bodyTypeFor(s.brand, s.model, s.category) === 'jdm-sport'
+  }
+  if (cat === 'Électrique') {
+    return ELECTRIC_RE.test(`${s.brand} ${s.model}`)
+  }
+  if (cat === 'Classique') {
+    return s.category === 'classic' || s.category === 'youngtimer'
   }
   if (cat === 'Berlines') {
     const bt = bodyTypeFor(s.brand, s.model, s.category)
@@ -138,7 +158,6 @@ function EmptyCarousel({ onSpot }: { onSpot: () => void }) {
   }, [])
   return (
     <div className="flex min-h-screen flex-col bg-bg px-4 pb-10 pt-[max(1rem,env(safe-area-inset-top))]">
-      <h1 className="py-4 font-display text-2xl font-bold text-fg">Fil</h1>
       <div className="relative flex-1 overflow-hidden rounded-3xl">
         {SLIDES.map((s, idx) => (
           <div
@@ -467,8 +486,7 @@ export default function Feed() {
   if (spots === null) {
     return (
       <div className="min-h-screen bg-bg px-4 pt-[max(1rem,env(safe-area-inset-top))]">
-        <h1 className="py-4 font-display text-2xl font-bold text-fg">Fil</h1>
-        <div className="space-y-5">
+        <div className="space-y-5 pt-4">
           {Array.from({ length: 3 }).map((_, i) => (
             <SkeletonCard key={i} />
           ))}
@@ -482,6 +500,38 @@ export default function Feed() {
     return <EmptyCarousel onSpot={() => navigate('/new-spot')} />
   }
 
+  // Which header pill is highlighted. "Près de moi" wins when the nearby
+  // sort is on; otherwise the active category pill (or "Tout").
+  const activePill: string =
+    feedFilters.sort === 'nearby'
+      ? 'Près de moi'
+      : PILL_CATEGORIES.includes(feedFilters.category)
+        ? feedFilters.category
+        : 'Tout'
+  // The advanced-filters dot lights up only for filters the pills DON'T
+  // cover (brand, city, liked/week sort).
+  const advancedActive =
+    feedFilters.brand !== null ||
+    feedFilters.city.trim().length > 0 ||
+    feedFilters.sort === 'liked' ||
+    feedFilters.sort === 'week'
+
+  function selectPill(pill: string) {
+    let next: FeedFilters
+    if (pill === 'Près de moi') {
+      next = { ...feedFilters, sort: 'nearby' }
+    } else {
+      // A category pill ("Tout" resets the category). Selecting a category
+      // drops the nearby sort so the pills behave as a single-select group.
+      next = {
+        ...feedFilters,
+        category: pill === 'Tout' ? 'Tout' : pill,
+        sort: feedFilters.sort === 'nearby' ? 'recent' : feedFilters.sort,
+      }
+    }
+    setFeedFilters(next)
+    saveFeedFilters(next)
+  }
 
   return (
     <div
@@ -494,15 +544,13 @@ export default function Feed() {
           breathing room is re-applied selectively (px-4) on text/icon rows
           only. */}
       <PullIndicator pull={pull} refreshing={refreshing} />
-      <h1 className="display-xl px-4 py-5 text-fg">Fil</h1>
 
       {/* Search (~85%) + a single minimal slider icon that opens the
-          filters panel. The old "Tout" / "Filtres" button row was removed
-          2026-06-05 — resetting now lives inside the filters modal, and
-          the whole header collapses to one clean line so the photos
-          below own the screen. Glass + border resolve through CSS vars so
-          the whole row auto-flips dark / light. */}
-      <div className="mb-6 flex items-center gap-2 px-4">
+          filters panel. The "Fil" title was removed 2026-06-23 — the
+          header now collapses to the search row + a scrollable pill row
+          so the photos below own the screen. Glass + border resolve
+          through CSS vars so the whole row auto-flips dark / light. */}
+      <div className="mb-3 flex items-center gap-2 px-4 pt-3">
         <div
           className="flex flex-1 items-center gap-2 rounded-full px-4 py-2.5"
           style={{
@@ -533,29 +581,55 @@ export default function Feed() {
         </div>
         <button
           onClick={() => setFiltersOpen(true)}
-          aria-label="Filtres"
-          className="tappable relative flex h-11 w-11 flex-none items-center justify-center rounded-full"
+          aria-label="Filtres avancés"
+          className="tappable relative flex flex-none items-center justify-center"
           style={{
-            background: allDefaults
-              ? 'var(--color-glass)'
-              : 'rgba(232,32,58,0.15)',
-            border: allDefaults
-              ? '1px solid var(--color-border)'
-              : '1px solid rgba(232,32,58,0.40)',
-            backdropFilter: 'saturate(160%) blur(22px)',
-            WebkitBackdropFilter: 'saturate(160%) blur(22px)',
+            height: 36,
+            width: 36,
+            borderRadius: 10,
+            background: advancedActive ? 'rgba(232,32,58,0.15)' : '#1a1a1a',
+            border: advancedActive
+              ? '1px solid rgba(232,32,58,0.40)'
+              : '1px solid #333',
           }}
         >
           <SlidersHorizontal
-            className={`h-[18px] w-[18px] ${allDefaults ? 'text-fg2' : 'text-accent'}`}
+            className={`h-[18px] w-[18px] ${advancedActive ? 'text-accent' : 'text-fg2'}`}
           />
-          {!allDefaults && (
+          {advancedActive && (
             <span
               className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-accent"
               style={{ border: '2px solid rgb(var(--color-bg))' }}
             />
           )}
         </button>
+      </div>
+
+      {/* Category pills — horizontal scroll, single-select. Tapping a pill
+          filters the feed instantly (categories drive feedFilters.category;
+          "Près de moi" drives the nearby sort). */}
+      <div className="no-scrollbar mb-5 flex gap-2 overflow-x-auto px-4">
+        {FEED_PILLS.map((pill) => {
+          const active = activePill === pill
+          return (
+            <button
+              key={pill}
+              onClick={() => selectPill(pill)}
+              className="tappable flex-none font-semibold tracking-tight transition-colors"
+              style={{
+                height: 34,
+                borderRadius: 20,
+                padding: '0 16px',
+                fontSize: 13,
+                color: active ? '#fff' : 'rgb(var(--color-fg2))',
+                background: active ? '#E8203A' : '#1a1a1a',
+                border: active ? '1px solid #E8203A' : '1px solid #333',
+              }}
+            >
+              {pill}
+            </button>
+          )
+        })}
       </div>
 
       <FeedFiltersModal
@@ -909,6 +983,11 @@ function FeedCard({
           aria-label={`Voir ${title}`}
         >
           <p className="truncate text-[16px] font-bold text-white">{title}</p>
+          {spot.description?.trim() ? (
+            <p className="clamp-2 mt-0.5 text-[13px] leading-snug text-white/85">
+              {spot.description.trim()}
+            </p>
+          ) : null}
           <p className="mt-0.5 truncate text-[13px] text-white/70">
             {spot.year ? <>{spot.year} · </> : null}
             {cat ? (

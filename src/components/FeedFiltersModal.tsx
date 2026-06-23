@@ -61,6 +61,8 @@ const CATEGORIES = [
   'Supercars',
   'Hypercars',
   'JDM',
+  'Électrique',
+  'Classique',
   'Berlines',
   'SUV',
   'Coupés',

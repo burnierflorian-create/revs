@@ -741,7 +741,7 @@ function SpotterAction() {
   }
 
   return (
-    <div className="mt-6 flex justify-center">
+    <div className="mt-6">
       <input
         ref={inputRef}
         type="file"
@@ -752,9 +752,9 @@ function SpotterAction() {
       />
       <button
         onClick={() => inputRef.current?.click()}
-        className="tappable inline-flex items-center gap-3 rounded-full"
+        className="tappable flex w-full items-center justify-center gap-3 rounded-full"
         style={{
-          padding: '12px 28px 12px 14px',
+          padding: '12px 28px',
           background:
             'linear-gradient(135deg, #FF3B52 0%, #E8203A 58%, #C7172A 100%)',
           // Tight neon halo (replaces the diffuse 32px drop) for a

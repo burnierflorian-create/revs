@@ -78,7 +78,9 @@ export default function MyCollection({ spots }: { spots: Spot[] }) {
   }
 
   return (
-    <div className="grid grid-cols-2 gap-4">
+    // Full-bleed 2-col grid: -mx-4 cancels the profile's 16px gutter so
+    // each card is exactly 50% of the screen width minus the 8px gutter.
+    <div className="-mx-4 grid grid-cols-2 gap-2">
       {sorted.map((s, i) => {
         const m = meta.get(s.id)
         return (

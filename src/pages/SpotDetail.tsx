@@ -482,6 +482,11 @@ export default function SpotDetail() {
             </h1>
             <LikeButton spotId={spot.id} realtime />
           </div>
+          {spot.description?.trim() ? (
+            <p className="mt-2 whitespace-pre-line text-[14px] leading-snug text-fg2">
+              {spot.description.trim()}
+            </p>
+          ) : null}
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <RarityBadge rarity={spot.rarity} size="md" />
             {typeof spot.production === 'number' && spot.production > 0 && (
