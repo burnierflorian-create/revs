@@ -8,8 +8,8 @@ import {
   useSearchParams,
 } from 'react-router-dom'
 import {
-  Map as MapIcon,
-  Newspaper,
+  MapPin,
+  Images,
   Home,
   Compass,
   User,
@@ -289,7 +289,7 @@ export default function MainLayout() {
           <NavLink to="/map" onClick={hapticSelection} className={tabClass} aria-label="Carte">
             {({ isActive }) => (
               <>
-                <MapIcon className="h-[22px] w-[22px]" strokeWidth={2} />
+                <MapPin className="h-[26px] w-[26px]" strokeWidth={1.5} />
                 {isActive && <span className="liquid-dot" />}
               </>
             )}
@@ -298,7 +298,7 @@ export default function MainLayout() {
           <NavLink to="/feed" onClick={hapticSelection} className={tabClass} aria-label="Fil">
             {({ isActive }) => (
               <>
-                <Newspaper className="h-[22px] w-[22px]" strokeWidth={2} />
+                <Images className="h-[26px] w-[26px]" strokeWidth={1.5} />
                 {isActive && <span className="liquid-dot" />}
               </>
             )}
@@ -307,7 +307,7 @@ export default function MainLayout() {
           <NavLink to="/" end onClick={hapticSelection} className={tabClass} aria-label="Accueil">
             {({ isActive }) => (
               <>
-                <Home className="h-[22px] w-[22px]" strokeWidth={2} />
+                <Home className="h-[26px] w-[26px]" strokeWidth={1.5} />
                 {isActive && <span className="liquid-dot" />}
               </>
             )}
@@ -316,7 +316,7 @@ export default function MainLayout() {
           <NavLink to="/discover" onClick={hapticSelection} className={tabClass} aria-label="Explorer">
             {({ isActive }) => (
               <>
-                <Compass className="h-[22px] w-[22px]" strokeWidth={2} />
+                <Compass className="h-[26px] w-[26px]" strokeWidth={1.5} />
                 {isActive && <span className="liquid-dot" />}
               </>
             )}
@@ -325,7 +325,7 @@ export default function MainLayout() {
           <NavLink to="/profile" onClick={hapticSelection} className={tabClass} aria-label="Profil">
             {({ isActive }) => (
               <>
-                <User className="h-[22px] w-[22px]" strokeWidth={2} />
+                <User className="h-[26px] w-[26px]" strokeWidth={1.5} />
                 {isActive && <span className="liquid-dot" />}
               </>
             )}

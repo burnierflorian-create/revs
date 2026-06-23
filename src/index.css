@@ -148,12 +148,14 @@ h4 {
 .liquid-nav {
   position: relative;
   pointer-events: auto;
-  width: 280px;
+  width: 296px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 20px;
-  border-radius: 40px;
+  /* Bigger, more imposing pill — vertical padding 12px → 16px and the
+     26px icons add ~10px of overall height. */
+  padding: 16px 20px;
+  border-radius: 44px;
   background: rgba(255, 255, 255, 0.08);
   backdrop-filter: blur(20px) saturate(180%);
   -webkit-backdrop-filter: blur(20px) saturate(180%);

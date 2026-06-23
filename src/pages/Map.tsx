@@ -36,7 +36,11 @@ import {
   type CardProgress,
 } from '../lib/cardLevels'
 import { BRANDS } from '../lib/brands'
-import { matchesPillCategory } from '../lib/spotCategory'
+import {
+  matchesBrandFilter,
+  matchesCategoryFilter,
+} from '../lib/filterCatalog'
+import QuickFilters from '../components/QuickFilters'
 import { rarityRank } from '../components/CollectorCard'
 import { rarityBadge } from '../lib/rarityStyle'
 import { useTheme } from '../lib/theme'
@@ -46,17 +50,6 @@ import {
   type SpotScore,
 } from '../lib/spotPredictions'
 import { xpLevel } from '../lib/xp'
-
-// Category filter pills shown under the search bar (same vocabulary as
-// the Fil's pills, minus "Près de moi" which is a feed-only sort).
-const MAP_CATEGORY_PILLS = [
-  'Tous',
-  'Supercars',
-  'Hypercars',
-  'JDM',
-  'Électrique',
-  'Classique',
-] as const
 
 const PARIS: [number, number] = [2.3522, 48.8566]
 const DEFAULT_ZOOM = 13
@@ -566,7 +559,10 @@ export default function MapPage() {
   const searchRef = useRef<string>('')
   // Active category pill (Tous / Supercars / …). Mirrored into a ref so the
   // marker-building loop reads the latest without re-subscribing.
-  const categoryRef = useRef<string>('Tous')
+  const categoryRef = useRef<string>('Tout')
+  // Active brand quick-filter key ('Tout' = all). Mirrored to a ref so the
+  // marker loop reads the latest without re-subscribing.
+  const brandRef = useRef<string>('Tout')
   // Hidden camera input for the centered "Spotter" FAB — clicked
   // synchronously inside the tap so iOS opens the native camera; the
   // captured photo is stashed and NewSpot consumes it on mount.
@@ -600,7 +596,8 @@ export default function MapPage() {
   // localStorage key (revs_map_filters), so nothing here ever reaches
   // the Fil. Restored from storage on mount.
   const [mapSearchQuery, setMapSearchQuery] = useState<string>('')
-  const [mapCategory, setMapCategory] = useState<string>('Tous')
+  const [mapCategory, setMapCategory] = useState<string>('Tout')
+  const [mapBrand, setMapBrand] = useState<string>('Tout')
   const [mapFilters, setMapFilters] = useState<MapFilters>(() =>
     loadMapFilters(),
   )
@@ -905,9 +902,12 @@ export default function MapPage() {
             .toLowerCase()
           if (!hay.includes(needle)) continue
         }
-        // Category pill filter (Tous = no filter).
+        // Category + brand quick filters ('Tout' = no filter).
         const cat = categoryRef.current
-        if (cat && cat !== 'Tous' && !matchesPillCategory(sp, cat)) continue
+        if (cat && cat !== 'Tout' && !matchesCategoryFilter(sp, cat)) continue
+        const brandKey = brandRef.current
+        if (brandKey && brandKey !== 'Tout' && !matchesBrandFilter(sp, brandKey))
+          continue
         // Advanced filters — rarity / brand / card level.
         if (adv.rarity !== 'all' && (sp.rarity ?? 'standard') !== adv.rarity)
           continue
@@ -1384,8 +1384,9 @@ export default function MapPage() {
 
   useEffect(() => {
     categoryRef.current = mapCategory
+    brandRef.current = mapBrand
     refreshRef.current?.()
-  }, [mapCategory])
+  }, [mapCategory, mapBrand])
 
   // Load the viewer's card collection once so the "niveau de carte" filter
   // can resolve each spot's level. Read-own; empty map when logged out.
@@ -1737,36 +1738,17 @@ export default function MapPage() {
             stopReplay + the replay state) stays in the module so it
             can be reattached to a future UI surface without rewiring
             the marker animation. */}
-        {/* Category pills — glassmorphism, scrollable, sit just under
-            the search bar so they read over the map behind them. */}
+        {/* Two-level compact filter bar (categories + brands) — glass
+            pills so the map reads through, each row with a "Voir plus ↓"
+            bottom sheet. */}
         <div className="mx-auto mt-2.5 max-w-md">
-          <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4">
-            {MAP_CATEGORY_PILLS.map((cat) => {
-              const active = mapCategory === cat
-              return (
-                <button
-                  key={cat}
-                  onClick={() => setMapCategory(cat)}
-                  className="tappable flex-none font-semibold tracking-tight transition-colors"
-                  style={{
-                    height: 34,
-                    borderRadius: 20,
-                    padding: '0 16px',
-                    fontSize: 13,
-                    color: active ? '#fff' : 'rgba(255,255,255,0.7)',
-                    background: active ? '#E8203A' : 'rgba(10,10,10,0.8)',
-                    border: active
-                      ? '1px solid #E8203A'
-                      : '1px solid rgba(255,255,255,0.14)',
-                    backdropFilter: 'blur(10px)',
-                    WebkitBackdropFilter: 'blur(10px)',
-                  }}
-                >
-                  {cat}
-                </button>
-              )
-            })}
-          </div>
+          <QuickFilters
+            category={mapCategory}
+            brand={mapBrand}
+            onCategory={setMapCategory}
+            onBrand={setMapBrand}
+            glass
+          />
         </div>
       </div>
 

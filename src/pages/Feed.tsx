@@ -23,26 +23,15 @@ import FeedFiltersModal, {
 } from '../components/FeedFiltersModal'
 import PullIndicator from '../components/PullIndicator'
 import { usePullToRefresh } from '../hooks/usePullToRefresh'
-import { BRANDS } from '../lib/brands'
-import { bodyTypeFor } from '../lib/car-body-type'
-import { ELECTRIC_RE } from '../lib/spotCategory'
+import {
+  matchesBrandFilter,
+  matchesCategoryFilter,
+} from '../lib/filterCatalog'
+import QuickFilters from '../components/QuickFilters'
 import { isFounder } from '../lib/founders'
 
 const PAGE = 10
 const POOL_SIZE = 200
-
-// Header filter pills (single-select). Category pills drive
-// feedFilters.category; "Près de moi" drives the nearby sort.
-const FEED_PILLS = [
-  'Tout',
-  'Supercars',
-  'Hypercars',
-  'JDM',
-  'Électrique',
-  'Classique',
-  'Près de moi',
-] as const
-const PILL_CATEGORIES = ['Supercars', 'Hypercars', 'JDM', 'Électrique', 'Classique']
 
 const SLIDES = [
   {
@@ -77,48 +66,6 @@ function carKey(s: Spot): string {
   return [s.brand, s.model, s.color]
     .map((x) => (x ?? '').trim().toLowerCase())
     .join('|')
-}
-
-// Maps a spot to one of the modal's category buckets. Combines the
-// stored spot.category enum with the body-type silhouette mapping plus
-// model-name keyword detection for Coupés / Cabriolets.
-function matchesCategory(s: Spot, cat: string): boolean {
-  if (cat === 'Tout') return true
-  if (cat === 'Supercars') {
-    return s.category === 'supercar' || bodyTypeFor(s.brand, s.model, s.category) === 'supercar'
-  }
-  if (cat === 'Hypercars') {
-    return s.category === 'hypercar' || bodyTypeFor(s.brand, s.model, s.category) === 'hypercar'
-  }
-  if (cat === 'JDM') {
-    return s.category === 'JDM' || bodyTypeFor(s.brand, s.model, s.category) === 'jdm-sport'
-  }
-  if (cat === 'Électrique') {
-    return ELECTRIC_RE.test(`${s.brand} ${s.model}`)
-  }
-  if (cat === 'Classique') {
-    return s.category === 'classic' || s.category === 'youngtimer'
-  }
-  if (cat === 'Berlines') {
-    const bt = bodyTypeFor(s.brand, s.model, s.category)
-    return bt === 'sedan' || bt === 'sport-sedan'
-  }
-  if (cat === 'SUV') {
-    const bt = bodyTypeFor(s.brand, s.model, s.category)
-    return bt === 'suv' || bt === 'suv-coupe' || bt === 'mini-suv'
-  }
-  if (cat === 'Coupés') {
-    return /\bcoupe\b|\bcoupé\b/i.test(`${s.brand} ${s.model}`)
-  }
-  if (cat === 'Cabriolets') {
-    return /\bcabriolet\b|\bconvertible\b|\bspider\b|\bspyder\b|\broadster\b|\btarga\b/i.test(
-      `${s.brand} ${s.model}`,
-    )
-  }
-  if (cat === 'Autre') {
-    return s.category === 'other' || s.category === 'classic' || s.category === 'youngtimer'
-  }
-  return true
 }
 
 function groupSpots(list: Spot[]): { primary: Spot; count: number }[] {
@@ -324,22 +271,14 @@ export default function Feed() {
   const applyFilters = useCallback(
     (pool: Spot[], f: FeedFilters): Spot[] => {
       let out = pool
-      // Category filter — combines spot.category enum with the body-
-      // type silhouette mapping, so "SUV" / "Coupés" / "Cabriolets" /
-      // "Berlines" all work even though those aren't stored categories.
-      if (f.category !== 'Tout') {
-        out = out.filter((s) => matchesCategory(s, f.category))
+      // Category filter — shared matcher (spot.category enum + body-type
+      // silhouette mapping + name keywords) so every bucket works.
+      if (f.category && f.category !== 'Tout') {
+        out = out.filter((s) => matchesCategoryFilter(s, f.category))
       }
-      // Brand filter — fuzzy match against the brand's catalogue
-      // patterns (case-insensitive substring of the brand's `match[]`).
+      // Brand filter — shared matcher (catalogue `match[]` substrings).
       if (f.brand) {
-        const brand = BRANDS.find((b) => b.slug === f.brand)
-        if (brand) {
-          out = out.filter((s) => {
-            const needle = (s.brand ?? '').toLowerCase()
-            return brand.match.some((m) => needle.includes(m))
-          })
-        }
+        out = out.filter((s) => matchesBrandFilter(s, f.brand))
       }
       // City filter — needs the resolved profile (ville). Falls back to
       // including spots where the profile hasn't loaded yet so the
@@ -500,34 +439,20 @@ export default function Feed() {
     return <EmptyCarousel onSpot={() => navigate('/new-spot')} />
   }
 
-  // Which header pill is highlighted. "Près de moi" wins when the nearby
-  // sort is on; otherwise the active category pill (or "Tout").
-  const activePill: string =
-    feedFilters.sort === 'nearby'
-      ? 'Près de moi'
-      : PILL_CATEGORIES.includes(feedFilters.category)
-        ? feedFilters.category
-        : 'Tout'
-  // The advanced-filters dot lights up only for filters the pills DON'T
-  // cover (brand, city, liked/week sort).
+  // The advanced-filters dot lights up only for filters the quick bar
+  // doesn't cover (sort + city). Category + brand live in QuickFilters.
   const advancedActive =
-    feedFilters.brand !== null ||
-    feedFilters.city.trim().length > 0 ||
-    feedFilters.sort === 'liked' ||
-    feedFilters.sort === 'week'
+    feedFilters.city.trim().length > 0 || feedFilters.sort !== 'recent'
 
-  function selectPill(pill: string) {
-    let next: FeedFilters
-    if (pill === 'Près de moi') {
-      next = { ...feedFilters, sort: 'nearby' }
-    } else {
-      // A category pill ("Tout" resets the category). Selecting a category
-      // drops the nearby sort so the pills behave as a single-select group.
-      next = {
-        ...feedFilters,
-        category: pill === 'Tout' ? 'Tout' : pill,
-        sort: feedFilters.sort === 'nearby' ? 'recent' : feedFilters.sort,
-      }
+  function setCategory(c: string) {
+    const next: FeedFilters = { ...feedFilters, category: c }
+    setFeedFilters(next)
+    saveFeedFilters(next)
+  }
+  function setBrand(key: string) {
+    const next: FeedFilters = {
+      ...feedFilters,
+      brand: key === 'Tout' ? null : key,
     }
     setFeedFilters(next)
     saveFeedFilters(next)
@@ -605,31 +530,16 @@ export default function Feed() {
         </button>
       </div>
 
-      {/* Category pills — horizontal scroll, single-select. Tapping a pill
-          filters the feed instantly (categories drive feedFilters.category;
-          "Près de moi" drives the nearby sort). */}
-      <div className="no-scrollbar mb-5 flex gap-2 overflow-x-auto px-4">
-        {FEED_PILLS.map((pill) => {
-          const active = activePill === pill
-          return (
-            <button
-              key={pill}
-              onClick={() => selectPill(pill)}
-              className="tappable flex-none font-semibold tracking-tight transition-colors"
-              style={{
-                height: 34,
-                borderRadius: 20,
-                padding: '0 16px',
-                fontSize: 13,
-                color: active ? '#fff' : 'rgb(var(--color-fg2))',
-                background: active ? '#E8203A' : '#1a1a1a',
-                border: active ? '1px solid #E8203A' : '1px solid #333',
-              }}
-            >
-              {pill}
-            </button>
-          )
-        })}
+      {/* Two-level compact filter bar — categories + brands quick rows,
+          each with a "Voir plus ↓" bottom sheet. Filters the feed
+          instantly on selection. */}
+      <div className="mb-4 px-4">
+        <QuickFilters
+          category={feedFilters.category}
+          brand={feedFilters.brand}
+          onCategory={setCategory}
+          onBrand={setBrand}
+        />
       </div>
 
       <FeedFiltersModal
