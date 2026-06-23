@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import { Filter, X } from 'lucide-react'
-import { BRANDS } from '../lib/brands'
 import type { Rarity } from '../lib/spots'
 import { CARD_LEVELS } from '../lib/cardLevels'
 import { appConfig } from '../config/appConfig'
@@ -183,34 +182,9 @@ export default function MapFiltersModal({
           </section>
           )}
 
-          {/* Constructeur */}
-          <section>
-            <p className="mb-2 text-xs uppercase tracking-[0.16em] text-fg/45">
-              Constructeur
-            </p>
-            <div className="flex flex-wrap gap-2">
-              <button
-                onClick={() => setDraft((d) => ({ ...d, brand: null }))}
-                className={chip(draft.brand === null)}
-              >
-                Tous
-              </button>
-              {BRANDS.map((b) => {
-                const on = draft.brand === b.slug
-                return (
-                  <button
-                    key={b.slug}
-                    onClick={() =>
-                      setDraft((d) => ({ ...d, brand: on ? null : b.slug }))
-                    }
-                    className={chip(on)}
-                  >
-                    {b.name}
-                  </button>
-                )
-              })}
-            </div>
-          </section>
+          {/* Constructeur retiré 2026-06-23 : la marque est désormais gérée
+              par la barre QuickFilters au-dessus de la carte. L'avancé ne
+              garde que Rareté + Niveau de carte. */}
         </div>
 
         {/* Footer — the Appliquer button floats clear of the global tab

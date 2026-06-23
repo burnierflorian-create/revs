@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import { Filter, X } from 'lucide-react'
-import { BRANDS } from '../lib/brands'
 
 export type FeedSort = 'recent' | 'liked' | 'nearby' | 'week'
 
@@ -56,19 +55,8 @@ export function saveFeedFilters(f: FeedFilters): void {
   }
 }
 
-const CATEGORIES = [
-  'Tout',
-  'Supercars',
-  'Hypercars',
-  'JDM',
-  'Électrique',
-  'Classique',
-  'Berlines',
-  'SUV',
-  'Coupés',
-  'Cabriolets',
-  'Autre',
-] as const
+// Catégorie + Marque are now handled by the always-visible QuickFilters
+// bar in the Fil header; the advanced sheet keeps only Tri + Ville.
 
 const SORTS: { value: FeedSort; label: string }[] = [
   { value: 'recent', label: 'Plus récents' },
@@ -125,66 +113,6 @@ export default function FeedFiltersModal({
         {/* Body — scrollable. Big bottom padding so the last section
             clears the floating footer + the global tab bar. */}
         <div className="flex-1 space-y-5 overflow-y-auto px-5 pb-24 pt-5">
-          {/* Catégorie */}
-          <section>
-            <p className="mb-2 text-xs uppercase tracking-[0.16em] text-fg/45">
-              Catégorie
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {CATEGORIES.map((c) => {
-                const on = draft.category === c
-                return (
-                  <button
-                    key={c}
-                    onClick={() => setDraft((d) => ({ ...d, category: c }))}
-                    className={`rounded-full px-3.5 py-1.5 text-xs font-medium transition-colors ${
-                      on ? 'bg-accent text-fg' : 'bg-card text-fg/60'
-                    }`}
-                  >
-                    {c}
-                  </button>
-                )
-              })}
-            </div>
-          </section>
-
-          {/* Marque */}
-          <section>
-            <p className="mb-2 text-xs uppercase tracking-[0.16em] text-fg/45">
-              Marque
-            </p>
-            <div className="flex flex-wrap gap-2">
-              <button
-                onClick={() => setDraft((d) => ({ ...d, brand: null }))}
-                className={`rounded-full px-3.5 py-1.5 text-xs font-medium transition-colors ${
-                  draft.brand === null
-                    ? 'bg-accent text-fg'
-                    : 'bg-card text-fg/60'
-                }`}
-              >
-                Toutes
-              </button>
-              {BRANDS.map((b) => {
-                const on = draft.brand === b.slug
-                return (
-                  <button
-                    key={b.slug}
-                    onClick={() =>
-                      setDraft((d) => ({ ...d, brand: on ? null : b.slug }))
-                    }
-                    className={`rounded-full px-3.5 py-1.5 text-xs font-medium transition-colors ${
-                      on
-                        ? 'bg-accent text-fg'
-                        : 'bg-card text-fg/60 hover:text-fg'
-                    }`}
-                  >
-                    {b.name}
-                  </button>
-                )
-              })}
-            </div>
-          </section>
-
           {/* Tri */}
           <section>
             <p className="mb-2 text-xs uppercase tracking-[0.16em] text-fg/45">
@@ -237,9 +165,13 @@ export default function FeedFiltersModal({
             opacity-driven .tab-pane stacking context, so we lift the
             button with padding rather than relying on z-index alone. */}
         <div className="flex flex-col gap-2 border-t border-fg/5 p-4 pb-[calc(env(safe-area-inset-bottom)+4.5rem)]">
-          {filtersActive(draft) && (
+          {(draft.sort !== 'recent' || draft.city.trim().length > 0) && (
             <button
-              onClick={() => setDraft(DEFAULT_FILTERS)}
+              // Resets only Tri + Ville — Catégorie / Marque are owned by
+              // the QuickFilters bar and left untouched here.
+              onClick={() =>
+                setDraft((d) => ({ ...d, sort: 'recent', city: '' }))
+              }
               className="w-full rounded-full bg-fg/5 py-2.5 text-sm font-medium text-fg/70 hover:bg-fg/10"
             >
               Réinitialiser
