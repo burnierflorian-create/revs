@@ -453,9 +453,12 @@ export default function Profile() {
           Collection grid / Garage cover flow / Récompenses drawer
           never slide under the tab bar even on the longest profiles
           (early-adopters with 100+ cards). */}
-      <div className="space-y-7 px-4 pb-40 pt-[54px]">
+      {/* Plus de px-4 global ici : la gouttière 16px est re-appliquée
+          section par section (identité + card Premium) pour que la section
+          des onglets soit nativement pleine largeur, sans marge latérale. */}
+      <div className="space-y-7 pb-40 pt-[54px]">
         {/* Identité */}
-        <div className="text-center">
+        <div className="px-4 text-center">
           <h1
             className="font-display font-extrabold tracking-tight text-fg"
             style={{ fontSize: '24px' }}
@@ -602,8 +605,8 @@ export default function Profile() {
         {/* TAB NAV — three plain words spaced horizontally (Apple text
             nav): active in pure white under a 1px underline, inactive in
             muted grey. No pills, no gradient fills, no emoji. */}
-        <section>
-          <div className="flex gap-6 px-1" role="tablist">
+        <section className="w-full">
+          <div className="flex gap-6 px-4" role="tablist">
             {(
               [
                 { key: 'collection', label: 'Collection' },
@@ -635,12 +638,12 @@ export default function Profile() {
             })}
           </div>
 
-          {/* Tab content wrapper — full-bleed (-mx-4 cancels the parent's
-              px-4 gutter) so Collection / Garage / Récompenses span the
-              full screen width. Inner blocks that need breathing room
-              (empty states, unlocked rewards) re-add their own padding;
-              the collection grid + garage scroll stay edge-to-edge. */}
-          <div className="mt-5 -mx-4">
+          {/* Tab content wrapper — full width, ZERO horizontal padding/margin
+              (the parent no longer carries px-4). Collection grid + garage
+              scroll go truly edge-to-edge; inner blocks that need breathing
+              room (deck list, empty states, unlocked rewards) re-add their
+              own px-4. */}
+          <div className="mt-5 w-full">
             {profileTab === 'collection' &&
               (appConfig.SHOW_CARD_COLLECTION ? (
                 <CollectionDecks spots={spots} />
@@ -919,11 +922,13 @@ export default function Profile() {
         </section>
 
         {/* PREMIUM CARD — upsell for free users, active-status for
-            subscribers. */}
-        <PremiumTopBanner
-          onTap={() => navigate('/premium')}
-          plan={plan}
-        />
+            subscribers. Re-pads the 16px gutter dropped from the parent. */}
+        <div className="px-4">
+          <PremiumTopBanner
+            onTap={() => navigate('/premium')}
+            plan={plan}
+          />
+        </div>
 
       </div>
 
