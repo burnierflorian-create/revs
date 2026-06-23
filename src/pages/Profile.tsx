@@ -635,12 +635,12 @@ export default function Profile() {
             })}
           </div>
 
-          {/* Tab content wrapper — the extra px-2 was removed 2026-06-23
-              so Collection / Garage / Récompenses span full width. The
-              parent's px-4 is the only horizontal gutter (16px); the
-              collection grid + garage scroll break out of it to reach the
-              screen edges where the spec asks for it. */}
-          <div className="mt-5">
+          {/* Tab content wrapper — full-bleed (-mx-4 cancels the parent's
+              px-4 gutter) so Collection / Garage / Récompenses span the
+              full screen width. Inner blocks that need breathing room
+              (empty states, unlocked rewards) re-add their own padding;
+              the collection grid + garage scroll stay edge-to-edge. */}
+          <div className="mt-5 -mx-4">
             {profileTab === 'collection' &&
               (appConfig.SHOW_CARD_COLLECTION ? (
                 <CollectionDecks spots={spots} />
@@ -696,7 +696,7 @@ export default function Profile() {
 
             {profileTab === 'garage' &&
               (total === 0 ? (
-                <div className="flex flex-col items-center rounded-2xl border border-fg/5 bg-card px-6 py-12 text-center">
+                <div className="mx-4 flex flex-col items-center rounded-2xl border border-fg/5 bg-card px-6 py-12 text-center">
                   <div className="flex h-16 w-16 items-center justify-center rounded-full bg-accent/10">
                     <Warehouse className="h-8 w-8 text-accent/70" />
                   </div>
@@ -758,7 +758,7 @@ export default function Profile() {
 
             {profileTab === 'rewards' &&
               appConfig.SHOW_COLLECTIONS_TO_COMPLETE && (
-              <div className="space-y-7">
+              <div className="space-y-7 px-4">
                 {/* Gérer mon abonnement — paid users only */}
                 {plan && (
                   <button
@@ -1162,7 +1162,7 @@ function PremiumTopBanner({
         >
           REVS PREMIUM
         </p>
-        {active ? (
+        {active && (
           <p className="mt-0.5 truncate text-[12px]">
             <span className="font-bold" style={{ color: '#34D399' }}>
               ✓ Premium actif
@@ -1171,12 +1171,10 @@ function PremiumTopBanner({
               <span className="text-white/45"> · renouv. {renew}</span>
             )}
           </p>
-        ) : (
-          // No price on the card — the tariff lives on /premium only.
-          <p className="mt-0.5 truncate text-[12px] text-white/50">
-            Spots illimités & avantages exclusifs
-          </p>
         )}
+        {/* Upsell case: no second line at all — only the logo, the red
+            "REVS PREMIUM" title and the "Découvrir →" button. The price
+            lives exclusively on the /premium page. */}
       </div>
 
       <span
@@ -1429,10 +1427,10 @@ function GarageCoverFlow({
   }, [spots])
 
   return (
-    // -mx-4 cancels the profile's 16px gutter so the scroll starts from
-    // the left screen edge (16px padding on the first item) and the last
-    // cards can bleed off the right edge.
-    <div className="-mx-4">
+    // The parent profile tab is already full-bleed, so the scroll spans
+    // the whole screen with NO global horizontal padding: only the first
+    // item carries a 16px left inset so the row starts at the screen edge.
+    <div>
       {/* Garage — horizontal scroll of 160×200 photo cards. Each uses the
           best (highest-rarity) spot photo of that model as its background,
           with a dark gradient + brand / year / model overlays. */}

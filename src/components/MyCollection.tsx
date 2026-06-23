@@ -60,7 +60,7 @@ export default function MyCollection({ spots }: { spots: Spot[] }) {
 
   if (spots.length === 0) {
     return (
-      <div className="flex flex-col items-center rounded-2xl border border-fg/5 bg-card px-6 py-12 text-center">
+      <div className="mx-4 flex flex-col items-center rounded-2xl border border-fg/5 bg-card px-6 py-12 text-center">
         <div className="flex h-16 w-16 items-center justify-center rounded-full bg-accent/10">
           <ImageOff className="h-8 w-8 text-accent/70" />
         </div>
@@ -78,9 +78,10 @@ export default function MyCollection({ spots }: { spots: Spot[] }) {
   }
 
   return (
-    // Full-bleed 2-col grid: -mx-4 cancels the profile's 16px gutter so
-    // each card is exactly 50% of the screen width minus the 8px gutter.
-    <div className="-mx-4 grid grid-cols-2 gap-2">
+    // 2-col grid at 100% width with an 8px gutter — each card is exactly
+    // 50% of the screen minus 4px. The parent profile tab is already
+    // full-bleed, so no horizontal padding is added here.
+    <div className="grid grid-cols-2 gap-2">
       {sorted.map((s, i) => {
         const m = meta.get(s.id)
         return (
