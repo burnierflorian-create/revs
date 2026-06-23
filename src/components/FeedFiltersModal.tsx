@@ -1,11 +1,21 @@
 import { useEffect, useState } from 'react'
-import { Filter, X } from 'lucide-react'
+import { createPortal } from 'react-dom'
+import {
+  BrandSection,
+  CategorySection,
+  RARITY_BUCKETS,
+  sheetPill,
+  type RarityBucket,
+} from './FilterSections'
 
 export type FeedSort = 'recent' | 'liked' | 'nearby' | 'week'
 
 export type FeedFilters = {
-  category: string // 'Tout' | 'Supercars' | 'Hypercars' | 'JDM' | 'Berlines' | 'SUV' | 'Coupés' | 'Cabriolets' | 'Autre'
+  category: string // 'Tout' | 'Supercars' | 'Hypercars' | 'JDM' | 'Électrique' | 'Classique' | 'SUV' | 'Berline'
   brand: string | null // brand slug, or null
+  rarity: RarityBucket // 'all' | 'commun' | 'rare' | 'ultra' | 'legendaire'
+  // Kept for back-compat with the feed's applyFilters() pipeline. No UI
+  // surface anymore — everything lives in Catégorie / Marque / Rareté.
   sort: FeedSort
   city: string
 }
@@ -13,6 +23,7 @@ export type FeedFilters = {
 export const DEFAULT_FILTERS: FeedFilters = {
   category: 'Tout',
   brand: null,
+  rarity: 'all',
   sort: 'recent',
   city: '',
 }
@@ -21,6 +32,7 @@ export function filtersActive(f: FeedFilters): boolean {
   return (
     f.category !== 'Tout' ||
     f.brand !== null ||
+    f.rarity !== 'all' ||
     f.sort !== 'recent' ||
     f.city.trim().length > 0
   )
@@ -39,6 +51,8 @@ export function loadFeedFilters(): FeedFilters {
     return {
       category: typeof p.category === 'string' ? p.category : 'Tout',
       brand: typeof p.brand === 'string' ? p.brand : null,
+      rarity:
+        typeof p.rarity === 'string' ? (p.rarity as RarityBucket) : 'all',
       sort: typeof p.sort === 'string' ? (p.sort as FeedSort) : 'recent',
       city: typeof p.city === 'string' ? p.city : '',
     }
@@ -54,16 +68,6 @@ export function saveFeedFilters(f: FeedFilters): void {
     /* storage unavailable — non-fatal */
   }
 }
-
-// Catégorie + Marque are now handled by the always-visible QuickFilters
-// bar in the Fil header; the advanced sheet keeps only Tri + Ville.
-
-const SORTS: { value: FeedSort; label: string }[] = [
-  { value: 'recent', label: 'Plus récents' },
-  { value: 'liked', label: 'Plus likés' },
-  { value: 'nearby', label: 'Près de moi' },
-  { value: 'week', label: 'Cette semaine' },
-]
 
 export default function FeedFiltersModal({
   open,
@@ -86,93 +90,94 @@ export default function FeedFiltersModal({
 
   if (!open) return null
 
-  return (
+  const dirty =
+    draft.category !== 'Tout' || draft.brand !== null || draft.rarity !== 'all'
+
+  return createPortal(
     <div
       onClick={onClose}
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 backdrop-blur-sm sm:items-center"
+      className="fixed inset-0 z-[60] flex items-end justify-center"
+      style={{ background: 'rgba(0,0,0,0.6)' }}
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="flex max-h-[88vh] w-full max-w-md flex-col rounded-t-3xl bg-bg sm:rounded-3xl"
+        className="flex w-full max-w-md flex-col"
+        style={{
+          background: '#141414',
+          borderTopLeftRadius: 24,
+          borderTopRightRadius: 24,
+          maxHeight: '85vh',
+          padding: 20,
+          paddingBottom: 'max(20px, env(safe-area-inset-bottom))',
+        }}
       >
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-fg/5 px-5 pt-5 pb-3">
-          <h2 className="flex items-center gap-2 font-display text-lg font-bold">
-            <Filter className="h-5 w-5 text-accent" />
-            Filtres
-          </h2>
-          <button
-            onClick={onClose}
-            aria-label="Fermer"
-            className="text-fg/50 hover:text-fg"
-          >
-            <X className="h-5 w-5" />
-          </button>
+        {/* Handle */}
+        <div className="flex justify-center pb-3">
+          <span
+            style={{
+              width: 40,
+              height: 4,
+              borderRadius: 999,
+              background: 'rgba(255,255,255,0.25)',
+            }}
+          />
         </div>
 
-        {/* Body — scrollable. Big bottom padding so the last section
-            clears the floating footer + the global tab bar. */}
-        <div className="flex-1 space-y-5 overflow-y-auto px-5 pb-24 pt-5">
-          {/* Tri */}
+        {/* Title */}
+        <h2
+          className="font-display font-bold text-white"
+          style={{ fontSize: 18 }}
+        >
+          Filtres
+        </h2>
+
+        {/* Body */}
+        <div className="no-scrollbar mt-4 flex-1 space-y-5 overflow-y-auto">
+          <CategorySection
+            value={draft.category}
+            onChange={(c) => setDraft((d) => ({ ...d, category: c }))}
+          />
+
+          <BrandSection
+            value={draft.brand}
+            onChange={(key) => setDraft((d) => ({ ...d, brand: key }))}
+          />
+
+          {/* Rareté — Fil only */}
           <section>
-            <p className="mb-2 text-xs uppercase tracking-[0.16em] text-fg/45">
-              Tri
-            </p>
-            <div className="grid grid-cols-2 gap-2">
-              {SORTS.map((s) => {
-                const on = draft.sort === s.value
-                return (
-                  <button
-                    key={s.value}
-                    onClick={() =>
-                      setDraft((d) => ({ ...d, sort: s.value }))
-                    }
-                    className={`rounded-xl px-3 py-2.5 text-sm font-medium transition-colors ${
-                      on ? 'bg-accent text-fg' : 'bg-card text-fg/60'
-                    }`}
-                  >
-                    {s.label}
-                  </button>
-                )
-              })}
+            <p className="mb-2.5 text-[13px] font-bold text-white">Rareté</p>
+            <div className="no-scrollbar flex gap-2 overflow-x-auto pb-0.5">
+              {RARITY_BUCKETS.map((r) => (
+                <button
+                  key={r.value}
+                  onClick={() => setDraft((d) => ({ ...d, rarity: r.value }))}
+                  className="tappable transition-colors"
+                  style={sheetPill(draft.rarity === r.value)}
+                >
+                  {r.label}
+                </button>
+              ))}
             </div>
           </section>
-
-          {/* Ville */}
-          <section>
-            <label
-              htmlFor="filter-city"
-              className="mb-2 block text-xs uppercase tracking-[0.16em] text-fg/45"
-            >
-              Ville du spotter
-            </label>
-            <input
-              id="filter-city"
-              type="text"
-              value={draft.city}
-              onChange={(e) =>
-                setDraft((d) => ({ ...d, city: e.target.value }))
-              }
-              placeholder="ex. Annecy, Paris…"
-              className="w-full rounded-2xl bg-card px-4 py-3 text-sm text-fg placeholder-fg/30 outline-none ring-1 ring-fg/5 focus:ring-accent/60"
-              autoComplete="off"
-            />
-          </section>
         </div>
 
-        {/* Footer — the Appliquer button floats clear of the global tab
-            bar (z-40, ~2.75rem + safe area). The modal lives inside an
-            opacity-driven .tab-pane stacking context, so we lift the
-            button with padding rather than relying on z-index alone. */}
-        <div className="flex flex-col gap-2 border-t border-fg/5 p-4 pb-[calc(env(safe-area-inset-bottom)+4.5rem)]">
-          {(draft.sort !== 'recent' || draft.city.trim().length > 0) && (
+        {/* Footer */}
+        <div className="mt-5 flex items-center gap-3">
+          {dirty && (
             <button
-              // Resets only Tri + Ville — Catégorie / Marque are owned by
-              // the QuickFilters bar and left untouched here.
               onClick={() =>
-                setDraft((d) => ({ ...d, sort: 'recent', city: '' }))
+                setDraft((d) => ({
+                  ...d,
+                  category: 'Tout',
+                  brand: null,
+                  rarity: 'all',
+                }))
               }
-              className="w-full rounded-full bg-fg/5 py-2.5 text-sm font-medium text-fg/70 hover:bg-fg/10"
+              className="tappable flex-none rounded-full px-5 py-3.5 text-sm font-medium"
+              style={{
+                background: 'rgba(255,255,255,0.06)',
+                color: 'rgba(255,255,255,0.6)',
+              }}
             >
               Réinitialiser
             </button>
@@ -182,12 +187,14 @@ export default function FeedFiltersModal({
               onApply(draft)
               onClose()
             }}
-            className="w-full rounded-full bg-accent py-3 text-sm font-bold text-fg"
+            className="tappable flex-1 rounded-full py-3.5 text-sm font-bold text-white transition-transform active:scale-[0.98]"
+            style={{ background: '#E8203A' }}
           >
             Appliquer les filtres
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }

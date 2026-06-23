@@ -25,22 +25,16 @@ import {
 } from '../lib/spots'
 import MapFiltersModal, {
   DEFAULT_MAP_FILTERS,
+  MAX_DISTANCE_KM,
   loadMapFilters,
   saveMapFilters,
   mapFiltersActive,
   type MapFilters,
 } from '../components/MapFiltersModal'
 import {
-  cardKey,
-  fetchMyCardProgress,
-  type CardProgress,
-} from '../lib/cardLevels'
-import { BRANDS } from '../lib/brands'
-import {
   matchesBrandFilter,
   matchesCategoryFilter,
 } from '../lib/filterCatalog'
-import QuickFilters from '../components/QuickFilters'
 import { rarityRank } from '../components/CollectorCard'
 import { rarityBadge } from '../lib/rarityStyle'
 import { useTheme } from '../lib/theme'
@@ -557,23 +551,14 @@ export default function MapPage() {
   const markersRef = useRef<Record<string, mapboxgl.Marker>>({})
   const onScreenRef = useRef<Record<string, mapboxgl.Marker>>({})
   const searchRef = useRef<string>('')
-  // Active category pill (Tous / Supercars / …). Mirrored into a ref so the
-  // marker-building loop reads the latest without re-subscribing.
-  const categoryRef = useRef<string>('Tout')
-  // Active brand quick-filter key ('Tout' = all). Mirrored to a ref so the
-  // marker loop reads the latest without re-subscribing.
-  const brandRef = useRef<string>('Tout')
   // Hidden camera input for the centered "Spotter" FAB — clicked
   // synchronously inside the tap so iOS opens the native camera; the
   // captured photo is stashed and NewSpot consumes it on mount.
   const spotInputRef = useRef<HTMLInputElement>(null)
-  // Advanced filters (rarity / brand / card level) + the viewer's card
-  // collection, mirrored into refs so the marker-building loop reads the
+  // All map filters (catégorie / marque / distance) live in the bottom
+  // sheet. Mirrored into a ref so the marker-building loop reads the
   // latest without re-subscribing.
   const advFiltersRef = useRef<MapFilters>(DEFAULT_MAP_FILTERS)
-  const cardMapRef = useRef<globalThis.Map<string, CardProgress>>(
-    new globalThis.Map(),
-  )
   const refreshRef = useRef<(() => void) | null>(null)
   const recomputeHotZonesRef = useRef<(() => void) | null>(null)
   // Called from the theme-change effect after setStyle() reloads the
@@ -596,8 +581,6 @@ export default function MapPage() {
   // localStorage key (revs_map_filters), so nothing here ever reaches
   // the Fil. Restored from storage on mount.
   const [mapSearchQuery, setMapSearchQuery] = useState<string>('')
-  const [mapCategory, setMapCategory] = useState<string>('Tout')
-  const [mapBrand, setMapBrand] = useState<string>('Tout')
   const [mapFilters, setMapFilters] = useState<MapFilters>(() =>
     loadMapFilters(),
   )
@@ -885,15 +868,13 @@ export default function MapPage() {
     function featureCollection(): GeoJSON.FeatureCollection {
       const needle = searchRef.current.trim().toLowerCase()
       const adv = advFiltersRef.current
-      const cards = cardMapRef.current
-      // Resolve the selected brand slug to its display name once so the
-      // per-spot test is a cheap normalized compare.
-      const advBrandName =
-        adv.brand != null
-          ? (BRANDS.find((b) => b.slug === adv.brand)?.name ?? adv.brand)
+      // Distance filter is only meaningful below the max (50 km = illimité)
+      // and only when we have the viewer's position to measure from.
+      const distLimitM =
+        adv.distanceKm < MAX_DISTANCE_KM && posRef.current
+          ? adv.distanceKm * 1000
           : null
-      const norm = (s: string) =>
-        (s ?? '').toLowerCase().trim().replace(/\s+/g, ' ')
+      const me = posRef.current
       const feats: GeoJSON.Feature[] = []
       for (const sp of allSpots.values()) {
         if (!isAlive(sp)) continue
@@ -902,23 +883,14 @@ export default function MapPage() {
             .toLowerCase()
           if (!hay.includes(needle)) continue
         }
-        // Category + brand quick filters ('Tout' = no filter).
-        const cat = categoryRef.current
-        if (cat && cat !== 'Tout' && !matchesCategoryFilter(sp, cat)) continue
-        const brandKey = brandRef.current
-        if (brandKey && brandKey !== 'Tout' && !matchesBrandFilter(sp, brandKey))
+        // Catégorie / Marque ('Tout' / null = no filter).
+        if (adv.category !== 'Tout' && !matchesCategoryFilter(sp, adv.category))
           continue
-        // Advanced filters — rarity / brand / card level.
-        if (adv.rarity !== 'all' && (sp.rarity ?? 'standard') !== adv.rarity)
-          continue
-        if (advBrandName != null) {
-          const b = norm(sp.brand ?? '')
-          const want = norm(advBrandName)
-          if (b !== want && !b.includes(want) && !want.includes(b)) continue
-        }
-        if (adv.cardLevel > 0) {
-          const cp = cards.get(cardKey(sp.brand ?? '', sp.model ?? ''))
-          if (!cp || cp.level < adv.cardLevel) continue
+        if (adv.brand && !matchesBrandFilter(sp, adv.brand)) continue
+        // Distance from the viewer (when a sub-max radius is selected).
+        if (distLimitM != null && me) {
+          if (distanceMeters(me.lat, me.lng, sp.lat, sp.lng) > distLimitM)
+            continue
         }
         feats.push({
           type: 'Feature',
@@ -1383,26 +1355,6 @@ export default function MapPage() {
   }, [mapSearchQuery])
 
   useEffect(() => {
-    categoryRef.current = mapCategory
-    brandRef.current = mapBrand
-    refreshRef.current?.()
-  }, [mapCategory, mapBrand])
-
-  // Load the viewer's card collection once so the "niveau de carte" filter
-  // can resolve each spot's level. Read-own; empty map when logged out.
-  useEffect(() => {
-    let active = true
-    fetchMyCardProgress().then((m) => {
-      if (!active) return
-      cardMapRef.current = m
-      refreshRef.current?.()
-    })
-    return () => {
-      active = false
-    }
-  }, [])
-
-  useEffect(() => {
     advFiltersRef.current = mapFilters
     refreshRef.current?.()
   }, [mapFilters])
@@ -1738,18 +1690,9 @@ export default function MapPage() {
             stopReplay + the replay state) stays in the module so it
             can be reattached to a future UI surface without rewiring
             the marker animation. */}
-        {/* Two-level compact filter bar (categories + brands) — glass
-            pills so the map reads through, each row with a "Voir plus ↓"
-            bottom sheet. */}
-        <div className="mx-auto mt-2.5 max-w-md">
-          <QuickFilters
-            category={mapCategory}
-            brand={mapBrand}
-            onCategory={setMapCategory}
-            onBrand={setMapBrand}
-            glass
-          />
-        </div>
+        {/* Category / brand / distance pills moved INTO the filter sheet
+            (the sliders icon next to the search) per 2026-06-23 — the map
+            header is now just the search row so the map owns the screen. */}
       </div>
 
       {/* AI prediction Sparkles entry button — archived behind

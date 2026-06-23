@@ -27,7 +27,7 @@ import {
   matchesBrandFilter,
   matchesCategoryFilter,
 } from '../lib/filterCatalog'
-import QuickFilters from '../components/QuickFilters'
+import { matchesRarityBucket } from '../components/FilterSections'
 import { isFounder } from '../lib/founders'
 
 const PAGE = 10
@@ -280,6 +280,10 @@ export default function Feed() {
       if (f.brand) {
         out = out.filter((s) => matchesBrandFilter(s, f.brand))
       }
+      // Rarity bucket filter (Commun / Rare / Ultra Rare / Légendaire).
+      if (f.rarity && f.rarity !== 'all') {
+        out = out.filter((s) => matchesRarityBucket(s.rarity, f.rarity))
+      }
       // City filter — needs the resolved profile (ville). Falls back to
       // including spots where the profile hasn't loaded yet so the
       // user doesn't see an empty list during the resolve hop.
@@ -439,24 +443,9 @@ export default function Feed() {
     return <EmptyCarousel onSpot={() => navigate('/new-spot')} />
   }
 
-  // The advanced-filters dot lights up only for filters the quick bar
-  // doesn't cover (sort + city). Category + brand live in QuickFilters.
-  const advancedActive =
-    feedFilters.city.trim().length > 0 || feedFilters.sort !== 'recent'
-
-  function setCategory(c: string) {
-    const next: FeedFilters = { ...feedFilters, category: c }
-    setFeedFilters(next)
-    saveFeedFilters(next)
-  }
-  function setBrand(key: string) {
-    const next: FeedFilters = {
-      ...feedFilters,
-      brand: key === 'Tout' ? null : key,
-    }
-    setFeedFilters(next)
-    saveFeedFilters(next)
-  }
+  // The filter icon dot lights up whenever ANY filter is non-default —
+  // everything (catégorie / marque / rareté) now lives in the sheet.
+  const advancedActive = filtersActive(feedFilters)
 
   return (
     <div
@@ -471,11 +460,12 @@ export default function Feed() {
       <PullIndicator pull={pull} refreshing={refreshing} />
 
       {/* Search (~85%) + a single minimal slider icon that opens the
-          filters panel. The "Fil" title was removed 2026-06-23 — the
-          header now collapses to the search row + a scrollable pill row
-          so the photos below own the screen. Glass + border resolve
-          through CSS vars so the whole row auto-flips dark / light. */}
-      <div className="mb-3 flex items-center gap-2 px-4 pt-3">
+          filters sheet. The "Fil" title was removed 2026-06-23; the
+          category / brand / rarity pills moved INTO the sheet 2026-06-23
+          so the header is just the search row and the photos below own
+          the screen. Glass + border resolve through CSS vars so the
+          whole row auto-flips dark / light. */}
+      <div className="mb-4 flex items-center gap-2 px-4 pt-3">
         <div
           className="flex flex-1 items-center gap-2 rounded-full px-4 py-2.5"
           style={{
@@ -528,18 +518,6 @@ export default function Feed() {
             />
           )}
         </button>
-      </div>
-
-      {/* Two-level compact filter bar — categories + brands quick rows,
-          each with a "Voir plus ↓" bottom sheet. Filters the feed
-          instantly on selection. */}
-      <div className="mb-4 px-4">
-        <QuickFilters
-          category={feedFilters.category}
-          brand={feedFilters.brand}
-          onCategory={setCategory}
-          onBrand={setBrand}
-        />
       </div>
 
       <FeedFiltersModal

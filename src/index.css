@@ -443,6 +443,37 @@ h4 {
   animation: newPulse 1.5s ease-out infinite;
 }
 
+/* Brand-red range slider used in the Carte distance filter. Flat track
+   with a white thumb so it reads on the #141414 sheet. */
+.revs-range {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  outline: none;
+}
+.revs-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #e8203a;
+  border: 2px solid #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  cursor: pointer;
+}
+.revs-range::-moz-range-thumb {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #e8203a;
+  border: 2px solid #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  cursor: pointer;
+}
+
 /* Hide the Mapbox logo + attribution controls completely. !important
    beats mapbox-gl.css regardless of bundle order. */
 .mapboxgl-ctrl-logo,

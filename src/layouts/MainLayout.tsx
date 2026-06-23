@@ -9,9 +9,9 @@ import {
 } from 'react-router-dom'
 import {
   MapPin,
-  Images,
+  Radio,
   Home,
-  Compass,
+  Newspaper,
   User,
   Camera,
 } from 'lucide-react'
@@ -298,7 +298,7 @@ export default function MainLayout() {
           <NavLink to="/feed" onClick={hapticSelection} className={tabClass} aria-label="Fil">
             {({ isActive }) => (
               <>
-                <Images className="h-[26px] w-[26px]" strokeWidth={1.5} />
+                <Radio className="h-[26px] w-[26px]" strokeWidth={1.5} />
                 {isActive && <span className="liquid-dot" />}
               </>
             )}
@@ -316,7 +316,7 @@ export default function MainLayout() {
           <NavLink to="/discover" onClick={hapticSelection} className={tabClass} aria-label="Explorer">
             {({ isActive }) => (
               <>
-                <Compass className="h-[26px] w-[26px]" strokeWidth={1.5} />
+                <Newspaper className="h-[26px] w-[26px]" strokeWidth={1.5} />
                 {isActive && <span className="liquid-dot" />}
               </>
             )}

@@ -1,28 +1,30 @@
 import { useEffect, useState } from 'react'
-import { Filter, X } from 'lucide-react'
-import type { Rarity } from '../lib/spots'
-import { CARD_LEVELS } from '../lib/cardLevels'
-import { appConfig } from '../config/appConfig'
+import { createPortal } from 'react-dom'
+import { BrandSection, CategorySection } from './FilterSections'
 
-// Advanced map filters — the BottomSheet behind the Carte filter icon.
-// Mirrors the Feed's FeedFiltersModal pattern (overlay → rounded-t sheet,
-// draft + Appliquer/Réinitialiser) but on the map's own dimensions:
-// rarity, constructeur, niveau de carte.
+// Advanced map filters — the bottom sheet behind the Carte filter icon.
+// Holds the full map filtering surface: Catégorie, Marque, Distance.
 
 export type MapFilters = {
-  rarity: Rarity | 'all'
+  category: string // 'Tout' | 'Supercars' | … | 'Berline'
   brand: string | null // brand slug, or null = toutes
-  cardLevel: number // 0 = tous, else minimum card level (1-5)
+  distanceKm: number // 1..50 ; 50 = illimité (no distance filter)
 }
 
+export const MAX_DISTANCE_KM = 50
+
 export const DEFAULT_MAP_FILTERS: MapFilters = {
-  rarity: 'all',
+  category: 'Tout',
   brand: null,
-  cardLevel: 0,
+  distanceKm: MAX_DISTANCE_KM,
 }
 
 export function mapFiltersActive(f: MapFilters): boolean {
-  return f.rarity !== 'all' || f.brand !== null || f.cardLevel > 0
+  return (
+    f.category !== 'Tout' ||
+    f.brand !== null ||
+    f.distanceKm < MAX_DISTANCE_KM
+  )
 }
 
 // Map-only persistence. A DEDICATED localStorage key (distinct from the
@@ -36,9 +38,14 @@ export function loadMapFilters(): MapFilters {
     if (!raw) return DEFAULT_MAP_FILTERS
     const p = JSON.parse(raw) as Partial<MapFilters>
     return {
-      rarity: typeof p.rarity === 'string' ? (p.rarity as MapFilters['rarity']) : 'all',
+      category: typeof p.category === 'string' ? p.category : 'Tout',
       brand: typeof p.brand === 'string' ? p.brand : null,
-      cardLevel: typeof p.cardLevel === 'number' ? p.cardLevel : 0,
+      distanceKm:
+        typeof p.distanceKm === 'number' &&
+        p.distanceKm >= 1 &&
+        p.distanceKm <= MAX_DISTANCE_KM
+          ? p.distanceKm
+          : MAX_DISTANCE_KM,
     }
   } catch {
     return DEFAULT_MAP_FILTERS
@@ -52,15 +59,6 @@ export function saveMapFilters(f: MapFilters): void {
     /* storage unavailable — non-fatal */
   }
 }
-
-const RARITIES: { value: Rarity; label: string }[] = [
-  { value: 'standard', label: 'Standard' },
-  { value: 'premium', label: 'Premium' },
-  { value: 'performance', label: 'Performance' },
-  { value: 'exclusif', label: 'Exclusif' },
-  { value: 'supercar', label: 'Supercar' },
-  { value: 'hypercar', label: 'Hypercar' },
-]
 
 export default function MapFiltersModal({
   open,
@@ -81,121 +79,99 @@ export default function MapFiltersModal({
 
   if (!open) return null
 
-  const chip = (on: boolean) =>
-    `rounded-full px-3.5 py-1.5 text-xs font-medium transition-colors ${
-      on ? 'bg-accent text-fg' : 'bg-card text-fg/60 hover:text-fg'
-    }`
+  const dirty = mapFiltersActive(draft)
+  const distanceLabel =
+    draft.distanceKm >= MAX_DISTANCE_KM
+      ? 'Illimité'
+      : `${draft.distanceKm} km`
 
-  return (
+  return createPortal(
     <div
       onClick={onClose}
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 backdrop-blur-sm sm:items-center"
+      className="fixed inset-0 z-[60] flex items-end justify-center"
+      style={{ background: 'rgba(0,0,0,0.6)' }}
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="flex max-h-[88vh] w-full max-w-md flex-col rounded-t-3xl bg-bg sm:rounded-3xl"
+        className="flex w-full max-w-md flex-col"
+        style={{
+          background: '#141414',
+          borderTopLeftRadius: 24,
+          borderTopRightRadius: 24,
+          maxHeight: '85vh',
+          padding: 20,
+          paddingBottom: 'max(20px, env(safe-area-inset-bottom))',
+        }}
       >
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-fg/5 px-5 pb-3 pt-5">
-          <h2 className="flex items-center gap-2 font-display text-lg font-bold text-fg">
-            <Filter className="h-5 w-5 text-accent" />
-            Filtres
-          </h2>
-          <button
-            onClick={onClose}
-            aria-label="Fermer"
-            className="text-fg/50 hover:text-fg"
-          >
-            <X className="h-5 w-5" />
-          </button>
+        {/* Handle */}
+        <div className="flex justify-center pb-3">
+          <span
+            style={{
+              width: 40,
+              height: 4,
+              borderRadius: 999,
+              background: 'rgba(255,255,255,0.25)',
+            }}
+          />
         </div>
 
-        {/* Body — scrollable. Big bottom padding so the last section
-            clears the floating footer + the global tab bar. */}
-        <div className="flex-1 space-y-5 overflow-y-auto px-5 pb-24 pt-5">
-          {/* Rareté */}
+        {/* Title */}
+        <h2
+          className="font-display font-bold text-white"
+          style={{ fontSize: 18 }}
+        >
+          Filtres
+        </h2>
+
+        {/* Body */}
+        <div className="no-scrollbar mt-4 flex-1 space-y-5 overflow-y-auto">
+          <CategorySection
+            value={draft.category}
+            onChange={(c) => setDraft((d) => ({ ...d, category: c }))}
+          />
+
+          <BrandSection
+            value={draft.brand}
+            onChange={(key) => setDraft((d) => ({ ...d, brand: key }))}
+          />
+
+          {/* Distance — Carte only */}
           <section>
-            <p className="mb-2 text-xs uppercase tracking-[0.16em] text-fg/45">
-              Rareté
-            </p>
-            <div className="flex flex-wrap gap-2">
-              <button
-                onClick={() => setDraft((d) => ({ ...d, rarity: 'all' }))}
-                className={chip(draft.rarity === 'all')}
-              >
-                Toutes
-              </button>
-              {RARITIES.map((r) => {
-                const on = draft.rarity === r.value
-                return (
-                  <button
-                    key={r.value}
-                    onClick={() =>
-                      setDraft((d) => ({
-                        ...d,
-                        rarity: on ? 'all' : r.value,
-                      }))
-                    }
-                    className={chip(on)}
-                  >
-                    {r.label}
-                  </button>
-                )
-              })}
+            <div className="mb-2.5 flex items-baseline justify-between">
+              <p className="text-[13px] font-bold text-white">Distance</p>
+              <span className="text-[13px] font-bold" style={{ color: '#E8203A' }}>
+                {distanceLabel}
+              </span>
+            </div>
+            <input
+              type="range"
+              min={1}
+              max={MAX_DISTANCE_KM}
+              step={1}
+              value={draft.distanceKm}
+              onChange={(e) =>
+                setDraft((d) => ({ ...d, distanceKm: Number(e.target.value) }))
+              }
+              className="revs-range w-full"
+              aria-label="Distance maximale"
+            />
+            <div className="mt-1 flex justify-between text-[11px] text-white/40">
+              <span>1 km</span>
+              <span>50 km</span>
             </div>
           </section>
-
-          {/* Niveau de carte — phase-gated by SHOW_CARD_LEVEL_UP. */}
-          {appConfig.SHOW_CARD_LEVEL_UP && (
-          <section>
-            <p className="mb-2 text-xs uppercase tracking-[0.16em] text-fg/45">
-              Niveau de carte
-            </p>
-            <div className="flex flex-wrap gap-2">
-              <button
-                onClick={() => setDraft((d) => ({ ...d, cardLevel: 0 }))}
-                className={chip(draft.cardLevel === 0)}
-              >
-                Tous
-              </button>
-              {CARD_LEVELS.map((l) => {
-                const on = draft.cardLevel === l.level
-                return (
-                  <button
-                    key={l.level}
-                    onClick={() =>
-                      setDraft((d) => ({
-                        ...d,
-                        cardLevel: on ? 0 : l.level,
-                      }))
-                    }
-                    className={chip(on)}
-                  >
-                    {l.name}
-                  </button>
-                )
-              })}
-            </div>
-            <p className="mt-2 text-[11px] text-fg/40">
-              Affiche les spots des modèles que tu possèdes à ce niveau ou plus.
-            </p>
-          </section>
-          )}
-
-          {/* Constructeur retiré 2026-06-23 : la marque est désormais gérée
-              par la barre QuickFilters au-dessus de la carte. L'avancé ne
-              garde que Rareté + Niveau de carte. */}
         </div>
 
-        {/* Footer — the Appliquer button floats clear of the global tab
-            bar (z-40, ~2.75rem + safe area). The modal lives inside an
-            opacity-driven .tab-pane stacking context, so we lift the
-            button with padding rather than relying on z-index alone. */}
-        <div className="flex flex-col gap-2 border-t border-fg/5 p-4 pb-[calc(env(safe-area-inset-bottom)+4.5rem)]">
-          {mapFiltersActive(draft) && (
+        {/* Footer */}
+        <div className="mt-5 flex items-center gap-3">
+          {dirty && (
             <button
               onClick={() => setDraft(DEFAULT_MAP_FILTERS)}
-              className="w-full rounded-full bg-fg/5 py-2.5 text-sm font-medium text-fg/70 hover:bg-fg/10"
+              className="tappable flex-none rounded-full px-5 py-3.5 text-sm font-medium"
+              style={{
+                background: 'rgba(255,255,255,0.06)',
+                color: 'rgba(255,255,255,0.6)',
+              }}
             >
               Réinitialiser
             </button>
@@ -205,12 +181,14 @@ export default function MapFiltersModal({
               onApply(draft)
               onClose()
             }}
-            className="w-full rounded-full bg-accent py-3 text-sm font-bold text-fg"
+            className="tappable flex-1 rounded-full py-3.5 text-sm font-bold text-white transition-transform active:scale-[0.98]"
+            style={{ background: '#E8203A' }}
           >
             Appliquer les filtres
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
