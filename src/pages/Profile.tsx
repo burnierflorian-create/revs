@@ -1251,20 +1251,23 @@ function CollectionDecks({ spots }: { spots: Spot[] }) {
     )
     return (
       <div>
-        <button
-          onClick={() => setOpenRarity(null)}
-          className="tappable mb-4 inline-flex items-center gap-2 text-xs font-medium text-fg2 hover:text-fg"
-        >
-          <ArrowLeft className="h-3.5 w-3.5" />
-          Tous les decks
-        </button>
-        <div className="mb-3 flex items-baseline justify-between">
-          <h3 className="text-lg font-semibold tracking-tight text-fg">
-            {DECK_LABEL[openRarity]}
-          </h3>
-          <span className="text-xs font-normal text-fg2">
-            {filtered.length} carte{filtered.length > 1 ? 's' : ''}
-          </span>
+        {/* Header keeps the 16px gutter; the grid below stays full-bleed. */}
+        <div className="px-4">
+          <button
+            onClick={() => setOpenRarity(null)}
+            className="tappable mb-4 inline-flex items-center gap-2 text-xs font-medium text-fg2 hover:text-fg"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+            Tous les decks
+          </button>
+          <div className="mb-3 flex items-baseline justify-between">
+            <h3 className="text-lg font-semibold tracking-tight text-fg">
+              {DECK_LABEL[openRarity]}
+            </h3>
+            <span className="text-xs font-normal text-fg2">
+              {filtered.length} carte{filtered.length > 1 ? 's' : ''}
+            </span>
+          </div>
         </div>
         <MyCollection spots={filtered} />
       </div>
@@ -1272,7 +1275,9 @@ function CollectionDecks({ spots }: { spots: Spot[] }) {
   }
 
   return (
-    <div className="space-y-3">
+    // Deck list keeps the 16px gutter (full-bleed only applies to the
+    // 2-col card grid shown after drilling into a deck).
+    <div className="space-y-3 px-4">
       {/* Collection summary — total cards + rarity distribution pills,
           ordered Légendaire-first like the decks below. */}
       <div

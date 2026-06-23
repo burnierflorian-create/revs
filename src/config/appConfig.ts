@@ -3,7 +3,7 @@ export const appConfig = {
   SHOW_REVS_RACE: false,
   SHOW_COLLECTIONS_TO_COMPLETE: false,
   SHOW_CARD_LEVEL_UP: false,
-  SHOW_CARD_COLLECTION: false,
+  SHOW_CARD_COLLECTION: true,
 
   // PHASE 3 - mois 4
   SHOW_F1_MOTORSPORT: false,
