@@ -539,6 +539,175 @@ function applyMode(map: mapboxgl.Map, mode: MapMode) {
   }
 }
 
+// ─────────────────── User-location compass marker ───────────────────
+// Apple-Plans-style location marker: a 60×60 SVG with a blue dot, a soft
+// pulsing halo and a rounded 60° direction cone. The cone fades in only
+// once a real compass heading lands; rotation is GPU-composited and
+// interpolated along the shortest arc for buttery-smooth tracking.
+const USER_MARKER_HTML = `
+<svg width="60" height="60" viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="revsConeGrad" cx="50%" cy="100%" r="100%">
+      <stop offset="0%" stop-color="#4DA6FF" stop-opacity="0.7"/>
+      <stop offset="100%" stop-color="#4DA6FF" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="revsUserGlow">
+      <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <!-- Rounded directional cone (Apple Plans) -->
+  <path class="user-cone" d="M30 28 L18 8 Q30 2 42 8 Z" fill="url(#revsConeGrad)"/>
+  <!-- Pulsing outer halo -->
+  <circle cx="30" cy="30" r="16" fill="#4DA6FF" opacity="0.15" class="pulse-ring"/>
+  <!-- Main blue dot -->
+  <circle cx="30" cy="30" r="10" fill="#4DA6FF" stroke="white" stroke-width="3" filter="url(#revsUserGlow)"/>
+  <!-- White core -->
+  <circle cx="30" cy="30" r="3" fill="white"/>
+</svg>
+`
+
+type DOEStatic = typeof DeviceOrientationEvent & {
+  requestPermission?: () => Promise<'granted' | 'denied'>
+}
+
+class CompassMarker {
+  private currentAngle = 0
+  private targetAngle = 0
+  private hasHeading = false
+  private lastSample = 0
+  private animationId: number | null = null
+  private marker: mapboxgl.Marker | null = null
+  // Mapbox positions the OUTER element (it owns that element's transform);
+  // the inner rotEl carries our compass rotation so the two never fight.
+  private outerEl: HTMLElement | null = null
+  private rotEl: HTMLElement | null = null
+  private coneEl: SVGElement | null = null
+  private orientationHandler: ((e: Event) => void) | null = null
+  private gestureCleanup: (() => void) | null = null
+
+  init(map: mapboxgl.Map, position: [number, number]) {
+    this.outerEl = document.createElement('div')
+    this.rotEl = document.createElement('div')
+    this.rotEl.style.willChange = 'transform'
+    this.rotEl.style.lineHeight = '0'
+    this.rotEl.innerHTML = USER_MARKER_HTML
+    this.outerEl.appendChild(this.rotEl)
+    this.coneEl = this.rotEl.querySelector('.user-cone')
+    // Cone hidden until a real heading arrives → blue dot only, no spin.
+    if (this.coneEl) this.coneEl.style.opacity = '0'
+
+    this.marker = new mapboxgl.Marker({
+      element: this.outerEl,
+      anchor: 'center',
+    })
+      .setLngLat(position)
+      .addTo(map)
+
+    this.startAnimation()
+    this.requestCompassPermission()
+  }
+
+  private requestCompassPermission() {
+    const DOE = window.DeviceOrientationEvent as DOEStatic | undefined
+    if (DOE && typeof DOE.requestPermission === 'function') {
+      // iOS — permission must be requested from a user gesture.
+      const onGesture = () => {
+        DOE.requestPermission?.()
+          .then((p) => {
+            if (p === 'granted') this.listenToCompass()
+          })
+          .catch(() => {})
+        this.gestureCleanup?.()
+      }
+      window.addEventListener('touchend', onGesture, { once: true })
+      window.addEventListener('click', onGesture, { once: true })
+      this.gestureCleanup = () => {
+        window.removeEventListener('touchend', onGesture)
+        window.removeEventListener('click', onGesture)
+        this.gestureCleanup = null
+      }
+    } else if (DOE) {
+      this.listenToCompass()
+    }
+  }
+
+  private listenToCompass() {
+    const THROTTLE_MS = 50 // max 20 updates/s
+    const handler = (ev: Event) => {
+      const now = Date.now()
+      if (now - this.lastSample < THROTTLE_MS) return
+      this.lastSample = now
+      const e = ev as DeviceOrientationEvent & {
+        webkitCompassHeading?: number
+      }
+      let heading: number
+      if (typeof e.webkitCompassHeading === 'number') {
+        heading = e.webkitCompassHeading // iOS — already absolute (0=North)
+      } else if (e.absolute && typeof e.alpha === 'number') {
+        heading = 360 - e.alpha // Android absolute
+      } else {
+        return // no reliable absolute heading
+      }
+      if (Number.isNaN(heading)) return
+      this.targetAngle = heading
+      if (!this.hasHeading) {
+        // First valid reading — snap the start angle, reveal the cone.
+        this.currentAngle = heading
+        this.hasHeading = true
+        if (this.coneEl) this.coneEl.style.opacity = '1'
+      }
+    }
+    this.orientationHandler = handler
+    // deviceorientationabsolute (Android) + deviceorientation (iOS).
+    window.addEventListener('deviceorientationabsolute', handler, true)
+    window.addEventListener('deviceorientation', handler, true)
+  }
+
+  private startAnimation() {
+    const animate = () => {
+      if (this.hasHeading && this.rotEl) {
+        // Shortest-arc interpolation so we never spin the long way round.
+        let diff = this.targetAngle - this.currentAngle
+        while (diff > 180) diff -= 360
+        while (diff < -180) diff += 360
+        const smoothFactor = 0.12 // fast start, soft settle
+        this.currentAngle += diff * smoothFactor
+        this.currentAngle = ((this.currentAngle % 360) + 360) % 360
+        this.rotEl.style.transform = `rotate(${this.currentAngle}deg)`
+      }
+      this.animationId = requestAnimationFrame(animate)
+    }
+    this.animationId = requestAnimationFrame(animate)
+  }
+
+  updatePosition(lng: number, lat: number) {
+    this.marker?.setLngLat([lng, lat])
+  }
+
+  destroy() {
+    if (this.animationId) cancelAnimationFrame(this.animationId)
+    if (this.orientationHandler) {
+      window.removeEventListener(
+        'deviceorientationabsolute',
+        this.orientationHandler,
+        true,
+      )
+      window.removeEventListener(
+        'deviceorientation',
+        this.orientationHandler,
+        true,
+      )
+    }
+    this.gestureCleanup?.()
+    this.marker?.remove()
+    this.marker = null
+  }
+}
+
 export default function MapPage() {
   const navigate = useNavigate()
   const location = useLocation()
@@ -571,8 +740,8 @@ export default function MapPage() {
   const navRef = useRef(navigate)
   navRef.current = navigate
   const posRef = useRef<{ lat: number; lng: number } | null>(null)
-  // Live user-location dot + its geolocation watch (see effect below).
-  const userMarkerRef = useRef<mapboxgl.Marker | null>(null)
+  // Live user-location compass marker + its geolocation watch (below).
+  const userMarkerRef = useRef<CompassMarker | null>(null)
   const watchIdRef = useRef<number | null>(null)
 
   const [error, setError] = useState<string | null>(null)
@@ -1471,45 +1640,29 @@ export default function MapPage() {
     if (mapReady && mapRef.current) applyMode(mapRef.current, mode)
   }, [mode, mapReady])
 
-  // ── Live user-location dot + heading cone ──
-  // A blue pulsing dot (Apple-Maps style), deliberately distinct from the
-  // red spot pins, kept in sync via watchPosition. A small arrow above the
-  // dot rotates to the compass heading (DeviceOrientation); it stays hidden
-  // when no compass is available.
+  // ── Live user-location compass marker (Apple Plans style) ──
+  // A CompassMarker instance owns the SVG marker, its rAF rotation loop
+  // and the DeviceOrientation listeners. We just feed it GPS fixes from
+  // watchPosition: the first fix builds + adds the marker, later fixes
+  // only move it. It stays a blue dot (no cone) until a real heading lands.
   useEffect(() => {
     if (!mapReady) return
     const map = mapRef.current
     if (!map || !navigator.geolocation) return
 
-    // Outer wrapper = Mapbox-positioned element (Mapbox owns its
-    // transform). Inner #user-location-marker carries the compass
-    // rotation, so we never clobber the positioning transform.
-    const el = document.createElement('div')
-    el.innerHTML =
-      '<div id="user-location-marker">' +
-      '<div class="direction-cone"></div>' +
-      '<div class="location-dot"></div>' +
-      '</div>'
-    const innerEl = el.querySelector(
-      '#user-location-marker',
-    ) as HTMLElement | null
-    const coneEl = el.querySelector('.direction-cone') as HTMLElement | null
-    // Arrow stays hidden until we get a real compass reading — a missing
-    // or null heading means "blue dot only, no rotation".
-    if (coneEl) coneEl.style.display = 'none'
-    const marker = new mapboxgl.Marker({ element: el, anchor: 'center' })
-    userMarkerRef.current = marker
-    let added = false
+    let compass: CompassMarker | null = null
 
     const watchId = navigator.geolocation.watchPosition(
       (pos) => {
         const lng = pos.coords.longitude
         const lat = pos.coords.latitude
         posRef.current = { lat, lng }
-        marker.setLngLat([lng, lat])
-        if (!added) {
-          marker.addTo(map)
-          added = true
+        if (!compass) {
+          compass = new CompassMarker()
+          compass.init(map, [lng, lat])
+          userMarkerRef.current = compass
+        } else {
+          compass.updatePosition(lng, lat)
         }
       },
       () => {
@@ -1519,95 +1672,13 @@ export default function MapPage() {
     )
     watchIdRef.current = watchId
 
-    // Compass heading → rotate the whole inner marker (dot + cone), like
-    // Apple Maps. webkitCompassHeading on iOS, alpha on Android.
-    //
-    // Fluidity rewrite (spec 2026-06-23): orientation events fire far too
-    // often and jitter, so we (1) throttle ingestion to one sample / 100 ms,
-    // (2) only stash a *target* heading, and (3) lerp the *current* heading
-    // toward it on every animation frame for buttery rotation. The arrow
-    // only appears once a valid heading lands.
-    let currentHeading = 0
-    let targetHeading = 0
-    let hasHeading = false
-    let lastSample = 0
-    let rafId = 0
-
-    const onOrientation = (ev: Event) => {
-      const now = Date.now()
-      // Throttle — ignore everything inside a 100 ms window.
-      if (now - lastSample < 100) return
-      lastSample = now
-      const e = ev as DeviceOrientationEvent & {
-        webkitCompassHeading?: number
-      }
-      let heading: number | null = null
-      if (typeof e.webkitCompassHeading === 'number')
-        heading = e.webkitCompassHeading
-      else if (typeof e.alpha === 'number') heading = 360 - e.alpha
-      if (heading == null || Number.isNaN(heading)) return
-      targetHeading = heading
-      if (!hasHeading) {
-        // First valid reading — snap the start angle and reveal the arrow.
-        currentHeading = heading
-        hasHeading = true
-        if (coneEl) coneEl.style.display = ''
-      }
-    }
-
-    const animate = () => {
-      if (hasHeading && innerEl) {
-        // Smooth interpolation along the shortest arc so we never spin the
-        // long way round when the heading wraps past 0°/360°.
-        const diff = targetHeading - currentHeading
-        const shortestDiff = ((diff + 540) % 360) - 180
-        currentHeading += shortestDiff * 0.1
-        innerEl.style.transform = `rotate(${currentHeading}deg)`
-      }
-      rafId = requestAnimationFrame(animate)
-    }
-    rafId = requestAnimationFrame(animate)
-    function attachOrientation() {
-      window.addEventListener('deviceorientationabsolute', onOrientation, true)
-      window.addEventListener('deviceorientation', onOrientation, true)
-    }
-    const DOE = window.DeviceOrientationEvent as
-      | (typeof DeviceOrientationEvent & {
-          requestPermission?: () => Promise<'granted' | 'denied'>
-        })
-      | undefined
-    let gestureCleanup: (() => void) | null = null
-    if (DOE && typeof DOE.requestPermission === 'function') {
-      // iOS — permission must be requested from a user gesture.
-      const onGesture = () => {
-        DOE.requestPermission?.()
-          .then((res) => {
-            if (res === 'granted') attachOrientation()
-          })
-          .catch(() => {})
-        gestureCleanup?.()
-      }
-      window.addEventListener('touchend', onGesture, { once: true })
-      window.addEventListener('click', onGesture, { once: true })
-      gestureCleanup = () => {
-        window.removeEventListener('touchend', onGesture)
-        window.removeEventListener('click', onGesture)
-        gestureCleanup = null
-      }
-    } else if (DOE) {
-      attachOrientation()
-    }
-
     return () => {
       if (watchIdRef.current != null) {
         navigator.geolocation.clearWatch(watchIdRef.current)
         watchIdRef.current = null
       }
-      window.removeEventListener('deviceorientationabsolute', onOrientation, true)
-      window.removeEventListener('deviceorientation', onOrientation, true)
-      if (rafId) cancelAnimationFrame(rafId)
-      gestureCleanup?.()
-      marker.remove()
+      compass?.destroy()
+      compass = null
       userMarkerRef.current = null
     }
   }, [mapReady])

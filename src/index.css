@@ -217,58 +217,33 @@ h4 {
   }
 }
 
-/* ── User location marker (Apple Maps / Google Maps style) ──
-   The Mapbox root wrapper carries Mapbox's positioning transform; the
-   inner #user-location-marker carries the compass rotation. Blue dot +
-   pulsing ring + a directional cone above it. */
-#user-location-marker {
-  position: relative;
-  width: 22px;
-  height: 22px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  /* Rotation is smoothed per-frame by the rAF lerp in Map.tsx — a CSS
-     transition on top would compound the easing and add lag. */
+/* ── User location marker (Apple Plans style) ──
+   A 60×60 SVG: blue dot + white core, a soft pulsing halo, and a rounded
+   60° direction cone. Mapbox positions the OUTER wrapper element; an inner
+   wrapper carries the compass rotation (CompassMarker in Map.tsx) so we
+   never clobber Mapbox's positioning transform. The cone fades in only
+   once a real heading lands. */
+.pulse-ring {
+  animation: pulse-location 2s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
 }
-.location-dot {
-  width: 22px;
-  height: 22px;
-  background: #4da6ff;
-  border: 3px solid white;
-  border-radius: 50%;
-  box-shadow:
-    0 0 0 4px rgba(77, 166, 255, 0.25),
-    0 2px 8px rgba(0, 0, 0, 0.5);
-  position: relative;
-  z-index: 2;
-  animation: pulse-dot 2s ease-in-out infinite;
-}
-.direction-cone {
-  position: absolute;
-  top: -28px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 0;
-  height: 0;
-  border-left: 9px solid transparent;
-  border-right: 9px solid transparent;
-  border-bottom: 24px solid rgba(77, 166, 255, 0.5);
-  filter: blur(1px);
-  z-index: 1;
-}
-@keyframes pulse-dot {
-  0%,
-  100% {
-    box-shadow:
-      0 0 0 4px rgba(77, 166, 255, 0.25),
-      0 2px 8px rgba(0, 0, 0, 0.5);
+@keyframes pulse-location {
+  0% {
+    r: 12px;
+    opacity: 0.3;
   }
   50% {
-    box-shadow:
-      0 0 0 8px rgba(77, 166, 255, 0.1),
-      0 2px 8px rgba(0, 0, 0, 0.5);
+    r: 18px;
+    opacity: 0.1;
   }
+  100% {
+    r: 12px;
+    opacity: 0.3;
+  }
+}
+.user-cone {
+  transition: opacity 240ms ease-out;
 }
 
 /* Map markers (spots + clusters) fade-in with a spring scale on first
