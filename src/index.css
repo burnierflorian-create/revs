@@ -217,16 +217,12 @@ h4 {
   }
 }
 
-/* ── User location marker (Apple Plans style) ──
-   A 60×70 SVG: blue dot + white core, a SMIL-animated pulsing halo, and a
-   trapezoidal directional beam. Mapbox positions the OUTER wrapper element;
-   an inner wrapper carries the compass rotation (CompassMarker in Map.tsx)
-   so we never clobber Mapbox's positioning transform. The halo pulse runs
-   from inline <animate> tags inside the SVG; the beam (.user-cone) fades in
-   only once a real heading lands. */
-.user-cone {
-  transition: opacity 240ms ease-out;
-}
+/* ── User location marker ──
+   A 50×60 SVG: a clear directional arrow above a blue dot + white core.
+   Mapbox positions the OUTER wrapper element; an inner wrapper carries the
+   compass rotation (CompassMarker in Map.tsx) so we never clobber Mapbox's
+   positioning transform. The arrow is always visible (points up until a
+   heading lands, then rotates). No extra CSS is needed for the SVG. */
 
 /* Map markers (spots + clusters) fade-in with a spring scale on first
    appearance — covers the cluster merge/explode-into-view moment. */

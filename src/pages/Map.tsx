@@ -540,36 +540,24 @@ function applyMode(map: mapboxgl.Map, mode: MapMode) {
 }
 
 // ─────────────────── User-location compass marker ───────────────────
-// Apple-Plans-style location marker: a 60×70 SVG with a blue dot at
-// (30,42), a SMIL-animated pulsing halo (r 11→18, opacity 0.18→0) and a
-// trapezoidal directional beam above it. The beam fades in only once a
-// real compass heading lands; rotation is GPU-composited and interpolated
-// along the shortest arc for buttery-smooth tracking. The Mapbox marker is
-// offset so the DOT (not the SVG centre) sits on the GPS coordinate, and
-// the rotation pivot is the dot too, so the beam swings around it.
+// Location marker: a 50×60 SVG with a clear directional arrow above a blue
+// dot at (25,44). The arrow is ALWAYS visible (points up until a compass
+// heading lands, then rotates to it). Rotation is GPU-composited and
+// interpolated along the shortest arc for buttery-smooth tracking. The
+// Mapbox marker is offset so the dot anchors near the GPS coordinate
+// (anchor { x:0.5, y:0.85 }), and the rotation pivot is the dot so the
+// arrow swings around it.
 const USER_MARKER_HTML = `
-<svg width="60" height="70" viewBox="0 0 60 70" fill="none" xmlns="http://www.w3.org/2000/svg" style="overflow:visible">
+<svg width="50" height="60" viewBox="0 0 50 60" fill="none" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <linearGradient id="revsBeam" x1="0.5" y1="1" x2="0.5" y2="0">
-      <stop offset="0%" stop-color="#4DA6FF" stop-opacity="0.7"/>
-      <stop offset="100%" stop-color="#4DA6FF" stop-opacity="0"/>
+    <linearGradient id="revsBeamGrad" x1="0.5" y1="0" x2="0.5" y2="1">
+      <stop offset="0%" stop-color="#4DA6FF" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#4DA6FF" stop-opacity="0.6"/>
     </linearGradient>
-    <filter id="revsGlow">
-      <feGaussianBlur stdDeviation="2" result="blur"/>
-      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
-    </filter>
   </defs>
-  <!-- Trapezoidal directional beam -->
-  <path class="user-cone" d="M26 38 Q22 10 14 2 Q30 -4 46 2 Q38 10 34 38 Z" fill="url(#revsBeam)"/>
-  <!-- Pulsing halo -->
-  <circle cx="30" cy="42" r="13" fill="#4DA6FF" opacity="0.15">
-    <animate attributeName="r" values="11;18;11" dur="2s" repeatCount="indefinite"/>
-    <animate attributeName="opacity" values="0.18;0;0.18" dur="2s" repeatCount="indefinite"/>
-  </circle>
-  <!-- Main blue dot -->
-  <circle cx="30" cy="42" r="11" fill="#4DA6FF" stroke="white" stroke-width="3" filter="url(#revsGlow)"/>
-  <!-- White core -->
-  <circle cx="30" cy="42" r="3" fill="white"/>
+  <path d="M25 44 L13 20 Q25 13 37 20 Z" fill="url(#revsBeamGrad)"/>
+  <circle cx="25" cy="44" r="10" fill="#4DA6FF" stroke="white" stroke-width="2.5"/>
+  <circle cx="25" cy="44" r="3" fill="white"/>
 </svg>
 `
 
@@ -588,30 +576,27 @@ class CompassMarker {
   // the inner rotEl carries our compass rotation so the two never fight.
   private outerEl: HTMLElement | null = null
   private rotEl: HTMLElement | null = null
-  private coneEl: SVGElement | null = null
   private orientationHandler: ((e: Event) => void) | null = null
   private gestureCleanup: (() => void) | null = null
 
   init(map: mapboxgl.Map, position: [number, number]) {
     this.outerEl = document.createElement('div')
     this.rotEl = document.createElement('div')
-    // 60×70 box; the dot is at (30,42) = 50% 60%, so the rotation pivot is
-    // the dot and the beam swings around it (not the SVG centre).
+    // 50×60 box; the dot is at (25,44) = 50% ~73.3%, so the rotation pivot
+    // is the dot and the arrow swings around it (not the SVG centre).
     this.rotEl.style.cssText =
-      'width:60px;height:70px;line-height:0;will-change:transform;transform-origin:50% 60%;'
+      'width:50px;height:60px;line-height:0;will-change:transform;transform-origin:50% 73.3%;'
     this.rotEl.innerHTML = USER_MARKER_HTML
     this.outerEl.appendChild(this.rotEl)
-    this.coneEl = this.rotEl.querySelector('.user-cone')
-    // Beam hidden until a real heading arrives → blue dot only, no spin.
-    if (this.coneEl) this.coneEl.style.opacity = '0'
 
     this.marker = new mapboxgl.Marker({
       element: this.outerEl,
       anchor: 'center',
-      // Lands the DOT (30,42), not the SVG centre (30,35), on the GPS
-      // point — the requested { x:0.5, y:0.7 } intent. Element centre is
-      // shifted 7px up so the dot 7px below it falls on the coordinate.
-      offset: [0, -7],
+      // Mapbox only takes keyword anchors, so the requested { x:0.5, y:0.85 }
+      // is realised via offset. Anchor 0.85 of a 60px-tall box = y=51; the
+      // element centre (y=30) must sit 21px above the GPS point so pixel 51
+      // lands on it → offset [0,-21].
+      offset: [0, -21],
     })
       .setLngLat(position)
       .addTo(map)
@@ -664,10 +649,10 @@ class CompassMarker {
       if (Number.isNaN(heading)) return
       this.targetAngle = heading
       if (!this.hasHeading) {
-        // First valid reading — snap the start angle, reveal the cone.
+        // First valid reading — snap the start angle so the arrow doesn't
+        // do a full spin from north on the first frame.
         this.currentAngle = heading
         this.hasHeading = true
-        if (this.coneEl) this.coneEl.style.opacity = '1'
       }
     }
     this.orientationHandler = handler
@@ -1855,10 +1840,11 @@ export default function MapPage() {
         </button>
       </div>
 
-      {/* Centered "Spotter" camera FAB — primary action, round, brand
-          red (#E8203A), white camera glyph. Sits above the global tab
-          bar so it's fully visible and never overlapped. Tapping fires
-          the hidden capture input synchronously (iOS camera requirement). */}
+      {/* Centered "Spotter" camera FAB — clean 60px brand-red circle:
+          flat #E8203A fill, ONE soft shadow, white 26px camera glyph. No
+          blur / glow / secondary backdrop. Tap springs to scale(0.92).
+          Sits above the global tab bar; tapping fires the hidden capture
+          input synchronously (iOS camera requirement). */}
       <input
         ref={spotInputRef}
         type="file"
@@ -1870,15 +1856,19 @@ export default function MapPage() {
       <button
         onClick={() => spotInputRef.current?.click()}
         aria-label="Spotter une voiture"
-        className="tappable absolute left-1/2 z-40 flex h-16 w-16 -translate-x-1/2 items-center justify-center rounded-full transition-transform active:scale-90"
+        className="absolute left-1/2 z-40 flex -translate-x-1/2 items-center justify-center active:scale-[0.92]"
         style={{
           bottom: 'calc(env(safe-area-inset-bottom) + 4.75rem)',
+          height: 60,
+          width: 60,
+          borderRadius: '50%',
+          overflow: 'hidden',
           background: '#E8203A',
-          boxShadow:
-            '0 18px 40px rgba(232, 32, 58, 0.45), 0 8px 18px rgba(0, 0, 0, 0.40), 0 4px 10px rgba(0, 0, 0, 0.30), inset 0 0 0 1px rgba(255, 255, 255, 0.12)',
+          boxShadow: '0 4px 16px rgba(232, 32, 58, 0.4)',
+          transition: 'transform 150ms cubic-bezier(0.34, 1.56, 0.64, 1)',
         }}
       >
-        <Camera className="h-7 w-7 text-white" strokeWidth={2.2} />
+        <Camera className="h-[26px] w-[26px] text-white" strokeWidth={2.2} />
       </button>
 
       {error && (
