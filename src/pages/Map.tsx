@@ -540,35 +540,36 @@ function applyMode(map: mapboxgl.Map, mode: MapMode) {
 }
 
 // ─────────────────── User-location compass marker ───────────────────
-// Apple-Plans-style location marker: an 80×80 SVG with a blue dot, a
-// SMIL-animated pulsing halo (r 12→20, opacity 0.2→0) and a rounded 50°
-// direction cone. The cone fades in only once a real compass heading
-// lands; rotation is GPU-composited and interpolated along the shortest
-// arc for buttery-smooth tracking.
+// Apple-Plans-style location marker: a 60×70 SVG with a blue dot at
+// (30,42), a SMIL-animated pulsing halo (r 11→18, opacity 0.18→0) and a
+// trapezoidal directional beam above it. The beam fades in only once a
+// real compass heading lands; rotation is GPU-composited and interpolated
+// along the shortest arc for buttery-smooth tracking. The Mapbox marker is
+// offset so the DOT (not the SVG centre) sits on the GPS coordinate, and
+// the rotation pivot is the dot too, so the beam swings around it.
 const USER_MARKER_HTML = `
-<svg width="80" height="80" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg" style="overflow:visible">
+<svg width="60" height="70" viewBox="0 0 60 70" fill="none" xmlns="http://www.w3.org/2000/svg" style="overflow:visible">
   <defs>
-    <radialGradient id="revsConeG" cx="50%" cy="100%" r="100%" gradientUnits="objectBoundingBox">
-      <stop offset="0%" stop-color="#4DA6FF" stop-opacity="0.55"/>
-      <stop offset="70%" stop-color="#4DA6FF" stop-opacity="0.15"/>
+    <linearGradient id="revsBeam" x1="0.5" y1="1" x2="0.5" y2="0">
+      <stop offset="0%" stop-color="#4DA6FF" stop-opacity="0.7"/>
       <stop offset="100%" stop-color="#4DA6FF" stop-opacity="0"/>
-    </radialGradient>
-    <filter id="revsDotGlow" x="-50%" y="-50%" width="200%" height="200%">
-      <feGaussianBlur in="SourceGraphic" stdDeviation="2.5" result="blur"/>
+    </linearGradient>
+    <filter id="revsGlow">
+      <feGaussianBlur stdDeviation="2" result="blur"/>
       <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
     </filter>
   </defs>
-  <!-- Directional cone: 50° sector pointing up -->
-  <path class="user-cone" d="M40 40 L26 10 Q40 3 54 10 Z" fill="url(#revsConeG)"/>
+  <!-- Trapezoidal directional beam -->
+  <path class="user-cone" d="M26 38 Q22 10 14 2 Q30 -4 46 2 Q38 10 34 38 Z" fill="url(#revsBeam)"/>
   <!-- Pulsing halo -->
-  <circle cx="40" cy="40" r="14" fill="#4DA6FF" opacity="0.18">
-    <animate attributeName="r" values="12;20;12" dur="2s" repeatCount="indefinite"/>
-    <animate attributeName="opacity" values="0.2;0;0.2" dur="2s" repeatCount="indefinite"/>
+  <circle cx="30" cy="42" r="13" fill="#4DA6FF" opacity="0.15">
+    <animate attributeName="r" values="11;18;11" dur="2s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.18;0;0.18" dur="2s" repeatCount="indefinite"/>
   </circle>
   <!-- Main blue dot -->
-  <circle cx="40" cy="40" r="11" fill="#4DA6FF" stroke="white" stroke-width="3" filter="url(#revsDotGlow)"/>
+  <circle cx="30" cy="42" r="11" fill="#4DA6FF" stroke="white" stroke-width="3" filter="url(#revsGlow)"/>
   <!-- White core -->
-  <circle cx="40" cy="40" r="3.5" fill="white"/>
+  <circle cx="30" cy="42" r="3" fill="white"/>
 </svg>
 `
 
@@ -594,17 +595,23 @@ class CompassMarker {
   init(map: mapboxgl.Map, position: [number, number]) {
     this.outerEl = document.createElement('div')
     this.rotEl = document.createElement('div')
+    // 60×70 box; the dot is at (30,42) = 50% 60%, so the rotation pivot is
+    // the dot and the beam swings around it (not the SVG centre).
     this.rotEl.style.cssText =
-      'width:80px;height:80px;line-height:0;will-change:transform;transform-origin:center center;'
+      'width:60px;height:70px;line-height:0;will-change:transform;transform-origin:50% 60%;'
     this.rotEl.innerHTML = USER_MARKER_HTML
     this.outerEl.appendChild(this.rotEl)
     this.coneEl = this.rotEl.querySelector('.user-cone')
-    // Cone hidden until a real heading arrives → blue dot only, no spin.
+    // Beam hidden until a real heading arrives → blue dot only, no spin.
     if (this.coneEl) this.coneEl.style.opacity = '0'
 
     this.marker = new mapboxgl.Marker({
       element: this.outerEl,
       anchor: 'center',
+      // Lands the DOT (30,42), not the SVG centre (30,35), on the GPS
+      // point — the requested { x:0.5, y:0.7 } intent. Element centre is
+      // shifted 7px up so the dot 7px below it falls on the coordinate.
+      offset: [0, -7],
     })
       .setLngLat(position)
       .addTo(map)
