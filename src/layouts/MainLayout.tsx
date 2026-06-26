@@ -16,6 +16,7 @@ import SpotCelebration from '../components/SpotCelebration'
 import StreakBreak from '../components/StreakBreak'
 import LevelUpOverlay from '../components/LevelUpOverlay'
 import BadgeUnlocked from '../components/BadgeUnlocked'
+import ShareCardSheet from '../components/ShareCardSheet'
 import TabsContainer, { type TabKey } from './TabsContainer'
 import {
   claimReferralCode,
@@ -237,6 +238,7 @@ export default function MainLayout() {
       <StreakBreak />
       <LevelUpOverlay />
       <BadgeUnlocked />
+      <ShareCardSheet />
       <UpdateNotification />
       <InstallBanner />
 

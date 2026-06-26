@@ -2,8 +2,43 @@ import { useEffect, useState } from 'react'
 import { prefersReducedMotion, vibrate } from '../lib/motion'
 import { XP_LADDER, xpLevel } from '../lib/xp'
 import { supabase } from '../lib/supabase'
+import type { Rarity, Spot } from '../lib/spots'
+import { rarityRank } from './CollectorCard'
+import { openShareCard } from './ShareCardSheet'
 
 const CHANNEL = 'revs:level-up'
+
+/** After a level-up, surface the user's best card for a story share. */
+async function offerBestCardShare(): Promise<void> {
+  try {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    if (!user) return
+    const { data } = await supabase
+      .from('spots')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(50)
+    const list = (data ?? []) as Spot[]
+    const withPhoto = list.filter((s) => s.photo_url)
+    if (withPhoto.length === 0) return
+    const best = [...withPhoto].sort(
+      (a, b) => rarityRank(b.rarity) - rarityRank(a.rarity),
+    )[0]
+    openShareCard({
+      photoUrl: best.photo_url,
+      brand: best.brand,
+      model: best.model,
+      year: best.year,
+      rarity: (best.rarity ?? 'standard') as Rarity,
+      autoMessage: 'Ta carte est prête à être partagée ! 🔥',
+    })
+  } catch {
+    /* best-effort — never block */
+  }
+}
 const LAST_LEVEL_KEY = 'revs_last_level'
 const COLORS = ['#E8203A', '#C8A96E', '#ffffff']
 
@@ -112,6 +147,8 @@ export default function LevelUpOverlay() {
       // Particles built in the handler (not render) to keep render pure.
       setData({ ...detail, particles: makeParticles() })
       window.setTimeout(() => setData(null), 2500)
+      // Once the level-up overlay clears, offer to share the best card.
+      window.setTimeout(() => void offerBestCardShare(), 2700)
     }
     window.addEventListener(CHANNEL, handler)
     return () => window.removeEventListener(CHANNEL, handler)

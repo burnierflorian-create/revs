@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowLeft, Loader2, MapPin, Trophy } from 'lucide-react'
+import { ArrowLeft, Loader2, MapPin, Share2, Trophy } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import type { Spot, Rarity } from '../lib/spots'
 import { xpForSpot } from '../lib/spots'
 import { fetchCardSpecs, type CardSpecs } from '../lib/cardSpecs'
 import { prefersReducedMotion } from '../lib/motion'
+import { openShareCard } from './ShareCardSheet'
 
 const RARITY_ORDER: Rarity[] = [
   'standard',
@@ -134,6 +135,7 @@ export default function CollectorCard({
   isFirstOnRevs,
   spotsCount,
   reveal = false,
+  showShare = false,
 }: {
   spot: Spot
   cardNumber: number
@@ -142,6 +144,8 @@ export default function CollectorCard({
   /** Play the first-appearance reveal (face-down → shake → 3D flip →
    *  flash, plus gold dust for legendary/hypercar cards). */
   reveal?: boolean
+  /** Show a "Partager" button under the card (collection grid). */
+  showShare?: boolean
 }) {
   const [flipped, setFlipped] = useState(false)
   // The reveal plays once on mount; afterwards the card renders plainly.
@@ -151,9 +155,23 @@ export default function CollectorCard({
   )
   useEffect(() => {
     if (!revealing) return
-    const t = window.setTimeout(() => setRevealing(false), 2100)
+    const t = window.setTimeout(() => {
+      setRevealing(false)
+      // Wow moment: a freshly-revealed LEGENDARY card auto-opens the share
+      // sheet so the user can post it straight to their story.
+      if (reveal && spot.rarity === 'hypercar') {
+        openShareCard({
+          photoUrl: spot.photo_url,
+          brand: spot.brand,
+          model: spot.model,
+          year: spot.year,
+          rarity: 'hypercar',
+          autoMessage: 'Ta carte est prête à être partagée ! 🔥',
+        })
+      }
+    }, 2100)
     return () => window.clearTimeout(t)
-  }, [revealing])
+  }, [revealing, reveal, spot])
   const [specs, setSpecs] = useState<CardSpecs | null>(null)
   const [specsLoading, setSpecsLoading] = useState(false)
   const [specsTried, setSpecsTried] = useState(false)
@@ -297,7 +315,33 @@ export default function CollectorCard({
     </div>
   )
 
-  if (!revealing) return card
+  if (!revealing) {
+    if (!showShare) return card
+    return (
+      <div>
+        {card}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation()
+            openShareCard({
+              photoUrl: spot.photo_url,
+              brand: spot.brand,
+              model: spot.model,
+              year: spot.year,
+              rarity,
+            })
+          }}
+          className="tappable mt-2 flex w-full items-center justify-center gap-2 text-sm font-semibold text-white"
+          style={{ background: '#1a1a1a', borderRadius: 12, padding: '10px 16px' }}
+          aria-label={`Partager la carte ${spot.brand} ${shortName}`}
+        >
+          <Share2 className="h-4 w-4" />
+          Partager
+        </button>
+      </div>
+    )
+  }
 
   // First-appearance reveal: the real card sits inside an element that
   // shakes then flips in 3D; a dark "face-down" overlay covers it until

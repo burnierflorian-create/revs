@@ -132,6 +132,7 @@ export default function MyCollection({ spots }: { spots: Spot[] }) {
               spotsCount={m?.spots_count ?? 1}
               isFirstOnRevs={m?.is_first_on_revs ?? false}
               reveal={revealIds.has(s.id)}
+              showShare
             />
           </div>
         )
