@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ChangeEvent } from 'react'
+import { useEffect, useRef } from 'react'
 import {
   NavLink,
   Outlet,
@@ -7,15 +7,7 @@ import {
   useNavigationType,
   useSearchParams,
 } from 'react-router-dom'
-import {
-  MapPin,
-  Radio,
-  Home,
-  Newspaper,
-  User,
-  Camera,
-} from 'lucide-react'
-import { setPendingPhoto } from '../lib/pendingPhoto'
+import { MapPin, Radio, Home, Newspaper, User } from 'lucide-react'
 import UpdateNotification from '../components/UpdateNotification'
 import InstallBanner from '../components/InstallBanner'
 import WelcomeCelebration from '../components/WelcomeCelebration'
@@ -76,17 +68,6 @@ export default function MainLayout() {
   if (tab) lastTabRef.current = tab
   const onStack = tab === null
 
-  // Central camera button — fires the native camera synchronously inside
-  // the tap (iOS requirement), stashes the photo and lands on /new-spot.
-  const camInputRef = useRef<HTMLInputElement>(null)
-  function onCamCapture(e: ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    e.target.value = ''
-    if (!file) return
-    hapticSelection()
-    setPendingPhoto(file)
-    navigate('/new-spot')
-  }
 
   // Force-relogin sweep: when an admin flips profiles.force_relogin = true
   // (e.g. after a major auth/onboarding change), the user is signed out
@@ -262,29 +243,10 @@ export default function MainLayout() {
           red camera button hovering above it. Both float over the
           content, which scrolls (blurred) underneath. */}
       <div className="liquid-nav-wrap">
-        <input
-          ref={camInputRef}
-          type="file"
-          accept="image/*"
-          capture="environment"
-          onChange={onCamCapture}
-          className="hidden"
-        />
+        {/* The Carte's "Spotter" camera FAB now lives in Map.tsx (a single
+            60px circle above the pill). The old nav-embedded .liquid-cam was
+            removed 2026-06-26 — it duplicated and overlapped the Map FAB. */}
         <nav className="liquid-nav" aria-label="Navigation principale">
-          {/* Camera — separate, floating 12px above the pill. ONLY on the
-              Carte tab; every other tab (and stack routes) hides it
-              entirely. The Home SPOTTER button is a different element and
-              is unaffected. */}
-          {tab === 'map' && (
-            <button
-              type="button"
-              onClick={() => camInputRef.current?.click()}
-              className="liquid-cam"
-              aria-label="Spotter une voiture"
-            >
-              <Camera className="h-6 w-6 text-white" strokeWidth={2} />
-            </button>
-          )}
 
           <NavLink to="/map" onClick={hapticSelection} className={tabClass} aria-label="Carte">
             {({ isActive }) => (

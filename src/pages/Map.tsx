@@ -568,15 +568,14 @@ type DOEStatic = typeof DeviceOrientationEvent & {
 class CompassMarker {
   private currentAngle = 0
   private targetAngle = 0
-  private hasHeading = false
-  private lastSample = 0
   private animationId: number | null = null
   private marker: mapboxgl.Marker | null = null
   // Mapbox positions the OUTER element (it owns that element's transform);
   // the inner rotEl carries our compass rotation so the two never fight.
   private outerEl: HTMLElement | null = null
   private rotEl: HTMLElement | null = null
-  private orientationHandler: ((e: Event) => void) | null = null
+  private absHandler: ((e: Event) => void) | null = null
+  private relHandler: ((e: Event) => void) | null = null
   private gestureCleanup: (() => void) | null = null
 
   init(map: mapboxgl.Map, position: [number, number]) {
@@ -630,47 +629,43 @@ class CompassMarker {
   }
 
   private listenToCompass() {
-    const THROTTLE_MS = 50 // max 20 updates/s
-    const handler = (ev: Event) => {
-      const now = Date.now()
-      if (now - this.lastSample < THROTTLE_MS) return
-      this.lastSample = now
+    // No throttle — every sample updates the *target*; the rAF loop does
+    // the smoothing, so the more samples the smoother. deviceorientation-
+    // absolute (Android) accepts webkitCompassHeading or 360-alpha when
+    // absolute; deviceorientation (iOS) only trusts webkitCompassHeading.
+    const onAbsolute = (ev: Event) => {
       const e = ev as DeviceOrientationEvent & {
         webkitCompassHeading?: number
       }
-      let heading: number
-      if (typeof e.webkitCompassHeading === 'number') {
-        heading = e.webkitCompassHeading // iOS — already absolute (0=North)
-      } else if (e.absolute && typeof e.alpha === 'number') {
-        heading = 360 - e.alpha // Android absolute
-      } else {
-        return // no reliable absolute heading
-      }
-      if (Number.isNaN(heading)) return
-      this.targetAngle = heading
-      if (!this.hasHeading) {
-        // First valid reading — snap the start angle so the arrow doesn't
-        // do a full spin from north on the first frame.
-        this.currentAngle = heading
-        this.hasHeading = true
-      }
+      const h =
+        e.webkitCompassHeading ??
+        (e.absolute && e.alpha != null ? 360 - e.alpha : null)
+      if (h !== null && !Number.isNaN(h)) this.targetAngle = h
     }
-    this.orientationHandler = handler
-    // deviceorientationabsolute (Android) + deviceorientation (iOS).
-    window.addEventListener('deviceorientationabsolute', handler, true)
-    window.addEventListener('deviceorientation', handler, true)
+    const onRelative = (ev: Event) => {
+      const e = ev as DeviceOrientationEvent & {
+        webkitCompassHeading?: number
+      }
+      const h = e.webkitCompassHeading ?? null
+      if (h !== null && !Number.isNaN(h)) this.targetAngle = h
+    }
+    this.absHandler = onAbsolute
+    this.relHandler = onRelative
+    window.addEventListener('deviceorientationabsolute', onAbsolute, true)
+    window.addEventListener('deviceorientation', onRelative, true)
   }
 
+  // rAF loop runs permanently from init; smoothFactor 0.08 + shortest-arc
+  // interpolation give buttery rotation. The arrow stays visible (points up
+  // at angle 0) until the target starts updating from a real heading.
   private startAnimation() {
     const animate = () => {
-      if (this.hasHeading && this.rotEl) {
-        // Shortest-arc interpolation so we never spin the long way round.
-        let diff = this.targetAngle - this.currentAngle
-        while (diff > 180) diff -= 360
-        while (diff < -180) diff += 360
-        const smoothFactor = 0.08 // very fluid: fast start, soft settle
-        this.currentAngle += diff * smoothFactor
-        this.currentAngle = ((this.currentAngle % 360) + 360) % 360
+      let delta = this.targetAngle - this.currentAngle
+      while (delta > 180) delta -= 360
+      while (delta < -180) delta += 360
+      this.currentAngle += delta * 0.08
+      this.currentAngle = ((this.currentAngle % 360) + 360) % 360
+      if (this.rotEl) {
         this.rotEl.style.transform = `rotate(${this.currentAngle}deg)`
       }
       this.animationId = requestAnimationFrame(animate)
@@ -684,18 +679,14 @@ class CompassMarker {
 
   destroy() {
     if (this.animationId) cancelAnimationFrame(this.animationId)
-    if (this.orientationHandler) {
+    if (this.absHandler)
       window.removeEventListener(
         'deviceorientationabsolute',
-        this.orientationHandler,
+        this.absHandler,
         true,
       )
-      window.removeEventListener(
-        'deviceorientation',
-        this.orientationHandler,
-        true,
-      )
-    }
+    if (this.relHandler)
+      window.removeEventListener('deviceorientation', this.relHandler, true)
     this.gestureCleanup?.()
     this.marker?.remove()
     this.marker = null
@@ -1856,9 +1847,12 @@ export default function MapPage() {
       <button
         onClick={() => spotInputRef.current?.click()}
         aria-label="Spotter une voiture"
-        className="absolute left-1/2 z-40 flex -translate-x-1/2 items-center justify-center active:scale-[0.92]"
+        data-tour="spot-fab"
+        className="fixed left-1/2 z-40 flex -translate-x-1/2 items-center justify-center active:scale-[0.92]"
         style={{
-          bottom: 'calc(env(safe-area-inset-bottom) + 4.75rem)',
+          // 80px above the safe-area inset → clears the navbar (which sits
+          // at safe + 8px, ~60px tall) with a comfortable gap, never overlaps.
+          bottom: 'calc(env(safe-area-inset-bottom) + 80px)',
           height: 60,
           width: 60,
           borderRadius: '50%',

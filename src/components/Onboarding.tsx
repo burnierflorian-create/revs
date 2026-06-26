@@ -326,7 +326,7 @@ const TOUR: TourStep[] = [
   },
   {
     route: '/map',
-    selector: '.liquid-cam',
+    selector: '[data-tour="spot-fab"]',
     title: '📸 SPOTTER — L’action principale',
     body: "C'est le bouton le plus important. Appuie dessus dès que tu vois une belle voiture. L'IA analyse ta photo en quelques secondes et identifie la marque, le modèle, l'année et la rareté automatiquement.",
   },

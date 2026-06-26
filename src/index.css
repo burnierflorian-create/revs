@@ -128,7 +128,9 @@ h4 {
   position: fixed;
   left: 0;
   right: 0;
-  bottom: calc(20px + env(safe-area-inset-bottom));
+  /* Navbar sits 8px above the safe-area inset. The Carte camera FAB
+     (Map.tsx) sits at safe + 80px so the two never overlap. */
+  bottom: calc(env(safe-area-inset-bottom) + 8px);
   z-index: 40;
   display: flex;
   justify-content: center;
@@ -186,36 +188,9 @@ h4 {
   border-radius: 50%;
   background: #e8203a;
 }
-/* Central camera button — floats 12px above the pill, gentle pulse. */
-.liquid-cam {
-  position: absolute;
-  left: 50%;
-  bottom: calc(100% + 12px);
-  margin-left: -28px;
-  pointer-events: auto;
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  background: #e8203a;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 4px 20px rgba(232, 32, 58, 0.5);
-  transition: transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1);
-  animation: camPulse 2.6s ease-in-out infinite;
-}
-.liquid-cam:active {
-  transform: scale(0.9);
-}
-@keyframes camPulse {
-  0%,
-  100% {
-    box-shadow: 0 4px 20px rgba(232, 32, 58, 0.5);
-  }
-  50% {
-    box-shadow: 0 6px 28px rgba(232, 32, 58, 0.7);
-  }
-}
+/* The .liquid-cam (nav-embedded camera) was removed 2026-06-26 — the
+   Carte's camera FAB now lives in Map.tsx as a single 60px circle, so the
+   duplicate that overlapped it is gone. */
 
 /* ── User location marker ──
    A 50×60 SVG: a clear directional arrow above a blue dot + white core.
