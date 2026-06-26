@@ -15,6 +15,7 @@ import {
 import { fetchLiveEvents, type LiveEvent } from '../lib/liveEvents'
 import TitleChip from '../components/TitleChip'
 import { checkLevelUp } from '../components/LevelUpOverlay'
+import LiquidXpBar from '../components/LiquidXpBar'
 import { triggerStreakBreak } from '../components/StreakBreak'
 
 type CommunityStats = {
@@ -279,6 +280,11 @@ export default function Home() {
             {new Intl.NumberFormat('fr-FR').format(Math.floor(xp))} XP
           </span>
         </button>
+      </div>
+
+      {/* Liquid XP progress toward the next level. */}
+      <div className="mb-3 px-1">
+        <LiquidXpBar pct={lvl.pct} />
       </div>
 
       {/* ─── STREAK PILL — visible red badge above the cockpit ─── */}

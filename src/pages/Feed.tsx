@@ -29,6 +29,7 @@ import {
 } from '../lib/filterCatalog'
 import { matchesRarityBucket } from '../components/FilterSections'
 import { isFounder } from '../lib/founders'
+import { prefersReducedMotion } from '../lib/motion'
 
 const PAGE = 10
 const POOL_SIZE = 200
@@ -616,6 +617,20 @@ export default function Feed() {
 
 // ─────────────────────────────── FEED CARD ───────────────────────────────
 
+// Double-tap heart burst — 8 fixed directions, slightly varied distance
+// (60–80px) and size (8–16px) for a natural pop. Deterministic so the
+// render stays pure.
+const HEART_DIRS = [0, 45, 90, 135, 180, 225, 270, 315].map((deg, i) => {
+  const a = (deg * Math.PI) / 180
+  const dist = 60 + (i % 3) * 10
+  const size = 8 + (i % 5) * 2
+  return {
+    hx: Math.cos(a) * dist,
+    hy: Math.sin(a) * dist,
+    size,
+  }
+})
+
 /** One spot in the feed — Instagram-grade. Layers: spotter row, 4:5
  *  edge-to-edge photo (double-tap to like, never navigates), tools row
  *  (like + count, comment + count, XP badge), tappable title block (the
@@ -637,6 +652,47 @@ function FeedCard({
   // Pending single-tap → open detail. Cancelled if a 2nd tap (double-tap
   // like) lands within the 300 ms window.
   const tapNavRef = useRef<number | null>(null)
+  // Parallax: the photo is 120% tall inside an overflow-hidden frame; we
+  // translate it at ~0.1× the card's distance from the viewport centre so
+  // it drifts slower than the scroll. Capturing scroll listener catches
+  // the tab-pane's scroll (events don't bubble, but capture does).
+  const photoRef = useRef<HTMLDivElement>(null)
+  const imgRef = useRef<HTMLImageElement>(null)
+  useEffect(() => {
+    if (prefersReducedMotion()) return
+    const photo = photoRef.current
+    const img = imgRef.current
+    if (!photo || !img) return
+    let visible = false
+    let raf = 0
+    const apply = () => {
+      raf = 0
+      const rect = photo.getBoundingClientRect()
+      const vh = window.innerHeight || 1
+      const offset = rect.top + rect.height / 2 - vh / 2
+      const margin = rect.height * 0.1
+      const ty = Math.max(-margin, Math.min(margin, offset * 0.1)) - margin
+      img.style.transform = `translate3d(0, ${ty}px, 0)`
+    }
+    const onScroll = () => {
+      if (visible && !raf) raf = requestAnimationFrame(apply)
+    }
+    const io = new IntersectionObserver(
+      (entries) => {
+        visible = entries[0]?.isIntersecting ?? false
+        if (visible) onScroll()
+      },
+      { threshold: 0 },
+    )
+    io.observe(photo)
+    window.addEventListener('scroll', onScroll, true)
+    apply()
+    return () => {
+      io.disconnect()
+      window.removeEventListener('scroll', onScroll, true)
+      if (raf) cancelAnimationFrame(raf)
+    }
+  }, [])
   const [liked, setLiked] = useState(false)
   const [likeCount, setLikeCount] = useState(0)
   const [commentCount, setCommentCount] = useState(0)
@@ -746,7 +802,8 @@ function FeedCard({
       }
       setHeartPop(true)
       hapticTap()
-      window.setTimeout(() => setHeartPop(false), 380)
+      // 650ms so the 600ms mini-heart burst finishes before unmount.
+      window.setTimeout(() => setHeartPop(false), 650)
       void setLikeState(true) // double-tap always likes, never unlikes
     } else {
       lastTapRef.current = now
@@ -765,16 +822,22 @@ function FeedCard({
       {/* PHOTO 4:5 — full-bleed. Rarity badge top-right, 44px floating
           header, and the car identity over a bottom gradient that keeps
           the text legible on any photo. Double-tap likes; never navigates. */}
-      <div onClick={onPhotoTap} className="relative cursor-pointer select-none">
+      <div
+        ref={photoRef}
+        onClick={onPhotoTap}
+        className="relative aspect-[4/5] cursor-pointer select-none overflow-hidden"
+      >
         {spot.photo_url ? (
           <img
+            ref={imgRef}
             src={spot.photo_url}
             alt={title}
             loading="lazy"
-            className="aspect-[4/5] w-full rounded-none object-cover contrast-[1.03] brightness-[0.98]"
+            className="absolute left-0 top-0 w-full object-cover contrast-[1.03] brightness-[0.98]"
+            style={{ height: '120%', willChange: 'transform' }}
           />
         ) : (
-          <div className="flex aspect-[4/5] w-full items-center justify-center bg-fg/5">
+          <div className="absolute inset-0 flex items-center justify-center bg-fg/5">
             <Car className="h-12 w-12 text-fg2/40" />
           </div>
         )}
@@ -897,6 +960,20 @@ function FeedCard({
               className="feed-double-heart h-28 w-28"
               style={{ color: '#FF2D46', fill: '#FF2D46' }}
             />
+            {HEART_DIRS.map((d, i) => (
+              <Heart
+                key={i}
+                className="feed-mini-heart"
+                style={
+                  {
+                    width: d.size,
+                    height: d.size,
+                    '--hx': `${d.hx}px`,
+                    '--hy': `${d.hy}px`,
+                  } as React.CSSProperties
+                }
+              />
+            ))}
           </div>
         )}
 

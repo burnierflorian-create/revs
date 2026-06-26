@@ -15,6 +15,7 @@ import XpFloater from '../components/XpFloater'
 import SpotCelebration from '../components/SpotCelebration'
 import StreakBreak from '../components/StreakBreak'
 import LevelUpOverlay from '../components/LevelUpOverlay'
+import BadgeUnlocked from '../components/BadgeUnlocked'
 import TabsContainer, { type TabKey } from './TabsContainer'
 import {
   claimReferralCode,
@@ -235,6 +236,7 @@ export default function MainLayout() {
       <SpotCelebration />
       <StreakBreak />
       <LevelUpOverlay />
+      <BadgeUnlocked />
       <UpdateNotification />
       <InstallBanner />
 

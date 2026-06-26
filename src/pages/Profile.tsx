@@ -22,6 +22,9 @@ import { useMyTier } from '../lib/tier'
 import { appConfig } from '../config/appConfig'
 import { Skeleton } from '../components/Skeleton'
 import MyCollection from '../components/MyCollection'
+import LiquidXpBar from '../components/LiquidXpBar'
+import { notifyBadgeUnlocked } from '../components/BadgeUnlocked'
+import { prefersReducedMotion } from '../lib/motion'
 import { rarityRank } from '../components/CollectorCard'
 import { rarityBadge } from '../lib/rarityStyle'
 import {
@@ -321,6 +324,39 @@ export default function Profile() {
   const unlocked = badgeCatalogue.filter((b) => unlocks.has(b.slug))
   const locked = badgeCatalogue.filter((b) => !unlocks.has(b.slug))
 
+  // Badge-unlock notifications: once the profile data is loaded, compare
+  // the current unlocked set against the baseline we last saw and fire a
+  // premium slide-up for any genuinely new badge. The first visit ever
+  // just seeds the baseline (no false fanfare for already-earned badges).
+  const unlockedKey = [...unlocks].sort().join(',')
+  useEffect(() => {
+    if (loading) return
+    let baseline = false
+    let storedSet = new Set<string>()
+    try {
+      const raw = localStorage.getItem('revs_seen_badges')
+      if (raw) {
+        storedSet = new Set(JSON.parse(raw) as string[])
+        baseline = true
+      }
+    } catch {
+      /* storage unavailable */
+    }
+    if (baseline) {
+      for (const b of badgeCatalogue) {
+        if (unlocks.has(b.slug) && !storedSet.has(b.slug)) {
+          notifyBadgeUnlocked({ emoji: b.emoji, name: b.name })
+        }
+      }
+    }
+    try {
+      localStorage.setItem('revs_seen_badges', JSON.stringify([...unlocks]))
+    } catch {
+      /* storage unavailable */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [unlockedKey, loading])
+
   return (
     <div className="min-h-screen bg-bg text-fg">
       {/* SECTION 1 — Cover + avatar. When the user has a spot worth
@@ -495,12 +531,14 @@ export default function Profile() {
             <StatCounter
               value={total}
               label="spots"
+              delay={0}
               onClick={() => navigate('/ma-galerie')}
             />
             <span className="w-px self-center bg-fg/10" style={{ height: 28 }} />
             <StatCounter
               value={uniqueBrands}
               label="marques"
+              delay={100}
               onClick={() => navigate('/mes-marques')}
             />
             <span className="w-px self-center bg-fg/10" style={{ height: 28 }} />
@@ -509,6 +547,8 @@ export default function Profile() {
               prefix="#"
               empty={!rank}
               label="rang"
+              delay={200}
+              countdown
               onClick={() => navigate('/classement')}
             />
             {meId && (
@@ -520,6 +560,7 @@ export default function Profile() {
                 <StatCounter
                   value={followers}
                   label={followers === 1 ? 'abonné' : 'abonnés'}
+                  delay={300}
                   onClick={() => navigate(`/u/${meId}`)}
                 />
               </>
@@ -539,19 +580,7 @@ export default function Profile() {
                 {level.isMax ? 'MAX' : level.next}
               </span>
             </div>
-            <div
-              className="h-1.5 w-full overflow-hidden rounded-full"
-              style={{ background: '#222' }}
-            >
-              <div
-                className="h-full rounded-full"
-                style={{
-                  width: `${animPct}%`,
-                  background: 'linear-gradient(90deg, #E8203A 0%, #ff4d4d 100%)',
-                  transition: 'width 1000ms cubic-bezier(0.22, 1, 0.36, 1)',
-                }}
-              />
-            </div>
+            <LiquidXpBar pct={animPct} />
           </div>
 
           {/* Badge preview — 3 badges (prefer unlocked). Tapping any of
@@ -1079,29 +1108,52 @@ function StatCounter({
   label,
   prefix = '',
   empty = false,
+  delay = 0,
+  countdown = false,
   onClick,
 }: {
   value: number
   label: string
   prefix?: string
   empty?: boolean
+  /** Stagger the count animation start (cascade effect). */
+  delay?: number
+  /** Count DOWN from a larger number to `value` (used for rank). */
+  countdown?: boolean
   onClick: () => void
 }) {
-  const [disp, setDisp] = useState(0)
+  // Countdown starts from a visibly larger number; count-up starts at 0.
+  const from = countdown ? value + 30 : 0
+  const [disp, setDisp] = useState(() =>
+    prefersReducedMotion() ? value : from,
+  )
   useEffect(() => {
     if (empty) return
-    const start = performance.now()
-    const dur = 1000
+    if (prefersReducedMotion()) {
+      setDisp(value)
+      return
+    }
+    const dur = 800
     let raf = 0
-    const ease = (k: number) => 1 - Math.pow(1 - k, 3)
+    let startTime: number | null = null
+    // easeOutExpo
+    const ease = (k: number) => (k >= 1 ? 1 : 1 - Math.pow(2, -10 * k))
     const tick = (now: number) => {
-      const k = Math.min(1, (now - start) / dur)
-      setDisp(Math.round(value * ease(k)))
+      if (startTime === null) startTime = now
+      const k = Math.min(1, (now - startTime) / dur)
+      const e = ease(k)
+      setDisp(Math.round(from + (value - from) * e))
       if (k < 1) raf = requestAnimationFrame(tick)
     }
-    raf = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(raf)
-  }, [value, empty])
+    // Cascade: hold the start value until `delay` ms have passed.
+    const timer = window.setTimeout(() => {
+      raf = requestAnimationFrame(tick)
+    }, delay)
+    return () => {
+      window.clearTimeout(timer)
+      cancelAnimationFrame(raf)
+    }
+  }, [value, empty, delay, from])
   return (
     <button
       onClick={onClick}

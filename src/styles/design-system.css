@@ -153,32 +153,8 @@ html.light .glass {
   height: var(--hz-size, 80px);
   pointer-events: none;
 }
-.hot-zone-ring {
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  background: radial-gradient(
-    circle,
-    rgba(232, 32, 58, calc(var(--hz-opacity, 0.50) * 0.95)) 0%,
-    rgba(232, 32, 58, calc(var(--hz-opacity, 0.50) * 0.28)) 45%,
-    transparent 70%
-  );
-  animation: hot-zone-pulse 2.8s ease-in-out infinite;
-  will-change: transform, opacity;
-}
-.hot-zone-ring-delay {
-  animation-delay: 1.4s;
-}
-@keyframes hot-zone-pulse {
-  0%, 100% {
-    transform: scale(0.65);
-    opacity: 0.45;
-  }
-  50% {
-    transform: scale(1.05);
-    opacity: 1;
-  }
-}
+/* .hot-zone-ring + waves are defined in the BATCH 2 animation block below
+   (3 concentric waves replacing the old single pulse). */
 
 /* ─────────────────────── Replay time-lapse marker pop ───────────────────────
    One-shot scale + halo animation triggered when a spot enters the
@@ -1052,4 +1028,225 @@ html.light .brand-logo-mono {
   .fx-levelup-particle {
     animation: none !important;
   }
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   APP-WIDE ANIMATION LAYER — BATCH 2 (2026-06-26)
+   Parallax, heart burst, collector swipe, profile counters, hot-zone
+   waves, splash, badge-unlocked, liquid XP bar. Reduced-motion guard at
+   the bottom of this block.
+   ════════════════════════════════════════════════════════════════════ */
+
+/* ── #2 Double-tap mini-heart burst (the big heart reuses feed-double-heart) ── */
+.feed-mini-heart {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  color: #E8203A;
+  fill: #E8203A;
+  pointer-events: none;
+  opacity: 0;
+  animation: feed-mini-heart-fly 0.6s ease-out forwards;
+}
+@keyframes feed-mini-heart-fly {
+  0%   { transform: translate(-50%, -50%) translate(0, 0) scale(0.3); opacity: 0; }
+  25%  { opacity: 1; }
+  100% { transform: translate(-50%, -50%) translate(var(--hx), var(--hy)) scale(1); opacity: 0; }
+}
+
+/* ── #5 Hot-zone concentric waves (replaces the pulse) ── */
+.hot-zone-ring {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: var(--hz-size, 120px);
+  height: var(--hz-size, 120px);
+  margin-left: calc(var(--hz-size, 120px) / -2);
+  margin-top: calc(var(--hz-size, 120px) / -2);
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    rgba(232, 32, 58, calc(var(--hz-opacity, 0.5) * 0.9)) 0%,
+    rgba(232, 32, 58, calc(var(--hz-opacity, 0.5) * 0.35)) 45%,
+    transparent 70%
+  );
+  opacity: 0;
+  will-change: transform, opacity;
+  animation: hot-zone-wave 2s ease-out infinite;
+}
+.hot-zone-ring-2 { animation-delay: 0.66s; }
+.hot-zone-ring-3 { animation-delay: 1.33s; }
+@keyframes hot-zone-wave {
+  0%   { transform: scale(0);   opacity: 0.4; }
+  100% { transform: scale(1.1); opacity: 0; }
+}
+
+/* ── #6 Splash screen ── */
+.splash-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 100000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  background: #0a0a0a;
+  animation: splash-out 0.5s ease-in forwards;
+  animation-delay: 2s;
+}
+.splash-logo {
+  display: flex;
+  font-family: var(--font-display, inherit);
+  font-weight: 900;
+  font-size: 56px;
+  letter-spacing: -0.04em;
+  color: #fff;
+  animation: splash-pulse 0.5s ease-in-out 0.5s;
+}
+.splash-letter {
+  display: inline-block;
+  opacity: 0;
+  filter: blur(8px);
+  transform: translateX(300px);
+  animation: splash-letter-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+@keyframes splash-letter-in {
+  to { opacity: 1; filter: blur(0); transform: translateX(0); }
+}
+@keyframes splash-pulse {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.05); }
+}
+.splash-tagline {
+  display: flex;
+  color: #E8203A;
+  font-weight: 800;
+  font-size: 13px;
+  letter-spacing: 0;
+  opacity: 0;
+  animation: splash-tagline-in 0.5s ease-out 1s forwards;
+}
+@keyframes splash-tagline-in {
+  to { opacity: 1; letter-spacing: 8px; }
+}
+@keyframes splash-out {
+  to { opacity: 0; visibility: hidden; }
+}
+
+/* ── #7 Badge unlocked notification ── */
+.badge-unlocked {
+  position: fixed;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom) + 96px);
+  transform: translateX(-50%) translateY(100px);
+  width: 85%;
+  max-width: 420px;
+  z-index: 9998;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: #141414;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  padding: 16px 20px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.6);
+  animation:
+    badge-in 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards,
+    badge-out 0.3s ease-in forwards 3s;
+}
+@keyframes badge-in {
+  to { transform: translateX(-50%) translateY(0); }
+}
+@keyframes badge-out {
+  to { transform: translateX(-50%) translateY(100px); opacity: 0; }
+}
+.badge-unlocked-emoji {
+  position: relative;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  overflow: hidden;
+  background: rgba(232, 32, 58, 0.18);
+  border: 1px solid rgba(232, 32, 58, 0.5);
+}
+.badge-unlocked-emoji::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    120deg,
+    transparent 30%,
+    rgba(255, 255, 255, 0.6) 50%,
+    transparent 70%
+  );
+  transform: translateX(-100%);
+  animation: badge-shimmer 0.8s ease-out 0.4s;
+}
+@keyframes badge-shimmer {
+  to { transform: translateX(100%); }
+}
+
+/* ── #8 Liquid XP bar ── */
+.liquid-xp-track {
+  position: relative;
+  width: 100%;
+  height: 8px;
+  border-radius: 20px;
+  overflow: hidden;
+  background: #222;
+}
+.liquid-xp-fill {
+  position: relative;
+  height: 100%;
+  border-radius: 20px;
+  background: linear-gradient(90deg, #E8203A, #ff6b6b, #E8203A);
+  background-size: 200% 100%;
+  animation: liquid-flow 2s linear infinite;
+  transition: width 1000ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.liquid-xp-fill.boost {
+  animation: liquid-flow 0.6s linear infinite;
+}
+@keyframes liquid-flow {
+  0%   { background-position: 0% 50%; }
+  100% { background-position: 200% 50%; }
+}
+.liquid-xp-bubble {
+  position: absolute;
+  bottom: 0;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.5);
+  animation: liquid-bubble 2.4s ease-in infinite;
+}
+@keyframes liquid-bubble {
+  0%   { transform: translateY(0); opacity: 0; }
+  20%  { opacity: 0.6; }
+  100% { transform: translateY(-8px); opacity: 0; }
+}
+
+/* ── reduced motion: disable batch-2 decorative effects ── */
+@media (prefers-reduced-motion: reduce) {
+  .feed-mini-heart,
+  .hot-zone-ring,
+  .splash-screen,
+  .splash-logo,
+  .splash-letter,
+  .splash-tagline,
+  .badge-unlocked,
+  .badge-unlocked-emoji::after,
+  .liquid-xp-fill,
+  .liquid-xp-bubble {
+    animation: none !important;
+  }
+  /* Keep the splash readable (static) instead of mid-animation. */
+  .splash-letter { opacity: 1; filter: none; transform: none; }
+  .splash-tagline { opacity: 1; letter-spacing: 6px; }
 }

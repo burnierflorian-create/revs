@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ArrowLeft, Loader2, MapPin, Trophy } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import type { Spot, Rarity } from '../lib/spots'
@@ -158,6 +158,34 @@ export default function CollectorCard({
   const [specsLoading, setSpecsLoading] = useState(false)
   const [specsTried, setSpecsTried] = useState(false)
 
+  // Touch-drag 3D tilt: the card follows the finger and pivots in 3D
+  // (rotateY ≤25°, rotateX ≤10°), then springs back on release. A real
+  // drag suppresses the tap-to-flip so the two gestures don't collide.
+  const [tilt, setTilt] = useState<{ rx: number; ry: number } | null>(null)
+  const dragRef = useRef<{ x: number; y: number } | null>(null)
+  const movedRef = useRef(false)
+  function onTouchStart(e: React.TouchEvent) {
+    if (prefersReducedMotion()) return
+    const t = e.touches[0]
+    dragRef.current = { x: t.clientX, y: t.clientY }
+    movedRef.current = false
+  }
+  function onTouchMove(e: React.TouchEvent) {
+    const d = dragRef.current
+    if (!d) return
+    const t = e.touches[0]
+    const dx = t.clientX - d.x
+    const dy = t.clientY - d.y
+    if (Math.abs(dx) > 6 || Math.abs(dy) > 6) movedRef.current = true
+    const ry = Math.max(-25, Math.min(25, (dx / window.innerWidth) * 25))
+    const rx = Math.max(-10, Math.min(10, (dy / window.innerHeight) * 10))
+    setTilt({ rx, ry })
+  }
+  function onTouchEnd() {
+    dragRef.current = null
+    setTilt(null) // spring back to rest
+  }
+
   // Lazy fetch: only the first time the card is flipped to the back.
   // Server caches per (brand, model, year) so subsequent flips across
   // cards or users are free. Failure stays in `null` → renders "—".
@@ -207,8 +235,31 @@ export default function CollectorCard({
 
       <button
         type="button"
-        onClick={() => setFlipped((f) => !f)}
+        onClick={() => {
+          // A drag isn't a flip — swallow the synthetic click after a swipe.
+          if (movedRef.current) {
+            movedRef.current = false
+            return
+          }
+          setFlipped((f) => !f)
+        }}
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+        onTouchCancel={onTouchEnd}
         className="collector-flip tappable relative block h-full w-full text-left"
+        style={{
+          transformStyle: 'preserve-3d',
+          transform: tilt
+            ? `rotateY(${tilt.ry}deg) rotateX(${tilt.rx}deg)`
+            : undefined,
+          transition: tilt
+            ? 'none'
+            : 'transform 400ms cubic-bezier(0.34, 1.56, 0.64, 1)',
+          filter: tilt
+            ? `drop-shadow(${-tilt.ry * 0.5}px 8px 12px rgba(0,0,0,0.45))`
+            : undefined,
+        }}
         aria-pressed={flipped}
         aria-label={`Retourner la carte ${spot.brand} ${shortName}`}
       >

@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom'
 import './index.css'
 import App from './App.tsx'
 import ErrorBoundary from './components/ErrorBoundary.tsx'
+import SplashScreen from './components/SplashScreen.tsx'
 import { ThemeProvider } from './lib/theme'
 
 createRoot(document.getElementById('root')!).render(
@@ -13,6 +14,7 @@ createRoot(document.getElementById('root')!).render(
         <BrowserRouter>
           <App />
         </BrowserRouter>
+        <SplashScreen />
       </ThemeProvider>
     </ErrorBoundary>
   </StrictMode>,

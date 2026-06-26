@@ -1161,9 +1161,12 @@ export default function MapPage() {
         el.className = 'hot-zone-marker'
         el.style.setProperty('--hz-size', `${size}px`)
         el.style.setProperty('--hz-opacity', opacity)
+        // Three concentric waves on a continuous loop (delays 0 / 0.66 /
+        // 1.33s) — a permanent "radar ping" pulse on each hot zone.
         el.innerHTML =
           '<div class="hot-zone-ring"></div>' +
-          '<div class="hot-zone-ring hot-zone-ring-delay"></div>'
+          '<div class="hot-zone-ring hot-zone-ring-2"></div>' +
+          '<div class="hot-zone-ring hot-zone-ring-3"></div>'
         const marker = new mapboxgl.Marker({
           element: el,
           anchor: 'center',
