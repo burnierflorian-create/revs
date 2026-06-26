@@ -23,7 +23,7 @@ import { appConfig } from '../config/appConfig'
 import { Skeleton } from '../components/Skeleton'
 import MyCollection from '../components/MyCollection'
 import LiquidXpBar from '../components/LiquidXpBar'
-import { notifyBadgeUnlocked } from '../components/BadgeUnlocked'
+import { BadgeUnlockWatcher } from '../components/BadgeUnlocked'
 import { prefersReducedMotion } from '../lib/motion'
 import { rarityRank } from '../components/CollectorCard'
 import { rarityBadge } from '../lib/rarityStyle'
@@ -324,41 +324,12 @@ export default function Profile() {
   const unlocked = badgeCatalogue.filter((b) => unlocks.has(b.slug))
   const locked = badgeCatalogue.filter((b) => !unlocks.has(b.slug))
 
-  // Badge-unlock notifications: once the profile data is loaded, compare
-  // the current unlocked set against the baseline we last saw and fire a
-  // premium slide-up for any genuinely new badge. The first visit ever
-  // just seeds the baseline (no false fanfare for already-earned badges).
-  const unlockedKey = [...unlocks].sort().join(',')
-  useEffect(() => {
-    if (loading) return
-    let baseline = false
-    let storedSet = new Set<string>()
-    try {
-      const raw = localStorage.getItem('revs_seen_badges')
-      if (raw) {
-        storedSet = new Set(JSON.parse(raw) as string[])
-        baseline = true
-      }
-    } catch {
-      /* storage unavailable */
-    }
-    if (baseline) {
-      for (const b of badgeCatalogue) {
-        if (unlocks.has(b.slug) && !storedSet.has(b.slug)) {
-          notifyBadgeUnlocked({ emoji: b.emoji, name: b.name })
-        }
-      }
-    }
-    try {
-      localStorage.setItem('revs_seen_badges', JSON.stringify([...unlocks]))
-    } catch {
-      /* storage unavailable */
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [unlockedKey, loading])
-
   return (
     <div className="min-h-screen bg-bg text-fg">
+      {/* Fires badge-unlocked notifications for newly-earned badges. Lives
+          here (rendered only once data is loaded) so its hooks are never
+          conditional on this page's loading early-return. */}
+      <BadgeUnlockWatcher badges={unlocked} />
       {/* SECTION 1 — Cover + avatar. When the user has a spot worth
           showing off, we use its photo as the immersive backdrop
           (heavy blur + dim overlay). Falls back to the brand red
