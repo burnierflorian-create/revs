@@ -36,6 +36,7 @@ import {
   matchesCategoryFilter,
 } from '../lib/filterCatalog'
 import { rarityRank } from '../components/CollectorCard'
+import { prefersReducedMotion } from '../lib/motion'
 import { rarityBadge } from '../lib/rarityStyle'
 import { useTheme } from '../lib/theme'
 import {
@@ -1014,6 +1015,9 @@ export default function MapPage() {
     // Signature of the on-screen marker set — lets us skip all DOM work
     // when a pan/zoom doesn't change which markers are visible.
     let lastSig = ''
+    // Spot ids that arrived via realtime (not the initial bounds fetch) —
+    // their marker gets a one-shot drop + ripple animation. Consumed once.
+    const newSpotIds = new Set<string>()
 
     function isAlive(sp: Spot): boolean {
       return new Date(sp.expires_at).getTime() > Date.now()
@@ -1310,6 +1314,25 @@ export default function MapPage() {
               ? new Date(expiresAt).getTime() - Date.now()
               : 0
             const el = spotMarkerEl(sp, remainingMs)
+            // Realtime arrivals drop in with a bounce + red ripple. The
+            // drop is applied to the INNER wrapper (not the Mapbox-
+            // positioned outer element) so it never fights the marker's
+            // own positioning transform. One-shot, and skipped under
+            // reduced motion.
+            if (newSpotIds.has(sp.id)) {
+              newSpotIds.delete(sp.id)
+              if (!prefersReducedMotion()) {
+                el.classList.remove('map-marker-pop')
+                const inner = el.firstElementChild as HTMLElement | null
+                if (inner) {
+                  inner.classList.add('map-marker-drop')
+                  const ripple = document.createElement('div')
+                  ripple.className = 'map-marker-ripple'
+                  inner.appendChild(ripple)
+                  window.setTimeout(() => ripple.remove(), 1300)
+                }
+              }
+            }
             const photoEl = el.querySelector(
               '[data-photo]',
             ) as HTMLElement | null
@@ -1460,6 +1483,9 @@ export default function MapPage() {
           const sp = payload.new as Spot
           if (!sp?.id) return
           allSpots.set(sp.id, sp)
+          // Flag it so its marker drops in (vs. just appearing) on the
+          // next marker sync. Only realtime inserts get the animation.
+          newSpotIds.add(sp.id)
           refreshSource()
           recomputeHotZones()
         },

@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 import type { Spot, Rarity } from '../lib/spots'
 import { xpForSpot } from '../lib/spots'
 import { fetchCardSpecs, type CardSpecs } from '../lib/cardSpecs'
+import { prefersReducedMotion } from '../lib/motion'
 
 const RARITY_ORDER: Rarity[] = [
   'standard',
@@ -132,13 +133,27 @@ export default function CollectorCard({
   cardNumber,
   isFirstOnRevs,
   spotsCount,
+  reveal = false,
 }: {
   spot: Spot
   cardNumber: number
   isFirstOnRevs: boolean
   spotsCount: number
+  /** Play the first-appearance reveal (face-down → shake → 3D flip →
+   *  flash, plus gold dust for legendary/hypercar cards). */
+  reveal?: boolean
 }) {
   const [flipped, setFlipped] = useState(false)
+  // The reveal plays once on mount; afterwards the card renders plainly.
+  // Skipped entirely under reduced motion.
+  const [revealing, setRevealing] = useState(
+    () => reveal && !prefersReducedMotion(),
+  )
+  useEffect(() => {
+    if (!revealing) return
+    const t = window.setTimeout(() => setRevealing(false), 2100)
+    return () => window.clearTimeout(t)
+  }, [revealing])
   const [specs, setSpecs] = useState<CardSpecs | null>(null)
   const [specsLoading, setSpecsLoading] = useState(false)
   const [specsTried, setSpecsTried] = useState(false)
@@ -168,7 +183,7 @@ export default function CollectorCard({
   // mechanic stays primary.
   const tiltable = rarity === 'supercar' || rarity === 'hypercar'
 
-  return (
+  const card = (
     <div
       className={`collector-frame ${tiltable ? 'tilt-hover' : ''}`}
       style={{
@@ -228,6 +243,39 @@ export default function CollectorCard({
           </div>
         </div>
       </button>
+    </div>
+  )
+
+  if (!revealing) return card
+
+  // First-appearance reveal: the real card sits inside an element that
+  // shakes then flips in 3D; a dark "face-down" overlay covers it until
+  // the mid-flip, a white flash marks the flip, and legendary (hypercar)
+  // cards spit out 20 gold particles.
+  const legendary = rarity === 'hypercar'
+  return (
+    <div className="fx-reveal" style={{ width: '100%' }}>
+      <div className="fx-reveal-inner">{card}</div>
+      <div className="fx-reveal-back">R</div>
+      <div className="fx-reveal-flash" />
+      {legendary &&
+        Array.from({ length: 20 }).map((_, i) => {
+          const a = (i / 20) * Math.PI * 2
+          const d = 60 + (i % 5) * 14
+          return (
+            <span
+              key={i}
+              className="fx-gold-dust"
+              style={
+                {
+                  '--dx': `${Math.cos(a) * d}px`,
+                  '--dy': `${Math.sin(a) * d}px`,
+                  '--rot': '360deg',
+                } as React.CSSProperties
+              }
+            />
+          )
+        })}
     </div>
   )
 }

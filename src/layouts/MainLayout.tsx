@@ -12,6 +12,9 @@ import UpdateNotification from '../components/UpdateNotification'
 import InstallBanner from '../components/InstallBanner'
 import WelcomeCelebration from '../components/WelcomeCelebration'
 import XpFloater from '../components/XpFloater'
+import SpotCelebration from '../components/SpotCelebration'
+import StreakBreak from '../components/StreakBreak'
+import LevelUpOverlay from '../components/LevelUpOverlay'
 import TabsContainer, { type TabKey } from './TabsContainer'
 import {
   claimReferralCode,
@@ -229,6 +232,9 @@ export default function MainLayout() {
       </main>
 
       <XpFloater />
+      <SpotCelebration />
+      <StreakBreak />
+      <LevelUpOverlay />
       <UpdateNotification />
       <InstallBanner />
 

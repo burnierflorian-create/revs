@@ -607,6 +607,19 @@ export default function NewSpot() {
       } catch (floaterErr) {
         console.warn('[spot] xp floater skipped:', floaterErr)
       }
+
+      // Post-spot celebration (confetti burst + collector fly-away) and a
+      // level-up check — both best-effort, never block navigation.
+      try {
+        const [{ celebrateSpot }, { checkLevelUp }] = await Promise.all([
+          import('../components/SpotCelebration'),
+          import('../components/LevelUpOverlay'),
+        ])
+        celebrateSpot({ photoUrl: pub.publicUrl })
+        void checkLevelUp()
+      } catch (fxErr) {
+        console.warn('[spot] celebration skipped:', fxErr)
+      }
       navigate('/map', { state: { toast: 'Spot publié ! 🔥' } })
     } catch (err) {
       console.error('[spot] publish aborted:', err)

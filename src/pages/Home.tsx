@@ -14,6 +14,8 @@ import {
 } from '../lib/challenges'
 import { fetchLiveEvents, type LiveEvent } from '../lib/liveEvents'
 import TitleChip from '../components/TitleChip'
+import { checkLevelUp } from '../components/LevelUpOverlay'
+import { triggerStreakBreak } from '../components/StreakBreak'
 
 type CommunityStats = {
   spots_today: number
@@ -121,6 +123,10 @@ export default function Home() {
       setXp((xpRes.data as number | null) ?? 0)
       setLoading(false)
 
+      // Level-up check — compares the freshly-fetched XP tier against the
+      // last one we saw and fires the full-screen overlay on advancement.
+      void checkLevelUp((xpRes.data as number | null) ?? 0)
+
       // Decoupled secondary fetches — none block the cockpit's first paint.
       fetchActiveChallenges().then((c) => {
         if (active) setChallenges(c)
@@ -145,7 +151,17 @@ export default function Home() {
         .then(({ data }) => {
           if (!active) return
           const rows = (data ?? []) as { created_at: string }[]
-          setStreak(computeStreak(rows.map((r) => r.created_at)))
+          const s = computeStreak(rows.map((r) => r.created_at))
+          setStreak(s)
+          // Streak-break detection: if we had a streak last time and it's
+          // now 0, play the flame-extinguish overlay once.
+          try {
+            const prev = Number(localStorage.getItem('revs_last_streak') ?? '0')
+            if (prev > 0 && s === 0) triggerStreakBreak()
+            localStorage.setItem('revs_last_streak', String(s))
+          } catch {
+            /* storage unavailable — skip break detection */
+          }
           const weekAgo = Date.now() - 7 * 86_400_000
           setSpotsThisWeek(
             rows.filter((r) => new Date(r.created_at).getTime() >= weekAgo)
