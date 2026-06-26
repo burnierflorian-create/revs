@@ -540,33 +540,35 @@ function applyMode(map: mapboxgl.Map, mode: MapMode) {
 }
 
 // ─────────────────── User-location compass marker ───────────────────
-// Apple-Plans-style location marker: a 60×60 SVG with a blue dot, a soft
-// pulsing halo and a rounded 60° direction cone. The cone fades in only
-// once a real compass heading lands; rotation is GPU-composited and
-// interpolated along the shortest arc for buttery-smooth tracking.
+// Apple-Plans-style location marker: an 80×80 SVG with a blue dot, a
+// SMIL-animated pulsing halo (r 12→20, opacity 0.2→0) and a rounded 50°
+// direction cone. The cone fades in only once a real compass heading
+// lands; rotation is GPU-composited and interpolated along the shortest
+// arc for buttery-smooth tracking.
 const USER_MARKER_HTML = `
-<svg width="60" height="60" viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg">
+<svg width="80" height="80" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg" style="overflow:visible">
   <defs>
-    <radialGradient id="revsConeGrad" cx="50%" cy="100%" r="100%">
-      <stop offset="0%" stop-color="#4DA6FF" stop-opacity="0.7"/>
+    <radialGradient id="revsConeG" cx="50%" cy="100%" r="100%" gradientUnits="objectBoundingBox">
+      <stop offset="0%" stop-color="#4DA6FF" stop-opacity="0.55"/>
+      <stop offset="70%" stop-color="#4DA6FF" stop-opacity="0.15"/>
       <stop offset="100%" stop-color="#4DA6FF" stop-opacity="0"/>
     </radialGradient>
-    <filter id="revsUserGlow">
-      <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
-      <feMerge>
-        <feMergeNode in="coloredBlur"/>
-        <feMergeNode in="SourceGraphic"/>
-      </feMerge>
+    <filter id="revsDotGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="2.5" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
     </filter>
   </defs>
-  <!-- Rounded directional cone (Apple Plans) -->
-  <path class="user-cone" d="M30 28 L18 8 Q30 2 42 8 Z" fill="url(#revsConeGrad)"/>
-  <!-- Pulsing outer halo -->
-  <circle cx="30" cy="30" r="16" fill="#4DA6FF" opacity="0.15" class="pulse-ring"/>
+  <!-- Directional cone: 50° sector pointing up -->
+  <path class="user-cone" d="M40 40 L26 10 Q40 3 54 10 Z" fill="url(#revsConeG)"/>
+  <!-- Pulsing halo -->
+  <circle cx="40" cy="40" r="14" fill="#4DA6FF" opacity="0.18">
+    <animate attributeName="r" values="12;20;12" dur="2s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.2;0;0.2" dur="2s" repeatCount="indefinite"/>
+  </circle>
   <!-- Main blue dot -->
-  <circle cx="30" cy="30" r="10" fill="#4DA6FF" stroke="white" stroke-width="3" filter="url(#revsUserGlow)"/>
+  <circle cx="40" cy="40" r="11" fill="#4DA6FF" stroke="white" stroke-width="3" filter="url(#revsDotGlow)"/>
   <!-- White core -->
-  <circle cx="30" cy="30" r="3" fill="white"/>
+  <circle cx="40" cy="40" r="3.5" fill="white"/>
 </svg>
 `
 
@@ -592,8 +594,8 @@ class CompassMarker {
   init(map: mapboxgl.Map, position: [number, number]) {
     this.outerEl = document.createElement('div')
     this.rotEl = document.createElement('div')
-    this.rotEl.style.willChange = 'transform'
-    this.rotEl.style.lineHeight = '0'
+    this.rotEl.style.cssText =
+      'width:80px;height:80px;line-height:0;will-change:transform;transform-origin:center center;'
     this.rotEl.innerHTML = USER_MARKER_HTML
     this.outerEl.appendChild(this.rotEl)
     this.coneEl = this.rotEl.querySelector('.user-cone')
@@ -674,7 +676,7 @@ class CompassMarker {
         let diff = this.targetAngle - this.currentAngle
         while (diff > 180) diff -= 360
         while (diff < -180) diff += 360
-        const smoothFactor = 0.12 // fast start, soft settle
+        const smoothFactor = 0.08 // very fluid: fast start, soft settle
         this.currentAngle += diff * smoothFactor
         this.currentAngle = ((this.currentAngle % 360) + 360) % 360
         this.rotEl.style.transform = `rotate(${this.currentAngle}deg)`

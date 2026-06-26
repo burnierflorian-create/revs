@@ -218,30 +218,12 @@ h4 {
 }
 
 /* ── User location marker (Apple Plans style) ──
-   A 60×60 SVG: blue dot + white core, a soft pulsing halo, and a rounded
-   60° direction cone. Mapbox positions the OUTER wrapper element; an inner
-   wrapper carries the compass rotation (CompassMarker in Map.tsx) so we
-   never clobber Mapbox's positioning transform. The cone fades in only
-   once a real heading lands. */
-.pulse-ring {
-  animation: pulse-location 2s ease-in-out infinite;
-  transform-box: fill-box;
-  transform-origin: center;
-}
-@keyframes pulse-location {
-  0% {
-    r: 12px;
-    opacity: 0.3;
-  }
-  50% {
-    r: 18px;
-    opacity: 0.1;
-  }
-  100% {
-    r: 12px;
-    opacity: 0.3;
-  }
-}
+   An 80×80 SVG: blue dot + white core, a SMIL-animated pulsing halo, and a
+   rounded 50° direction cone. Mapbox positions the OUTER wrapper element;
+   an inner wrapper carries the compass rotation (CompassMarker in Map.tsx)
+   so we never clobber Mapbox's positioning transform. The halo pulse runs
+   from inline <animate> tags inside the SVG; the cone fades in only once a
+   real heading lands. */
 .user-cone {
   transition: opacity 240ms ease-out;
 }
