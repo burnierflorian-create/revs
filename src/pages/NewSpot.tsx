@@ -89,7 +89,7 @@ export default function NewSpot() {
   const [image, setImage] = useState<{ blob: Blob; base64: string } | null>(
     null,
   )
-  // A separate, smaller (800px / q0.7) JPEG sent ONLY to the Claude vision
+  // A separate, smaller (1200px / q0.7) JPEG sent ONLY to the Claude vision
   // calls (identify-car + detect-plate). The full-res `image` blob is kept
   // for storage/display + plate blur; the AI never sees the heavy original,
   // which cuts vision token cost ~60% without hurting display quality.
@@ -196,10 +196,12 @@ export default function NewSpot() {
     try {
       const resized = await resizeImageToJpeg(file)
       setImage(resized)
-      // AI-only downscale (800px / q0.7). Best-effort: if it fails we fall
-      // back to image.base64 in analyze(), so capture is never blocked.
+      // AI-only downscale (1200px / q0.7). Larger than the display path on
+      // purpose: more pixels = sharper badges/logos for the vision model.
+      // Best-effort: if it fails we fall back to image.base64 in analyze(),
+      // so capture is never blocked.
       try {
-        const ai = await resizeImageToJpeg(file, 800, 0.7)
+        const ai = await resizeImageToJpeg(file, 1200, 0.7)
         setAiBase64(ai.base64)
       } catch {
         /* keep aiBase64 null → analyze() uses the full-res base64 */
@@ -301,7 +303,7 @@ export default function NewSpot() {
     // out the still-running sibling call.
     const timer = setTimeout(() => ctrl.abort(), 25000)
     const body = JSON.stringify({
-      // Send the lightweight 800px AI image; fall back to the full-res
+      // Send the lightweight 1200px AI image; fall back to the full-res
       // base64 only if the downscale failed.
       imageBase64: aiBase64 ?? image.base64,
       mimeType: 'image/jpeg',

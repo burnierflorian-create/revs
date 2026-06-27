@@ -83,6 +83,9 @@ ANALYSE VISUELLE — observe la photo et croise ces indices AVANT de conclure :
 - JANTES (nombre de branches, design spécifique d'une finition sportive).
 - ÉCHAPPEMENTS (nombre, forme ronde/trapézoïdale, position).
 - PROPORTIONS (coupé, berline, SUV, break, cabriolet).
+- COULEUR CARROSSERIE : identifie la teinte exacte en te basant sur les teintes constructeur officielles. Ex: "jaune Giallo Orion" (Lamborghini), "bleu Santorini" (BMW), "vert Goodwood" (Bentley), "rouge Rosso Corsa" (Ferrari).
+- SPOILERS ET AÉRODYNAMISME : présence d'un aileron actif, diffuseur, prises d'air actives.
+- ROUES : taille estimée, style (multi-branches, monobloc, turbine), couleur des étriers de frein.
 
 Si l'image est valide, renvoie strictement ce JSON :
 {
@@ -92,6 +95,7 @@ Si l'image est valide, renvoie strictement ce JSON :
   "color": "couleur précise et nommée",
   "category": "supercar|hypercar|classic|youngtimer|JDM|other",
   "confidence": 85,
+  "price_estimate": 220000,
   "rarity": "standard|premium|performance|exclusif|supercar|hypercar",
   "specs": "Configuration moteur / Transmission",
   "valid": true
@@ -101,7 +105,8 @@ Règles :
 - "model" : le plus PRÉCIS possible — inclus la génération/millésime ET la version/finition quand elle est identifiable. Ex: "Mercedes-AMG C 63 S", "BMW M340i", "Audi RS 6 Avant", "Porsche 911 Carrera S (992)", "Golf GTI Mk8". N'invente pas une finition que rien n'indique.
 - "color" : nomme la teinte précise quand tu la reconnais ("gris nardo", "bleu Santorin", "vert British Racing", "rouge Rosso Corsa") plutôt qu'un simple "gris" ou "rouge".
 - "confidence" : entier 0-100, ta certitude réelle sur l'ensemble marque + modèle + version.
-- "specs" : UNE ligne courte (max 50 caractères), format "Configuration / Transmission". Ex: "V8 BiTurbo / Transm. Intégrale", "Moteur Central Arrière / Propulsion", "L6 BiTurbo / Propulsion". PAS de chevaux.
+- "specs" : moteur précis si identifiable visuellement (ex: "V12 NA / Propulsion", "Flat-6 Biturbo / 4RM"), sinon configuration générale.
+- "price_estimate" : prix neuf catalogue OFFICIEL en euros du modèle exact identifié, basé sur tes connaissances. Ferrari 488 GTB = 220000, McLaren 570S = 175000, Lamborghini Huracán = 200000. Si tu n'es pas certain du prix exact, donne une fourchette basse conservative. JAMAIS 0 ou null.
 - RARETÉ = uniquement le volume de production mondial du modèle. JAMAIS le prix, jamais le lieu, jamais le standing perçu.
 - En cas de doute sur la rareté, descends d'un cran (douteux supercar = "performance").
 - Si tu n'identifies pas le modèle exact, donne ta meilleure estimation — JAMAIS "indéterminé" ni "inconnue".
