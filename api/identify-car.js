@@ -106,7 +106,7 @@ Règles :
 - "color" : nomme la teinte précise quand tu la reconnais ("gris nardo", "bleu Santorin", "vert British Racing", "rouge Rosso Corsa") plutôt qu'un simple "gris" ou "rouge".
 - "confidence" : entier 0-100, ta certitude réelle sur l'ensemble marque + modèle + version.
 - "specs" : moteur précis si identifiable visuellement (ex: "V12 NA / Propulsion", "Flat-6 Biturbo / 4RM"), sinon configuration générale.
-- "price_estimate" : prix neuf catalogue OFFICIEL en euros du modèle exact identifié, basé sur tes connaissances. Ferrari 488 GTB = 220000, McLaren 570S = 175000, Lamborghini Huracán = 200000. Si tu n'es pas certain du prix exact, donne une fourchette basse conservative. JAMAIS 0 ou null.
+- "price_estimate" : prix du MARCHÉ ACTUEL en euros — pas le prix neuf catalogue, mais le prix de revente réel aujourd'hui. Base-toi sur les cotes argus/marché réelles. Ex: Ferrari 488 GTB 2019 = 160000-180000€ sur le marché, McLaren 570S 2018 = 120000-140000€, Lamborghini Huracán 2020 = 180000-220000€, Porsche 911 Carrera S 2020 = 110000-130000€, Mercedes-AMG GT 63 S 2024 = 180000-220000€. Donne le prix médian du marché actuel pour l'année identifiée. JAMAIS le prix neuf si la voiture a plus de 2 ans.
 - RARETÉ = uniquement le volume de production mondial du modèle. JAMAIS le prix, jamais le lieu, jamais le standing perçu.
 - En cas de doute sur la rareté, descends d'un cran (douteux supercar = "performance").
 - Si tu n'identifies pas le modèle exact, donne ta meilleure estimation — JAMAIS "indéterminé" ni "inconnue".
