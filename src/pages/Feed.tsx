@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { Car, Heart, Layers, Loader2, MessageCircle, Search as SearchIcon, SlidersHorizontal, X, Zap } from 'lucide-react'
 import { supabase } from '../lib/supabase'
@@ -37,15 +38,15 @@ const POOL_SIZE = 200
 const SLIDES = [
   {
     img: 'https://images.unsplash.com/photo-1541348263662-e068662d82af?w=1200&q=80',
-    title: 'Les supercars spottées près de toi en temps réel',
+    titleKey: 'feedpage.slides.realtime',
   },
   {
     img: 'https://images.unsplash.com/photo-1567808291548-fc3ee04dbcf0?w=1200&q=80',
-    title: 'Like et commente les spots de la communauté',
+    titleKey: 'feedpage.slides.community',
   },
   {
     img: 'https://images.unsplash.com/photo-1617060219602-8cbf8f1eff8d?w=1200&q=80',
-    title: 'Grimpe dans le classement',
+    titleKey: 'feedpage.slides.ranking',
   },
 ]
 
@@ -99,6 +100,7 @@ function groupSpots(list: Spot[]): { primary: Spot; count: number }[] {
 }
 
 function EmptyCarousel({ onSpot }: { onSpot: () => void }) {
+  const { t } = useTranslation()
   const [i, setI] = useState(0)
   useEffect(() => {
     const t = setInterval(() => setI((v) => (v + 1) % SLIDES.length), 4000)
@@ -117,7 +119,7 @@ function EmptyCarousel({ onSpot }: { onSpot: () => void }) {
             <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-black/30" />
             <div className="absolute inset-x-0 bottom-0 p-7">
               <p className="font-display text-2xl font-bold leading-tight text-white">
-                {s.title}
+                {t(s.titleKey)}
               </p>
             </div>
           </div>
@@ -130,7 +132,7 @@ function EmptyCarousel({ onSpot }: { onSpot: () => void }) {
               className={`h-1.5 rounded-full transition-all ${
                 idx === i ? 'w-6 bg-accent' : 'w-2 bg-fg/40'
               }`}
-              aria-label={`Slide ${idx + 1}`}
+              aria-label={t('feedpage.slideAria', { number: idx + 1 })}
             />
           ))}
         </div>
@@ -139,13 +141,14 @@ function EmptyCarousel({ onSpot }: { onSpot: () => void }) {
         onClick={onSpot}
         className="mt-6 w-full rounded-full bg-accent py-4 text-sm font-semibold text-fg shadow-lg shadow-accent/40"
       >
-        Sois le premier à spotter
+        {t('feedpage.beFirstToSpot')}
       </button>
     </div>
   )
 }
 
 export default function Feed() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const [spots, setSpots] = useState<Spot[] | null>(null)
   const [profiles, setProfiles] = useState<Record<string, Prof>>({})
@@ -369,9 +372,7 @@ export default function Feed() {
           getPosition().then((p) => {
             userPosRef.current = p
             if (!p) {
-              setGeoMsg(
-                'Active la localisation pour trier par distance — tri par récence en attendant.',
-              )
+              setGeoMsg(t('feedpage.geoDisabled'))
             }
           }),
         )
@@ -395,7 +396,7 @@ export default function Feed() {
     return () => {
       active = false
     }
-  }, [feedFilters, refreshKey, applyFilters, getPosition, mergeProfiles])
+  }, [feedFilters, refreshKey, applyFilters, getPosition, mergeProfiles, t])
 
   const loadMore = useCallback(async () => {
     if (loadingMore || !hasMore || spots === null) return
@@ -481,14 +482,14 @@ export default function Feed() {
             type="text"
             value={feedSearchQuery}
             onChange={(e) => setFeedSearchQuery(e.target.value)}
-            placeholder="Rechercher dans le fil…"
+            placeholder={t('feedpage.searchPlaceholder')}
             style={{ fontSize: '16px' }}
             className="flex-1 bg-transparent font-medium tracking-tight text-fg/80 placeholder:text-fg2 outline-none"
           />
           {feedSearchQuery && (
             <button
               onClick={() => setFeedSearchQuery('')}
-              aria-label="Effacer"
+              aria-label={t('feedpage.clear')}
               className="tappable text-fg2 hover:text-fg"
             >
               <X className="h-4 w-4" />
@@ -497,7 +498,7 @@ export default function Feed() {
         </div>
         <button
           onClick={() => setFiltersOpen(true)}
-          aria-label="Filtres avancés"
+          aria-label={t('feedpage.advancedFilters')}
           className="tappable relative flex flex-none items-center justify-center"
           style={{
             height: 36,
@@ -552,13 +553,13 @@ export default function Feed() {
           </div>
           <p className="mt-4 font-display text-lg font-extrabold tracking-tighter text-fg">
             {allDefaults
-              ? 'Aucun spot pour l’instant'
-              : 'Rien ne correspond'}
+              ? t('feedpage.empty.noSpotsTitle')
+              : t('feedpage.empty.noMatchTitle')}
           </p>
           <p className="mt-1 text-sm text-fg2">
             {allDefaults
-              ? 'Sois le premier à spotter une voiture iconique !'
-              : 'Aucun spot ne correspond à ces filtres.'}
+              ? t('feedpage.empty.noSpotsBody')
+              : t('feedpage.empty.noMatchBody')}
           </p>
         </div>
       ) : (
@@ -583,7 +584,7 @@ export default function Feed() {
             if (filtered.length === 0) {
               return (
                 <p className="px-8 py-12 text-center text-sm text-fg2">
-                  Aucune voiture trouvée pour
+                  {t('feedpage.searchNoResults')}
                   <span className="text-fg"> « {feedSearchQuery} »</span>.
                 </p>
               )
@@ -606,7 +607,7 @@ export default function Feed() {
           )}
           {!hasMore && spots.length > PAGE && (
             <p className="py-4 text-center text-xs text-fg/25">
-              Tu as tout vu pour le moment.
+              {t('feedpage.allCaughtUp')}
             </p>
           )}
         </div>
@@ -645,6 +646,7 @@ function FeedCard({
   prof?: Prof
   burstCount: number
 }) {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const meRef = useRef<string | null>(null)
   const busyRef = useRef(false)
@@ -701,12 +703,12 @@ function FeedCard({
   const [myAvatar, setMyAvatar] = useState<string | null>(null)
   const [myInitial, setMyInitial] = useState('?')
 
-  const pseudo = prof?.pseudo || 'Spotter'
+  const pseudo = prof?.pseudo || t('feedpage.defaultPseudo')
   const ville = prof?.ville?.trim() || ''
   const founder = isFounder(spot.user_id)
   const cat = categoryBadge(spot.category)
   const rb = rarityBadge(spot.rarity)
-  const title = [spot.brand, spot.model].filter(Boolean).join(' ') || 'Voiture'
+  const title = [spot.brand, spot.model].filter(Boolean).join(' ') || t('feedpage.defaultCar')
 
   useEffect(() => {
     let active = true
@@ -780,8 +782,12 @@ function FeedCard({
       const who = await myPseudo()
       void notifyPush({
         user_id: spot.user_id,
-        title: '❤️ Nouveau like',
-        body: `${who} a liké ton spot ${spot.brand} ${spot.model}`,
+        title: t('feedpage.push.likeTitle'),
+        body: t('feedpage.push.likeBody', {
+          who,
+          brand: spot.brand,
+          model: spot.model,
+        }),
         url: `/spot/${spot.id}`,
         type: 'likes',
       })
@@ -866,7 +872,7 @@ function FeedCard({
             navigate(`/u/${spot.user_id}`)
           }}
           className="absolute inset-x-0 top-0 z-20 flex min-w-0 items-center gap-2.5 px-3 pt-3 text-left"
-          aria-label={`Profil de ${pseudo}`}
+          aria-label={t('feedpage.profileOf', { pseudo })}
         >
           <div
             className="flex h-11 w-11 flex-none items-center justify-center overflow-hidden rounded-full bg-black/35 text-[15px] font-extrabold text-white"
@@ -906,7 +912,7 @@ function FeedCard({
                   letterSpacing: '0.12em',
                 }}
               >
-                Fondateur
+                {t('feedpage.founder')}
               </span>
             )}
           </span>
@@ -931,7 +937,7 @@ function FeedCard({
             navigate(`/spot/${spot.id}`)
           }}
           className="absolute inset-x-0 bottom-0 z-10 px-4 pb-3 text-left"
-          aria-label={`Voir ${title}`}
+          aria-label={t('feedpage.view', { title })}
         >
           <p className="truncate text-[16px] font-bold text-white">{title}</p>
           {spot.description?.trim() ? (
@@ -1001,7 +1007,7 @@ function FeedCard({
         <div className="flex items-center gap-5 px-4 pt-3">
           <button
             onClick={() => setLikeState(!liked)}
-            aria-label={liked ? 'Retirer le like' : 'Liker'}
+            aria-label={liked ? t('feedpage.unlike') : t('feedpage.like')}
             aria-pressed={liked}
             className="tappable flex items-center gap-1.5"
           >
@@ -1013,7 +1019,7 @@ function FeedCard({
           </button>
           <button
             onClick={() => setSheetOpen(true)}
-            aria-label="Commentaires"
+            aria-label={t('feedpage.comments')}
             className="tappable flex items-center gap-1.5"
           >
             <MessageCircle strokeWidth={1.2} className="h-6 w-6 text-white" />
@@ -1031,7 +1037,7 @@ function FeedCard({
         <button
           onClick={() => setSheetOpen(true)}
           className="tappable mt-2 flex w-full items-center gap-2.5 px-4 pb-3.5 text-left"
-          aria-label="Ajouter un commentaire"
+          aria-label={t('feedpage.addComment')}
         >
           <div className="flex h-7 w-7 flex-none items-center justify-center overflow-hidden rounded-full bg-white/10 text-[11px] font-extrabold text-white/70">
             {myAvatar ? (
@@ -1040,7 +1046,7 @@ function FeedCard({
               myInitial
             )}
           </div>
-          <span className="text-[13px] text-white/45">Ajouter un commentaire…</span>
+          <span className="text-[13px] text-white/45">{t('feedpage.addCommentPlaceholder')}</span>
         </button>
       </div>
 

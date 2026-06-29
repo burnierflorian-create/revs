@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
+import type { TFunction } from 'i18next'
 import {
   ArrowLeft,
   Check,
@@ -40,6 +42,7 @@ import { floatXp } from '../components/XpFloater'
 export default function Profile() {
   const navigate = useNavigate()
   const tier = useMyTier()
+  const { t } = useTranslation()
 
   const [loading, setLoading] = useState(true)
   const [pseudo, setPseudo] = useState('Spotter')
@@ -221,7 +224,7 @@ export default function Profile() {
     (planTier(plan) === 'vip'
       ? 'VIP'
       : planTier(plan) === 'premium'
-        ? 'Premium'
+        ? t('profilepage.status.premium')
         : null)
   const idLine = [statusLabel, level.name, ville]
     .filter(Boolean)
@@ -347,7 +350,7 @@ export default function Profile() {
         {/* Share profile — round button left of the settings gear. */}
         <button
           onClick={() => setShareOpen(true)}
-          aria-label="Partager le profil"
+          aria-label={t('profilepage.header.shareProfileAria')}
           className="tappable absolute top-[max(1rem,env(safe-area-inset-top))] flex h-9 w-9 items-center justify-center rounded-full text-white/80 backdrop-blur transition-colors hover:text-white"
           style={{
             right: '60px',
@@ -359,7 +362,7 @@ export default function Profile() {
         </button>
         <button
           onClick={() => navigate('/settings')}
-          aria-label="Paramètres"
+          aria-label={t('profilepage.header.settingsAria')}
           className="tappable absolute right-4 top-[max(1rem,env(safe-area-inset-top))] flex h-10 w-10 items-center justify-center rounded-full bg-black/40 text-fg/80 backdrop-blur transition-colors hover:text-fg"
           style={{ border: '1px solid rgb(var(--color-fg) / 0.10)' }}
         >
@@ -432,7 +435,7 @@ export default function Profile() {
                   border: '2px solid rgb(var(--color-card))',
                   boxShadow: '0 4px 14px rgba(255,200,50,0.45)',
                 }}
-                aria-label="Membre Premium"
+                aria-label={t('profilepage.tier.premiumAria')}
               >
                 ⚡
               </span>
@@ -446,7 +449,7 @@ export default function Profile() {
                   border: '2px solid rgb(var(--color-card))',
                   boxShadow: '0 6px 18px rgba(255,200,50,0.55)',
                 }}
-                aria-label="Membre VIP"
+                aria-label={t('profilepage.tier.vipAria')}
               >
                 👑
               </span>
@@ -492,7 +495,7 @@ export default function Profile() {
                   border: '1px solid rgba(232,32,58,0.40)',
                 }}
               >
-                🔥 {streak} jour{streak > 1 ? 's' : ''}
+                🔥 {t('profilepage.streak.days', { count: streak })}
               </span>
             </div>
           )}
@@ -501,14 +504,14 @@ export default function Profile() {
           <div className="mx-auto mt-5 flex max-w-[320px] items-stretch">
             <StatCounter
               value={total}
-              label="spots"
+              label={t('profilepage.stats.spots')}
               delay={0}
               onClick={() => navigate('/ma-galerie')}
             />
             <span className="w-px self-center bg-fg/10" style={{ height: 28 }} />
             <StatCounter
               value={uniqueBrands}
-              label="marques"
+              label={t('profilepage.stats.brands')}
               delay={100}
               onClick={() => navigate('/mes-marques')}
             />
@@ -517,7 +520,7 @@ export default function Profile() {
               value={rank ?? 0}
               prefix="#"
               empty={!rank}
-              label="rang"
+              label={t('profilepage.stats.rank')}
               delay={200}
               countdown
               onClick={() => navigate('/classement')}
@@ -530,7 +533,7 @@ export default function Profile() {
                 />
                 <StatCounter
                   value={followers}
-                  label={followers === 1 ? 'abonné' : 'abonnés'}
+                  label={t('profilepage.stats.followers', { count: followers })}
                   delay={300}
                   onClick={() => navigate(`/u/${meId}`)}
                 />
@@ -591,7 +594,7 @@ export default function Profile() {
                 onClick={() => navigate('/badges')}
                 className="tappable text-[12px] font-semibold text-fg2 hover:text-fg"
               >
-                Voir tous les badges →
+                {t('profilepage.badges.seeAll')}
               </button>
             </div>
           )}
@@ -609,9 +612,9 @@ export default function Profile() {
           <div className="flex gap-6 px-4" role="tablist">
             {(
               [
-                { key: 'collection', label: 'Collection' },
-                { key: 'garage', label: 'Garage' },
-                { key: 'rewards', label: 'Récompenses' },
+                { key: 'collection', label: t('profilepage.tabs.collection') },
+                { key: 'garage', label: t('profilepage.tabs.garage') },
+                { key: 'rewards', label: t('profilepage.tabs.rewards') },
               ] as const
             ).map((t) => {
               const active = profileTab === t.key
@@ -679,7 +682,7 @@ export default function Profile() {
                       className="font-bold text-white"
                       style={{ fontSize: '18px' }}
                     >
-                      Bientôt disponible
+                      {t('profilepage.collectionLock.title')}
                     </p>
                     <p
                       className="leading-relaxed"
@@ -690,8 +693,7 @@ export default function Profile() {
                         paddingRight: '24px',
                       }}
                     >
-                      Phase 2 — Tes spots seront transformés en cartes de
-                      collection uniques très bientôt.
+                      {t('profilepage.collectionLock.body')}
                     </p>
                   </div>
                 </div>
@@ -704,13 +706,13 @@ export default function Profile() {
                     <Warehouse className="h-8 w-8 text-accent/70" />
                   </div>
                   <p className="mt-4 max-w-[15rem] font-medium">
-                    Ton garage est vide, pars chasser ta première supercar
+                    {t('profilepage.garage.empty')}
                   </p>
                   <button
                     onClick={() => navigate('/new-spot')}
                     className="mt-5 rounded-full bg-accent px-6 py-3 text-sm font-semibold"
                   >
-                    Spotter
+                    {t('profilepage.garage.spot')}
                   </button>
                 </div>
               ) : (
@@ -749,11 +751,10 @@ export default function Profile() {
                       <Lock className="h-6 w-6 text-fg2" strokeWidth={1.6} />
                     </span>
                     <p className="text-lg font-semibold text-fg">
-                      Bientôt disponible
+                      {t('profilepage.rewardsLock.title')}
                     </p>
                     <p className="max-w-[20rem] text-sm leading-relaxed text-fg2">
-                      Débloque des récompenses uniques et des accessoires
-                      physiques lors de la Phase 2.
+                      {t('profilepage.rewardsLock.body')}
                     </p>
                   </div>
                 </div>
@@ -787,14 +788,14 @@ export default function Profile() {
                       </span>
                       <span className="flex flex-col">
                         <span className="text-[10px] uppercase tracking-widest text-fg2">
-                          Abonnement
+                          {t('profilepage.subscription.label')}
                         </span>
                         <span className="font-display text-base font-bold text-fg">
                           {planDisplayName(plan)}
                         </span>
                       </span>
                     </span>
-                    <span className="text-xs text-fg/55">Gérer →</span>
+                    <span className="text-xs text-fg/55">{t('profilepage.subscription.manage')}</span>
                   </button>
                 )}
 
@@ -806,10 +807,13 @@ export default function Profile() {
                       className="font-black uppercase text-fg2/55"
                       style={{ fontSize: '10px', letterSpacing: '0.20em' }}
                     >
-                      Badges
+                      {t('profilepage.badges.heading')}
                     </h4>
                     <span className="text-[10px] font-bold text-fg2">
-                      {unlocked.length} / {badgeCatalogue.length} débloqués
+                      {t('profilepage.badges.unlockedCount', {
+                        unlocked: unlocked.length,
+                        total: badgeCatalogue.length,
+                      })}
                     </span>
                   </div>
                   <div className="grid grid-cols-4 gap-3">
@@ -873,15 +877,15 @@ export default function Profile() {
                       className="mb-3 font-black uppercase text-fg2/55"
                       style={{ fontSize: '10px', letterSpacing: '0.20em' }}
                     >
-                      Historique XP
+                      {t('profilepage.xpHistory.heading')}
                     </h4>
                     <div className="space-y-1.5">
-                      {xpHistory.map((t, i) => {
-                        const r = xpReasonLabel(t.reason)
+                      {xpHistory.map((tx, i) => {
+                        const r = xpReasonLabel(tx.reason, t)
                         const date = new Intl.DateTimeFormat('fr-FR', {
                           day: 'numeric',
                           month: 'short',
-                        }).format(new Date(t.created_at))
+                        }).format(new Date(tx.created_at))
                         return (
                           <div
                             key={i}
@@ -901,14 +905,14 @@ export default function Profile() {
                               className="flex-none font-display font-extrabold tabular-nums"
                               style={{
                                 color:
-                                  t.amount >= 0
+                                  tx.amount >= 0
                                     ? '#E8203A'
                                     : 'rgb(var(--color-fg) / 0.4)',
                                 fontSize: '14px',
                               }}
                             >
-                              {t.amount >= 0 ? '+' : ''}
-                              {t.amount} XP
+                              {tx.amount >= 0 ? '+' : ''}
+                              {tx.amount} XP
                             </span>
                           </div>
                         )
@@ -965,6 +969,7 @@ function ShareSheet({
   pseudo: string
   userId: string | null
 }) {
+  const { t } = useTranslation()
   const [copied, setCopied] = useState(false)
   if (!open) return null
 
@@ -985,7 +990,10 @@ function ShareSheet({
   const share = async () => {
     try {
       if (navigator.share) {
-        await navigator.share({ title: `${pseudo} sur REVS`, url })
+        await navigator.share({
+          title: t('profilepage.share.nativeTitle', { name: pseudo }),
+          url,
+        })
       } else {
         void copy()
       }
@@ -1011,8 +1019,8 @@ function ShareSheet({
         style={{ background: '#141414', border: '1px solid rgba(255,255,255,0.06)' }}
       >
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-bold text-white">Partager le profil</h2>
-          <button onClick={onClose} aria-label="Fermer" className="text-white/50 hover:text-white">
+          <h2 className="text-lg font-bold text-white">{t('profilepage.share.title')}</h2>
+          <button onClick={onClose} aria-label={t('profilepage.share.closeAria')} className="text-white/50 hover:text-white">
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -1033,7 +1041,7 @@ function ShareSheet({
           )}
         </button>
         <p className="mt-1.5 px-1 text-[11px] text-white/35">
-          {copied ? 'Lien copié !' : 'Touche pour copier le lien'}
+          {copied ? t('profilepage.share.copied') : t('profilepage.share.copyHint')}
         </p>
 
         {/* Native share */}
@@ -1043,7 +1051,7 @@ function ShareSheet({
           style={{ background: '#E8203A', boxShadow: '0 8px 24px rgba(232,32,58,0.45)' }}
         >
           <Share className="h-[18px] w-[18px]" />
-          Partager
+          {t('profilepage.share.shareButton')}
         </button>
       </div>
     </div>,
@@ -1054,20 +1062,28 @@ function ShareSheet({
 // ─────────────────────── Profile helpers (post-restructure) ───────────────────────
 
 /** Human-readable label + emoji for an xp_transactions.reason. */
-function xpReasonLabel(reason: string): { emoji: string; label: string } {
-  if (reason === 'spot') return { emoji: '📸', label: 'Spot publié' }
+function xpReasonLabel(
+  reason: string,
+  t: TFunction,
+): { emoji: string; label: string } {
+  if (reason === 'spot')
+    return { emoji: '📸', label: t('profilepage.xpReason.spot') }
   if (reason === 'daily_first')
-    return { emoji: '☀️', label: 'Premier spot du jour' }
-  if (reason === 'streak') return { emoji: '🔥', label: 'Bonus streak' }
+    return { emoji: '☀️', label: t('profilepage.xpReason.dailyFirst') }
+  if (reason === 'streak')
+    return { emoji: '🔥', label: t('profilepage.xpReason.streak') }
   if (reason.startsWith('collection:'))
-    return { emoji: '🃏', label: 'Collection complétée' }
+    return { emoji: '🃏', label: t('profilepage.xpReason.collection') }
   if (reason.startsWith('referral'))
-    return { emoji: '🤝', label: 'Parrainage' }
+    return { emoji: '🤝', label: t('profilepage.xpReason.referral') }
   if (reason.startsWith('challenge') || reason.startsWith('weekly'))
-    return { emoji: '🎯', label: 'Défi réussi' }
-  if (reason.startsWith('like')) return { emoji: '❤️', label: 'Like reçu' }
-  if (reason.startsWith('event')) return { emoji: '🎪', label: 'Event' }
-  if (reason === 'reconcile') return { emoji: '⚙️', label: 'Ajustement' }
+    return { emoji: '🎯', label: t('profilepage.xpReason.challenge') }
+  if (reason.startsWith('like'))
+    return { emoji: '❤️', label: t('profilepage.xpReason.like') }
+  if (reason.startsWith('event'))
+    return { emoji: '🎪', label: t('profilepage.xpReason.event') }
+  if (reason === 'reconcile')
+    return { emoji: '⚙️', label: t('profilepage.xpReason.reconcile') }
   return { emoji: '✨', label: reason }
 }
 
@@ -1153,6 +1169,7 @@ function PremiumTopBanner({
   plan?: string | null
   renewsAt?: string | null
 }) {
+  const { t } = useTranslation()
   const active = !!plan
   const renew = renewsAt
     ? new Intl.DateTimeFormat('fr-FR', {
@@ -1193,10 +1210,10 @@ function PremiumTopBanner({
         {active && (
           <p className="mt-0.5 truncate text-[12px]">
             <span className="font-bold" style={{ color: '#34D399' }}>
-              ✓ Premium actif
+              {t('profilepage.premium.active')}
             </span>
             {renew && (
-              <span className="text-white/45"> · renouv. {renew}</span>
+              <span className="text-white/45"> {t('profilepage.premium.renews', { date: renew })}</span>
             )}
           </p>
         )}
@@ -1209,7 +1226,7 @@ function PremiumTopBanner({
         className="flex-none rounded-full px-3.5 py-2 text-[12px] font-extrabold text-white"
         style={{ background: '#E8203A' }}
       >
-        {active ? 'Gérer' : 'Découvrir →'}
+        {active ? t('profilepage.premium.manage') : t('profilepage.premium.discover')}
       </span>
     </button>
   )
@@ -1241,16 +1258,8 @@ const DECK_RARITY_ORDER: Rarity[] = [
   'premium',
   'standard',
 ]
-const DECK_LABEL: Record<Rarity, string> = {
-  hypercar: 'Hypercar',
-  supercar: 'Supercar',
-  exclusif: 'Exclusif',
-  performance: 'Performance',
-  premium: 'Premium',
-  standard: 'Standard',
-}
-
 function CollectionDecks({ spots }: { spots: Spot[] }) {
+  const { t } = useTranslation()
   const [openRarity, setOpenRarity] = useState<Rarity | null>(null)
 
   const decks = useMemo<Deck[]>(() => {
@@ -1263,9 +1272,14 @@ function CollectionDecks({ spots }: { spots: Spot[] }) {
           .sort(
             (a, b) => (b.estimated_price ?? 0) - (a.estimated_price ?? 0),
           )[0]?.photo_url ?? null
-      return { rarity: r, label: DECK_LABEL[r], count: inRarity.length, cover }
+      return {
+        rarity: r,
+        label: t(`profilepage.rarity.${r}`),
+        count: inRarity.length,
+        cover,
+      }
     }).filter((d) => d.count > 0)
-  }, [spots])
+  }, [spots, t])
 
   if (spots.length === 0) {
     // Reuse the MyCollection empty state so the message stays
@@ -1286,14 +1300,14 @@ function CollectionDecks({ spots }: { spots: Spot[] }) {
             className="tappable mb-4 inline-flex items-center gap-2 text-xs font-medium text-fg2 hover:text-fg"
           >
             <ArrowLeft className="h-3.5 w-3.5" />
-            Tous les decks
+            {t('profilepage.decks.allDecks')}
           </button>
           <div className="mb-3 flex items-baseline justify-between">
             <h3 className="text-lg font-semibold tracking-tight text-fg">
-              {DECK_LABEL[openRarity]}
+              {t(`profilepage.rarity.${openRarity}`)}
             </h3>
             <span className="text-xs font-normal text-fg2">
-              {filtered.length} carte{filtered.length > 1 ? 's' : ''}
+              {t('profilepage.decks.cardCount', { count: filtered.length })}
             </span>
           </div>
         </div>
@@ -1320,12 +1334,12 @@ function CollectionDecks({ spots }: { spots: Spot[] }) {
             className="text-[10px] font-black uppercase text-fg2/55"
             style={{ letterSpacing: '0.2em' }}
           >
-            Collection
+            {t('profilepage.decks.summaryLabel')}
           </span>
           <span className="font-display text-2xl font-extrabold leading-none text-fg">
             {spots.length}
             <span className="ml-1.5 text-[11px] font-bold text-fg2">
-              carte{spots.length > 1 ? 's' : ''}
+              {t('profilepage.decks.cardWord', { count: spots.length })}
             </span>
           </span>
         </div>
@@ -1410,8 +1424,7 @@ function CollectionDecks({ spots }: { spots: Spot[] }) {
                 d.cover ? 'text-white/65' : 'text-fg2'
               }`}
             >
-              {d.count} carte{d.count > 1 ? 's' : ''} collectionnée
-              {d.count > 1 ? 's' : ''}
+              {t('profilepage.decks.cardsCollected', { count: d.count })}
             </p>
           </div>
 
@@ -1593,6 +1606,7 @@ function BadgesBottomSheet({
   badges: Badge[]
   unlocks: Set<string>
 }) {
+  const { t } = useTranslation()
   // Lock body scroll while the sheet is open. We restore the previous
   // overflow value on close so nothing the rest of the app set is
   // accidentally clobbered.
@@ -1610,7 +1624,7 @@ function BadgesBottomSheet({
   return createPortal(
     <div className="fixed inset-0 z-50" role="dialog" aria-modal="true">
       <button
-        aria-label="Fermer"
+        aria-label={t('profilepage.badgesSheet.closeAria')}
         onClick={onClose}
         className="absolute inset-0"
         style={{
@@ -1655,11 +1669,11 @@ function BadgesBottomSheet({
             className="font-display font-extrabold tracking-tight text-fg"
             style={{ fontSize: '20px', letterSpacing: '-0.02em' }}
           >
-            Tous les badges
+            {t('profilepage.badgesSheet.title')}
           </h3>
           <button
             onClick={onClose}
-            aria-label="Fermer"
+            aria-label={t('profilepage.badgesSheet.closeAria')}
             className="tappable flex h-9 w-9 items-center justify-center rounded-full text-fg2 hover:text-fg"
             style={{
               background: 'rgb(var(--color-fg) / 0.06)',
@@ -1748,6 +1762,7 @@ function TopChallenges({
   count: number
   onShowAll: () => void
 }) {
+  const { t } = useTranslation()
   const [claimed, setClaimed] = useState<Record<string, string>>({})
   const [busyId, setBusyId] = useState<string | null>(null)
 
@@ -1798,14 +1813,14 @@ function TopChallenges({
           className="font-black uppercase text-fg2/55"
           style={{ fontSize: '10px', letterSpacing: '0.20em' }}
         >
-          Défis en cours
+          {t('profilepage.challenges.heading')}
         </h4>
         <button
           onClick={onShowAll}
           className="tappable font-bold text-accent hover:underline"
           style={{ fontSize: '10px' }}
         >
-          Tous les défis
+          {t('profilepage.challenges.seeAll')}
         </button>
       </div>
       <div className="space-y-3">
@@ -1817,7 +1832,7 @@ function TopChallenges({
               border: '1px solid rgb(var(--color-fg) / 0.05)',
             }}
           >
-            Tous les défis sont déjà réclamés. Bravo 🏁
+            {t('profilepage.challenges.allClaimed')}
           </div>
         ) : (
           top.map((p) => (
@@ -1843,6 +1858,7 @@ function TopChallengeCard({
   busy: boolean
   onClaim: () => void
 }) {
+  const { t } = useTranslation()
   const { collection, matchedCount, target } = progress
   const pct = Math.min(100, Math.round((matchedCount / target) * 100))
   const complete = matchedCount >= target
@@ -1908,7 +1924,7 @@ function TopChallengeCard({
               opacity: busy ? 0.6 : 1,
             }}
           >
-            {busy ? '…' : 'Réclamer'}
+            {busy ? '…' : t('profilepage.challenges.claim')}
           </button>
         ) : (
           <span
@@ -1921,7 +1937,7 @@ function TopChallengeCard({
               letterSpacing: '0.10em',
             }}
           >
-            En cours
+            {t('profilepage.challenges.inProgress')}
           </span>
         )}
       </div>

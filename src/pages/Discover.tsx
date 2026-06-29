@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import News from './News'
 import Meets from '../components/Meets'
 import F1Calendar from '../components/F1Calendar'
@@ -14,6 +15,7 @@ import { hapticSelection } from '../lib/haptic'
 type Universe = 'f1' | 'cars'
 
 export default function Discover({ initial }: { initial?: 'events' }) {
+  const { t } = useTranslation()
   // CarSpotting is the primary universe; F1 & Motorsport sits beside it.
   const [universe, setUniverse] = useState<Universe>('cars')
   const [f1Sub, setF1Sub] = useState<'actu' | 'calendar' | 'roster'>('actu')
@@ -60,14 +62,14 @@ export default function Discover({ initial }: { initial?: 'events' }) {
 
   const subTabs: { key: string; label: string }[] = isF1
     ? [
-        { key: 'actu', label: 'Actu' },
-        { key: 'calendar', label: 'Calendrier' },
-        { key: 'roster', label: 'Écuries & Pilotes' },
+        { key: 'actu', label: t('discoverpage.subtabs.actu') },
+        { key: 'calendar', label: t('discoverpage.subtabs.calendar') },
+        { key: 'roster', label: t('discoverpage.subtabs.roster') },
       ]
     : [
-        { key: 'actu', label: 'Actu' },
-        { key: 'events', label: 'Events' },
-        { key: 'brands', label: 'Marques' },
+        { key: 'actu', label: t('discoverpage.subtabs.actu') },
+        { key: 'events', label: t('discoverpage.subtabs.events') },
+        { key: 'brands', label: t('discoverpage.subtabs.brands') },
       ]
 
   function setSub(k: string) {
@@ -93,12 +95,12 @@ export default function Discover({ initial }: { initial?: 'events' }) {
           Pilotes"); the active underline is centred symmetrically in its
           column. No horizontal scroll. */}
       <div className="mt-1 grid w-full grid-cols-3 px-2 pt-3">
-        {subTabs.map((t) => {
-          const active = sub === t.key
+        {subTabs.map((tab) => {
+          const active = sub === tab.key
           return (
             <button
-              key={t.key}
-              onClick={() => setSub(t.key)}
+              key={tab.key}
+              onClick={() => setSub(tab.key)}
               className="relative pb-2.5 text-center transition-colors"
             >
               <span
@@ -106,7 +108,7 @@ export default function Discover({ initial }: { initial?: 'events' }) {
                   active ? 'font-semibold text-fg' : 'font-normal text-fg2'
                 }`}
               >
-                {t.label}
+                {tab.label}
               </span>
               <span
                 aria-hidden

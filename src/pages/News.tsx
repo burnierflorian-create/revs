@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { supabase } from '../lib/supabase'
 import { timeAgo } from '../lib/spots'
 import { Skeleton } from '../components/Skeleton'
@@ -51,6 +52,7 @@ function fallbackImg(cat: string): string {
 }
 
 export default function News({ categories }: { categories: string[] }) {
+  const { t } = useTranslation()
   const [items, setItems] = useState<NewsItem[] | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const [pull, setPull] = useState(0)
@@ -129,9 +131,9 @@ export default function News({ categories }: { categories: string[] }) {
               REVS
             </span>
           ) : pull >= PULL_THRESHOLD ? (
-            'Relâche pour actualiser'
+            t('discoverpage.news.pullRelease')
           ) : (
-            'Tire pour actualiser'
+            t('discoverpage.news.pullStart')
           )}
         </div>
       )}
@@ -139,7 +141,9 @@ export default function News({ categories }: { categories: string[] }) {
           sub-tabs. */}
       <p className="px-1 pb-3 pt-1 text-[11px] italic text-white/35">
         {items && items.length > 0
-          ? `MIS À JOUR ${timeAgo(newestStamp(items) ?? items[0].created_at).toUpperCase()}`
+          ? t('discoverpage.news.updated', {
+              time: timeAgo(newestStamp(items) ?? items[0].created_at).toUpperCase(),
+            })
           : ''}
       </p>
 
@@ -168,7 +172,7 @@ export default function News({ categories }: { categories: string[] }) {
           className="rounded-2xl p-6 text-center"
           style={{ background: '#141414' }}
         >
-          <p className="text-sm text-white/55">Pas d'actu pour le moment.</p>
+          <p className="text-sm text-white/55">{t('discoverpage.news.empty')}</p>
           <button
             onClick={() => load(false)}
             className="tappable mt-4 rounded-full px-6 py-3 text-sm font-bold text-white"
@@ -177,12 +181,12 @@ export default function News({ categories }: { categories: string[] }) {
               boxShadow: '0 8px 24px rgba(232,32,58,0.45)',
             }}
           >
-            Rafraîchir
+            {t('discoverpage.news.refresh')}
           </button>
         </div>
       ) : visible && visible.length === 0 ? (
         <p className="px-1 py-8 text-center text-sm text-white/45">
-          Aucun article pour le moment.
+          {t('discoverpage.news.noArticles')}
         </p>
       ) : (
         // Apple News premium layout — a large hero card then medium
@@ -225,7 +229,7 @@ export default function News({ categories }: { categories: string[] }) {
                       style={{ background: b.color, letterSpacing: '0.06em' }}
                     >
                       {b.label}
-                      {isNew(n) && ' · NOUVEAU'}
+                      {isNew(n) && ` · ${t('discoverpage.news.new')}`}
                     </span>
                     <div
                       aria-hidden

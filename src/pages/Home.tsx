@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { ChevronRight } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { setPendingPhoto } from '../lib/pendingPhoto'
@@ -36,11 +37,17 @@ type CityRank = {
 type CityRow = { user_id: string; xp: number; pseudo: string | null }
 
 // Time-of-day greeting from the device's local hour.
-function greetingFor(name: string): string {
+function greetingFor(
+  name: string,
+  t: ReturnType<typeof useTranslation>['t'],
+): string {
   const h = new Date().getHours()
-  if (h >= 23 || h < 12) return h >= 23 ? `Bonne nuit ${name}` : `Bonjour ${name}`
-  if (h < 18) return `Bon après-midi ${name}`
-  return `Bonsoir ${name}`
+  if (h >= 23 || h < 12)
+    return h >= 23
+      ? t('home.greeting.night', { name })
+      : t('home.greeting.morning', { name })
+  if (h < 18) return t('home.greeting.afternoon', { name })
+  return t('home.greeting.evening', { name })
 }
 
 // Current daily streak: consecutive days (local) with at least one spot,
@@ -63,6 +70,7 @@ function computeStreak(isoDates: string[]): number {
 
 export default function Home() {
   const navigate = useNavigate()
+  const { t } = useTranslation()
   const [loading, setLoading] = useState(true)
   const [name, setName] = useState('Spotter')
   const [xp, setXp] = useState(0)
@@ -252,7 +260,7 @@ export default function Home() {
             <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
           </span>
           <span className="tabular-nums">{community?.online_now ?? 0}</span>
-          <span className="text-fg/45">passionnés en ligne</span>
+          <span className="text-fg/45">{t('home.onlineNow')}</span>
         </span>
         <button
           onClick={() => navigate('/profile')}
@@ -263,7 +271,7 @@ export default function Home() {
             padding: '6px 12px',
             border: '1px solid rgba(255,255,255,0.06)',
           }}
-          aria-label="Voir mon profil"
+          aria-label={t('home.viewProfile')}
         >
           <span aria-hidden style={{ fontSize: '13px' }}>🎯</span>
           <span
@@ -298,7 +306,7 @@ export default function Home() {
               border: '1px solid rgba(232,32,58,0.40)',
             }}
           >
-            🔥 {streak} jour{streak > 1 ? 's' : ''} de streak
+            🔥 {streak > 1 ? t('home.streak.days_plural', { count: streak }) : t('home.streak.days', { count: streak })}
           </span>
         </div>
       )}
@@ -337,8 +345,10 @@ export default function Home() {
                     </span>
                   </p>
                   <p className="mt-0.5 truncate text-xs text-fg/60">
-                    {ev.location} · {ev.spot_count} spot
-                    {ev.spot_count > 1 ? 's' : ''}
+                    {ev.location} ·{' '}
+                    {ev.spot_count > 1
+                      ? t('home.live.spots_plural', { count: ev.spot_count })
+                      : t('home.live.spots', { count: ev.spot_count })}
                   </p>
                 </div>
                 <ChevronRight className="h-4 w-4 flex-none text-fg/40" />
@@ -396,6 +406,7 @@ function CockpitWidget({
   challenges: Challenge[]
   onChallenges: () => void
 }) {
+  const { t } = useTranslation()
   return (
     <section
       className="home-section-enter relative overflow-hidden"
@@ -433,7 +444,7 @@ function CockpitWidget({
           className="font-display font-extrabold tracking-tighter text-fg"
           style={{ fontSize: '30px', lineHeight: 1, letterSpacing: '-0.03em' }}
         >
-          {greetingFor(name)}
+          {greetingFor(name, t)}
         </h1>
         <div className="mt-2.5">
           <TitleChip xp={xp} title={title} size="sm" />
@@ -752,6 +763,7 @@ function RpmGauges({
  *  (pendingPhoto) and NewSpot consumes it on mount. */
 function SpotterAction() {
   const navigate = useNavigate()
+  const { t } = useTranslation()
   const inputRef = useRef<HTMLInputElement>(null)
 
   function onCapture(e: React.ChangeEvent<HTMLInputElement>) {
@@ -784,7 +796,7 @@ function SpotterAction() {
           boxShadow:
             '0 0 15px rgba(239,68,68,0.5), inset 0 1px 0 rgba(255,255,255,0.28), inset 0 -2px 6px rgba(0,0,0,0.25)',
         }}
-        aria-label="Spotter une voiture — ouvrir la caméra"
+        aria-label={t('home.spotter.aria')}
       >
         {/* Holo capture ring — two ambient ping rings + bright core. */}
         <span
@@ -816,7 +828,7 @@ function SpotterAction() {
           className="font-display font-extrabold uppercase text-white"
           style={{ fontSize: '14px', letterSpacing: '0.14em' }}
         >
-          Spotter
+          {t('home.spotter.label')}
         </span>
       </button>
     </div>
@@ -845,15 +857,16 @@ function GpCountdownCard({
   lastWinner: string | null
   onTap: () => void
 }) {
+  const { t } = useTranslation()
   const cd = {
     d: Math.max(0, Math.floor(gpDiff / 86400000)),
     h: Math.max(0, Math.floor((gpDiff % 86400000) / 3600000)),
     m: Math.max(0, Math.floor((gpDiff % 3600000) / 60000)),
   }
   const blocks = [
-    { v: String(cd.d), label: 'JOURS' },
-    { v: String(cd.h).padStart(2, '0'), label: 'HEURES' },
-    { v: String(cd.m).padStart(2, '0'), label: 'MINUTES' },
+    { v: String(cd.d), label: t('home.gp.days') },
+    { v: String(cd.h).padStart(2, '0'), label: t('home.gp.hours') },
+    { v: String(cd.m).padStart(2, '0'), label: t('home.gp.minutes') },
   ]
 
   return (
@@ -866,7 +879,7 @@ function GpCountdownCard({
         border: '1px solid rgba(255,255,255,0.06)',
         boxShadow: '0 8px 22px rgba(0,0,0,0.45)',
       }}
-      aria-label={`Grand Prix — ${name}`}
+      aria-label={t('home.gp.aria', { name })}
     >
       {/* Top — big flag + GP name + red F1 pill */}
       <div className="flex items-center gap-2.5">
@@ -926,7 +939,7 @@ function GpCountdownCard({
           className="mt-3.5 font-display font-extrabold"
           style={{ fontSize: '22px', color: '#E8203A' }}
         >
-          En cours !
+          {t('home.gp.live')}
         </p>
       )}
 
@@ -951,8 +964,11 @@ function GpCountdownCard({
 
       {/* Contextual info line under the circuit */}
       <p className="mt-2 text-[11px] text-white/45">
-        🏁 Course dans {cd.d} jour{cd.d > 1 ? 's' : ''}
-        {lastWinner && ` · Dernier vainqueur : ${lastWinner}`}
+        🏁{' '}
+        {cd.d > 1
+          ? t('home.gp.raceIn_plural', { count: cd.d })
+          : t('home.gp.raceIn', { count: cd.d })}
+        {lastWinner && t('home.gp.lastWinner', { winner: lastWinner })}
       </p>
 
       {/* Fine red line flush at the very bottom of the card */}
@@ -984,6 +1000,7 @@ function CityRankCard({
   onTap: () => void
   onSetCity: () => void
 }) {
+  const { t } = useTranslation()
   if (rank === undefined) return null // still loading — no flash
 
   const cardStyle = {
@@ -1002,7 +1019,7 @@ function CityRankCard({
           style={cardStyle}
         >
           <p className="text-sm font-medium text-white/80">
-            🏆 Ajoute ta ville pour voir ton classement
+            🏆 {t('home.city.addCity')}
           </p>
           <ChevronRight className="h-5 w-5 flex-none text-white/30" />
         </button>
@@ -1043,7 +1060,7 @@ function CityRankCard({
 
         <div className="relative flex items-center">
           <span className="flex-1 text-[14px] font-bold text-white">
-            🏆 Classement
+            🏆 {t('home.city.ranking')}
           </span>
           <span
             className="text-[14px] font-extrabold"
@@ -1071,11 +1088,16 @@ function CityRankCard({
                 className="mt-2 text-[14px] font-bold"
                 style={{ color: '#C8A96E' }}
               >
-                👑 Tu domines {rank.city} !
+                👑 {t('home.city.youDominate', { city: rank.city })}
               </p>
               <p className="mt-1.5 text-[11px] text-white/40">
-                {daysToNextGp != null && `Prochain GP dans ${daysToNextGp} jour${daysToNextGp > 1 ? 's' : ''} · `}
-                {spotsThisWeek} spot{spotsThisWeek > 1 ? 's' : ''} cette semaine
+                {daysToNextGp != null &&
+                  (daysToNextGp > 1
+                    ? t('home.city.nextGp_plural', { count: daysToNextGp })
+                    : t('home.city.nextGp', { count: daysToNextGp }))}
+                {spotsThisWeek > 1
+                  ? t('home.city.spotsThisWeek_plural', { count: spotsThisWeek })
+                  : t('home.city.spotsThisWeek', { count: spotsThisWeek })}
               </p>
             </div>
 
@@ -1110,9 +1132,9 @@ function CityRankCard({
               #{rank.rank}
             </p>
             <p className="relative mt-2 text-[13px] text-white/55">
-              encore{' '}
-              <span className="font-bold text-white">{rank.gapToAbove} XP</span>{' '}
-              pour dépasser{' '}
+              {t('home.city.stillNeed')}{' '}
+              <span className="font-bold text-white">{t('home.city.xpAmount', { count: rank.gapToAbove })}</span>{' '}
+              {t('home.city.toPass')}{' '}
               <span className="font-semibold text-white">
                 {rank.abovePseudo ?? `#${rank.rank - 1}`}
               </span>
@@ -1133,12 +1155,14 @@ function CityRankCard({
           </>
         ) : (
           <p className="relative mt-3 text-[13px] text-white/65">
-            Spotte pour entrer dans le classement de {rank.city}.
+            {t('home.city.spotToEnter', { city: rank.city })}
           </p>
         )}
 
         <p className="relative mt-2 text-right text-[11px] font-medium text-white/35">
-          {rank.total} spotter{rank.total > 1 ? 's' : ''}
+          {rank.total > 1
+            ? t('home.city.spotters_plural', { count: rank.total })
+            : t('home.city.spotters', { count: rank.total })}
         </p>
       </button>
     </section>

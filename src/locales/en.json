@@ -211,5 +211,248 @@
     "brands": "Brands",
     "newsEmpty": "No news right now.",
     "refresh": "Refresh"
+  },
+  "home": {
+    "greeting": {
+      "morning": "Good morning {{name}}",
+      "afternoon": "Good afternoon {{name}}",
+      "evening": "Good evening {{name}}",
+      "night": "Good night {{name}}"
+    },
+    "onlineNow": "enthusiasts online",
+    "viewProfile": "View my profile",
+    "streak": {
+      "days": "{{count}} day streak",
+      "days_plural": "{{count}} day streak"
+    },
+    "live": {
+      "spots": "{{count}} spot",
+      "spots_plural": "{{count}} spots"
+    },
+    "spotter": {
+      "aria": "Spot a car — open the camera",
+      "label": "Spot"
+    },
+    "gp": {
+      "days": "DAYS",
+      "hours": "HOURS",
+      "minutes": "MINUTES",
+      "aria": "Grand Prix — {{name}}",
+      "live": "Live now!",
+      "raceIn": "Race in {{count}} day",
+      "raceIn_plural": "Race in {{count}} days",
+      "lastWinner": " · Last winner: {{winner}}"
+    },
+    "city": {
+      "addCity": "Add your city to see your ranking",
+      "ranking": "Ranking",
+      "youDominate": "You rule {{city}}!",
+      "nextGp": "Next GP in {{count}} day · ",
+      "nextGp_plural": "Next GP in {{count}} days · ",
+      "spotsThisWeek": "{{count}} spot this week",
+      "spotsThisWeek_plural": "{{count}} spots this week",
+      "stillNeed": "still",
+      "xpAmount": "{{count}} XP",
+      "toPass": "to pass",
+      "spotToEnter": "Spot to enter the {{city}} ranking.",
+      "spotters": "{{count}} spotter",
+      "spotters_plural": "{{count}} spotters"
+    }
+  },
+  "feedpage": {
+    "slides": {
+      "realtime": "Supercars spotted near you in real time",
+      "community": "Like and comment on the community's spots",
+      "ranking": "Climb the leaderboard"
+    },
+    "slideAria": "Slide {{number}}",
+    "beFirstToSpot": "Be the first to spot",
+    "geoDisabled": "Enable location to sort by distance — sorting by recency in the meantime.",
+    "searchPlaceholder": "Search the feed…",
+    "clear": "Clear",
+    "advancedFilters": "Advanced filters",
+    "empty": {
+      "noSpotsTitle": "No spots yet",
+      "noMatchTitle": "Nothing matches",
+      "noSpotsBody": "Be the first to spot an iconic car!",
+      "noMatchBody": "No spot matches these filters."
+    },
+    "searchNoResults": "No car found for",
+    "allCaughtUp": "You're all caught up for now.",
+    "defaultPseudo": "Spotter",
+    "defaultCar": "Car",
+    "push": {
+      "likeTitle": "❤️ New like",
+      "likeBody": "{{who}} liked your {{brand}} {{model}} spot"
+    },
+    "profileOf": "{{pseudo}}'s profile",
+    "founder": "Founder",
+    "view": "View {{title}}",
+    "unlike": "Remove like",
+    "like": "Like",
+    "comments": "Comments",
+    "addComment": "Add a comment",
+    "addCommentPlaceholder": "Add a comment…"
+  },
+  "mappage": {
+    "spotFallbackTitle": "Spot",
+    "popupSeeDetail": "See details →",
+    "anonymous": "Anonymous",
+    "geoUnavailable": "Geolocation is not available on this device.",
+    "geoPermissionDenied": "Allow location in Settings → Safari → Location",
+    "geoPositionUnavailable": "Position unavailable right now, try again.",
+    "errorTokenMissing": "Mapbox token missing (VITE_MAPBOX_TOKEN).",
+    "errorInitMap": "Unable to initialize the map.",
+    "errorTokenInvalid": "Map unavailable: invalid or unauthorized Mapbox token.",
+    "errorTokenHint": "Check the VITE_MAPBOX_TOKEN variable in .env.local.",
+    "flyingTo": "Flying to {{place}}",
+    "searchPlaceholder": "Search for a car…",
+    "clear": "Clear",
+    "filters": "Filters",
+    "spotTipOfDay": "Spot tip of the day",
+    "locateMe": "Locate me",
+    "spotACar": "Spot a car",
+    "close": "Close",
+    "spotsHere": "{{count}} spots here",
+    "sortedByLikes": "Sorted by likes",
+    "spotTip": "Spot tip",
+    "tipOfDay": "TIP OF THE DAY",
+    "conditionsGood": "FAVORABLE CONDITIONS",
+    "conditionsMedium": "AVERAGE CONDITIONS",
+    "conditionsBad": "UNFAVORABLE",
+    "analyzing": "Analyzing…",
+    "addCityPrompt": "Add your city in Settings to receive a personalized tip every day (weather + spotting trend).",
+    "dailyUpdateNote": "Updated once a day. The tip takes into account your city, the brands you spot the most and the local weather.",
+    "aiBadge": "AI 🎯"
+  },
+  "profilepage": {
+    "header": {
+      "shareProfileAria": "Share profile",
+      "settingsAria": "Settings"
+    },
+    "tier": {
+      "premiumAria": "Premium member",
+      "vipAria": "VIP member"
+    },
+    "status": {
+      "premium": "Premium"
+    },
+    "streak": {
+      "days": "{{count}} day",
+      "days_other": "{{count}} days",
+      "days_one": "{{count}} day"
+    },
+    "stats": {
+      "spots": "spots",
+      "brands": "brands",
+      "rank": "rank",
+      "followers": "follower",
+      "followers_other": "followers",
+      "followers_one": "follower"
+    },
+    "badges": {
+      "seeAll": "See all badges →",
+      "heading": "Badges",
+      "unlockedCount": "{{unlocked}} / {{total}} unlocked"
+    },
+    "tabs": {
+      "collection": "Collection",
+      "garage": "Garage",
+      "rewards": "Rewards"
+    },
+    "collectionLock": {
+      "title": "Coming soon",
+      "body": "Phase 2 — Your spots will be turned into unique collectible cards very soon."
+    },
+    "garage": {
+      "empty": "Your garage is empty, go hunt your first supercar",
+      "spot": "Spot"
+    },
+    "rewardsLock": {
+      "title": "Coming soon",
+      "body": "Unlock unique rewards and physical merch during Phase 2."
+    },
+    "subscription": {
+      "label": "Subscription",
+      "manage": "Manage →"
+    },
+    "xpHistory": {
+      "heading": "XP history"
+    },
+    "xpReason": {
+      "spot": "Spot posted",
+      "dailyFirst": "First spot of the day",
+      "streak": "Streak bonus",
+      "collection": "Collection completed",
+      "referral": "Referral",
+      "challenge": "Challenge completed",
+      "like": "Like received",
+      "event": "Event",
+      "reconcile": "Adjustment"
+    },
+    "share": {
+      "nativeTitle": "{{name}} on REVS",
+      "title": "Share profile",
+      "closeAria": "Close",
+      "copied": "Link copied!",
+      "copyHint": "Tap to copy the link",
+      "shareButton": "Share"
+    },
+    "premium": {
+      "active": "✓ Premium active",
+      "renews": "· renews {{date}}",
+      "manage": "Manage",
+      "discover": "Discover →"
+    },
+    "rarity": {
+      "hypercar": "Hypercar",
+      "supercar": "Supercar",
+      "exclusif": "Exclusive",
+      "performance": "Performance",
+      "premium": "Premium",
+      "standard": "Standard"
+    },
+    "decks": {
+      "allDecks": "All decks",
+      "cardCount": "{{count}} card",
+      "cardCount_other": "{{count}} cards",
+      "summaryLabel": "Collection",
+      "cardWord": "card",
+      "cardWord_other": "cards",
+      "cardsCollected": "{{count}} card collected",
+      "cardsCollected_other": "{{count}} cards collected",
+      "cardCount_one": "{{count}} card",
+      "cardWord_one": "card",
+      "cardsCollected_one": "{{count}} card collected"
+    },
+    "badgesSheet": {
+      "closeAria": "Close",
+      "title": "All badges"
+    },
+    "challenges": {
+      "heading": "Active challenges",
+      "seeAll": "All challenges",
+      "allClaimed": "All challenges already claimed. Well done 🏁",
+      "claim": "Claim",
+      "inProgress": "In progress"
+    }
+  },
+  "discoverpage": {
+    "subtabs": {
+      "actu": "News",
+      "calendar": "Calendar",
+      "roster": "Teams & Drivers",
+      "events": "Events",
+      "brands": "Brands"
+    },
+    "news": {
+      "pullRelease": "Release to refresh",
+      "pullStart": "Pull to refresh",
+      "updated": "UPDATED {{time}}",
+      "empty": "No news for now.",
+      "refresh": "Refresh",
+      "noArticles": "No articles for now.",
+      "new": "NEW"
+    }
   }
 }

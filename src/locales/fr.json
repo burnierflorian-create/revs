@@ -211,5 +211,248 @@
     "brands": "Marques",
     "newsEmpty": "Pas d'actu pour le moment.",
     "refresh": "Rafraîchir"
+  },
+  "home": {
+    "greeting": {
+      "morning": "Bonjour {{name}}",
+      "afternoon": "Bon après-midi {{name}}",
+      "evening": "Bonsoir {{name}}",
+      "night": "Bonne nuit {{name}}"
+    },
+    "onlineNow": "passionnés en ligne",
+    "viewProfile": "Voir mon profil",
+    "streak": {
+      "days": "{{count}} jour de streak",
+      "days_plural": "{{count}} jours de streak"
+    },
+    "live": {
+      "spots": "{{count}} spot",
+      "spots_plural": "{{count}} spots"
+    },
+    "spotter": {
+      "aria": "Spotter une voiture — ouvrir la caméra",
+      "label": "Spotter"
+    },
+    "gp": {
+      "days": "JOURS",
+      "hours": "HEURES",
+      "minutes": "MINUTES",
+      "aria": "Grand Prix — {{name}}",
+      "live": "En cours !",
+      "raceIn": "Course dans {{count}} jour",
+      "raceIn_plural": "Course dans {{count}} jours",
+      "lastWinner": " · Dernier vainqueur : {{winner}}"
+    },
+    "city": {
+      "addCity": "Ajoute ta ville pour voir ton classement",
+      "ranking": "Classement",
+      "youDominate": "Tu domines {{city}} !",
+      "nextGp": "Prochain GP dans {{count}} jour · ",
+      "nextGp_plural": "Prochain GP dans {{count}} jours · ",
+      "spotsThisWeek": "{{count}} spot cette semaine",
+      "spotsThisWeek_plural": "{{count}} spots cette semaine",
+      "stillNeed": "encore",
+      "xpAmount": "{{count}} XP",
+      "toPass": "pour dépasser",
+      "spotToEnter": "Spotte pour entrer dans le classement de {{city}}.",
+      "spotters": "{{count}} spotter",
+      "spotters_plural": "{{count}} spotters"
+    }
+  },
+  "feedpage": {
+    "slides": {
+      "realtime": "Les supercars spottées près de toi en temps réel",
+      "community": "Like et commente les spots de la communauté",
+      "ranking": "Grimpe dans le classement"
+    },
+    "slideAria": "Diapositive {{number}}",
+    "beFirstToSpot": "Sois le premier à spotter",
+    "geoDisabled": "Active la localisation pour trier par distance — tri par récence en attendant.",
+    "searchPlaceholder": "Rechercher dans le fil…",
+    "clear": "Effacer",
+    "advancedFilters": "Filtres avancés",
+    "empty": {
+      "noSpotsTitle": "Aucun spot pour l’instant",
+      "noMatchTitle": "Rien ne correspond",
+      "noSpotsBody": "Sois le premier à spotter une voiture iconique !",
+      "noMatchBody": "Aucun spot ne correspond à ces filtres."
+    },
+    "searchNoResults": "Aucune voiture trouvée pour",
+    "allCaughtUp": "Tu as tout vu pour le moment.",
+    "defaultPseudo": "Spotter",
+    "defaultCar": "Voiture",
+    "push": {
+      "likeTitle": "❤️ Nouveau like",
+      "likeBody": "{{who}} a liké ton spot {{brand}} {{model}}"
+    },
+    "profileOf": "Profil de {{pseudo}}",
+    "founder": "Fondateur",
+    "view": "Voir {{title}}",
+    "unlike": "Retirer le like",
+    "like": "Liker",
+    "comments": "Commentaires",
+    "addComment": "Ajouter un commentaire",
+    "addCommentPlaceholder": "Ajouter un commentaire…"
+  },
+  "mappage": {
+    "spotFallbackTitle": "Spot",
+    "popupSeeDetail": "Voir le détail →",
+    "anonymous": "Anonyme",
+    "geoUnavailable": "Géolocalisation non disponible sur cet appareil.",
+    "geoPermissionDenied": "Autorise la localisation dans Réglages → Safari → Localisation",
+    "geoPositionUnavailable": "Position indisponible pour le moment, réessaie.",
+    "errorTokenMissing": "Token Mapbox manquant (VITE_MAPBOX_TOKEN).",
+    "errorInitMap": "Impossible d’initialiser la carte.",
+    "errorTokenInvalid": "Carte indisponible : token Mapbox invalide ou non autorisé.",
+    "errorTokenHint": "Vérifie la variable VITE_MAPBOX_TOKEN dans .env.local.",
+    "flyingTo": "Vol vers {{place}}",
+    "searchPlaceholder": "Rechercher une voiture…",
+    "clear": "Effacer",
+    "filters": "Filtres",
+    "spotTipOfDay": "Conseil de spot du jour",
+    "locateMe": "Me localiser",
+    "spotACar": "Spotter une voiture",
+    "close": "Fermer",
+    "spotsHere": "{{count}} spots ici",
+    "sortedByLikes": "Triés par likes",
+    "spotTip": "Conseil de spot",
+    "tipOfDay": "CONSEIL DU JOUR",
+    "conditionsGood": "CONDITIONS FAVORABLES",
+    "conditionsMedium": "CONDITIONS MOYENNES",
+    "conditionsBad": "PEU FAVORABLE",
+    "analyzing": "Analyse en cours…",
+    "addCityPrompt": "Ajoute ta ville dans Réglages pour recevoir un conseil personnalisé chaque jour (météo + tendance de spotting).",
+    "dailyUpdateNote": "Mise à jour une fois par jour. Le conseil tient compte de ta ville, des marques que tu spottes le plus et de la météo locale.",
+    "aiBadge": "IA 🎯"
+  },
+  "profilepage": {
+    "header": {
+      "shareProfileAria": "Partager le profil",
+      "settingsAria": "Paramètres"
+    },
+    "tier": {
+      "premiumAria": "Membre Premium",
+      "vipAria": "Membre VIP"
+    },
+    "status": {
+      "premium": "Premium"
+    },
+    "streak": {
+      "days": "{{count}} jour",
+      "days_other": "{{count}} jours",
+      "days_one": "{{count}} jour"
+    },
+    "stats": {
+      "spots": "spots",
+      "brands": "marques",
+      "rank": "rang",
+      "followers": "abonné",
+      "followers_other": "abonnés",
+      "followers_one": "abonné"
+    },
+    "badges": {
+      "seeAll": "Voir tous les badges →",
+      "heading": "Badges",
+      "unlockedCount": "{{unlocked}} / {{total}} débloqués"
+    },
+    "tabs": {
+      "collection": "Collection",
+      "garage": "Garage",
+      "rewards": "Récompenses"
+    },
+    "collectionLock": {
+      "title": "Bientôt disponible",
+      "body": "Phase 2 — Tes spots seront transformés en cartes de collection uniques très bientôt."
+    },
+    "garage": {
+      "empty": "Ton garage est vide, pars chasser ta première supercar",
+      "spot": "Spotter"
+    },
+    "rewardsLock": {
+      "title": "Bientôt disponible",
+      "body": "Débloque des récompenses uniques et des accessoires physiques lors de la Phase 2."
+    },
+    "subscription": {
+      "label": "Abonnement",
+      "manage": "Gérer →"
+    },
+    "xpHistory": {
+      "heading": "Historique XP"
+    },
+    "xpReason": {
+      "spot": "Spot publié",
+      "dailyFirst": "Premier spot du jour",
+      "streak": "Bonus streak",
+      "collection": "Collection complétée",
+      "referral": "Parrainage",
+      "challenge": "Défi réussi",
+      "like": "Like reçu",
+      "event": "Event",
+      "reconcile": "Ajustement"
+    },
+    "share": {
+      "nativeTitle": "{{name}} sur REVS",
+      "title": "Partager le profil",
+      "closeAria": "Fermer",
+      "copied": "Lien copié !",
+      "copyHint": "Touche pour copier le lien",
+      "shareButton": "Partager"
+    },
+    "premium": {
+      "active": "✓ Premium actif",
+      "renews": "· renouv. {{date}}",
+      "manage": "Gérer",
+      "discover": "Découvrir →"
+    },
+    "rarity": {
+      "hypercar": "Hypercar",
+      "supercar": "Supercar",
+      "exclusif": "Exclusif",
+      "performance": "Performance",
+      "premium": "Premium",
+      "standard": "Standard"
+    },
+    "decks": {
+      "allDecks": "Tous les decks",
+      "cardCount": "{{count}} carte",
+      "cardCount_other": "{{count}} cartes",
+      "summaryLabel": "Collection",
+      "cardWord": "carte",
+      "cardWord_other": "cartes",
+      "cardsCollected": "{{count}} carte collectionnée",
+      "cardsCollected_other": "{{count}} cartes collectionnées",
+      "cardCount_one": "{{count}} carte",
+      "cardWord_one": "carte",
+      "cardsCollected_one": "{{count}} carte collectionnée"
+    },
+    "badgesSheet": {
+      "closeAria": "Fermer",
+      "title": "Tous les badges"
+    },
+    "challenges": {
+      "heading": "Défis en cours",
+      "seeAll": "Tous les défis",
+      "allClaimed": "Tous les défis sont déjà réclamés. Bravo 🏁",
+      "claim": "Réclamer",
+      "inProgress": "En cours"
+    }
+  },
+  "discoverpage": {
+    "subtabs": {
+      "actu": "Actu",
+      "calendar": "Calendrier",
+      "roster": "Écuries & Pilotes",
+      "events": "Events",
+      "brands": "Marques"
+    },
+    "news": {
+      "pullRelease": "Relâche pour actualiser",
+      "pullStart": "Tire pour actualiser",
+      "updated": "MIS À JOUR {{time}}",
+      "empty": "Pas d'actu pour le moment.",
+      "refresh": "Rafraîchir",
+      "noArticles": "Aucun article pour le moment.",
+      "new": "NOUVEAU"
+    }
   }
 }

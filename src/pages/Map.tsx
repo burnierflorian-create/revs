@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { useTranslation } from 'react-i18next'
+import type { TFunction } from 'i18next'
 import { useLocation, useNavigate } from 'react-router-dom'
 import mapboxgl from 'mapbox-gl'
 import type { DataDrivenPropertyValueSpecification } from 'mapbox-gl'
@@ -251,8 +253,8 @@ function clusterMarkerEl(count: number, maxRarity: number): HTMLDivElement {
   return outer
 }
 
-function popupInner(p: SpotProps): string {
-  const title = (p.model || p.brand || 'Spot').trim()
+function popupInner(p: SpotProps, t: TFunction): string {
+  const title = (p.model || p.brand || t('mappage.spotFallbackTitle')).trim()
   const sub = [p.brand, p.year ?? undefined].filter(Boolean).join(' · ')
   const photo = p.photo_url
     ? `<img src="${escapeHtml(p.photo_url)}" alt="" loading="lazy" decoding="async" style="width:72px;height:72px;border-radius:12px;object-fit:cover;flex:none" />`
@@ -264,7 +266,7 @@ function popupInner(p: SpotProps): string {
         <div style="font-weight:800;font-size:15px;color:#111111">${escapeHtml(title)}</div>
         <div style="font-size:12px;color:#555555;margin-top:3px">${escapeHtml(sub || p.spotter)}</div>
         <div style="font-size:11px;color:#777777;margin-top:3px">${escapeHtml(timeAgo(p.created_at))}</div>
-        <div style="font-size:11px;color:#E8203A;font-weight:700;margin-top:6px">Voir le détail →</div>
+        <div style="font-size:11px;color:#E8203A;font-weight:700;margin-top:6px">${escapeHtml(t('mappage.popupSeeDetail'))}</div>
       </div>
     </div>`
 }
@@ -696,6 +698,7 @@ class CompassMarker {
 }
 
 export default function MapPage() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const location = useLocation()
   const { theme } = useTheme()
@@ -848,7 +851,7 @@ export default function MapPage() {
 
   function locate() {
     if (!navigator.geolocation) {
-      setGeoError('Géolocalisation non disponible sur cet appareil.')
+      setGeoError(t('mappage.geoUnavailable'))
       return
     }
     navigator.geolocation.getCurrentPosition(
@@ -866,8 +869,8 @@ export default function MapPage() {
       (err) => {
         setGeoError(
           err.code === err.PERMISSION_DENIED
-            ? 'Autorise la localisation dans Réglages → Safari → Localisation'
-            : 'Position indisponible pour le moment, réessaie.',
+            ? t('mappage.geoPermissionDenied')
+            : t('mappage.geoPositionUnavailable'),
         )
         setTimeout(() => setGeoError(null), 6000)
       },
@@ -897,9 +900,7 @@ export default function MapPage() {
       .query({ name: 'geolocation' as PermissionName })
       .then((status) => {
         if (status.state === 'denied') {
-          setGeoError(
-            'Autorise la localisation dans Réglages → Safari → Localisation',
-          )
+          setGeoError(t('mappage.geoPermissionDenied'))
           setTimeout(() => setGeoError(null), 6000)
           return
         }
@@ -923,7 +924,7 @@ export default function MapPage() {
 
     const tokenMb = import.meta.env.VITE_MAPBOX_TOKEN as string | undefined
     if (!tokenMb) {
-      setError('Token Mapbox manquant (VITE_MAPBOX_TOKEN).')
+      setError(t('mappage.errorTokenMissing'))
       return
     }
     mapboxgl.accessToken = tokenMb
@@ -1006,7 +1007,7 @@ export default function MapPage() {
         renderWorldCopies: false,
       })
     } catch {
-      setError('Impossible d’initialiser la carte.')
+      setError(t('mappage.errorInitMap'))
       return null
     }
     mapRef.current = map
@@ -1060,7 +1061,7 @@ export default function MapPage() {
             model: sp.model ?? '',
             year: sp.year ?? null,
             photo_url: sp.photo_url ?? null,
-            spotter: names.get(sp.user_id) ?? 'Anonyme',
+            spotter: names.get(sp.user_id) ?? t('mappage.anonymous'),
             created_at: sp.created_at,
             expires_at: sp.expires_at,
             rarity: sp.rarity ?? 'standard',
@@ -1275,7 +1276,7 @@ export default function MapPage() {
                         model: String(pr.model ?? ''),
                         photo_url:
                           typeof pr.photo_url === 'string' ? pr.photo_url : null,
-                        spotter: String(pr.spotter ?? 'Anonyme'),
+                        spotter: String(pr.spotter ?? t('mappage.anonymous')),
                         created_at: String(pr.created_at ?? ''),
                         rarity: (typeof pr.rarity === 'string'
                           ? pr.rarity
@@ -1299,7 +1300,7 @@ export default function MapPage() {
               typeof props.year === 'number' ? props.year : null,
             photo_url:
               typeof props.photo_url === 'string' ? props.photo_url : null,
-            spotter: String(props.spotter ?? 'Anonyme'),
+            spotter: String(props.spotter ?? t('mappage.anonymous')),
             created_at: String(props.created_at ?? ''),
             // Coerce to a known rarity bucket; an unknown/legacy value
             // falls back to standard so the pin still renders with the
@@ -1349,7 +1350,7 @@ export default function MapPage() {
               })
               const node = document.createElement('div')
               node.style.cursor = 'pointer'
-              node.innerHTML = popupInner(sp)
+              node.innerHTML = popupInner(sp, t)
               node.addEventListener('click', () => {
                 popup.remove()
                 navRef.current(`/spot/${sp.id}`)
@@ -1399,7 +1400,7 @@ export default function MapPage() {
       if (
         /401|403|unauthorized|forbidden|access token|not authorized/i.test(msg)
       ) {
-        setError('Carte indisponible : token Mapbox invalide ou non autorisé.')
+        setError(t('mappage.errorTokenInvalid'))
       }
     })
 
@@ -1624,7 +1625,7 @@ export default function MapPage() {
     if (!map || !token) return
 
     const ctl = new AbortController()
-    const t = window.setTimeout(async () => {
+    const searchTimer = window.setTimeout(async () => {
       try {
         const center = map.getCenter()
         const proximity = `${center.lng.toFixed(4)},${center.lat.toFixed(4)}`
@@ -1649,14 +1650,14 @@ export default function MapPage() {
           essential: true,
         })
         const placeLabel = (hit.place_name ?? q).split(',')[0]
-        setToast(`Vol vers ${placeLabel}`)
+        setToast(t('mappage.flyingTo', { place: placeLabel }))
         window.setTimeout(() => setToast(null), 2400)
       } catch {
         /* aborted or network — silent */
       }
     }, 700)
     return () => {
-      window.clearTimeout(t)
+      window.clearTimeout(searchTimer)
       ctl.abort()
     }
   }, [mapSearchQuery, visibleCount])
@@ -1758,13 +1759,13 @@ export default function MapPage() {
               type="text"
               value={mapSearchQuery}
               onChange={(e) => setMapSearchQuery(e.target.value)}
-              placeholder="Rechercher une voiture…"
+              placeholder={t('mappage.searchPlaceholder')}
               className="min-w-0 flex-1 bg-transparent text-sm font-medium text-fg outline-none placeholder:text-fg2"
             />
             {mapSearchQuery && (
               <button
                 onClick={() => setMapSearchQuery('')}
-                aria-label="Effacer"
+                aria-label={t('mappage.clear')}
                 className="tappable text-fg2 hover:text-fg"
               >
                 <X className="h-4 w-4" />
@@ -1773,7 +1774,7 @@ export default function MapPage() {
           </div>
           <button
             onClick={() => setFiltersOpen(true)}
-            aria-label="Filtres"
+            aria-label={t('mappage.filters')}
             className="tappable relative flex-none p-2 text-fg2 hover:text-fg"
           >
             <SlidersHorizontal className="h-5 w-5" />
@@ -1803,7 +1804,7 @@ export default function MapPage() {
       {SHOW_WEATHER_IA && (
         <button
           onClick={() => setInfoSheetOpen(true)}
-          aria-label="Conseil de spot du jour"
+          aria-label={t('mappage.spotTipOfDay')}
           className="tappable absolute right-4 z-10 flex h-10 w-10 items-center justify-center rounded-full"
           style={{
             top: 'calc(max(3rem, env(safe-area-inset-top) + 2rem) + 3.25rem)',
@@ -1862,7 +1863,7 @@ export default function MapPage() {
 
         <button
           onClick={flyToUser}
-          aria-label="Me localiser"
+          aria-label={t('mappage.locateMe')}
           className="tappable flex h-12 w-12 items-center justify-center rounded-full bg-accent transition-transform active:scale-90"
           style={{
             // shadow-2xl level — bigger ambient + brand-tinted glow +
@@ -1891,7 +1892,7 @@ export default function MapPage() {
       />
       <button
         onClick={() => spotInputRef.current?.click()}
-        aria-label="Spotter une voiture"
+        aria-label={t('mappage.spotACar')}
         data-tour="spot-fab"
         className="fixed left-1/2 z-40 flex -translate-x-1/2 items-center justify-center active:scale-[0.92]"
         style={{
@@ -1915,7 +1916,7 @@ export default function MapPage() {
           <div className="max-w-xs text-center">
             <p className="text-sm text-fg/80">{error}</p>
             <p className="mt-2 text-xs text-fg/40">
-              Vérifie la variable VITE_MAPBOX_TOKEN dans .env.local.
+              {t('mappage.errorTokenHint')}
             </p>
           </div>
         </div>
@@ -1960,6 +1961,7 @@ function ClusterSheet({
   onClose: () => void
   onOpenSpot: (id: string) => void
 }) {
+  const { t } = useTranslation()
   const [likes, setLikes] = useState<Record<string, number>>({})
   useEffect(() => {
     const prev = document.body.style.overflow
@@ -1994,7 +1996,7 @@ function ClusterSheet({
   return createPortal(
     <div className="fixed inset-0 z-50" role="dialog" aria-modal="true">
       <button
-        aria-label="Fermer"
+        aria-label={t('mappage.close')}
         onClick={onClose}
         className="absolute inset-0"
         style={{
@@ -2026,9 +2028,9 @@ function ClusterSheet({
           />
         </div>
         <h3 className="mb-0.5 mt-3 font-display text-[17px] font-extrabold text-white">
-          {items.length} spots ici
+          {t('mappage.spotsHere', { count: items.length })}
         </h3>
-        <p className="mb-3 text-[12px] text-white/45">Triés par likes</p>
+        <p className="mb-3 text-[12px] text-white/45">{t('mappage.sortedByLikes')}</p>
         <div className="space-y-2">
           {sorted.map((s) => {
             const rb = rarityBadge(s.rarity)
@@ -2057,7 +2059,7 @@ function ClusterSheet({
                 )}
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-[14px] font-bold text-white">
-                    {s.model || s.brand || 'Spot'}
+                    {s.model || s.brand || t('mappage.spotFallbackTitle')}
                   </p>
                   <p className="truncate text-[12px] text-white/50">
                     @{s.spotter} · {timeAgo(s.created_at)}
@@ -2083,7 +2085,7 @@ function ClusterSheet({
           className="tappable mb-1 mt-4 w-full rounded-full py-3 text-[14px] font-semibold text-white"
           style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.1)' }}
         >
-          Fermer
+          {t('mappage.close')}
         </button>
       </div>
     </div>,
@@ -2098,21 +2100,21 @@ function ClusterSheet({
 // presentational — fetching is owned by the Map page so the same
 // PredictionResult drives both states.
 
-const PREDICTION_THEME: Record<SpotScore, { background: string; label: string }> = {
+const PREDICTION_THEME: Record<SpotScore, { background: string; labelKey: string }> = {
   bon: {
     background:
       'linear-gradient(155deg, #5a1018 0%, #2e0a0d 55%, #150708 100%)',
-    label: 'CONDITIONS FAVORABLES',
+    labelKey: 'mappage.conditionsGood',
   },
   moyen: {
     background:
       'linear-gradient(155deg, #4a2a08 0%, #2e1804 55%, #150b02 100%)',
-    label: 'CONDITIONS MOYENNES',
+    labelKey: 'mappage.conditionsMedium',
   },
   mauvais: {
     background:
       'linear-gradient(155deg, #1e2024 0%, #14161a 55%, #0d0e10 100%)',
-    label: 'PEU FAVORABLE',
+    labelKey: 'mappage.conditionsBad',
   },
 }
 
@@ -2125,6 +2127,7 @@ function MapPredictionSheet({
   loading: boolean
   onClose: () => void
 }) {
+  const { t } = useTranslation()
   const [drag, setDrag] = useState(0)
   const [dragging, setDragging] = useState(false)
   const startY = useRef(0)
@@ -2172,7 +2175,7 @@ function MapPredictionSheet({
       className="fixed inset-0 z-[80]"
       role="dialog"
       aria-modal="true"
-      aria-label="Conseil de spot"
+      aria-label={t('mappage.spotTip')}
     >
       <div
         className="absolute inset-0 bg-black/55"
@@ -2217,19 +2220,19 @@ function MapPredictionSheet({
                 className="label-up text-[9.5px] text-fg/75"
                 style={{ letterSpacing: '0.18em' }}
               >
-                {prediction ? theme.label : 'CONSEIL DU JOUR'}
+                {prediction ? t(theme.labelKey) : t('mappage.tipOfDay')}
               </p>
               <span
                 className="inline-flex items-center gap-1 rounded-full bg-black/45 px-2 py-1 text-[9px] font-bold tracking-wider text-fg/85 backdrop-blur"
                 style={{ border: '1px solid rgba(255,255,255,0.12)' }}
               >
-                IA 🎯
+                {t('mappage.aiBadge')}
               </span>
             </div>
             {loading && !prediction ? (
               <div className="mt-3 flex items-center gap-2 text-[14px] text-fg/80">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Analyse en cours…
+                {t('mappage.analyzing')}
               </div>
             ) : prediction ? (
               <p
@@ -2243,8 +2246,7 @@ function MapPredictionSheet({
                 className="mt-3 leading-snug text-fg/75"
                 style={{ fontSize: '14px' }}
               >
-                Ajoute ta ville dans Réglages pour recevoir un conseil
-                personnalisé chaque jour (météo + tendance de spotting).
+                {t('mappage.addCityPrompt')}
               </p>
             )}
           </div>
@@ -2252,9 +2254,7 @@ function MapPredictionSheet({
           <p
             className="mt-3 px-1 text-[11px] leading-snug text-fg2"
           >
-            Mise à jour une fois par jour. Le conseil tient compte de
-            ta ville, des marques que tu spottes le plus et de la
-            météo locale.
+            {t('mappage.dailyUpdateNote')}
           </p>
         </div>
       </div>
