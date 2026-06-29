@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { ArrowLeft, Bell, Check, MapPin, Search, Shield } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { setLanguage, currentLang, type Lang } from '../i18n'
+import { currentLang, type Lang } from '../i18n'
 
 // ─────────────────────────────────────────────────────────────────────
 // First-launch onboarding — a linear 8-step flow (no guided tour). The
@@ -116,7 +116,7 @@ function OptionButton({
 
 export default function Onboarding() {
   const navigate = useNavigate()
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
 
   // null = still deciding (no flash); false = hidden; true = show.
   const [show, setShow] = useState<boolean | null>(null)
@@ -175,7 +175,27 @@ export default function Onboarding() {
 
   function pickLang(l: Lang) {
     setLang(l)
-    setLanguage(l) // apply immediately so the rest of the flow is in `l`
+    // 1) flip the live UI language (the root re-renders the whole tree),
+    void i18n.changeLanguage(l)
+    // 2) persist the choice to localStorage (i18next's conventional key),
+    try {
+      localStorage.setItem('i18nextLng', l)
+    } catch {
+      /* ignore */
+    }
+    // 3) mirror to profiles.language (best-effort) so it follows the user
+    //    across devices even if they drop off before finishing.
+    void (async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (user) {
+        await supabase
+          .from('profiles')
+          .update({ language: l })
+          .eq('user_id', user.id)
+      }
+    })()
   }
 
   function toggleInterest(id: string) {

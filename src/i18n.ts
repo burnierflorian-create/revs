@@ -4,7 +4,7 @@ import fr from './locales/fr.json'
 import en from './locales/en.json'
 
 // App i18n — two languages, no extra detector dependency. The chosen
-// language is the SINGLE source of truth in localStorage ('revs_lang');
+// language is the SINGLE source of truth in localStorage ('i18nextLng');
 // it is also mirrored onto profiles.language in Supabase (best-effort,
 // for cross-device continuity) but localStorage is what drives the UI so
 // the first paint never waits on the network.
@@ -12,17 +12,23 @@ import en from './locales/en.json'
 export const SUPPORTED_LANGS = ['fr', 'en'] as const
 export type Lang = (typeof SUPPORTED_LANGS)[number]
 
-const STORAGE_KEY = 'revs_lang'
+// i18next's conventional localStorage key, so the value is portable.
+const STORAGE_KEY = 'i18nextLng'
+// Legacy key used by the first cut — read once for migration.
+const LEGACY_KEY = 'revs_lang'
 
 export function isLang(v: unknown): v is Lang {
   return v === 'fr' || v === 'en'
 }
 
-// localStorage first, then the browser's preferred language, else French.
+// localStorage first (current then legacy), then the browser's preferred
+// language, else French.
 function detectInitialLang(): Lang {
   try {
     const stored = localStorage.getItem(STORAGE_KEY)
     if (isLang(stored)) return stored
+    const legacy = localStorage.getItem(LEGACY_KEY)
+    if (isLang(legacy)) return legacy
   } catch {
     /* ignore — private mode / blocked storage */
   }
@@ -55,6 +61,9 @@ void i18n.use(initReactI18next).init({
   supportedLngs: SUPPORTED_LANGS as unknown as string[],
   interpolation: { escapeValue: false },
   returnNull: false,
+  // No Suspense — resources are bundled inline, so there is nothing to
+  // await; this avoids any React 19 suspense edge case on first render.
+  react: { useSuspense: false },
 })
 
 applyHtmlLang(initial)
