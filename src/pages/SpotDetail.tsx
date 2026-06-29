@@ -82,6 +82,44 @@ export default function SpotDetail() {
   const [infoBusy, setInfoBusy] = useState(false)
   const [infoErr, setInfoErr] = useState<string | null>(null)
 
+  // On-demand market price: when a spot has no estimated_price (null/0),
+  // fetch it via the server-side Haiku endpoint (which also persists it to
+  // Supabase, so this only ever runs once per spot). `marketPrice` holds
+  // the freshly-fetched value; the display falls back to it.
+  const [marketPrice, setMarketPrice] = useState<number | null>(null)
+  const [priceLoading, setPriceLoading] = useState(false)
+  useEffect(() => {
+    if (!spot) return
+    if (spot.estimated_price && spot.estimated_price > 0) return
+    if (marketPrice != null || priceLoading) return
+    if (!spot.brand && !spot.model) return
+    let active = true
+    setPriceLoading(true)
+    ;(async () => {
+      try {
+        const res = await fetch('/api/market-price', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            spotId: spot.id,
+            brand: spot.brand,
+            model: spot.model,
+            year: spot.year,
+          }),
+        })
+        const data = (await res.json()) as { price?: number | null }
+        if (active && typeof data.price === 'number') setMarketPrice(data.price)
+      } catch {
+        /* leave price as "Indisponible" — best-effort */
+      } finally {
+        if (active) setPriceLoading(false)
+      }
+    })()
+    return () => {
+      active = false
+    }
+  }, [spot, marketPrice, priceLoading])
+
   useEffect(() => {
     if (spot?.car_info) setCarInfo(spot.car_info)
   }, [spot?.car_info])
@@ -526,7 +564,11 @@ export default function SpotDetail() {
                   Prix du marché
                 </div>
                 <div className="mt-1 font-display text-[28px] font-extrabold leading-none tracking-tighter text-fg">
-                  {formatPrice(spot.estimated_price) ?? 'Indisponible'}
+                  {formatPrice(
+                    spot.estimated_price && spot.estimated_price > 0
+                      ? spot.estimated_price
+                      : marketPrice,
+                  ) ?? (priceLoading ? 'Estimation…' : 'Indisponible')}
                 </div>
               </div>
               <div

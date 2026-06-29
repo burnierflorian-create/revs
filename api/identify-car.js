@@ -129,7 +129,9 @@ Règles :
 - RARETÉ = uniquement le volume de production mondial du modèle. JAMAIS le prix, jamais le lieu, jamais le standing perçu.
 - En cas de doute sur la rareté, descends d'un cran (douteux supercar = "performance").
 - Si tu n'identifies pas le modèle exact, donne ta meilleure estimation — JAMAIS "indéterminé" ni "inconnue".
-- Pas d'appel web : appuie-toi UNIQUEMENT sur la vision de cette photo et tes connaissances statiques pour une réponse instantanée.`
+- Pas d'appel web : appuie-toi UNIQUEMENT sur la vision de cette photo et tes connaissances statiques pour une réponse instantanée.
+
+RÈGLE ABSOLUE : Ne jamais retourner brand="Voiture" ou model="Modèle indéterminé". Si tu vois un Lamborghini (silhouette angulaire, badge taureau, prises d'air latérales) → Lamborghini. Si tu vois une McLaren (portes papillon, nez pointu, prises d'air latérales) → McLaren. Si tu vois un badge constructeur flou mais reconnaissable → utilise-le. Donne TOUJOURS ta meilleure estimation même avec faible confiance. confidence=30 avec le bon modèle vaut mieux que confidence=0 avec "indéterminé".`
 
 const SYSTEM_SIMPLE = `Tu es un expert automobile. Identifie la voiture sur la photo. Tu dois TOUJOURS répondre — au pire avec la marque seule + "Modèle indéterminé" + confidence: 20.
 
