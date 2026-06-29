@@ -25,6 +25,7 @@ import {
 import { supabase } from '../lib/supabase'
 import { useMyTier } from '../lib/tier'
 import { hapticSelection } from '../lib/haptic'
+import { useTranslation } from 'react-i18next'
 
 const tabClass = ({ isActive }: { isActive: boolean }) =>
   `liquid-tab ${isActive ? 'text-[#E8203A]' : 'text-white/40'}`
@@ -49,6 +50,7 @@ function pathToTab(pathname: string): {
 }
 
 export default function MainLayout() {
+  const { t } = useTranslation()
   const { pathname } = useLocation()
   const navigate = useNavigate()
   const navType = useNavigationType()
@@ -256,9 +258,9 @@ export default function MainLayout() {
         {/* The Carte's "Spotter" camera FAB now lives in Map.tsx (a single
             60px circle above the pill). The old nav-embedded .liquid-cam was
             removed 2026-06-26 — it duplicated and overlapped the Map FAB. */}
-        <nav className="liquid-nav" aria-label="Navigation principale">
+        <nav className="liquid-nav" aria-label={t('nav.main')}>
 
-          <NavLink to="/map" onClick={hapticSelection} className={tabClass} aria-label="Carte">
+          <NavLink to="/map" onClick={hapticSelection} className={tabClass} aria-label={t('nav.map')}>
             {({ isActive }) => (
               <>
                 <MapPin className="h-[26px] w-[26px]" strokeWidth={1.5} />
@@ -267,7 +269,7 @@ export default function MainLayout() {
             )}
           </NavLink>
 
-          <NavLink to="/feed" onClick={hapticSelection} className={tabClass} aria-label="Fil">
+          <NavLink to="/feed" onClick={hapticSelection} className={tabClass} aria-label={t('nav.feed')}>
             {({ isActive }) => (
               <>
                 <Radio className="h-[26px] w-[26px]" strokeWidth={1.5} />
@@ -276,7 +278,7 @@ export default function MainLayout() {
             )}
           </NavLink>
 
-          <NavLink to="/" end onClick={hapticSelection} className={tabClass} aria-label="Accueil">
+          <NavLink to="/" end onClick={hapticSelection} className={tabClass} aria-label={t('nav.home')}>
             {({ isActive }) => (
               <>
                 <Home className="h-[26px] w-[26px]" strokeWidth={1.5} />
@@ -285,7 +287,7 @@ export default function MainLayout() {
             )}
           </NavLink>
 
-          <NavLink to="/discover" onClick={hapticSelection} className={tabClass} aria-label="Explorer">
+          <NavLink to="/discover" onClick={hapticSelection} className={tabClass} aria-label={t('nav.discover')}>
             {({ isActive }) => (
               <>
                 <Newspaper className="h-[26px] w-[26px]" strokeWidth={1.5} />
@@ -294,7 +296,7 @@ export default function MainLayout() {
             )}
           </NavLink>
 
-          <NavLink to="/profile" onClick={hapticSelection} className={tabClass} aria-label="Profil">
+          <NavLink to="/profile" onClick={hapticSelection} className={tabClass} aria-label={t('nav.profile')}>
             {({ isActive }) => (
               <>
                 <User className="h-[26px] w-[26px]" strokeWidth={1.5} />

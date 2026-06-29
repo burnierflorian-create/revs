@@ -29,6 +29,7 @@ import {
   Trash2,
   UserPlus,
   Users,
+  Globe,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useTheme } from '../lib/theme'
@@ -43,6 +44,8 @@ import {
   saveRadarPrefs,
   type RadarPrefs,
 } from '../lib/radar'
+import { useTranslation } from 'react-i18next'
+import { setLanguage, type Lang } from '../i18n'
 
 // ─────────────────────── Reusable primitives ───────────────────────
 
@@ -189,6 +192,7 @@ export default function Settings() {
   const navigate = useNavigate()
   const fileRef = useRef<HTMLInputElement>(null)
   const { theme, setTheme } = useTheme()
+  const { t, i18n } = useTranslation()
 
   const [loading, setLoading] = useState(true)
   const [userId, setUserId] = useState<string | null>(null)
@@ -1439,7 +1443,42 @@ export default function Settings() {
           )}
 
           {/* 3 — PRÉFÉRENCES */}
-          <Section title="Préférences">
+          <Section title={t('settings.sections.preferences')}>
+            <Row
+              icon={<Globe className="h-4 w-4" />}
+              label={t('settings.language.label')}
+              sub={t('settings.language.sub')}
+              noChevron
+              right={
+                <span className="flex flex-none rounded-full bg-fg/10 p-0.5">
+                  {(['fr', 'en'] as Lang[]).map((l) => {
+                    const active = (i18n.language?.startsWith('en')
+                      ? 'en'
+                      : 'fr') === l
+                    return (
+                      <button
+                        key={l}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          hapticSuccess()
+                          setLanguage(l)
+                          if (userId)
+                            void supabase
+                              .from('profiles')
+                              .update({ language: l })
+                              .eq('user_id', userId)
+                        }}
+                        className={`rounded-full px-3 py-1 text-[11px] font-bold tracking-wide transition-colors ${
+                          active ? 'bg-accent text-white' : 'text-fg2'
+                        }`}
+                      >
+                        {l.toUpperCase()}
+                      </button>
+                    )
+                  })}
+                </span>
+              }
+            />
             <Row
               icon={<Sun className="h-4 w-4" />}
               label="Apparence"

@@ -483,3 +483,26 @@ h4 {
     outline-offset: 3px;
   }
 }
+/* Step transitions for the multi-step onboarding flow. Forward = slide in
+   from the right, back = slide in from the left. Keyed re-mount per step
+   replays the matching animation. */
+@keyframes onb-step-fwd {
+  from {
+    transform: translateX(28px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+@keyframes onb-step-back {
+  from {
+    transform: translateX(-28px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}

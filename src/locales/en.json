@@ -1,0 +1,215 @@
+{
+  "common": {
+    "next": "Next",
+    "back": "Back",
+    "skip": "Skip",
+    "continue": "Continue",
+    "start": "Start",
+    "finish": "Finish",
+    "save": "Save",
+    "saving": "Saving…",
+    "saved": "Saved ✓",
+    "cancel": "Cancel",
+    "close": "Close",
+    "retry": "Retry",
+    "loading": "Loading…",
+    "search": "Search",
+    "yes": "Yes",
+    "no": "No",
+    "enable": "Enable",
+    "later": "Later",
+    "select": "Select",
+    "unavailable": "Unavailable"
+  },
+  "nav": {
+    "map": "Map",
+    "feed": "Feed",
+    "home": "Home",
+    "discover": "Discover",
+    "profile": "Profile",
+    "main": "Main navigation"
+  },
+  "auth": {
+    "tagline": "Spot the most iconic cars.",
+    "continueWithApple": "Continue with Apple",
+    "continueWithGoogle": "Continue with Google",
+    "or": "or",
+    "login": "Log in",
+    "signup": "Sign up",
+    "email": "Email",
+    "emailPlaceholder": "you@example.com",
+    "password": "Password",
+    "passwordHintSignup": "At least 8 characters.",
+    "newPassword": "New password",
+    "confirmNewPassword": "Confirm new password",
+    "forgotPassword": "Forgot password?",
+    "pseudo": "Username",
+    "pseudoPlaceholder": "your_username",
+    "pseudoInvalid": "3-20 characters: letters, numbers or _ only.",
+    "pseudoTaken": "This username is already taken.",
+    "city": "City",
+    "cityPlaceholder": "e.g. London",
+    "country": "Country",
+    "referralCode": "Referral code",
+    "referralPlaceholder": "ABC123",
+    "referralHint": "Optional — +50 XP for you and your referrer.",
+    "referralChars": "{{count}}/6 characters",
+    "referralValid": "✓ Valid referral code — +50 XP for both of you!",
+    "referralInvalid": "Invalid format — 6 uppercase letters or digits.",
+    "forgotIntro": "Enter your email address. We'll send you a link to reset your password.",
+    "recoverIntro": "Choose your new password. Once confirmed, you'll be sent back to the login screen.",
+    "submitLogin": "LOG IN",
+    "submitSignup": "SIGN UP",
+    "submitRecover": "UPDATE PASSWORD",
+    "submitForgot": "SEND LINK",
+    "backToLogin": "← Back to login",
+    "signupCreated": "Account created. Check your inbox to confirm.",
+    "resetSent": "An email has been sent with a link to reset your password.",
+    "passwordUpdated": "Password updated. Log in with the new one.",
+    "passwordTooShort": "Password too short (min. 6 characters).",
+    "passwordsMismatch": "The two passwords don't match.",
+    "legalLogin": "By continuing, you accept the terms and privacy policy.",
+    "legalSignup": "By creating an account, you accept the terms and privacy policy.",
+    "showPassword": "Show password",
+    "hidePassword": "Hide password"
+  },
+  "onboarding": {
+    "ui": {
+      "back": "Back",
+      "skip": "Skip",
+      "next": "Next",
+      "continue": "Continue",
+      "step": "Step {{current}} of {{total}}"
+    },
+    "lang": {
+      "title": "Choose your language",
+      "subtitle": "You can change it anytime in settings.",
+      "fr": "Français",
+      "en": "English"
+    },
+    "florian": {
+      "title": "Hi, I'm Florian 👋",
+      "body": "Hi, my name is Florian, I'm 19 and I created REVS because I've always been passionate about cars. I wanted a real community where we share our finest automotive encounters, where every spot counts and where we collect our dream cars. Welcome aboard — I can't wait to see what you'll spot.",
+      "signature": "Florian, founder of REVS",
+      "cta": "Nice to meet you!"
+    },
+    "dreamCar": {
+      "title": "What's your dream car?",
+      "subtitle": "The one you'd love to spot (or own).",
+      "placeholder": "e.g. Ferrari F40, Porsche 911…",
+      "suggestionsTitle": "Suggestions",
+      "skip": "I'm not sure yet"
+    },
+    "interests": {
+      "title": "What gets your heart racing?",
+      "subtitle": "Pick everything you love — at least one.",
+      "options": {
+        "supercars": "Supercars",
+        "hypercars": "Hypercars",
+        "jdm": "JDM",
+        "classics": "Youngtimers & classics",
+        "f1": "Formula 1",
+        "electric": "Electric",
+        "tuning": "Tuning",
+        "suvs": "SUVs & 4x4",
+        "american": "US muscle",
+        "german": "German",
+        "italian": "Italian",
+        "rally": "Rally"
+      }
+    },
+    "source": {
+      "title": "How did you hear about REVS?",
+      "subtitle": "It helps us know where to focus.",
+      "options": {
+        "instagram": "Instagram",
+        "tiktok": "TikTok",
+        "youtube": "YouTube",
+        "friend": "A friend / word of mouth",
+        "appstore": "App Store / Play Store",
+        "search": "Google search",
+        "event": "A car event",
+        "other": "Other"
+      }
+    },
+    "notifications": {
+      "title": "Stay in the race 🔔",
+      "subtitle": "Turn on notifications to get alerted when a supercar is spotted near you, and when you climb the leaderboard.",
+      "enable": "Enable notifications",
+      "skip": "Not now",
+      "enabled": "Notifications enabled ✓"
+    },
+    "location": {
+      "title": "Spot around you 📍",
+      "subtitle": "REVS uses your location to place your spots on the map and show you cars spotted nearby. You can turn it off anytime.",
+      "enable": "Enable location",
+      "skip": "Not now",
+      "enabled": "Location enabled ✓"
+    },
+    "rules": {
+      "title": "Community rules",
+      "subtitle": "REVS works thanks to everyone's respect. Before you start:",
+      "items": {
+        "respect": "Respect other spotters and their cars.",
+        "privacy": "Never post readable plates or faces — we blur them automatically.",
+        "safety": "Spot safely: never while driving, never on the road.",
+        "authentic": "Post your own photos, taken by you."
+      },
+      "accept": "I agree, let's go! 🚀"
+    }
+  },
+  "settings": {
+    "title": "Settings",
+    "sections": {
+      "account": "My account",
+      "security": "Security",
+      "premium": "Premium",
+      "preferences": "Preferences",
+      "privacy": "Privacy",
+      "legal": "Legal"
+    },
+    "appearance": "Appearance",
+    "appearanceLight": "Light mode",
+    "appearanceDark": "Dark mode",
+    "language": {
+      "label": "Language",
+      "sub": "Choose the app language",
+      "fr": "Français",
+      "en": "English"
+    },
+    "notifications": "Notifications",
+    "logout": "Log out"
+  },
+  "profile": {
+    "title": "Profile",
+    "spots": "Spots",
+    "brands": "Brands",
+    "rank": "Rank",
+    "level": "Level",
+    "collection": "Collection",
+    "badges": "Badges",
+    "dreamCar": "Dream car",
+    "editProfile": "Edit profile"
+  },
+  "feed": {
+    "title": "Feed",
+    "empty": "No spots yet.",
+    "spottedBy": "Spotted by {{name}}",
+    "comment": "Comment",
+    "share": "Share"
+  },
+  "map": {
+    "title": "Map",
+    "spot": "Spot",
+    "near": "Near you",
+    "loading": "Loading map…"
+  },
+  "discover": {
+    "title": "Discover",
+    "news": "News",
+    "events": "Events",
+    "brands": "Brands",
+    "newsEmpty": "No news right now.",
+    "refresh": "Refresh"
+  }
+}

@@ -1,0 +1,215 @@
+{
+  "common": {
+    "next": "Suivant",
+    "back": "Retour",
+    "skip": "Passer",
+    "continue": "Continuer",
+    "start": "Commencer",
+    "finish": "Terminer",
+    "save": "Enregistrer",
+    "saving": "Enregistrement…",
+    "saved": "Enregistré ✓",
+    "cancel": "Annuler",
+    "close": "Fermer",
+    "retry": "Réessayer",
+    "loading": "Chargement…",
+    "search": "Rechercher",
+    "yes": "Oui",
+    "no": "Non",
+    "enable": "Activer",
+    "later": "Plus tard",
+    "select": "Sélectionner",
+    "unavailable": "Indisponible"
+  },
+  "nav": {
+    "map": "Carte",
+    "feed": "Fil",
+    "home": "Accueil",
+    "discover": "Explorer",
+    "profile": "Profil",
+    "main": "Navigation principale"
+  },
+  "auth": {
+    "tagline": "Spotte les voitures iconiques.",
+    "continueWithApple": "Continuer avec Apple",
+    "continueWithGoogle": "Continuer avec Google",
+    "or": "ou",
+    "login": "Connexion",
+    "signup": "Inscription",
+    "email": "Email",
+    "emailPlaceholder": "toi@exemple.com",
+    "password": "Mot de passe",
+    "passwordHintSignup": "Minimum 8 caractères.",
+    "newPassword": "Nouveau mot de passe",
+    "confirmNewPassword": "Confirme le nouveau mot de passe",
+    "forgotPassword": "Mot de passe oublié ?",
+    "pseudo": "Pseudo",
+    "pseudoPlaceholder": "ton_pseudo",
+    "pseudoInvalid": "3-20 caractères : lettres, chiffres ou _ uniquement.",
+    "pseudoTaken": "Ce pseudo est déjà pris.",
+    "city": "Ville",
+    "cityPlaceholder": "Ex: Annecy",
+    "country": "Pays",
+    "referralCode": "Code de parrainage",
+    "referralPlaceholder": "ABC123",
+    "referralHint": "Optionnel — +50 XP pour toi et ton parrain.",
+    "referralChars": "{{count}}/6 caractères",
+    "referralValid": "✓ Code parrain valide — +50 XP pour vous deux !",
+    "referralInvalid": "Format invalide — 6 chiffres ou lettres majuscules.",
+    "forgotIntro": "Saisis ton adresse e-mail. Nous t'enverrons un lien pour réinitialiser ton mot de passe.",
+    "recoverIntro": "Choisis ton nouveau mot de passe. Une fois validé, tu seras renvoyé sur l'écran de connexion.",
+    "submitLogin": "SE CONNECTER",
+    "submitSignup": "S'INSCRIRE",
+    "submitRecover": "METTRE À JOUR LE MOT DE PASSE",
+    "submitForgot": "ENVOYER LE LIEN",
+    "backToLogin": "← Retour à la connexion",
+    "signupCreated": "Compte créé. Vérifie ta boîte mail pour confirmer.",
+    "resetSent": "Un email t'a été envoyé avec un lien pour réinitialiser ton mot de passe.",
+    "passwordUpdated": "Mot de passe mis à jour. Connecte-toi avec le nouveau.",
+    "passwordTooShort": "Mot de passe trop court (min. 6 caractères).",
+    "passwordsMismatch": "Les deux mots de passe ne correspondent pas.",
+    "legalLogin": "En continuant, tu acceptes les conditions et la politique de confidentialité.",
+    "legalSignup": "En créant un compte, tu acceptes les conditions et la politique de confidentialité.",
+    "showPassword": "Afficher le mot de passe",
+    "hidePassword": "Masquer le mot de passe"
+  },
+  "onboarding": {
+    "ui": {
+      "back": "Retour",
+      "skip": "Passer",
+      "next": "Suivant",
+      "continue": "Continuer",
+      "step": "Étape {{current}} sur {{total}}"
+    },
+    "lang": {
+      "title": "Choisis ta langue",
+      "subtitle": "Tu pourras la changer à tout moment dans les paramètres.",
+      "fr": "Français",
+      "en": "English"
+    },
+    "florian": {
+      "title": "Salut, moi c'est Florian 👋",
+      "body": "Salut, je m'appelle Florian, j'ai 19 ans et j'ai créé REVS parce que je suis passionné de voitures depuis toujours. Je voulais une vraie communauté où on partage nos plus belles rencontres automobiles, où chaque spot compte et où on collectionne les voitures de nos rêves. Bienvenue dans l'aventure — j'ai hâte de voir ce que tu vas spotter.",
+      "signature": "Florian, fondateur de REVS",
+      "cta": "Enchanté !"
+    },
+    "dreamCar": {
+      "title": "Quelle est ta voiture de rêve ?",
+      "subtitle": "Celle que tu rêverais de spotter (ou de posséder).",
+      "placeholder": "Ex : Ferrari F40, Porsche 911…",
+      "suggestionsTitle": "Suggestions",
+      "skip": "Je ne sais pas encore"
+    },
+    "interests": {
+      "title": "Qu'est-ce qui te fait vibrer ?",
+      "subtitle": "Choisis tout ce qui te plaît — au moins un.",
+      "options": {
+        "supercars": "Supercars",
+        "hypercars": "Hypercars",
+        "jdm": "JDM",
+        "classics": "Youngtimers & classiques",
+        "f1": "Formule 1",
+        "electric": "Électrique",
+        "tuning": "Tuning",
+        "suvs": "SUV & 4x4",
+        "american": "Muscle US",
+        "german": "Allemandes",
+        "italian": "Italiennes",
+        "rally": "Rallye"
+      }
+    },
+    "source": {
+      "title": "Comment as-tu connu REVS ?",
+      "subtitle": "Ça nous aide à savoir où nous concentrer.",
+      "options": {
+        "instagram": "Instagram",
+        "tiktok": "TikTok",
+        "youtube": "YouTube",
+        "friend": "Un ami / bouche à oreille",
+        "appstore": "App Store / Play Store",
+        "search": "Recherche Google",
+        "event": "Un événement auto",
+        "other": "Autre"
+      }
+    },
+    "notifications": {
+      "title": "Reste dans la course 🔔",
+      "subtitle": "Active les notifications pour être alerté quand une supercar est spottée près de toi, et quand tu progresses dans le classement.",
+      "enable": "Activer les notifications",
+      "skip": "Pas maintenant",
+      "enabled": "Notifications activées ✓"
+    },
+    "location": {
+      "title": "Spotte autour de toi 📍",
+      "subtitle": "REVS utilise ta position pour placer tes spots sur la carte et te montrer les voitures repérées près de toi. Tu peux la désactiver à tout moment.",
+      "enable": "Activer la localisation",
+      "skip": "Pas maintenant",
+      "enabled": "Localisation activée ✓"
+    },
+    "rules": {
+      "title": "Les règles de la communauté",
+      "subtitle": "REVS marche grâce au respect de chacun. Avant de commencer :",
+      "items": {
+        "respect": "Respecte les autres spotters et leurs voitures.",
+        "privacy": "Ne publie jamais de plaques lisibles ni de visages — on les floute automatiquement.",
+        "safety": "Spotte en sécurité : jamais au volant, jamais sur la route.",
+        "authentic": "Publie tes propres photos, prises par toi."
+      },
+      "accept": "J'accepte, c'est parti ! 🚀"
+    }
+  },
+  "settings": {
+    "title": "Paramètres",
+    "sections": {
+      "account": "Mon compte",
+      "security": "Sécurité",
+      "premium": "Premium",
+      "preferences": "Préférences",
+      "privacy": "Confidentialité",
+      "legal": "Légal"
+    },
+    "appearance": "Apparence",
+    "appearanceLight": "Mode clair",
+    "appearanceDark": "Mode sombre",
+    "language": {
+      "label": "Langue",
+      "sub": "Choisis la langue de l'application",
+      "fr": "Français",
+      "en": "English"
+    },
+    "notifications": "Notifications",
+    "logout": "Se déconnecter"
+  },
+  "profile": {
+    "title": "Profil",
+    "spots": "Spots",
+    "brands": "Marques",
+    "rank": "Rang",
+    "level": "Niveau",
+    "collection": "Collection",
+    "badges": "Badges",
+    "dreamCar": "Voiture de rêve",
+    "editProfile": "Modifier le profil"
+  },
+  "feed": {
+    "title": "Fil",
+    "empty": "Aucun spot pour le moment.",
+    "spottedBy": "Spotté par {{name}}",
+    "comment": "Commenter",
+    "share": "Partager"
+  },
+  "map": {
+    "title": "Carte",
+    "spot": "Spotter",
+    "near": "Près de toi",
+    "loading": "Chargement de la carte…"
+  },
+  "discover": {
+    "title": "Explorer",
+    "news": "Actu",
+    "events": "Événements",
+    "brands": "Marques",
+    "newsEmpty": "Pas d'actu pour le moment.",
+    "refresh": "Rafraîchir"
+  }
+}

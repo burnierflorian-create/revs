@@ -1,388 +1,139 @@
-import { useEffect, useRef, useState } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
+import { ArrowLeft, Bell, Check, MapPin, Search, Shield } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { setLanguage, currentLang, type Lang } from '../i18n'
 
-// First-launch onboarding — accelerated 3-slide, Apple-style flow built
-// entirely from pure CSS/SVG geometry (no image assets). The SINGLE source
-// of truth for whether to show it is profiles.onboarding_completed in
-// Supabase: false (or a missing row) → show; true → skip. There is NO
-// localStorage gate, so a server-side reset of the flag force-replays the
-// tuto for everyone. Mounted once in App; renders null once past it.
+// ─────────────────────────────────────────────────────────────────────
+// First-launch onboarding — a linear 8-step flow (no guided tour). The
+// SINGLE source of truth for whether to show it is
+// profiles.onboarding_completed in Supabase: false / null / missing row →
+// show; true → skip. No localStorage gate, so a server-side reset replays
+// it for everyone. The user's answers (language, dream car, interests,
+// discovery source) are persisted to profiles at the end.
+//
+// Design: full-screen #0a0a0a, accent #E8203A, glassmorphism cards, pure
+// Tailwind + a couple of CSS keyframes (onb-step-fwd / onb-step-back).
+// ─────────────────────────────────────────────────────────────────────
 
 const RED = '#E8203A'
+const TOTAL = 8
 
-// Spring-physics easing for the inter-slide glide (gentle overshoot).
-const SPRING = 'transform 0.55s cubic-bezier(0.34, 1.56, 0.64, 1)'
+// Step indices (kept named for readability).
+const S_LANG = 0
+const S_FLORIAN = 1
+const S_DREAM = 2
+const S_INTERESTS = 3
+const S_SOURCE = 4
+const S_NOTIF = 5
+const S_GEO = 6
+const S_RULES = 7
 
-// Fire the permission prompts in order — geolocation first (needed to
-// spot), then notifications. Must run synchronously from the click (no
-// await before) so iOS Safari / iOS PWA surface the geo prompt. Refusal is
-// fine: the app keeps working, changeable later in Settings.
-function kickoffPermissions() {
-  try {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        () => {},
-        () => {},
-        { enableHighAccuracy: false, timeout: 10000, maximumAge: 30000 },
-      )
-    }
-  } catch {
-    /* ignore */
-  }
-  try {
-    if (
-      typeof Notification !== 'undefined' &&
-      Notification.permission === 'default'
-    ) {
-      Notification.requestPermission().catch(() => {})
-    }
-  } catch {
-    /* ignore */
-  }
-}
+// Dream-car suggestions — proper nouns, identical in both languages.
+const DREAM_CARS = [
+  'Ferrari F40',
+  'Ferrari 488 Pista',
+  'Lamborghini Aventador',
+  'Lamborghini Huracán',
+  'Porsche 911 GT3 RS',
+  'Porsche 911 Turbo S',
+  'McLaren 720S',
+  'McLaren P1',
+  'Bugatti Chiron',
+  'Nissan GT-R R34',
+  'Toyota GR Supra',
+  'Mercedes-AMG GT',
+  'BMW M4 Competition',
+  'Audi R8 V10',
+  'Aston Martin Vantage',
+  'Ford Mustang GT',
+  'Chevrolet Corvette C8',
+  'Tesla Model S Plaid',
+  'Pagani Huayra',
+  'Koenigsegg Jesko',
+  'Mazda RX-7',
+  'Honda NSX',
+]
 
-// ── Slide 1 · pulsing red beacon over a stylised CSS map grid ──
-function MapBeacon() {
+const INTERESTS = [
+  'supercars',
+  'hypercars',
+  'jdm',
+  'classics',
+  'f1',
+  'electric',
+  'tuning',
+  'suvs',
+  'american',
+  'german',
+  'italian',
+  'rally',
+] as const
+
+const SOURCES = [
+  'instagram',
+  'tiktok',
+  'youtube',
+  'friend',
+  'appstore',
+  'search',
+  'event',
+  'other',
+] as const
+
+// Reusable glassmorphism option button. `selected` flips it to the red
+// accent treatment.
+function OptionButton({
+  selected,
+  onClick,
+  children,
+  className = '',
+}: {
+  selected: boolean
+  onClick: () => void
+  children: React.ReactNode
+  className?: string
+}) {
   return (
-    <div
-      className="relative h-56 w-56"
-      style={{ animation: 'onb-slide-up 0.6s ease-out' }}
-    >
-      <div
-        aria-hidden
-        className="absolute inset-0 rounded-3xl"
-        style={{
-          backgroundImage:
-            'linear-gradient(rgba(255,255,255,0.07) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.07) 1px, transparent 1px)',
-          backgroundSize: '26px 26px',
-          maskImage:
-            'radial-gradient(circle at center, black 38%, transparent 74%)',
-          WebkitMaskImage:
-            'radial-gradient(circle at center, black 38%, transparent 74%)',
-        }}
-      />
-      <span
-        aria-hidden
-        className="absolute left-1/2 top-1/2 h-24 w-24 -translate-x-1/2 -translate-y-1/2 animate-ping rounded-full"
-        style={{ background: 'rgba(232,32,58,0.20)' }}
-      />
-      <span
-        aria-hidden
-        className="absolute left-1/2 top-1/2 h-16 w-16 -translate-x-1/2 -translate-y-1/2 animate-ping rounded-full"
-        style={{ background: 'rgba(232,32,58,0.30)', animationDelay: '0.4s' }}
-      />
-      <span
-        aria-hidden
-        className="absolute left-1/2 top-1/2 h-6 w-6 -translate-x-1/2 -translate-y-1/2 rounded-full"
-        style={{ background: RED, boxShadow: '0 0 26px rgba(232,32,58,0.85)' }}
-      />
-      {/* Scattered spot pings — several red dots pulsing across the map. */}
-      {[
-        { top: '26%', left: '30%', d: '0s' },
-        { top: '32%', left: '70%', d: '0.8s' },
-        { top: '70%', left: '64%', d: '1.2s' },
-        { top: '66%', left: '32%', d: '0.5s' },
-      ].map((p, i) => (
-        <span
-          key={i}
-          aria-hidden
-          className="absolute"
-          style={{ top: p.top, left: p.left, transform: 'translate(-50%,-50%)' }}
-        >
-          <span
-            className="absolute left-1/2 top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 animate-ping rounded-full"
-            style={{ background: 'rgba(232,32,58,0.28)', animationDelay: p.d }}
-          />
-          <span
-            className="block h-2 w-2 rounded-full"
-            style={{ background: RED, boxShadow: '0 0 8px rgba(232,32,58,0.8)' }}
-          />
-        </span>
-      ))}
-    </div>
-  )
-}
-
-// ── Slide 2 · three fanned collection cards (matte grey / sport blue /
-//    neon violet) in CSS perspective, floating softly ──
-function DeckFan() {
-  const card = 'absolute inset-0 rounded-2xl'
-  return (
-    <div
-      className="relative h-60 w-44"
+    <button
+      type="button"
+      onClick={onClick}
+      className={`tappable relative rounded-2xl px-4 py-3.5 text-left text-sm font-semibold transition-all active:scale-[0.98] ${className}`}
       style={{
-        perspective: '900px',
-        animation: 'onb-float 4.5s ease-in-out infinite',
+        background: selected ? 'rgba(232,32,58,0.14)' : 'rgba(255,255,255,0.04)',
+        border: `1.5px solid ${selected ? RED : 'rgba(255,255,255,0.1)'}`,
+        color: selected ? '#fff' : 'rgba(255,255,255,0.82)',
+        backdropFilter: 'blur(12px)',
+        WebkitBackdropFilter: 'blur(12px)',
+        boxShadow: selected ? '0 0 22px rgba(232,32,58,0.3)' : undefined,
       }}
     >
-      <div
-        aria-hidden
-        className={card}
-        style={{
-          transform: 'rotateZ(-11deg) translateY(-16px) scale(0.9)',
-          border: '1.5px solid rgba(156,163,175,0.65)',
-          background: 'rgba(255,255,255,0.03)',
-        }}
-      />
-      <div
-        aria-hidden
-        className={card}
-        style={{
-          transform: 'rotateZ(-3deg) translateY(-6px) scale(0.95)',
-          border: '1.5px solid rgba(59,130,246,0.8)',
-          background: 'rgba(59,130,246,0.06)',
-        }}
-      />
-      <div
-        aria-hidden
-        className={`${card} flex items-center justify-center overflow-hidden`}
-        style={{
-          transform: 'rotateZ(5deg)',
-          border: '1.5px solid rgba(168,85,247,0.9)',
-          background: 'rgba(168,85,247,0.08)',
-          boxShadow: '0 0 34px rgba(168,85,247,0.28)',
-        }}
-      >
-        {/* Holographic sheen — a shifting rainbow film over the rare card. */}
-        <span
-          aria-hidden
-          className="absolute inset-0"
-          style={{
-            background:
-              'linear-gradient(125deg, rgba(255,0,128,0.20) 0%, rgba(0,200,255,0.16) 35%, rgba(180,80,255,0.22) 65%, rgba(255,200,0,0.14) 100%)',
-            mixBlendMode: 'screen',
-          }}
-        />
-        <span
-          className="relative font-display text-5xl font-extrabold tracking-tighter"
-          style={{ color: 'rgba(216,180,254,0.95)' }}
-        >
-          R
-        </span>
-      </div>
-    </div>
+      {children}
+    </button>
   )
 }
-
-// ── Slide 3 · minimalist white-line podium with three spotters + XP bars ──
-function Podium() {
-  const cols = [
-    { name: 'Léa', rank: 2, h: 64, fill: 70 },
-    { name: 'Marco', rank: 1, h: 92, fill: 96 },
-    { name: 'Tom', rank: 3, h: 46, fill: 54 },
-  ]
-  return (
-    <div className="flex items-end justify-center gap-3">
-      {cols.map((c, i) => (
-        <div key={c.name} className="flex w-16 flex-col items-center gap-2">
-          <span
-            className="text-xs font-semibold text-white"
-            style={{ animation: `onb-slide-up 0.5s ease-out ${0.15 + i * 0.1}s both` }}
-          >
-            {c.name}
-          </span>
-          <div
-            className="h-1 w-full overflow-hidden rounded-full bg-white/15"
-            style={{ animation: `onb-slide-up 0.5s ease-out ${0.15 + i * 0.1}s both` }}
-          >
-            <div
-              className="h-full rounded-full bg-white"
-              style={{ width: `${c.fill}%` }}
-            />
-          </div>
-          <div
-            className="flex w-full items-start justify-center rounded-t-md pt-1.5"
-            style={{
-              height: c.h,
-              border: '1px solid rgba(255,255,255,0.45)',
-              borderBottom: 'none',
-              background:
-                'linear-gradient(180deg, rgba(255,255,255,0.06) 0%, transparent 100%)',
-              transformOrigin: 'bottom',
-              animation: `onb-rise 0.55s cubic-bezier(0.34,1.56,0.64,1) ${i * 0.1}s both`,
-            }}
-          >
-            <span className="font-display text-sm font-extrabold text-white/80">
-              {c.rank}
-            </span>
-          </div>
-        </div>
-      ))}
-    </div>
-  )
-}
-
-// ── Slide 2 · phone → AI sparkle → collector card ──
-function ConceptVisual() {
-  return (
-    <div
-      className="relative flex h-56 w-56 items-center justify-center"
-      style={{ animation: 'onb-float 4.5s ease-in-out infinite' }}
-    >
-      <div
-        className="relative"
-        style={{
-          width: 96,
-          height: 180,
-          borderRadius: 20,
-          border: '2px solid rgba(255,255,255,0.3)',
-          background: 'rgba(255,255,255,0.03)',
-        }}
-      >
-        <span
-          aria-hidden
-          className="absolute inset-2 rounded-xl"
-          style={{
-            background:
-              'radial-gradient(circle at 50% 40%, rgba(232,32,58,0.4), transparent 70%)',
-          }}
-        />
-        <span
-          aria-hidden
-          className="absolute left-1/2 top-3 h-2 w-2 -translate-x-1/2 rounded-full"
-          style={{ background: 'rgba(255,255,255,0.45)' }}
-        />
-      </div>
-      <div
-        className="absolute -right-1 top-7 flex items-center justify-center"
-        style={{
-          width: 66,
-          height: 90,
-          borderRadius: 12,
-          border: '1.5px solid rgba(168,85,247,0.9)',
-          background: 'rgba(168,85,247,0.1)',
-          transform: 'rotate(9deg)',
-          boxShadow: '0 0 26px rgba(168,85,247,0.32)',
-          animation: 'onb-slide-up 0.6s ease-out 0.3s both',
-        }}
-      >
-        <span
-          className="font-display text-2xl font-extrabold"
-          style={{ color: 'rgba(216,180,254,0.95)' }}
-        >
-          R
-        </span>
-      </div>
-      <span
-        aria-hidden
-        className="absolute left-[42%] top-1/2 -translate-y-1/2 text-3xl"
-        style={{ animation: 'onb-spot 1.8s ease-in-out infinite' }}
-      >
-        ✨
-      </span>
-    </div>
-  )
-}
-
-type Slide = { title: string; subtitle: string; visual: React.ReactNode }
-
-const SLIDES: Slide[] = [
-  {
-    title: 'Bienvenue sur REVS',
-    subtitle:
-      'Le premier réseau social de carspotting. Capture les supercars autour de toi, collectionne des cartes rares et deviens le meilleur spotter de ta ville.',
-    visual: <MapBeacon />,
-  },
-  {
-    title: "L'IA identifie, toi tu collectes",
-    subtitle:
-      "Prends une photo d'une belle voiture. En quelques secondes, notre IA reconnaît la marque, le modèle et attribue une rareté. Plus c'est rare, plus tu gagnes d'XP.",
-    visual: <ConceptVisual />,
-  },
-  {
-    title: 'Monte dans le classement',
-    subtitle:
-      'Chaque spot te rapporte de l’XP. Enchaîne les streaks, complète les défis hebdomadaires et affronte les spotters de ta région.',
-    visual: <Podium />,
-  },
-  {
-    title: 'Collectionne des cartes uniques',
-    subtitle:
-      'Chaque voiture spottée devient une carte collector exclusive. Les cartes Légendaires brillent avec un effet holographique. Collectionne-les toutes.',
-    visual: <DeckFan />,
-  },
-]
-
-// Guided tour steps — each navigates to its `route`, waits for `selector`
-// to mount, then spotlights it. Runs right after the slides, before the
-// onboarding_completed flag flips.
-type TourStep = {
-  route: string
-  selector: string
-  title: string
-  body: string
-}
-// Routes are chosen to MINIMISE navigation (the source of the old jank):
-// the tour mounts /map once (steps 1-3, nav tabs are always present there)
-// then / once (steps 4-8). Only one heavy screen mount across the whole
-// tour.
-const TOUR: TourStep[] = [
-  {
-    route: '/map',
-    selector: 'nav.liquid-nav [aria-label="Carte"]',
-    title: '🗺️ La Carte — Ton terrain de chasse',
-    body: "Vois en temps réel tous les spots des autres passionnés autour de toi. Les zones rouges qui s'enflamment indiquent les endroits les plus actifs du moment. Plus il y a de spots, plus le halo est intense.",
-  },
-  {
-    route: '/map',
-    selector: '[data-tour="spot-fab"]',
-    title: '📸 SPOTTER — L’action principale',
-    body: "C'est le bouton le plus important. Appuie dessus dès que tu vois une belle voiture. L'IA analyse ta photo en quelques secondes et identifie la marque, le modèle, l'année et la rareté automatiquement.",
-  },
-  {
-    route: '/map',
-    selector: 'nav.liquid-nav [aria-label="Fil"]',
-    title: '📱 Le Fil — La communauté en direct',
-    body: 'Toutes les voitures spottées par la communauté REVS. Fais défiler, like les spots des autres, laisse des commentaires. Chaque interaction te rapporte de l’XP et renforce le lien avec la communauté.',
-  },
-  {
-    route: '/',
-    selector: '[data-tour="speedometers"]',
-    title: '⚡ Tes défis — La motivation hebdo',
-    body: 'Chaque semaine, 3 défis personnalisés selon ta ville et tes habitudes de spotting. Les compteurs de vitesse se remplissent en temps réel quand tu complètes un défi. Termine les 3 pour un bonus XP massif.',
-  },
-  {
-    route: '/',
-    selector: '[data-tour="streak"]',
-    title: '🔥 Le Streak — Garde la flamme',
-    body: 'Spotte au moins une voiture par jour pour maintenir ton streak. Plus ta série est longue, plus tu gagnes de bonus XP à chaque spot. Un streak de 7 jours débloque le badge Série 7 !',
-  },
-  {
-    route: '/',
-    selector: 'nav.liquid-nav [aria-label="Explorer"]',
-    title: '🔍 L’Explorer — Découvre et explore',
-    body: 'Retrouve toutes les actualités CarSpotting et F1 traduites en français, les events près de toi, et les pages dédiées à chaque marque avec tous les spots de la communauté. Reste connecté à l’univers automobile.',
-  },
-  {
-    route: '/',
-    selector: 'nav.liquid-nav [aria-label="Profil"]',
-    title: '👤 Ton Profil — Ton identité',
-    body: 'Retrouve tes stats (spots, marques, rang), tes badges débloqués et ta Collection de cartes. Chaque voiture spottée génère une carte unique. Les Ultra Rare et Légendaires ont des effets spéciaux exclusifs.',
-  },
-  {
-    route: '/',
-    selector: '[data-tour="ranking"]',
-    title: '🏆 Le Classement — Prouve ta valeur',
-    body: "Affronte les spotters de ta ville, de ton pays et du monde entier. Plus tu spots des voitures rares, plus tu gagnes d'XP et plus tu montes. Deviens le #1 de ta ville et domine le classement !",
-  },
-]
-
-type Rect = { top: number; left: number; width: number; height: number }
 
 export default function Onboarding() {
   const navigate = useNavigate()
-  const location = useLocation()
+  const { t } = useTranslation()
+
   // null = still deciding (no flash); false = hidden; true = show.
   const [show, setShow] = useState<boolean | null>(null)
-  const [index, setIndex] = useState(0)
-  const startX = useRef<number | null>(null)
-  // Flow phase: the 4 slides, then the 8-step guided tour.
-  const [phase, setPhase] = useState<'slides' | 'tour'>('slides')
-  const [tourStep, setTourStep] = useState(0)
-  const [rect, setRect] = useState<Rect | null>(null)
-  // Phase 3 — the "active les notifications" tip toast shown after the tour.
-  const [toast, setToast] = useState(false)
+  const [step, setStep] = useState(0)
+  const [dir, setDir] = useState<'fwd' | 'back'>('fwd')
+
+  // Answers.
+  const [lang, setLang] = useState<Lang>(() => currentLang())
+  const [dreamQuery, setDreamQuery] = useState('')
+  const [dreamCar, setDreamCar] = useState('')
+  const [interests, setInterests] = useState<string[]>([])
+  const [source, setSource] = useState<string | null>(null)
+  const [notifOn, setNotifOn] = useState(false)
+  const [geoOn, setGeoOn] = useState(false)
+
+  // Florian photo — /florian.jpg if present, else a gradient "F" avatar.
+  const [photoOk, setPhotoOk] = useState(true)
 
   // Single source of truth = the DB flag. Show whenever it isn't
   // explicitly true (false / null / missing row → first launch).
@@ -413,49 +164,67 @@ export default function Onboarding() {
     }
   }, [])
 
-  // For each tour step: switch to its route only if we're not already
-  // there, then probe for the target a few times (it may mount a beat
-  // later as the tab loads). We DON'T blank the previous spotlight while
-  // searching — the box simply springs to the new element once found, so
-  // the tour stays fluid instead of flashing to a dark centre. If the
-  // target never appears (e.g. the streak pill at streak = 0) we fall back
-  // to a centred bubble after ~1.4 s. Light setTimeout probes (no rAF
-  // loop) keep the main thread free.
-  useEffect(() => {
-    if (phase !== 'tour') return
-    const step = TOUR[tourStep]
-    if (location.pathname !== step.route) navigate(step.route)
-    let cancelled = false
-    let found = false
-    const timers: number[] = []
-    const attempt = () => {
-      if (cancelled || found) return
-      const el = document.querySelector(step.selector)
-      if (el) {
-        const r = el.getBoundingClientRect()
-        if (r.width > 1 && r.height > 1) {
-          found = true
-          setRect({ top: r.top, left: r.left, width: r.width, height: r.height })
-        }
-      }
-    }
-    ;[50, 180, 360, 650, 1000].forEach((d) =>
-      timers.push(window.setTimeout(attempt, d)),
-    )
-    timers.push(
-      window.setTimeout(() => {
-        if (!cancelled && !found) setRect(null)
-      }, 1400),
-    )
-    window.addEventListener('resize', attempt)
-    return () => {
-      cancelled = true
-      timers.forEach((id) => clearTimeout(id))
-      window.removeEventListener('resize', attempt)
-    }
-  }, [phase, tourStep, navigate, location.pathname])
+  function goNext() {
+    setDir('fwd')
+    setStep((s) => Math.min(s + 1, TOTAL - 1))
+  }
+  function goBack() {
+    setDir('back')
+    setStep((s) => Math.max(s - 1, 0))
+  }
 
-  function persistDone() {
+  function pickLang(l: Lang) {
+    setLang(l)
+    setLanguage(l) // apply immediately so the rest of the flow is in `l`
+  }
+
+  function toggleInterest(id: string) {
+    setInterests((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    )
+  }
+
+  async function requestNotif() {
+    try {
+      if (
+        typeof Notification !== 'undefined' &&
+        Notification.permission === 'default'
+      ) {
+        const perm = await Notification.requestPermission()
+        setNotifOn(perm === 'granted')
+      } else if (
+        typeof Notification !== 'undefined' &&
+        Notification.permission === 'granted'
+      ) {
+        setNotifOn(true)
+      }
+    } catch {
+      /* ignore — unsupported */
+    }
+    goNext()
+  }
+
+  function requestGeo() {
+    try {
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          () => {
+            setGeoOn(true)
+            goNext()
+          },
+          () => goNext(),
+          { enableHighAccuracy: false, timeout: 10000, maximumAge: 30000 },
+        )
+        return
+      }
+    } catch {
+      /* ignore */
+    }
+    goNext()
+  }
+
+  // Persist every answer + flip the completed flag, then close to the map.
+  function finish() {
     void (async () => {
       const {
         data: { user },
@@ -463,274 +232,344 @@ export default function Onboarding() {
       if (user) {
         await supabase
           .from('profiles')
-          .update({ onboarding_completed: true })
+          .update({
+            onboarding_completed: true,
+            language: lang,
+            dream_car: dreamCar.trim() || null,
+            interests,
+            discovery_source: source,
+          })
           .eq('user_id', user.id)
       }
     })()
-  }
-
-  function nextTour() {
-    if (tourStep < TOUR.length - 1) setTourStep((s) => s + 1)
-    else finishTour()
-  }
-
-  // End of the tour → close, land on Carte, then surface the tip toast.
-  function finishTour() {
-    persistDone()
     setShow(false)
     navigate('/map')
-    setToast(true)
-    window.setTimeout(() => setToast(false), 4000)
   }
 
-  // Skip everything (slides "Passer" or tour "Passer").
-  function complete(toMap: boolean) {
-    kickoffPermissions()
-    persistDone()
-    setShow(false)
-    if (toMap) navigate('/map')
-  }
+  if (!show) return null
 
-  // After the tour (show=false) the only thing left to render is the
-  // 4-second tip toast.
-  if (!show) {
-    if (!toast) return null
-    return (
-      <div
-        className="fixed inset-x-0 z-[120] flex justify-center px-4"
-        style={{
-          bottom: 'max(5.5rem, calc(env(safe-area-inset-bottom) + 5rem))',
-          fontFamily: 'var(--font-display, Inter, system-ui, sans-serif)',
-        }}
+  const dreamSuggestions = (() => {
+    const q = dreamQuery.trim().toLowerCase()
+    if (!q) return DREAM_CARS.slice(0, 6)
+    return DREAM_CARS.filter((c) => c.toLowerCase().includes(q)).slice(0, 6)
+  })()
+
+  // ── Footer (primary CTA + optional secondary skip), per step ──
+  function renderFooter() {
+    const primary = (label: string, onClick: () => void, disabled = false) => (
+      <button
+        onClick={onClick}
+        disabled={disabled}
+        className="tappable w-full rounded-full py-4 text-base font-bold text-white transition-transform active:scale-[0.98] disabled:opacity-40"
+        style={{ background: RED, boxShadow: '0 0 20px rgba(232,32,58,0.5)' }}
       >
-        <div
-          className="flex max-w-sm items-center gap-3 rounded-2xl px-4 py-3"
-          style={{
-            background: '#141414',
-            border: '1px solid #E8203A',
-            boxShadow: '0 12px 40px rgba(0,0,0,0.6)',
-            animation: 'onb-slide-up 0.4s ease-out',
-          }}
-        >
-          <p className="min-w-0 flex-1 text-[12.5px] leading-snug text-white/85">
-            💡 Astuce : Active les notifications pour être alerté quand une
-            supercar est spottée près de toi !
-          </p>
-          <button
-            onClick={() => {
-              try {
-                if (
-                  typeof Notification !== 'undefined' &&
-                  Notification.permission === 'default'
-                )
-                  Notification.requestPermission().catch(() => {})
-              } catch {
-                /* ignore */
-              }
-              setToast(false)
-            }}
-            className="tappable flex-none rounded-full px-3.5 py-1.5 text-[12px] font-bold text-white"
-            style={{ background: RED }}
-          >
-            Activer
-          </button>
-        </div>
-      </div>
+        {label}
+      </button>
     )
-  }
-
-  function onTouchStart(e: React.TouchEvent) {
-    startX.current = e.touches[0].clientX
-  }
-  function onTouchEnd(e: React.TouchEvent) {
-    if (startX.current == null) return
-    const dx = e.changedTouches[0].clientX - startX.current
-    startX.current = null
-    if (dx < -50 && index < SLIDES.length - 1) setIndex((i) => i + 1)
-    else if (dx > 50 && index > 0) setIndex((i) => i - 1)
-  }
-
-  // ── Guided tour overlay (spotlight + bubble, cross-screen) ──
-  if (phase === 'tour') {
-    const t = TOUR[tourStep]
-    const screenW = window.innerWidth
-    const screenH = window.innerHeight
-    const BUBBLE_W = Math.min(300, screenW - 24)
-    const cx = rect ? rect.left + rect.width / 2 : screenW / 2
-    const bubbleLeft = Math.min(
-      Math.max(cx - BUBBLE_W / 2, 12),
-      Math.max(12, screenW - BUBBLE_W - 12),
-    )
-    const arrowLeft = Math.min(Math.max(cx - bubbleLeft, 24), BUBBLE_W - 24)
-    // Element in the top ~45% of the screen → bubble BELOW it (arrow up);
-    // otherwise → bubble ABOVE it (arrow down). No rect → centred.
-    const below = rect ? rect.top + rect.height / 2 < screenH * 0.45 : false
-    const SPRING_T =
-      'top .45s cubic-bezier(0.34,1.56,0.64,1), bottom .45s cubic-bezier(0.34,1.56,0.64,1), left .45s cubic-bezier(0.34,1.56,0.64,1)'
-
-    const bubblePos: React.CSSProperties = !rect
-      ? { left: bubbleLeft, top: '38%', width: BUBBLE_W }
-      : below
-        ? { left: bubbleLeft, top: rect.top + rect.height + 16, width: BUBBLE_W }
-        : {
-            left: bubbleLeft,
-            bottom: screenH - rect.top + 16,
-            width: BUBBLE_W,
-          }
-
-    return (
-      <div
-        onClick={nextTour}
-        className="fixed inset-0 z-[100]"
-        style={{ fontFamily: 'var(--font-display, Inter, system-ui, sans-serif)' }}
+    const secondary = (label: string, onClick: () => void) => (
+      <button
+        onClick={onClick}
+        className="tappable w-full py-3 text-center text-sm font-semibold text-white/45 transition-colors hover:text-white/80"
       >
-        {/* Spotlight — transparent hole; rest darkened by the huge
-            box-shadow. Springs between steps; red halo pulse. */}
-        {rect ? (
-          <div
-            aria-hidden
-            className="pointer-events-none absolute rounded-2xl"
-            style={{
-              top: rect.top - 8,
-              left: rect.left - 8,
-              width: rect.width + 16,
-              height: rect.height + 16,
-              boxShadow: '0 0 0 9999px rgba(0,0,0,0.85)',
-              border: '2px solid rgba(232,32,58,0.9)',
-              transition:
-                'top .45s cubic-bezier(0.34,1.56,0.64,1), left .45s cubic-bezier(0.34,1.56,0.64,1), width .45s cubic-bezier(0.34,1.56,0.64,1), height .45s cubic-bezier(0.34,1.56,0.64,1)',
-              animation: 'onb-spot 1.8s ease-in-out infinite',
-            }}
-          />
-        ) : (
-          <div
-            className="absolute inset-0"
-            style={{ background: 'rgba(0,0,0,0.85)' }}
-          />
-        )}
-
-        {/* Passer — skip the whole tour */}
-        <button
-          onClick={(e) => {
-            e.stopPropagation()
-            complete(true)
-          }}
-          className="tappable absolute right-5 z-10 text-sm font-medium text-white/55 transition-colors hover:text-white"
-          style={{ top: 'max(1.25rem, env(safe-area-inset-top))' }}
-        >
-          Passer
-        </button>
-
-        {/* Bubble */}
-        <div
-          onClick={(e) => e.stopPropagation()}
-          className="absolute"
-          style={{ ...bubblePos, transition: SPRING_T }}
-        >
-          {/* Arrow ABOVE the bubble (when bubble is below the element) */}
-          {rect && below && (
-            <>
-              <span
-                aria-hidden
-                className="absolute"
-                style={{
-                  left: arrowLeft - 9,
-                  bottom: '100%',
-                  width: 0,
-                  height: 0,
-                  borderLeft: '9px solid transparent',
-                  borderRight: '9px solid transparent',
-                  borderBottom: '9px solid #E8203A',
-                }}
-              />
-              <span
-                aria-hidden
-                className="absolute"
-                style={{
-                  left: arrowLeft - 7,
-                  bottom: 'calc(100% - 2px)',
-                  width: 0,
-                  height: 0,
-                  borderLeft: '7px solid transparent',
-                  borderRight: '7px solid transparent',
-                  borderBottom: '7px solid #141414',
-                }}
-              />
-            </>
-          )}
-
-          <div
-            className="relative rounded-[20px]"
-            style={{
-              background: '#141414',
-              border: '1px solid #E8203A',
-              boxShadow: '0 12px 40px rgba(0,0,0,0.6)',
-              padding: '20px 16px',
-            }}
-          >
-            <span
-              className="absolute right-4 top-4 text-[12px] font-bold"
-              style={{ color: RED }}
-            >
-              {tourStep + 1} / {TOUR.length}
-            </span>
-            <p className="pr-12 text-[17px] font-bold leading-snug text-white">
-              {t.title}
-            </p>
-            <p
-              className="mt-2 line-clamp-4 text-[13px] text-white/60"
-              style={{ lineHeight: 1.6 }}
-            >
-              {t.body}
-            </p>
-            <button
-              onClick={nextTour}
-              className="tappable mt-4 w-full rounded-full py-3 text-sm font-bold text-white transition-transform active:scale-[0.97]"
-              style={{ background: RED, boxShadow: '0 0 14px rgba(232,32,58,0.5)' }}
-            >
-              {tourStep === TOUR.length - 1
-                ? 'C’est parti, je spotte ! 🚀'
-                : 'Compris →'}
-            </button>
-          </div>
-
-          {/* Arrow BELOW the bubble (when bubble is above the element) */}
-          {rect && !below && (
-            <>
-              <span
-                aria-hidden
-                className="absolute"
-                style={{
-                  left: arrowLeft - 9,
-                  top: '100%',
-                  width: 0,
-                  height: 0,
-                  borderLeft: '9px solid transparent',
-                  borderRight: '9px solid transparent',
-                  borderTop: '9px solid #E8203A',
-                }}
-              />
-              <span
-                aria-hidden
-                className="absolute"
-                style={{
-                  left: arrowLeft - 7,
-                  top: 'calc(100% - 2px)',
-                  width: 0,
-                  height: 0,
-                  borderLeft: '7px solid transparent',
-                  borderRight: '7px solid transparent',
-                  borderTop: '7px solid #141414',
-                }}
-              />
-            </>
-          )}
-        </div>
-      </div>
+        {label}
+      </button>
     )
+
+    switch (step) {
+      case S_LANG:
+        return primary(t('onboarding.ui.continue'), goNext)
+      case S_FLORIAN:
+        return primary(t('onboarding.florian.cta'), goNext)
+      case S_DREAM:
+        return (
+          <>
+            {primary(t('onboarding.ui.continue'), goNext)}
+            {!dreamCar && secondary(t('onboarding.dreamCar.skip'), goNext)}
+          </>
+        )
+      case S_INTERESTS:
+        return primary(t('onboarding.ui.continue'), goNext, interests.length === 0)
+      case S_SOURCE:
+        return primary(t('onboarding.ui.continue'), goNext, source === null)
+      case S_NOTIF:
+        return (
+          <>
+            {primary(
+              notifOn
+                ? t('onboarding.notifications.enabled')
+                : t('onboarding.notifications.enable'),
+              notifOn ? goNext : requestNotif,
+            )}
+            {!notifOn && secondary(t('onboarding.notifications.skip'), goNext)}
+          </>
+        )
+      case S_GEO:
+        return (
+          <>
+            {primary(
+              geoOn
+                ? t('onboarding.location.enabled')
+                : t('onboarding.location.enable'),
+              geoOn ? goNext : requestGeo,
+            )}
+            {!geoOn && secondary(t('onboarding.location.skip'), goNext)}
+          </>
+        )
+      case S_RULES:
+        return primary(t('onboarding.rules.accept'), finish)
+      default:
+        return null
+    }
   }
 
-  const last = index === SLIDES.length - 1
+  // ── Step body ──
+  function renderStep() {
+    switch (step) {
+      case S_LANG:
+        return (
+          <StepShell
+            title={t('onboarding.lang.title')}
+            subtitle={t('onboarding.lang.subtitle')}
+          >
+            <div className="flex flex-col gap-3">
+              {(
+                [
+                  { code: 'fr' as Lang, flag: '🇫🇷', label: t('onboarding.lang.fr') },
+                  { code: 'en' as Lang, flag: '🇬🇧', label: t('onboarding.lang.en') },
+                ]
+              ).map((o) => (
+                <OptionButton
+                  key={o.code}
+                  selected={lang === o.code}
+                  onClick={() => pickLang(o.code)}
+                  className="flex items-center gap-4 !py-4"
+                >
+                  <span className="text-3xl leading-none">{o.flag}</span>
+                  <span className="flex-1 text-[16px]">{o.label}</span>
+                  {lang === o.code && (
+                    <Check className="h-5 w-5" style={{ color: RED }} />
+                  )}
+                </OptionButton>
+              ))}
+            </div>
+          </StepShell>
+        )
+
+      case S_FLORIAN:
+        return (
+          <StepShell title={t('onboarding.florian.title')}>
+            <div className="flex flex-col items-center text-center">
+              <div
+                className="mb-6 h-28 w-28 overflow-hidden rounded-full"
+                style={{
+                  border: '2px solid rgba(232,32,58,0.6)',
+                  boxShadow: '0 0 34px rgba(232,32,58,0.35)',
+                }}
+              >
+                {photoOk ? (
+                  <img
+                    src="/florian.jpg"
+                    alt="Florian"
+                    onError={() => setPhotoOk(false)}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <div
+                    className="flex h-full w-full items-center justify-center font-display text-4xl font-extrabold text-white"
+                    style={{
+                      background:
+                        'linear-gradient(135deg, #E8203A 0%, #7a0f1c 100%)',
+                    }}
+                  >
+                    F
+                  </div>
+                )}
+              </div>
+              <p
+                className="rounded-3xl px-5 py-4 text-[14.5px] leading-relaxed text-white/80"
+                style={{
+                  background: 'rgba(255,255,255,0.04)',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  backdropFilter: 'blur(12px)',
+                  WebkitBackdropFilter: 'blur(12px)',
+                }}
+              >
+                {t('onboarding.florian.body')}
+              </p>
+              <p className="mt-4 text-[13px] font-semibold" style={{ color: RED }}>
+                {t('onboarding.florian.signature')}
+              </p>
+            </div>
+          </StepShell>
+        )
+
+      case S_DREAM:
+        return (
+          <StepShell
+            title={t('onboarding.dreamCar.title')}
+            subtitle={t('onboarding.dreamCar.subtitle')}
+          >
+            <div className="relative">
+              <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-white/40" />
+              <input
+                value={dreamQuery}
+                onChange={(e) => {
+                  setDreamQuery(e.target.value)
+                  setDreamCar(e.target.value)
+                }}
+                placeholder={t('onboarding.dreamCar.placeholder')}
+                className="w-full rounded-2xl py-3.5 pl-11 pr-4 text-sm text-white placeholder-white/35 outline-none focus:ring-2 focus:ring-accent/45"
+                style={{
+                  background: 'rgba(255,255,255,0.04)',
+                  border: '1.5px solid rgba(255,255,255,0.1)',
+                  backdropFilter: 'blur(12px)',
+                  WebkitBackdropFilter: 'blur(12px)',
+                }}
+              />
+            </div>
+            {dreamSuggestions.length > 0 && (
+              <div className="mt-4">
+                <p className="label-up mb-2 px-1 text-[10px] text-white/40">
+                  {t('onboarding.dreamCar.suggestionsTitle')}
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {dreamSuggestions.map((c) => (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() => {
+                        setDreamCar(c)
+                        setDreamQuery(c)
+                      }}
+                      className="tappable rounded-full px-3.5 py-2 text-[13px] font-semibold transition-all active:scale-95"
+                      style={{
+                        background:
+                          dreamCar === c
+                            ? 'rgba(232,32,58,0.16)'
+                            : 'rgba(255,255,255,0.05)',
+                        border: `1px solid ${
+                          dreamCar === c ? RED : 'rgba(255,255,255,0.12)'
+                        }`,
+                        color: dreamCar === c ? '#fff' : 'rgba(255,255,255,0.8)',
+                      }}
+                    >
+                      {c}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </StepShell>
+        )
+
+      case S_INTERESTS:
+        return (
+          <StepShell
+            title={t('onboarding.interests.title')}
+            subtitle={t('onboarding.interests.subtitle')}
+          >
+            <div className="grid grid-cols-2 gap-2.5">
+              {INTERESTS.map((id) => (
+                <OptionButton
+                  key={id}
+                  selected={interests.includes(id)}
+                  onClick={() => toggleInterest(id)}
+                  className="flex items-center justify-between gap-2"
+                >
+                  <span className="truncate">
+                    {t(`onboarding.interests.options.${id}`)}
+                  </span>
+                  {interests.includes(id) && (
+                    <Check className="h-4 w-4 flex-none" style={{ color: RED }} />
+                  )}
+                </OptionButton>
+              ))}
+            </div>
+          </StepShell>
+        )
+
+      case S_SOURCE:
+        return (
+          <StepShell
+            title={t('onboarding.source.title')}
+            subtitle={t('onboarding.source.subtitle')}
+          >
+            <div className="flex flex-col gap-2.5">
+              {SOURCES.map((id) => (
+                <OptionButton
+                  key={id}
+                  selected={source === id}
+                  onClick={() => setSource(id)}
+                  className="flex items-center justify-between gap-2"
+                >
+                  <span>{t(`onboarding.source.options.${id}`)}</span>
+                  {source === id && (
+                    <Check className="h-4 w-4 flex-none" style={{ color: RED }} />
+                  )}
+                </OptionButton>
+              ))}
+            </div>
+          </StepShell>
+        )
+
+      case S_NOTIF:
+        return (
+          <StepShell
+            icon={<Bell className="h-8 w-8" style={{ color: RED }} />}
+            title={t('onboarding.notifications.title')}
+            subtitle={t('onboarding.notifications.subtitle')}
+            centered
+          />
+        )
+
+      case S_GEO:
+        return (
+          <StepShell
+            icon={<MapPin className="h-8 w-8" style={{ color: RED }} />}
+            title={t('onboarding.location.title')}
+            subtitle={t('onboarding.location.subtitle')}
+            centered
+          />
+        )
+
+      case S_RULES:
+        return (
+          <StepShell
+            icon={<Shield className="h-8 w-8" style={{ color: RED }} />}
+            title={t('onboarding.rules.title')}
+            subtitle={t('onboarding.rules.subtitle')}
+          >
+            <div className="flex flex-col gap-3">
+              {(['respect', 'privacy', 'safety', 'authentic'] as const).map(
+                (k) => (
+                  <div
+                    key={k}
+                    className="flex items-start gap-3 rounded-2xl px-4 py-3"
+                    style={{
+                      background: 'rgba(255,255,255,0.04)',
+                      border: '1px solid rgba(255,255,255,0.1)',
+                    }}
+                  >
+                    <span
+                      className="mt-0.5 flex h-6 w-6 flex-none items-center justify-center rounded-full"
+                      style={{ background: 'rgba(232,32,58,0.16)' }}
+                    >
+                      <Check className="h-3.5 w-3.5" style={{ color: RED }} />
+                    </span>
+                    <span className="text-[13.5px] leading-snug text-white/80">
+                      {t(`onboarding.rules.items.${k}`)}
+                    </span>
+                  </div>
+                ),
+              )}
+            </div>
+          </StepShell>
+        )
+
+      default:
+        return null
+    }
+  }
 
   return (
     <div
@@ -741,81 +580,112 @@ export default function Onboarding() {
         fontFamily: 'var(--font-display, Inter, system-ui, sans-serif)',
       }}
     >
-      {/* Passer — discreet, top-right */}
-      <button
-        onClick={() => complete(false)}
-        className="tappable absolute right-5 z-10 text-sm font-medium text-white/45 transition-colors hover:text-white/80"
-        style={{ top: 'max(1.25rem, env(safe-area-inset-top))' }}
-      >
-        Passer
-      </button>
-
-      {/* Slides — horizontal spring track, swipeable */}
+      {/* Backdrop red glow */}
       <div
-        className="flex-1 overflow-hidden"
-        onTouchStart={onTouchStart}
-        onTouchEnd={onTouchEnd}
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-0 h-[45vh]"
+        style={{
+          background:
+            'radial-gradient(ellipse 90% 100% at 50% 0%, rgba(232,32,58,0.28) 0%, rgba(232,32,58,0.05) 38%, transparent 66%)',
+        }}
+      />
+
+      {/* Header — back button + progress bar + step counter */}
+      <div
+        className="relative z-10 flex items-center gap-3 px-5"
+        style={{ paddingTop: 'max(1.25rem, env(safe-area-inset-top))' }}
       >
-        <div
-          className="flex h-full"
+        <button
+          onClick={goBack}
+          aria-label={t('onboarding.ui.back')}
+          className="tappable flex h-9 w-9 flex-none items-center justify-center rounded-full transition-opacity"
           style={{
-            transform: `translateX(-${index * 100}%)`,
-            transition: SPRING,
+            background: 'rgba(255,255,255,0.06)',
+            border: '1px solid rgba(255,255,255,0.12)',
+            opacity: step === 0 ? 0 : 1,
+            pointerEvents: step === 0 ? 'none' : 'auto',
           }}
         >
-          {SLIDES.map((s, i) => (
-            <section
-              key={s.title}
-              className="flex h-full w-full min-w-full flex-col items-center justify-center px-9 text-center"
-            >
-              {i === 0 && (
-                <h2
-                  className="mb-4 font-display font-extrabold leading-none"
-                  style={{ fontSize: '40px', letterSpacing: '-1.5px' }}
-                >
-                  <span style={{ color: RED }}>R</span>
-                  <span className="text-white">EVS</span>
-                </h2>
-              )}
-              <div className="mb-12 flex h-56 items-center justify-center">
-                {s.visual}
-              </div>
-              <h1 className="font-display text-[28px] font-extrabold leading-tight tracking-tight">
-                {s.title}
-              </h1>
-              <p className="mt-3 max-w-[20rem] text-[15px] leading-relaxed text-white/55">
-                {s.subtitle}
-              </p>
-            </section>
-          ))}
-        </div>
-      </div>
-
-      {/* Footer — dots + final CTA */}
-      <div className="px-8 pb-[max(2rem,env(safe-area-inset-bottom))] pt-2">
-        <div className="mb-7 flex items-center justify-center gap-2">
-          {SLIDES.map((_, i) => (
-            <button
-              key={i}
-              onClick={() => setIndex(i)}
-              aria-label={`Aller au slide ${i + 1}`}
-              className="h-2 rounded-full transition-all duration-300"
-              style={{
-                width: i === index ? '22px' : '8px',
-                background: i === index ? RED : 'rgba(255,255,255,0.25)',
-              }}
-            />
-          ))}
-        </div>
-
-        <button
-          onClick={() => (last ? setPhase('tour') : setIndex((i) => i + 1))}
-          className="tappable w-full rounded-full py-4 text-base font-bold text-white transition-transform active:scale-[0.98]"
-          style={{ background: RED, boxShadow: '0 0 20px rgba(232,32,58,0.5)' }}
-        >
-          {last ? 'Commencer le tour →' : 'Suivant →'}
+          <ArrowLeft className="h-4 w-4 text-white" />
         </button>
+        <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/10">
+          <div
+            className="h-full rounded-full"
+            style={{
+              width: `${((step + 1) / TOTAL) * 100}%`,
+              background: RED,
+              boxShadow: '0 0 10px rgba(232,32,58,0.6)',
+              transition: 'width 0.4s cubic-bezier(0.22,1,0.36,1)',
+            }}
+          />
+        </div>
+        <span className="flex-none text-[12px] font-bold tabular-nums text-white/45">
+          {step + 1}/{TOTAL}
+        </span>
       </div>
+
+      {/* Body — animated per step */}
+      <div className="relative z-10 flex-1 overflow-y-auto px-7 pt-8">
+        <div
+          key={step}
+          style={{
+            animation: `${
+              dir === 'back' ? 'onb-step-back' : 'onb-step-fwd'
+            } 0.35s cubic-bezier(0.22,1,0.36,1)`,
+          }}
+        >
+          {renderStep()}
+        </div>
+      </div>
+
+      {/* Footer */}
+      <div className="relative z-10 px-7 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-3">
+        {renderFooter()}
+      </div>
+    </div>
+  )
+}
+
+// Shared step layout — optional centered icon, title, subtitle, body.
+function StepShell({
+  icon,
+  title,
+  subtitle,
+  children,
+  centered,
+}: {
+  icon?: React.ReactNode
+  title: string
+  subtitle?: string
+  children?: React.ReactNode
+  centered?: boolean
+}) {
+  return (
+    <div className={centered ? 'flex flex-col items-center text-center' : ''}>
+      {icon && (
+        <div
+          className="mb-6 flex h-16 w-16 items-center justify-center rounded-2xl"
+          style={{
+            background: 'rgba(232,32,58,0.12)',
+            border: '1px solid rgba(232,32,58,0.3)',
+          }}
+        >
+          {icon}
+        </div>
+      )}
+      <h1 className="font-display text-[26px] font-extrabold leading-tight tracking-tight">
+        {title}
+      </h1>
+      {subtitle && (
+        <p
+          className={`mt-2.5 text-[14.5px] leading-relaxed text-white/55 ${
+            centered ? 'max-w-[20rem]' : ''
+          }`}
+        >
+          {subtitle}
+        </p>
+      )}
+      {children && <div className="mt-7">{children}</div>}
     </div>
   )
 }
