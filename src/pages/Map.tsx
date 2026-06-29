@@ -37,6 +37,7 @@ import {
 } from '../lib/filterCatalog'
 import { rarityRank } from '../components/CollectorCard'
 import { prefersReducedMotion } from '../lib/motion'
+import { onNewSpot } from '../lib/feedSync'
 import { rarityBadge } from '../lib/rarityStyle'
 import { useTheme } from '../lib/theme'
 import {
@@ -1506,10 +1507,25 @@ export default function MapPage() {
       )
       .subscribe()
 
+    // In-app bridge — the publisher's OWN spot appears instantly without
+    // waiting on (or depending on) Supabase realtime. NewSpot emits the
+    // freshly-inserted row (full `.select('*')`, expires_at included) the
+    // moment the insert is confirmed; we inject it straight into the map.
+    // Realtime still covers OTHER users' spots. Deduped by id, so if the
+    // realtime echo arrives too it's a harmless overwrite.
+    const offNewSpot = onNewSpot((sp) => {
+      if (!sp?.id) return
+      allSpots.set(sp.id, sp)
+      newSpotIds.add(sp.id)
+      refreshSource()
+      recomputeHotZones()
+    })
+
     return () => {
       if (pollId) clearInterval(pollId)
       window.clearInterval(hotZonesInterval)
       clearHotZones()
+      offNewSpot()
       supabase.removeChannel(channel)
       for (const k in onScreenRef.current) onScreenRef.current[k].remove()
       onScreenRef.current = {}

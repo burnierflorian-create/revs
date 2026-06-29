@@ -523,10 +523,10 @@ export default function SpotDetail() {
             >
               <div>
                 <div className="label-up text-[10px] text-fg2">
-                  Prix neuf estimé
+                  Prix du marché
                 </div>
                 <div className="mt-1 font-display text-[28px] font-extrabold leading-none tracking-tighter text-fg">
-                  {formatPrice(spot.estimated_price) ?? 'Non estimé'}
+                  {formatPrice(spot.estimated_price) ?? 'Indisponible'}
                 </div>
               </div>
               <div

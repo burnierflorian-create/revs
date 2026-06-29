@@ -1,6 +1,26 @@
 import Anthropic from '@anthropic-ai/sdk'
 
+// Sonnet does the VISUAL recognition (image). The market price is a
+// separate TEXT-ONLY call on Haiku (the cheapest model) — splitting the
+// two cuts the price-side cost ~80% vs. asking Sonnet for everything.
 const MODEL = 'claude-sonnet-4-6'
+const PRICE_MODEL = 'claude-haiku-4-5-20251001'
+
+// Market-price rule + real reference quotes (current resale value, NOT
+// catalogue-new) so Haiku anchors on realistic numbers for the year.
+const PRICE_SYSTEM = `Tu donnes le prix du MARCHÉ ACTUEL en euros — la cote réelle de revente aujourd'hui pour l'année indiquée, en bon état. PAS le prix neuf, PAS une estimation gonflée. Jamais le prix neuf si la voiture a plus de 2 ans.
+Références de cote marché réelles :
+- Ferrari 488 GTB 2019 → 165000
+- McLaren 570S 2018 → 125000
+- Lamborghini Huracán 2020 → 195000
+- Porsche 911 Carrera S 992 2021 → 115000
+- Mercedes-AMG GT 63 S 2024 → 195000
+- BMW M3 Competition 2022 → 75000
+- Audi RS6 Avant 2022 → 85000
+- Range Rover Sport SVR 2021 → 90000
+- Rolls-Royce Ghost 2012 → 95000
+- Bentley Continental GT 2020 → 155000
+Réponds UNIQUEMENT par le nombre entier en euros, rien d'autre (pas de symbole, pas de texte).`
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -95,7 +115,6 @@ Si l'image est valide, renvoie strictement ce JSON :
   "color": "couleur précise et nommée",
   "category": "supercar|hypercar|classic|youngtimer|JDM|other",
   "confidence": 85,
-  "price_estimate": 220000,
   "rarity": "standard|premium|performance|exclusif|supercar|hypercar",
   "specs": "Configuration moteur / Transmission",
   "valid": true
@@ -106,7 +125,7 @@ Règles :
 - "color" : nomme la teinte précise quand tu la reconnais ("gris nardo", "bleu Santorin", "vert British Racing", "rouge Rosso Corsa") plutôt qu'un simple "gris" ou "rouge".
 - "confidence" : entier 0-100, ta certitude réelle sur l'ensemble marque + modèle + version.
 - "specs" : moteur précis si identifiable visuellement (ex: "V12 NA / Propulsion", "Flat-6 Biturbo / 4RM"), sinon configuration générale.
-- "price_estimate" : prix du MARCHÉ ACTUEL en euros — pas le prix neuf catalogue, mais le prix de revente réel aujourd'hui. Base-toi sur les cotes argus/marché réelles. Ex: Ferrari 488 GTB 2019 = 160000-180000€ sur le marché, McLaren 570S 2018 = 120000-140000€, Lamborghini Huracán 2020 = 180000-220000€, Porsche 911 Carrera S 2020 = 110000-130000€, Mercedes-AMG GT 63 S 2024 = 180000-220000€. Donne le prix médian du marché actuel pour l'année identifiée. JAMAIS le prix neuf si la voiture a plus de 2 ans.
+- NE renvoie PAS de prix : le prix du marché est calculé séparément (appel texte dédié, modèle moins cher).
 - RARETÉ = uniquement le volume de production mondial du modèle. JAMAIS le prix, jamais le lieu, jamais le standing perçu.
 - En cas de doute sur la rareté, descends d'un cran (douteux supercar = "performance").
 - Si tu n'identifies pas le modèle exact, donne ta meilleure estimation — JAMAIS "indéterminé" ni "inconnue".
@@ -364,6 +383,34 @@ async function callClaude(client, mimeType, imageBase64, system, maxTokens) {
   })
 }
 
+// Text-only market-price lookup on Haiku (cheap). Returns an integer in
+// [1000, 10_000_000] or null. Best-effort — never throws; on any failure
+// the spot just keeps a null price.
+async function lookupMarketPrice(client, brand, model, year) {
+  const b = (brand ?? '').trim()
+  const m = (model ?? '').trim()
+  if (!b && !m) return null
+  const yearPart = year ? ` ${year}` : ''
+  try {
+    const r = await client.messages.create({
+      model: PRICE_MODEL,
+      max_tokens: 20,
+      system: PRICE_SYSTEM,
+      messages: [
+        {
+          role: 'user',
+          content: `Prix du marché actuel en euros pour une ${b} ${m}${yearPart} en bon état ?`,
+        },
+      ],
+    })
+    const n = parseInt(String(lastText(r)).replace(/[^0-9]/g, ''), 10)
+    if (Number.isFinite(n) && n >= 1000 && n <= 10_000_000) return n
+  } catch (e) {
+    console.error('[identify-car] price lookup failed:', e?.message ?? e)
+  }
+  return null
+}
+
 function lastText(response) {
   if (!response?.content) return ''
   const blocks = response.content.filter((b) => b.type === 'text')
@@ -458,12 +505,18 @@ export default async function handler(req, res) {
       }
 
       if (parsed && (parsed.brand || parsed.model)) {
-        // Single static vision call — rarity ships straight from the
-        // strict prompt's static knowledge, no paid web_search refine.
-        // This is the only AI touch in a spot's lifecycle; rarity,
-        // specs and history are all served locally or from DB cache
-        // afterwards.
-        return sendJson(res, finalize(parsed))
+        // Vision recognition done (Sonnet). The market price is a
+        // separate cheap Haiku text call so the expensive vision model
+        // never spends tokens guessing prices. Rarity/specs still ship
+        // from the strict prompt; history is DB-cached afterwards.
+        const result = finalize(parsed)
+        result.estimated_price = await lookupMarketPrice(
+          client,
+          result.brand,
+          result.model,
+          result.year,
+        )
+        return sendJson(res, result)
       }
     } catch (e) {
       console.error(`[identify-car] attempt ${i + 1} threw:`, e?.message ?? e)
