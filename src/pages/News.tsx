@@ -4,15 +4,10 @@ import { timeAgo } from '../lib/spots'
 import { Skeleton } from '../components/Skeleton'
 import { categoryBadge } from '../lib/categoryStyle'
 
-// Opening Discover silently pings /api/fetch-news (server-throttled) if
-// the freshest article is older than this, so news stays fresh without
-// the user noticing.
-const STALE_MS = 30 * 60 * 1000
-// Don't re-ping within this window even across remounts (Discover tab
-// switches remount News).
-const TRIGGER_COOLDOWN_MS = 15 * 60 * 1000
-const TRIGGER_KEY = 'revs_news_triggered_at'
-// "NOUVEAU" badge for articles published in the last hour.
+// News is fetched ONLY by the once-daily server cron (vercel.json →
+// /api/fetch-news at 06:00 UTC). The client never triggers a fetch — it
+// just reads the table. "NOUVEAU" badge for articles published in the
+// last hour.
 const NEW_MS = 60 * 60 * 1000
 
 function newestStamp(list: { created_at: string }[]): string | null {
@@ -60,15 +55,16 @@ export default function News({ categories }: { categories: string[] }) {
   const [refreshing, setRefreshing] = useState(false)
   const [pull, setPull] = useState(0)
   const startY = useRef<number | null>(null)
-  const triedRef = useRef(false)
 
   const load = useCallback(async (initial = false, silent = false) => {
     if (initial) setItems(null)
     else if (!silent) setRefreshing(true)
+    // Show EVERY article in the table (retention is handled server-side by
+    // the daily cron's 50-article cap), newest first — not filtered by an
+    // expiry window, so the tab always lists the full current set.
     const { data, error } = await supabase
       .from('news')
       .select('*')
-      .gt('expires_at', new Date().toISOString())
       .order('published_at', { ascending: false, nullsFirst: false })
       .order('created_at', { ascending: false })
       .limit(50)
@@ -77,50 +73,14 @@ export default function News({ categories }: { categories: string[] }) {
     if (!initial && !silent) setRefreshing(false)
   }, [])
 
-  const triggerServerRefresh = useCallback(async () => {
-    try {
-      sessionStorage.setItem(TRIGGER_KEY, String(Date.now()))
-    } catch {
-      /* sessionStorage unavailable */
-    }
-    try {
-      // Server is throttled + idempotent (dedup on url), so a naive
-      // call here is safe even if several users open Discover at once.
-      await fetch('/api/fetch-news', { method: 'GET' })
-    } catch {
-      /* offline — keep showing what we have */
-    }
-    // Silent: reload without flipping any visible refreshing indicator.
-    await load(false, true)
-  }, [load])
-
   useEffect(() => {
     load(true)
-    // Reload from DB every 30 min in case the cron / another client
-    // refreshed it while this tab stayed open.
+    // Re-read the table every 30 min so a tab left open picks up the
+    // cron's daily refresh. This only READS the DB — it never triggers a
+    // server fetch.
     const id = window.setInterval(() => load(false), 30 * 60 * 1000)
     return () => window.clearInterval(id)
   }, [load])
-
-  // Once the first list arrives, self-heal if it's stale.
-  useEffect(() => {
-    if (triedRef.current || items === null) return
-    triedRef.current = true
-    const stamp = newestStamp(items)
-    const ageMs = stamp ? Date.now() - new Date(stamp).getTime() : Infinity
-    let lastTrigger = 0
-    try {
-      lastTrigger = Number(sessionStorage.getItem(TRIGGER_KEY) || 0)
-    } catch {
-      /* ignore */
-    }
-    if (
-      ageMs > STALE_MS &&
-      Date.now() - lastTrigger > TRIGGER_COOLDOWN_MS
-    ) {
-      void triggerServerRefresh()
-    }
-  }, [items, triggerServerRefresh])
 
   const PULL_THRESHOLD = 70
 

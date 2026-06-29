@@ -107,6 +107,39 @@ ANALYSE VISUELLE — observe la photo et croise ces indices AVANT de conclure :
 - SPOILERS ET AÉRODYNAMISME : présence d'un aileron actif, diffuseur, prises d'air actives.
 - ROUES : taille estimée, style (multi-branches, monobloc, turbine), couleur des étriers de frein.
 
+SIGNATURES SUPERCARS — reconnais ces marques même de DERRIÈRE ou de CÔTÉ :
+
+LAMBORGHINI — indices infaillibles :
+- Silhouette ultra-basse et angulaire, lignes en Y caractéristiques.
+- Feux arrière LED en forme de Y ou hexagonaux (Huracán, Urus, Revuelto).
+- Badge taureau doré sur le capot ou les ailes.
+- Prises d'air latérales énormes sur les flancs.
+- Huracán : feux arrière en Y, diffuseur agressif, sorties d'échappement centrales.
+- Urus : SUV avec ligne de toit fuyante, feux en Y, calandre hexagonale massive.
+- Revuelto (ex-Aventador) : portes en ciseaux, nez pointu extrême, ligne de toit très basse.
+- Couleurs emblématiques : jaune Giallo Orion, vert Verde Mantis, orange Arancio Atlas, bleu Blu Cepheus.
+
+FERRARI — indices infaillibles :
+- Badge cheval cabré jaune sur fond rouge ou noir.
+- Feux ronds (308, F40) ou feux LED fins (488, SF90, Roma).
+- Sorties d'échappement centrales en haut du diffuseur (488, F8, SF90).
+- Roma/Portofino : 2+2 élégant, ligne fluide.
+- 296 GTB : feux en boomerang, prises d'air latérales.
+
+McLAREN — indices infaillibles :
+- Portes papillon dièdre caractéristiques.
+- Nez très pointu avec splitter intégré.
+- Prises d'air derrière les vitres latérales.
+- Feux arrière fins horizontaux.
+- GT : ligne plus douce, coffre arrière, moins extrême que la 720S.
+
+PORSCHE 911 GT3 — indices infaillibles :
+- Aileron arrière fixe très large et haut (swan neck).
+- Diffuseur arrière agressif avec sorties d'échappement basses.
+- Roues centre-lock (écrou central unique).
+- Jantes dorées ou noires spécifiques GT3.
+- Badge GT3 sur le capot arrière moteur.
+
 Si l'image est valide, renvoie strictement ce JSON :
 {
   "brand": "Marque exacte",
@@ -131,7 +164,13 @@ Règles :
 - Si tu n'identifies pas le modèle exact, donne ta meilleure estimation — JAMAIS "indéterminé" ni "inconnue".
 - Pas d'appel web : appuie-toi UNIQUEMENT sur la vision de cette photo et tes connaissances statiques pour une réponse instantanée.
 
-RÈGLE ABSOLUE : Ne jamais retourner brand="Voiture" ou model="Modèle indéterminé". Si tu vois un Lamborghini (silhouette angulaire, badge taureau, prises d'air latérales) → Lamborghini. Si tu vois une McLaren (portes papillon, nez pointu, prises d'air latérales) → McLaren. Si tu vois un badge constructeur flou mais reconnaissable → utilise-le. Donne TOUJOURS ta meilleure estimation même avec faible confiance. confidence=30 avec le bon modèle vaut mieux que confidence=0 avec "indéterminé".`
+RÈGLE ABSOLUE ANTI-INDÉTERMINÉ :
+Si tu vois une voiture basse et sportive avec des lignes angulaires = Lamborghini minimum.
+Si tu vois des portes papillon = McLaren minimum.
+Si tu vois un grand aileron fixe sur un coupé = Porsche 911 GT3/GT4 minimum.
+Si tu vois des feux ronds arrière sur un coupé bas = Ferrari classique minimum.
+JAMAIS retourner brand="Voiture" ou model="Modèle indéterminé" — toujours donner la meilleure estimation même à confidence=25.
+Si vraiment impossible : brand="Véhicule non identifié", model="Supercar inconnue", confidence=15 — mais ce cas doit être extrêmement rare.`
 
 const SYSTEM_SIMPLE = `Tu es un expert automobile. Identifie la voiture sur la photo. Tu dois TOUJOURS répondre — au pire avec la marque seule + "Modèle indéterminé" + confidence: 20.
 

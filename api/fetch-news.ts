@@ -70,18 +70,21 @@ async function fetchWithTimeout(url: string): Promise<Response | null> {
   }
 }
 
-const PER_FEED = 5
-// Cost cap: only the 10 most-recent NEW articles are summarised/translated
-// by Claude per run (one call each). Older new ones wait for the next run.
-const MAX_TRANSLATE = 10
-// Articles older than 48h are dropped before they ever reach Claude.
-const MAX_AGE_MS = 48 * 60 * 60 * 1000
-// Article time-to-live in DB (matches the 48h DB default — keeps the
-// feed populated between the 4 daily cron runs).
-const TTL_MS = 48 * 60 * 60 * 1000
-// Public (non-cron) callers can only trigger a real run if the freshest
-// article is older than this — bounds Claude/API cost under load.
-const MIN_REFRESH_MS = 20 * 60 * 1000
+const PER_FEED = 6
+// Daily cron only. Translate up to 14 candidates (one Claude call each) so
+// that after quality/dedup filtering we reliably land 8–12 NEW inserts.
+const MAX_TRANSLATE = 14
+// Hard cap on NEW articles inserted per run (8–12 target). Surplus
+// candidates wait for tomorrow's run.
+const MAX_NEW_PER_RUN = 12
+// Older candidates are dropped before reaching Claude. Widened to 7 days
+// (was 48h) since the cron now runs once/day — a 48h window starved the
+// daily run of fresh candidates.
+const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
+// Article time-to-live in DB. Long (60d) so old articles are KEPT, not
+// expired out — retention is now handled by the 50-article cap below, not
+// by TTL deletion.
+const TTL_MS = 60 * 24 * 60 * 60 * 1000
 // Quality filter: drop summaries shorter than this once Claude returns.
 const MIN_SUMMARY_LEN = 100
 
@@ -537,43 +540,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     attributeNamePrefix: '@_',
   })
 
-  // Housekeeping: drop articles past their 24h TTL on every call
-  // (cron + client), so the table never accumulates stale news.
-  const nowIso = new Date().toISOString()
-  let expired: number | null = null
-  {
-    const { error, count } = await admin
-      .from('news')
-      .delete({ count: 'exact' })
-      .lt('expires_at', nowIso)
-    expired = error ? -1 : (count ?? 0)
-    if (error) console.error('news ttl cleanup failed:', error)
-  }
+  // NO TTL deletion: old articles are KEPT. Retention is handled solely by
+  // the 50-article cap after insert (below). `expired` stays 0 for response
+  // shape compatibility.
+  const expired = 0
 
-  // Public client trigger: skip cheaply if the feed is already fresh.
-  if (
-    !isCron &&
-    !force &&
-    req.query.purge !== '1' &&
-    req.query.purge_en !== '1'
-  ) {
-    const { data: latest } = await admin
-      .from('news')
-      .select('created_at')
-      .order('created_at', { ascending: false })
-      .limit(1)
-    const newest = latest?.[0]?.created_at as string | undefined
-    if (newest) {
-      const ageMs = Date.now() - new Date(newest).getTime()
-      if (ageMs < MIN_REFRESH_MS) {
-        res.status(200).json({
-          skipped: true,
-          reason: 'fresh',
-          ageMinutes: Math.round(ageMs / 60000),
-        })
-        return
-      }
-    }
+  // Cron-only. News is fetched exclusively by the daily server cron
+  // (vercel.json → 06:00 UTC). Any non-cron caller is rejected so the
+  // client can never trigger a fetch. `force`/`purge` stay open for manual
+  // admin maintenance (authenticated out-of-band).
+  if (!isCron && !force && req.query.purge !== '1' && req.query.purge_en !== '1') {
+    res.status(200).json({ skipped: true, reason: 'cron_only' })
+    return
   }
 
   // Manual maintenance levers (cron path stays non-destructive):
@@ -863,7 +841,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     })
   }
 
-  const rows = accepted
+  // Cap NEW inserts at 8–12/day: keep at most MAX_NEW_PER_RUN, freshest
+  // first (accepted was ordered longest-summary-first for dedup, so re-sort
+  // by recency before the cap so the newest stories win the slots).
+  const rows = [...accepted]
+    .sort(
+      (a, b) =>
+        new Date(b.published_at ?? 0).getTime() -
+        new Date(a.published_at ?? 0).getTime(),
+    )
+    .slice(0, MAX_NEW_PER_RUN)
 
   // Delete the inferior duplicates before inserting their replacements
   // so the unique (url) constraint never trips on the dedup transition.
@@ -888,13 +875,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
   }
 
-  // Cap the table at ~60 freshest articles, but PER UNIVERSE so the
+  // Cap the table at 50 freshest articles, but PER UNIVERSE so the
   // high-volume motorsport feeds can't starve the CarSpotting tab: keep
-  // the 30 newest F1 + the 30 newest road-car articles. Each universe is
-  // trimmed independently (newest by published_at, then created_at).
+  // the 25 newest F1 + the 25 newest road-car articles (= 50 total). Each
+  // universe is trimmed independently (newest by published_at, then
+  // created_at). This is the ONLY retention mechanism now (no TTL delete).
   let trimmed = 0
   {
-    const KEEP_PER_BUCKET = 30
+    const KEEP_PER_BUCKET = 25
     const trimBucket = async (isF1: boolean): Promise<number> => {
       let q = admin
         .from('news')
