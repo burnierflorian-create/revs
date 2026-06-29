@@ -3,6 +3,9 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 
 const MODEL = 'claude-sonnet-4-6'
+// Cheap text model + price rule for the on-demand market-price action.
+const PRICE_MODEL = 'claude-haiku-4-5-20251001'
+const PRICE_SYSTEM = `Tu donnes le prix du MARCHÉ actuel en euros — la cote réelle de revente aujourd'hui en France pour l'année indiquée, en bon état. PAS le prix neuf. Jamais le prix neuf si la voiture a plus de 2 ans. Références : Lamborghini Huracán 2020 = 195000, McLaren GT 2022 = 165000, Porsche 911 GT3 2021 = 175000, Ferrari 488 GTB 2019 = 165000. Réponds UNIQUEMENT par le nombre entier en euros, rien d'autre.`
 
 const SUPABASE_URL =
   process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
@@ -705,6 +708,71 @@ async function handleCardSpecs(
   }
 }
 
+// On-demand market price for a spot whose estimated_price is missing/zero.
+// Cheap Haiku text call, run server-side (key stays off the client), and
+// the result is persisted via the service-role admin client (bypasses RLS,
+// so it works for any spot — not just the viewer's own).
+async function handleMarketPrice(
+  req: VercelRequest,
+  res: VercelResponse,
+  admin: SupabaseClient,
+) {
+  const body =
+    typeof req.body === 'string' ? JSON.parse(req.body) : req.body || {}
+  const spotId =
+    typeof (body as { spotId?: string }).spotId === 'string'
+      ? (body as { spotId: string }).spotId
+      : undefined
+  const brand = String((body as { brand?: unknown }).brand ?? '').trim()
+  const model = String((body as { model?: unknown }).model ?? '').trim()
+  const yearRaw = (body as { year?: unknown }).year
+  const year =
+    typeof yearRaw === 'number' && Number.isFinite(yearRaw) ? yearRaw : null
+  if (!brand && !model) {
+    res.status(400).json({ error: 'missing_car' })
+    return
+  }
+
+  const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
+  let price: number | null = null
+  try {
+    const yearPart = year ? ` ${year}` : ''
+    const r = await anthropic.messages.create({
+      model: PRICE_MODEL,
+      max_tokens: 20,
+      system: PRICE_SYSTEM,
+      messages: [
+        {
+          role: 'user',
+          content: `Prix marché ${brand} ${model}${yearPart} en France, répondre uniquement avec le nombre entier en euros.`,
+        },
+      ],
+    })
+    const text = r.content
+      .filter((b): b is Anthropic.Messages.TextBlock => b.type === 'text')
+      .map((b) => b.text)
+      .join(' ')
+    const n = parseInt(String(text).replace(/[^0-9]/g, ''), 10)
+    if (Number.isFinite(n) && n >= 1000 && n <= 10_000_000) price = n
+  } catch (e) {
+    console.error('[market-price] lookup failed:', (e as Error)?.message ?? e)
+    res.status(502).json({ error: 'lookup_failed' })
+    return
+  }
+
+  if (price != null && spotId) {
+    try {
+      await admin
+        .from('spots')
+        .update({ estimated_price: price })
+        .eq('id', spotId)
+    } catch (e) {
+      console.error('[market-price] persist failed:', (e as Error)?.message ?? e)
+    }
+  }
+  res.status(200).json({ price })
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Méthode non autorisée.' })
@@ -742,6 +810,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
   if (req.query.action === 'card-specs') {
     return handleCardSpecs(req, res, admin)
+  }
+  if (req.query.action === 'market-price') {
+    return handleMarketPrice(req, res, admin)
   }
 
   const body =

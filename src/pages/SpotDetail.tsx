@@ -97,9 +97,20 @@ export default function SpotDetail() {
     setPriceLoading(true)
     ;(async () => {
       try {
-        const res = await fetch('/api/market-price', {
+        // car-info requires a Supabase auth token (the call hits the paid
+        // Claude API). market-price is folded into it as an action to stay
+        // under the Hobby plan's 12-function limit.
+        const {
+          data: { session },
+        } = await supabase.auth.getSession()
+        const res = await fetch('/api/car-info?action=market-price', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            ...(session?.access_token
+              ? { Authorization: `Bearer ${session.access_token}` }
+              : {}),
+          },
           body: JSON.stringify({
             spotId: spot.id,
             brand: spot.brand,
