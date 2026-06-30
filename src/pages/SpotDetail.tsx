@@ -6,6 +6,7 @@ import {
   type TouchList,
 } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import mapboxgl from 'mapbox-gl'
 import 'mapbox-gl/dist/mapbox-gl.css'
 import {
@@ -63,6 +64,7 @@ function openNavigation(lat: number, lng: number) {
 export default function SpotDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const { t } = useTranslation()
 
   const [spot, setSpot] = useState<Spot | null>(null)
   const [notFound, setNotFound] = useState(false)
@@ -149,7 +151,7 @@ export default function SpotDetail() {
         data: { session },
       } = await supabase.auth.getSession()
       const token = session?.access_token
-      if (!token) throw new Error('Non authentifié')
+      if (!token) throw new Error(t('spotdetail.notAuthenticated'))
       const res = await fetch('/api/car-info', {
         method: 'POST',
         headers: {
@@ -163,7 +165,7 @@ export default function SpotDetail() {
         error?: string
       }
       if (!res.ok || !data.car_info)
-        throw new Error(data.error || 'Échec de la recherche')
+        throw new Error(data.error || t('spotdetail.searchFailed'))
       setCarInfo(data.car_info)
     } catch (e) {
       setInfoErr(translateError(e))
@@ -282,8 +284,12 @@ export default function SpotDetail() {
         const who = await myPseudo()
         void notifyPush({
           user_id: spot.user_id,
-          title: '💬 Nouveau commentaire',
-          body: `${who} a commenté ton spot ${spot.brand} ${spot.model}`,
+          title: t('spotdetail.pushTitle'),
+          body: t('spotdetail.pushBody', {
+            who,
+            brand: spot.brand,
+            model: spot.model,
+          }),
           url: `/spot/${spot.id}`,
           type: 'comments',
         })
@@ -296,7 +302,7 @@ export default function SpotDetail() {
     const url = `https://revs-ten.vercel.app/spot/${spot.id}`
     const data = {
       title: `${spot.brand} ${spot.model}`,
-      text: `Regarde ce spot sur REVS : ${spot.brand} ${spot.model}`,
+      text: t('spotdetail.shareText', { brand: spot.brand, model: spot.model }),
       url,
     }
     try {
@@ -305,7 +311,7 @@ export default function SpotDetail() {
         return
       }
       await navigator.clipboard.writeText(url)
-      setShareMsg('Lien copié !')
+      setShareMsg(t('spotdetail.linkCopied'))
       setTimeout(() => setShareMsg(null), 2500)
     } catch {
       /* user cancelled share — ignore */
@@ -421,12 +427,12 @@ export default function SpotDetail() {
   if (notFound) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-bg px-8 text-center text-fg">
-        <p className="text-sm text-fg/60">Ce spot est introuvable.</p>
+        <p className="text-sm text-fg/60">{t('spotdetail.notFound')}</p>
         <button
           onClick={() => navigate('/feed')}
           className="rounded-full bg-accent px-6 py-3 text-sm font-medium"
         >
-          Retour au feed
+          {t('spotdetail.backToFeed')}
         </button>
       </div>
     )
@@ -446,12 +452,15 @@ export default function SpotDetail() {
   }
 
   const info: [string, string][] = [
-    ['Marque', spot.brand || '—'],
-    ['Modèle', spot.model || '—'],
-    ['Année', spot.year != null ? String(spot.year) : '—'],
-    ['Couleur', spot.color || '—'],
-    ['Catégorie', categoryLabel(spot.category)],
-    ['Confiance IA', spot.confidence != null ? `${spot.confidence}%` : '—'],
+    [t('spotdetail.info.brand'), spot.brand || '—'],
+    [t('spotdetail.info.model'), spot.model || '—'],
+    [t('spotdetail.info.year'), spot.year != null ? String(spot.year) : '—'],
+    [t('spotdetail.info.color'), spot.color || '—'],
+    [t('spotdetail.info.category'), categoryLabel(spot.category)],
+    [
+      t('spotdetail.info.aiConfidence'),
+      spot.confidence != null ? `${spot.confidence}%` : '—',
+    ],
   ]
 
   return (
@@ -497,7 +506,7 @@ export default function SpotDetail() {
         />
         <button
           onClick={() => navigate(-1)}
-          aria-label="Fermer"
+          aria-label={t('spotdetail.ariaClose')}
           className="tappable absolute left-4 top-[max(1rem,env(safe-area-inset-top))] flex h-11 w-11 items-center justify-center rounded-full"
           style={{
             background: 'rgba(255,255,255,0.12)',
@@ -510,7 +519,7 @@ export default function SpotDetail() {
         </button>
         <button
           onClick={share}
-          aria-label="Partager"
+          aria-label={t('spotdetail.ariaShare')}
           className="tappable absolute right-4 top-[max(1rem,env(safe-area-inset-top))] flex h-11 w-11 items-center justify-center rounded-full bg-black/55 backdrop-blur"
           style={{ border: '1px solid rgba(255,255,255,0.14)' }}
         >
@@ -543,8 +552,12 @@ export default function SpotDetail() {
                 className="rounded-full bg-card px-2.5 py-1 text-[11px] text-fg2"
                 style={{ border: '1px solid var(--color-border)' }}
               >
-                {new Intl.NumberFormat('fr-FR').format(spot.production)} ex.
-                produits
+                {t('spotdetail.produced', {
+                  count: spot.production,
+                  formattedCount: new Intl.NumberFormat('fr-FR').format(
+                    spot.production,
+                  ),
+                })}
               </span>
             )}
           </div>
@@ -572,14 +585,17 @@ export default function SpotDetail() {
             >
               <div>
                 <div className="label-up text-[10px] text-fg2">
-                  Prix du marché
+                  {t('spotdetail.marketPrice')}
                 </div>
                 <div className="mt-1 font-display text-[28px] font-extrabold leading-none tracking-tighter text-fg">
                   {formatPrice(
                     spot.estimated_price && spot.estimated_price > 0
                       ? spot.estimated_price
                       : marketPrice,
-                  ) ?? (priceLoading ? 'Estimation…' : 'Indisponible')}
+                  ) ??
+                    (priceLoading
+                      ? t('spotdetail.priceEstimating')
+                      : t('spotdetail.priceUnavailable'))}
                 </div>
               </div>
               <div
@@ -633,7 +649,7 @@ export default function SpotDetail() {
         <p className="flex items-center gap-1.5 text-[13px] text-fg2">
           <MapPin className="h-4 w-4 flex-none text-accent" />
           {owner?.ville ? (
-            <span>{owner.ville}, France</span>
+            <span>{t('spotdetail.locationCountry', { ville: owner.ville })}</span>
           ) : (
             <span className="tabular-nums">
               {spot.lat.toFixed(4)}, {spot.lng.toFixed(4)}
@@ -650,7 +666,8 @@ export default function SpotDetail() {
             className="tappable flex w-full items-center justify-between gap-3 px-5 py-4 text-left"
           >
             <span className="flex items-center gap-2 font-bold tracking-wide text-fg">
-              <Info className="h-5 w-5 text-accent" />À propos de cette voiture
+              <Info className="h-5 w-5 text-accent" />
+              {t('spotdetail.about')}
             </span>
             <ChevronDown
               className={`h-5 w-5 text-fg2 transition-transform ${
@@ -663,7 +680,7 @@ export default function SpotDetail() {
               {infoBusy ? (
                 <div className="flex items-center gap-2 text-sm text-fg2">
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  Recherche des specs sur le web…
+                  {t('spotdetail.searchingSpecs')}
                 </div>
               ) : infoErr ? (
                 <p className="text-sm text-accent">{infoErr}</p>
@@ -675,13 +692,13 @@ export default function SpotDetail() {
                   <dl className="grid grid-cols-2 gap-x-4 gap-y-3">
                     {(
                       [
-                        ['Moteur', carInfo.engine],
-                        ['Puissance', carInfo.horsepower],
-                        ['Couple', carInfo.torque],
-                        ['0-100 km/h', carInfo.zero_to_100],
-                        ['Vitesse max', carInfo.top_speed],
-                        ['Prix neuf', carInfo.msrp_eur],
-                        ['Production', carInfo.production],
+                        [t('spotdetail.specs.engine'), carInfo.engine],
+                        [t('spotdetail.specs.horsepower'), carInfo.horsepower],
+                        [t('spotdetail.specs.torque'), carInfo.torque],
+                        [t('spotdetail.specs.zeroTo100'), carInfo.zero_to_100],
+                        [t('spotdetail.specs.topSpeed'), carInfo.top_speed],
+                        [t('spotdetail.specs.msrp'), carInfo.msrp_eur],
+                        [t('spotdetail.specs.production'), carInfo.production],
                       ] as [string, string][]
                     ).map(([k, v]) => (
                       <div key={k}>
@@ -705,7 +722,7 @@ export default function SpotDetail() {
           style={{ boxShadow: '0 8px 24px rgba(232,32,58,0.45)' }}
         >
           <Navigation className="h-4 w-4" />
-          Y ALLER
+          {t('spotdetail.goThere')}
         </button>
 
         <div
@@ -737,12 +754,16 @@ export default function SpotDetail() {
                 className="h-full w-full object-cover object-top"
               />
             ) : (
-              (owner?.pseudo || 'Spotter').charAt(0).toUpperCase()
+              (owner?.pseudo || t('spotdetail.defaultSpotter'))
+                .charAt(0)
+                .toUpperCase()
             )}
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-1.5 truncate font-semibold text-fg">
-              <span className="truncate">{owner?.pseudo || 'Spotter'}</span>
+              <span className="truncate">
+                {owner?.pseudo || t('spotdetail.defaultSpotter')}
+              </span>
               {owner?.tier && (
                 <span
                   className={`flex-none rounded-full px-1.5 py-0.5 text-[10px] font-extrabold tracking-wider ${
@@ -750,9 +771,15 @@ export default function SpotDetail() {
                       ? 'bg-[#FFD700]/15 text-[#FFD700]'
                       : 'bg-accent/15 text-accent'
                   }`}
-                  aria-label={owner.tier === 'vip' ? 'Membre VIP' : 'Membre Premium'}
+                  aria-label={
+                    owner.tier === 'vip'
+                      ? t('spotdetail.vipMember')
+                      : t('spotdetail.premiumMember')
+                  }
                 >
-                  {owner.tier === 'vip' ? '👑 VIP' : '⚡ PREMIUM'}
+                  {owner.tier === 'vip'
+                    ? t('spotdetail.vipBadge')
+                    : t('spotdetail.premiumBadge')}
                 </span>
               )}
             </div>
@@ -762,24 +789,26 @@ export default function SpotDetail() {
         </button>
 
         <p className="text-xs text-fg2">
-          Spotté le {formatDateTime(spot.created_at)}
+          {t('spotdetail.spottedOn', {
+            date: formatDateTime(spot.created_at),
+          })}
         </p>
 
         <section className="border-t border-white/[0.08] pt-6">
           <h2 className="mb-3 font-display text-lg font-extrabold tracking-tighter text-fg">
-            Commentaires{' '}
+            {t('spotdetail.comments')}{' '}
             <span className="text-fg2 font-bold">({comments.length})</span>
           </h2>
 
           <div className="space-y-4">
             {comments.length === 0 ? (
               <p className="text-sm text-fg/40">
-                Sois le premier à commenter ce spot.
+                {t('spotdetail.beFirstToComment')}
               </p>
             ) : (
               comments.map((c) => {
                 const p = comProfiles[c.user_id]
-                const nm = p?.pseudo || 'Spotter'
+                const nm = p?.pseudo || t('spotdetail.defaultSpotter')
                 const title = effectiveTitle(p?.xp ?? 0, p?.title ?? null)
                 return (
                   <div key={c.id} className="flex gap-3">
@@ -831,13 +860,13 @@ export default function SpotDetail() {
               maxLength={280}
               rows={1}
               onChange={(e) => setText(e.target.value)}
-              placeholder="Ajoute un commentaire…"
+              placeholder={t('spotdetail.addComment')}
               className="flex-1 resize-none rounded-2xl bg-card px-4 py-3 text-sm text-fg outline-none placeholder:text-fg/30 focus:ring-1 focus:ring-accent"
             />
             <button
               onClick={postComment}
               disabled={sending || !text.trim()}
-              aria-label="Envoyer"
+              aria-label={t('spotdetail.ariaSend')}
               className="flex h-11 w-11 flex-none items-center justify-center rounded-full bg-accent disabled:opacity-40"
             >
               <Send className="h-4 w-4 text-fg" />

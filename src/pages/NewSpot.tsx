@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
+import i18n from '../i18n'
 import { ArrowLeft, Camera, MapPin } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import {
@@ -55,7 +57,10 @@ function supaError(label: string, e: unknown): Error {
   })
   const detail = [o.message, o.details, o.hint].filter(Boolean).join(' — ')
   return new Error(
-    `${label} : ${detail || 'erreur inconnue'}${code ? ` [${code}]` : ''}`,
+    `${i18n.t('newspot.supaError', {
+      label,
+      detail: detail || i18n.t('newspot.errorUnknown'),
+    })}${code ? ` [${code}]` : ''}`,
   )
 }
 
@@ -81,6 +86,7 @@ const EMPTY_RESULT: IdentifyResult = {
 const getPosition = getCurrentPositionSafe
 
 export default function NewSpot() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const cameraRef = useRef<HTMLInputElement>(null)
 
@@ -135,8 +141,8 @@ export default function NewSpot() {
     return {
       id: 'preview-' + Date.now(),
       user_id: '',
-      brand: brand || result.brand || 'Voiture',
-      model: model || result.model || 'Modèle',
+      brand: brand || result.brand || t('newspot.previewDefaultBrand'),
+      model: model || result.model || t('newspot.previewDefaultModel'),
       year: Number.isFinite(yearN) ? yearN : null,
       color: color || result.color || '',
       category: (category || result.category) as SpotCategory,
@@ -207,7 +213,7 @@ export default function NewSpot() {
         /* keep aiBase64 null → analyze() uses the full-res base64 */
       }
     } catch {
-      setPubError('Impossible de lire cette image.')
+      setPubError(t('newspot.imageReadFailed'))
     }
   }
 
@@ -254,7 +260,7 @@ export default function NewSpot() {
   async function saveProfileGate() {
     const p = gpPseudo.trim()
     if (p.length < 2) {
-      setGpErr('Choisis un pseudo (2 caractères minimum).')
+      setGpErr(t('newspot.gatePseudoTooShort'))
       return
     }
     setGpSaving(true)
@@ -264,7 +270,7 @@ export default function NewSpot() {
     } = await supabase.auth.getUser()
     if (!user) {
       setGpSaving(false)
-      setGpErr('Non authentifié.')
+      setGpErr(t('newspot.notAuthenticated'))
       return
     }
     const { error } = await supabase
@@ -275,7 +281,7 @@ export default function NewSpot() {
       )
     setGpSaving(false)
     if (error) {
-      setGpErr("Échec de l'enregistrement. Réessaie.")
+      setGpErr(t('newspot.profileSaveFailed'))
       return
     }
     setProfileOk(true)
@@ -348,10 +354,7 @@ export default function NewSpot() {
       if (data.valid === false) {
         // rejectAndRestart() owns the error buzz — call it once.
         cancelHeartbeat()
-        rejectAndRestart(
-          data.reason ||
-            "Cette photo ne semble pas être une vraie voiture en conditions réelles.",
-        )
+        rejectAndRestart(data.reason || t('newspot.rejectNotRealCar'))
         return
       }
       applyResult(data)
@@ -423,13 +426,13 @@ export default function NewSpot() {
     setPubError(null)
     setLimitReached(false)
     try {
-      setPubStatus('Localisation…')
+      setPubStatus(t('newspot.statusLocating'))
       const pos = await getPosition()
 
       // Anti-fraude : photo prise sur le moment et au bon endroit.
       const takenAt = photoMeta?.takenAt ?? null
       if (takenAt && Date.now() - takenAt.getTime() > MAX_PHOTO_AGE_MS) {
-        rejectAndRestart('Photo trop ancienne - prends la photo sur le moment')
+        rejectAndRestart(t('newspot.rejectPhotoTooOld'))
         return
       }
       const photoLat = photoMeta?.lat ?? null
@@ -442,16 +445,16 @@ export default function NewSpot() {
           pos.coords.longitude,
         )
         if (drift > MAX_GPS_DRIFT_M) {
-          rejectAndRestart('Localisation incohérente')
+          rejectAndRestart(t('newspot.rejectGpsIncoherent'))
           return
         }
       }
 
-      setPubStatus('Authentification…')
+      setPubStatus(t('newspot.statusAuthenticating'))
       const {
         data: { user },
       } = await supabase.auth.getUser()
-      if (!user) throw new Error('Non authentifié')
+      if (!user) throw new Error(t('newspot.notAuthenticatedThrow'))
 
       // Limite quotidienne : 5 spots/jour pour les comptes gratuits.
       const { data: sub } = await supabase
@@ -471,24 +474,22 @@ export default function NewSpot() {
           .maybeSingle()
         if ((cnt?.count ?? 0) >= 5) {
           setLimitReached(true)
-          setPubError(
-            "Tu as atteint ta limite de 5 spots aujourd'hui. Passe Premium pour des spots illimités.",
-          )
+          setPubError(t('newspot.limitReached'))
           setPubStatus('')
           return
         }
       }
 
-      setPubStatus('Envoi de la photo…')
+      setPubStatus(t('newspot.statusUploading'))
       const path = `${user.id}/${Date.now()}.jpg`
       const { error: upErr } = await supabase.storage
         .from('spots')
         .upload(path, image.blob, { contentType: 'image/jpeg' })
-      if (upErr) throw supaError('Envoi de la photo', upErr)
+      if (upErr) throw supaError(t('newspot.uploadLabel'), upErr)
 
       const { data: pub } = supabase.storage.from('spots').getPublicUrl(path)
 
-      setPubStatus('Publication…')
+      setPubStatus(t('newspot.statusPublishing'))
       const yearNum = parseInt(year, 10)
 
       // If a live event is within 5km, opt-in to tag this spot to it.
@@ -528,7 +529,7 @@ export default function NewSpot() {
         })
         .select('*')
         .single()
-      if (insErr) throw supaError('Publication', insErr)
+      if (insErr) throw supaError(t('newspot.publishLabel'), insErr)
       const insertedSpot = (inserted as Spot | null) ?? null
       const newSpotId = insertedSpot?.id ?? null
       // Instant feed re-render — hand the full row to the (kept-alive)
@@ -547,8 +548,12 @@ export default function NewSpot() {
         const brandTrim = brand.trim()
         const modelTrim = model.trim()
         void notifyPush({
-          title: '🚗 Nouveau spot',
-          body: `${who} vient de spotter une ${brandTrim} ${modelTrim} près de toi`,
+          title: t('newspot.pushNearbyTitle'),
+          body: t('newspot.pushNearbyBody', {
+            who,
+            brand: brandTrim,
+            model: modelTrim,
+          }),
           url: '/map',
           type: 'nearby',
           nearby: {
@@ -562,8 +567,12 @@ export default function NewSpot() {
         const brandEntry = slug ? getBrand(slug) : undefined
         if (slug && brandEntry) {
           void notifyPush({
-            title: `🔔 Nouvelle ${brandEntry.name} spottée`,
-            body: `${who} vient de spotter une ${brandEntry.name} ${modelTrim} près de toi`,
+            title: t('newspot.pushBrandTitle', { brand: brandEntry.name }),
+            body: t('newspot.pushBrandBody', {
+              who,
+              brand: brandEntry.name,
+              model: modelTrim,
+            }),
             url: `/brand/${slug}`,
             // Gate on the existing "nearby" pref — brand follows are
             // proximity-based notifications by design.
@@ -622,15 +631,15 @@ export default function NewSpot() {
       } catch (fxErr) {
         console.warn('[spot] celebration skipped:', fxErr)
       }
-      navigate('/map', { state: { toast: 'Spot publié ! 🔥' } })
+      navigate('/map', { state: { toast: t('newspot.toastPublished') } })
     } catch (err) {
       console.error('[spot] publish aborted:', err)
       const msg =
         (err as { code?: number })?.code === 1
-          ? 'Position GPS refusée. Active la localisation pour publier.'
+          ? t('newspot.gpsDenied')
           : err instanceof Error
             ? err.message
-            : 'Échec de la publication'
+            : t('newspot.publishFailed')
       setPubError(msg)
       setPubStatus('')
     }
@@ -652,7 +661,7 @@ export default function NewSpot() {
   if (profileOk === null) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-bg text-sm text-fg2">
-        Chargement…
+        {t('newspot.loading')}
       </div>
     )
   }
@@ -663,7 +672,7 @@ export default function NewSpot() {
         <div className="flex items-center gap-4 py-4">
           <button
             onClick={() => navigate('/')}
-            aria-label="Retour"
+            aria-label={t('newspot.back')}
             className="tappable text-fg2 hover:text-fg"
           >
             <ArrowLeft className="h-6 w-6" />
@@ -672,31 +681,30 @@ export default function NewSpot() {
         <div className="mx-auto mt-6 max-w-sm space-y-5">
           <div>
             <h1 className="display-xl text-fg">
-              Crée ton pseudo avant de spotter
+              {t('newspot.gateTitle')}
             </h1>
             <p className="mt-2 text-sm text-fg2">
-              Ton pseudo apparaît sur tes spots dans le feed. Pas de spots
-              anonymes sur REVS.
+              {t('newspot.gateSubtitle')}
             </p>
           </div>
           <div className="space-y-2">
-            <label className="label-up text-[10px] text-fg2">Pseudo</label>
+            <label className="label-up text-[10px] text-fg2">{t('newspot.labelPseudo')}</label>
             <input
               value={gpPseudo}
               maxLength={24}
               onChange={(e) => setGpPseudo(e.target.value)}
-              placeholder="ex : speedhunter_74"
+              placeholder={t('newspot.placeholderPseudo')}
               className="w-full rounded-2xl bg-card px-4 py-3.5 text-fg outline-none placeholder:text-fg2/40 focus:border-accent"
               style={{ border: '1px solid var(--color-border)' }}
             />
           </div>
           <div className="space-y-2">
-            <label className="label-up text-[10px] text-fg2">Ville</label>
+            <label className="label-up text-[10px] text-fg2">{t('newspot.labelVille')}</label>
             <input
               value={gpVille}
               maxLength={48}
               onChange={(e) => setGpVille(e.target.value)}
-              placeholder="ex : Annecy"
+              placeholder={t('newspot.placeholderVille')}
               className="w-full rounded-2xl bg-card px-4 py-3.5 text-fg outline-none placeholder:text-fg2/40 focus:border-accent"
               style={{ border: '1px solid var(--color-border)' }}
             />
@@ -708,7 +716,7 @@ export default function NewSpot() {
             className="tappable w-full rounded-full bg-accent py-3.5 text-sm font-extrabold tracking-wider text-fg disabled:opacity-50"
             style={{ boxShadow: '0 8px 24px rgba(232,32,58,0.45)' }}
           >
-            {gpSaving ? '…' : 'SAUVEGARDER ET SPOTTER'}
+            {gpSaving ? t('newspot.gateSaving') : t('newspot.gateSave')}
           </button>
         </div>
       </div>
@@ -721,7 +729,7 @@ export default function NewSpot() {
       <div className="flex items-center gap-4 py-4">
         <button
           onClick={back}
-          aria-label="Retour"
+          aria-label={t('newspot.back')}
           className="tappable text-fg2 hover:text-fg"
         >
           <ArrowLeft className="h-6 w-6" />
@@ -746,7 +754,7 @@ export default function NewSpot() {
       {/* ÉTAPE 1 — PHOTO */}
       {step === 1 && (
         <div className="space-y-6 pb-8">
-          <h1 className="display-xl text-fg">Nouveau spot</h1>
+          <h1 className="display-xl text-fg">{t('newspot.newSpotTitle')}</h1>
 
           <input
             ref={cameraRef}
@@ -773,7 +781,7 @@ export default function NewSpot() {
             <div className="space-y-5">
               <img
                 src={previewUrl}
-                alt="Aperçu"
+                alt={t('newspot.previewAlt')}
                 // Hero of the publish flow — keep eager + high
                 // priority so the preview lands the moment the
                 // analyse step finishes.
@@ -788,7 +796,7 @@ export default function NewSpot() {
                   className="tappable flex-1 rounded-full py-3 text-sm font-bold tracking-wide text-fg2 hover:text-fg"
                   style={{ border: '1px solid var(--color-border)' }}
                 >
-                  Reprendre
+                  {t('newspot.retake')}
                 </button>
                 <button
                   onClick={analyze}
@@ -796,7 +804,7 @@ export default function NewSpot() {
                   className="tappable flex-[2] rounded-full bg-accent py-3 text-sm font-extrabold tracking-wider text-fg disabled:opacity-50"
                   style={{ boxShadow: '0 8px 24px rgba(232,32,58,0.45)' }}
                 >
-                  ANALYSER
+                  {t('newspot.analyze')}
                 </button>
               </div>
             </div>
@@ -808,7 +816,7 @@ export default function NewSpot() {
                 style={{ boxShadow: '0 12px 36px rgba(232,32,58,0.45)' }}
               >
                 <Camera className="h-6 w-6" />
-                PRENDRE UNE PHOTO
+                {t('newspot.takePhoto')}
               </button>
               {pubError && (
                 <p className="text-sm text-accent">{pubError}</p>
@@ -882,14 +890,13 @@ export default function NewSpot() {
                   className="font-display font-extrabold tracking-tight text-white"
                   style={{ fontSize: '16px', letterSpacing: '-0.01em' }}
                 >
-                  Analyse REVS IA en cours
+                  {t('newspot.analyzingTitle')}
                 </h3>
                 <p
                   className="mt-1.5 leading-snug text-fg/55"
                   style={{ fontSize: '12px' }}
                 >
-                  Identification des courbes, de la rareté et des
-                  caractéristiques techniques…
+                  {t('newspot.analyzingSubtitle')}
                 </p>
               </div>
             </div>
@@ -905,7 +912,7 @@ export default function NewSpot() {
               className="rounded-3xl bg-card px-4 py-3 text-sm text-fg2"
               style={{ border: '1px solid var(--color-border)' }}
             >
-              Identification difficile — complète ou corrige les champs ci-dessous.
+              {t('newspot.identifyDifficult')}
             </div>
           ) : (
             // Hero reveal — full 2:3 CollectorCard preview built
@@ -932,7 +939,7 @@ export default function NewSpot() {
                 className="text-center font-medium uppercase text-fg2"
                 style={{ fontSize: '10px', letterSpacing: '0.18em' }}
               >
-                IA · {result.confidence}% de confiance
+                {t('newspot.confidenceLine', { confidence: result.confidence })}
               </p>
               {/* Low-confidence warning — a far / obscured shot makes the
                   model guess unreliable. Surfaced under the card so the
@@ -944,7 +951,7 @@ export default function NewSpot() {
 
           {result.alternatives.length > 0 && (
             <div className="space-y-2">
-              <p className="label-up text-[10px] text-fg2">Alternatives</p>
+              <p className="label-up text-[10px] text-fg2">{t('newspot.alternatives')}</p>
               <div className="flex flex-wrap gap-2">
                 {result.alternatives.slice(0, 2).map((alt, i) => (
                   <button
@@ -962,18 +969,18 @@ export default function NewSpot() {
           )}
 
           <div className="space-y-4">
-            <Field label="Marque" value={brand} onChange={setBrand} />
-            <Field label="Modèle" value={model} onChange={setModel} />
+            <Field label={t('newspot.fieldBrand')} value={brand} onChange={setBrand} />
+            <Field label={t('newspot.fieldModel')} value={model} onChange={setModel} />
             <Field
-              label="Année"
+              label={t('newspot.fieldYear')}
               value={year}
               onChange={setYear}
               inputMode="numeric"
             />
-            <Field label="Couleur" value={color} onChange={setColor} />
+            <Field label={t('newspot.fieldColor')} value={color} onChange={setColor} />
 
             <div className="space-y-2">
-              <label className="label-up text-[10px] text-fg2">Catégorie</label>
+              <label className="label-up text-[10px] text-fg2">{t('newspot.fieldCategory')}</label>
               <select
                 value={category}
                 onChange={(e) => setCategory(e.target.value as SpotCategory)}
@@ -993,7 +1000,7 @@ export default function NewSpot() {
                 className="block"
                 style={{ fontSize: '12px', color: '#888' }}
               >
-                Ajoute une description (optionnel)
+                {t('newspot.descriptionLabel')}
               </label>
               <div className="relative">
                 <textarea
@@ -1001,7 +1008,7 @@ export default function NewSpot() {
                   maxLength={280}
                   onChange={(e) => setDescription(e.target.value)}
                   rows={3}
-                  placeholder="Ex: Elle roulait vers le lac, moteur en plein régime… 🔥"
+                  placeholder={t('newspot.descriptionPlaceholder')}
                   className="w-full resize-none outline-none placeholder:text-[#666]"
                   style={{
                     background: '#1a1a1a',
@@ -1035,7 +1042,7 @@ export default function NewSpot() {
                 : { background: '#141414', border: '1px solid var(--color-border)', color: 'rgb(var(--color-fg))' }
             }
           >
-            {savedToGallery ? '✓ Photo enregistrée !' : '💾 Enregistrer dans ma galerie'}
+            {savedToGallery ? t('newspot.savedToGallery') : t('newspot.saveToGallery')}
           </button>
 
           <button
@@ -1044,7 +1051,7 @@ export default function NewSpot() {
             className="tappable w-full rounded-full bg-accent py-4 text-sm font-extrabold tracking-wider text-fg disabled:opacity-50"
             style={{ boxShadow: '0 8px 24px rgba(232,32,58,0.45)' }}
           >
-            CONTINUER
+            {t('newspot.continue')}
           </button>
         </div>
       )}
@@ -1063,7 +1070,7 @@ export default function NewSpot() {
             <MapPin className="h-7 w-7 text-accent" />
           </div>
           <p className="text-sm text-fg2">
-            Votre position GPS sera enregistrée.
+            {t('newspot.gpsWillBeSaved')}
           </p>
           {limitReached ? (
             <div className="w-full max-w-xs space-y-3">
@@ -1073,14 +1080,14 @@ export default function NewSpot() {
                 className="tappable w-full rounded-full bg-accent px-6 py-3 text-sm font-extrabold tracking-wider text-fg"
                 style={{ boxShadow: '0 8px 24px rgba(232,32,58,0.45)' }}
               >
-                VOIR LES ABONNEMENTS
+                {t('newspot.viewSubscriptions')}
               </button>
               <button
                 onClick={() => navigate('/')}
                 className="tappable w-full rounded-full bg-card px-6 py-3 text-sm font-bold tracking-wide text-fg2"
                 style={{ border: '1px solid var(--color-border)' }}
               >
-                Plus tard
+                {t('newspot.later')}
               </button>
             </div>
           ) : pubError ? (
@@ -1091,13 +1098,13 @@ export default function NewSpot() {
                 className="tappable rounded-full bg-accent px-6 py-3 text-sm font-extrabold tracking-wider text-fg"
                 style={{ boxShadow: '0 8px 24px rgba(232,32,58,0.45)' }}
               >
-                RÉESSAYER
+                {t('newspot.retry')}
               </button>
             </div>
           ) : (
             <div className="w-56 space-y-3 text-sm text-fg2">
               <p className="label-up text-[11px]">
-                {pubStatus || 'Publication…'}
+                {pubStatus || t('newspot.statusPublishing')}
               </p>
               <Skeleton className="h-2 w-full rounded-full" />
             </div>
@@ -1137,6 +1144,7 @@ function Field({
  *  (< 50%) — a far or obscured shot. Amber alert, theme-aware: muted
  *  glow on dark, deeper contrasted amber on the alabaster light surface. */
 function LowConfidenceBadge() {
+  const { t } = useTranslation()
   const { theme } = useTheme()
   const light = theme === 'light'
   return (
@@ -1153,7 +1161,7 @@ function LowConfidenceBadge() {
             : '1px solid rgba(245,158,11,0.30)',
         }}
       >
-        ⚠️ Cible éloignée — Reconnaissance basse
+        {t('newspot.lowConfidenceBadge')}
       </span>
     </div>
   )

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import {
   ArrowLeft,
@@ -61,11 +62,11 @@ const RARITY_MULT: Record<Rarity, number> = {
   supercar:    3.0,
   hypercar:    4.0,
 }
-const TIMING_LABEL: Record<RaceResult['timing_bucket'], string> = {
-  perfect: 'DÉPART PARFAIT',
-  good: 'BON DÉPART',
-  miss: 'DÉPART RATÉ',
-  false_start: 'FAUX DÉPART',
+const TIMING_LABEL_KEY: Record<RaceResult['timing_bucket'], string> = {
+  perfect: 'timingPerfect',
+  good: 'timingGood',
+  miss: 'timingMiss',
+  false_start: 'timingFalseStart',
 }
 const TIMING_COLOR: Record<RaceResult['timing_bucket'], string> = {
   perfect: '#FFD700',
@@ -163,6 +164,7 @@ function vibrate(ms = 8) {
 // ─────────────────────────────── PAGE ───────────────────────────────
 
 export default function Race() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const [phase, setPhase] = useState<Phase>('select')
   const [spots, setSpots] = useState<Spot[] | null>(null)
@@ -314,12 +316,12 @@ export default function Race() {
         <div className="flex items-center gap-4 px-4 py-4">
           <button
             onClick={() => (phase === 'select' ? navigate(-1) : reset())}
-            aria-label="Retour"
+            aria-label={t('racepage.back')}
             className="tappable text-fg2 hover:text-fg"
           >
             <ArrowLeft className="h-6 w-6" />
           </button>
-          <h1 className="display-xl text-fg">REVS RACE</h1>
+          <h1 className="display-xl text-fg">{t('racepage.title')}</h1>
         </div>
       )}
 
@@ -402,6 +404,7 @@ function SelectPhase({
   busy: boolean
   onStart: () => void
 }) {
+  const { t } = useTranslation()
   if (spots === null) {
     return (
       <div className="flex items-center justify-center px-6 pt-10">
@@ -416,7 +419,7 @@ function SelectPhase({
         style={{ border: '1px solid var(--color-border)' }}
       >
         <p className="font-medium">
-          Pas encore de cartes. Spotte d'abord pour pouvoir courir !
+          {t('racepage.noCards')}
         </p>
       </div>
     )
@@ -445,6 +448,7 @@ function SelectCarousel({
   busy: boolean
   onStart: () => void
 }) {
+  const { t } = useTranslation()
   // Carousel anchored on the picked card. Falls back to index 0 if
   // nothing's picked yet — first paint shows the most recent spot.
   const initialIdx = useMemo(() => {
@@ -505,7 +509,7 @@ function SelectCarousel({
         className="mx-4 mb-2 text-center text-[12px] text-fg2"
         style={{ letterSpacing: '0.04em' }}
       >
-        Choisis ta carte — swipe pour parcourir
+        {t('racepage.swipeHint')}
       </p>
 
       {/* Carousel area */}
@@ -605,7 +609,7 @@ function SelectCarousel({
           </p>
           <div className="mt-2.5 grid grid-cols-2 gap-3 text-center">
             <div>
-              <p className="text-[8px] uppercase tracking-widest text-fg2">Multi</p>
+              <p className="text-[8px] uppercase tracking-widest text-fg2">{t('racepage.multi')}</p>
               <p
                 className="font-display font-extrabold text-fg"
                 style={{ fontSize: '15px' }}
@@ -615,7 +619,7 @@ function SelectCarousel({
             </div>
             <div>
               <p className="text-[8px] uppercase tracking-widest text-fg2">
-                Score est.
+                {t('racepage.estScore')}
               </p>
               <p
                 className="font-display font-extrabold"
@@ -650,7 +654,7 @@ function SelectCarousel({
           ) : (
             <Flag className="h-4 w-4" />
           )}
-          {busy ? 'PRÉPARATION…' : 'CHOISIR CETTE VOITURE'}
+          {busy ? t('racepage.preparing') : t('racepage.chooseThisCar')}
         </button>
       </div>
     </div>
@@ -658,6 +662,7 @@ function SelectCarousel({
 }
 
 function BigCard({ spot, active }: { spot: Spot; active: boolean }) {
+  const { t } = useTranslation()
   const rarity = (spot.rarity ?? 'standard') as Rarity
   return (
     <div
@@ -682,7 +687,7 @@ function BigCard({ spot, active }: { spot: Spot; active: boolean }) {
         />
       ) : (
         <div className="absolute inset-0 flex items-center justify-center text-fg2">
-          pas de photo
+          {t('racepage.noPhoto')}
         </div>
       )}
       <div
@@ -736,6 +741,7 @@ function ReadyPhase({
   stake: RaceStake
   onGo: () => void
 }) {
+  const { t } = useTranslation()
   const playerRarity = (spot.rarity ?? 'standard') as Rarity
   const playerEst = Math.round(playerHp * RARITY_MULT[playerRarity] * 1.1)
   const oppEst = Math.round(
@@ -769,7 +775,7 @@ function ReadyPhase({
           }}
         >
           <p className="text-[10px] uppercase tracking-widest text-fg/70">
-            Enjeu de la course
+            {t('racepage.raceStake')}
           </p>
           <p
             className="mt-1 flex items-center justify-center gap-1.5 font-display font-extrabold tracking-tighter text-white"
@@ -783,7 +789,7 @@ function ReadyPhase({
         {/* Face-à-face */}
         <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
           <Fighter
-            title="TOI"
+            title={t('racepage.you')}
             brand={spot.brand}
             model={spot.model}
             rarity={playerRarity}
@@ -804,7 +810,7 @@ function ReadyPhase({
             VS
           </div>
           <Fighter
-            title="ADVERSAIRE"
+            title={t('racepage.opponent')}
             brand={opponent.brand}
             model={opponent.model}
             rarity={opponent.rarity}
@@ -833,7 +839,7 @@ function ReadyPhase({
           }}
         >
           <Flag className="h-4 w-4" />
-          LANCER LA COURSE
+          {t('racepage.startRace')}
         </button>
       </div>
     </div>
@@ -975,6 +981,7 @@ function CountdownPhase({
   onTap: () => void
   showGoFlash: boolean
 }) {
+  const { t } = useTranslation()
   const isGo = goAt != null
   // Map the existing 3-2-1-0 countdown ticks (driven by the main page
   // hook) into how many F1 lights are still LIT. Spec: start with
@@ -1051,7 +1058,7 @@ function CountdownPhase({
           }}
         >
           <Zap className="h-5 w-5" fill="currentColor" />
-          {isGo ? 'BOOST' : 'ATTENDS LES FEUX'}
+          {isGo ? t('racepage.boost') : t('racepage.waitForLights')}
         </button>
       </div>
     </div>
@@ -1195,6 +1202,7 @@ function SprintPhase({
   result: RaceResult | null
   slowMo: boolean
 }) {
+  const { t } = useTranslation()
   const playerTop = topSpeedFromHp(playerHp)
   const [speed, setSpeed] = useState(slowMo ? playerTop - 12 : 0)
   const [elapsedMs, setElapsedMs] = useState(0)
@@ -1283,7 +1291,7 @@ function SprintPhase({
             fontSize: '9px',
           }}
         >
-          {slowMo ? 'ARRIVÉE' : 'TOUR 1/1'}
+          {slowMo ? t('racepage.finish') : t('racepage.lap')}
         </span>
         <div
           className="rounded-full px-3 py-1 font-extrabold uppercase tracking-widest"
@@ -1301,7 +1309,7 @@ function SprintPhase({
             letterSpacing: '0.12em',
           }}
         >
-          {playerLeading ? '1ᵉʳ' : '2ᵉ'} · TOI
+          {playerLeading ? t('racepage.firstPlace') : t('racepage.secondPlace')} · {t('racepage.you')}
         </div>
         <span
           className="rounded-full px-2.5 py-1 font-extrabold tracking-tight tabular-nums text-white"
@@ -1342,7 +1350,7 @@ function SprintPhase({
         </div>
         <div className="flex flex-1 flex-col gap-1">
           <span className="text-[8.5px] uppercase tracking-widest text-fg2">
-            Boost
+            {t('racepage.boost')}
           </span>
           <div
             className="h-2 w-full overflow-hidden rounded-full"
@@ -1651,6 +1659,7 @@ function ResultPhase({
   onAgain: () => void
   onHome: () => void
 }) {
+  const { t } = useTranslation()
   const won = result.winner_is_me
   const playerRarity = (playerSpot.rarity ?? 'standard') as Rarity
   const winnerRarity = won ? playerRarity : opponent.rarity
@@ -1684,7 +1693,7 @@ function ResultPhase({
             animation: 'race-pop 460ms var(--ease-spring) both',
           }}
         >
-          {won ? 'VICTOIRE' : 'DÉFAITE'}
+          {won ? t('racepage.victory') : t('racepage.defeat')}
         </p>
       </div>
 
@@ -1745,14 +1754,14 @@ function ResultPhase({
             fontSize: '10px',
           }}
         >
-          {TIMING_LABEL[result.timing_bucket]} (×{result.timing_mult})
+          {t(`racepage.${TIMING_LABEL_KEY[result.timing_bucket]}`)} (×{result.timing_mult})
         </span>
       </div>
 
       {/* Score row */}
       <div className="mt-5 grid grid-cols-2 gap-3 px-4">
         <ScoreCard
-          label="TOI"
+          label={t('racepage.you')}
           brand={playerSpot.brand}
           model={playerSpot.model}
           rarity={playerRarity}
@@ -1779,7 +1788,7 @@ function ResultPhase({
           className="mx-4 mt-5 rounded-2xl bg-card p-4 text-center"
           style={{ border: '1px solid var(--color-border)' }}
         >
-          <p className="text-[12px] text-fg2">Lot de consolation</p>
+          <p className="text-[12px] text-fg2">{t('racepage.consolationPrize')}</p>
           <p
             className="mt-1 flex items-center justify-center gap-1.5 font-extrabold text-fg"
             style={{ fontSize: '20px' }}
@@ -1803,7 +1812,7 @@ function ResultPhase({
           className="tappable rounded-full bg-fg/[0.07] px-5 py-4 text-sm font-extrabold uppercase tracking-wider text-fg/80"
           style={{ border: '1px solid var(--color-border)' }}
         >
-          Accueil
+          {t('racepage.home')}
         </button>
         <button
           onClick={onAgain}
@@ -1814,7 +1823,7 @@ function ResultPhase({
           }}
         >
           <Flag className="h-4 w-4" />
-          REJOUER
+          {t('racepage.playAgain')}
         </button>
       </div>
     </div>
@@ -1822,6 +1831,7 @@ function ResultPhase({
 }
 
 function LootBoxReveal({ amount, label }: { amount: number; label: string }) {
+  const { t } = useTranslation()
   const [stage, setStage] = useState<'shake' | 'burst' | 'reward'>('shake')
   useEffect(() => {
     const t1 = setTimeout(() => setStage('burst'), 700)
@@ -1842,7 +1852,7 @@ function LootBoxReveal({ amount, label }: { amount: number; label: string }) {
       }}
     >
       <p className="text-[10px] uppercase tracking-widest text-fg2">
-        Récompense
+        {t('racepage.reward')}
       </p>
       <div className="relative mt-2 flex h-20 w-20 items-center justify-center">
         {stage === 'shake' && (
@@ -1909,6 +1919,7 @@ function ScoreCard({
   score: number
   winner: boolean
 }) {
+  const { t } = useTranslation()
   return (
     <div
       className="rounded-2xl p-3"
@@ -1946,7 +1957,7 @@ function ScoreCard({
       >
         {score}
       </p>
-      <p className="text-[9px] uppercase tracking-widest text-fg2">SCORE</p>
+      <p className="text-[9px] uppercase tracking-widest text-fg2">{t('racepage.score')}</p>
     </div>
   )
 }
