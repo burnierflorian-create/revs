@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { ArrowLeft, Lock } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { EVENT_TYPES, type EventType } from '../lib/events'
@@ -7,6 +8,7 @@ import { translateError } from '../lib/errors'
 
 export default function NewEvent() {
   const navigate = useNavigate()
+  const { t } = useTranslation()
 
   const [title, setTitle] = useState('')
   const [type, setType] = useState<EventType>('Cars & Coffee')
@@ -114,11 +116,10 @@ export default function NewEvent() {
           <Lock className="h-6 w-6 text-accent" />
         </div>
         <p className="font-display text-xl font-extrabold tracking-tighter text-fg">
-          Réservé aux organisateurs
+          {t('miscpages.newEvent.gatedTitle')}
         </p>
         <p className="-mt-3 max-w-sm text-sm leading-relaxed text-fg2">
-          La création d'événements est réservée aux organisateurs officiels.
-          Fais une demande via les paramètres.
+          {t('miscpages.newEvent.gatedBody')}
         </p>
         <div className="flex gap-3">
           <button
@@ -126,14 +127,14 @@ export default function NewEvent() {
             className="tappable rounded-full bg-card px-6 py-3 text-sm font-bold tracking-wide text-fg2"
             style={{ border: '1px solid var(--color-border)' }}
           >
-            Retour
+            {t('miscpages.newEvent.back')}
           </button>
           <button
             onClick={() => navigate('/settings')}
             className="tappable rounded-full bg-accent px-6 py-3 text-sm font-extrabold tracking-wider text-fg"
             style={{ boxShadow: '0 8px 24px rgba(232,32,58,0.45)' }}
           >
-            DEVENIR ORGANISATEUR
+            {t('miscpages.newEvent.becomeOrganizer')}
           </button>
         </div>
       </div>
@@ -143,7 +144,7 @@ export default function NewEvent() {
   if (allowed === null) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-bg text-sm text-fg2">
-        Chargement…
+        {t('miscpages.newEvent.loading')}
       </div>
     )
   }
@@ -157,16 +158,16 @@ export default function NewEvent() {
       <div className="flex items-center gap-4 py-4">
         <button
           onClick={() => navigate('/events')}
-          aria-label="Retour"
+          aria-label={t('miscpages.newEvent.back')}
           className="tappable text-fg2 hover:text-fg"
         >
           <ArrowLeft className="h-6 w-6" />
         </button>
-        <h1 className="display-xl text-fg">Nouvel événement</h1>
+        <h1 className="display-xl text-fg">{t('miscpages.newEvent.title')}</h1>
       </div>
 
       <form onSubmit={onSubmit} className="space-y-5 pb-10">
-        <Labelled label="Titre">
+        <Labelled label={t('miscpages.newEvent.fieldTitle')}>
           <input
             required
             value={title}
@@ -176,7 +177,7 @@ export default function NewEvent() {
           />
         </Labelled>
 
-        <Labelled label="Type">
+        <Labelled label={t('miscpages.newEvent.fieldType')}>
           <select
             value={type}
             onChange={(e) => setType(e.target.value as EventType)}
@@ -191,7 +192,7 @@ export default function NewEvent() {
           </select>
         </Labelled>
 
-        <Labelled label="Date et heure">
+        <Labelled label={t('miscpages.newEvent.fieldDatetime')}>
           <input
             required
             type="datetime-local"
@@ -202,7 +203,7 @@ export default function NewEvent() {
           />
         </Labelled>
 
-        <Labelled label="Lieu">
+        <Labelled label={t('miscpages.newEvent.fieldLocation')}>
           <input
             required
             value={location}
@@ -212,7 +213,7 @@ export default function NewEvent() {
           />
         </Labelled>
 
-        <Labelled label="Description (optionnel)">
+        <Labelled label={t('miscpages.newEvent.fieldDescription')}>
           <textarea
             value={description}
             rows={3}
@@ -245,11 +246,10 @@ export default function NewEvent() {
                   }`}
                 />
               </span>
-              Mode Live
+              {t('miscpages.newEvent.liveMode')}
             </p>
             <p className="mt-1 text-xs text-fg2">
-              Affiche une bannière LIVE et une mini-carte temps réel
-              pendant l'événement.
+              {t('miscpages.newEvent.liveModeHint')}
             </p>
           </div>
           <button
@@ -281,7 +281,7 @@ export default function NewEvent() {
           className="tappable w-full rounded-full bg-accent py-4 text-sm font-extrabold tracking-wider text-fg disabled:opacity-50"
           style={{ boxShadow: '0 8px 24px rgba(232,32,58,0.45)' }}
         >
-          {busy ? '…' : "PUBLIER L'ÉVÉNEMENT"}
+          {busy ? '…' : t('miscpages.newEvent.submit')}
         </button>
       </form>
     </div>

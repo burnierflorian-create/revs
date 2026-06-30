@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import { supabase } from '../lib/supabase'
@@ -47,6 +48,7 @@ function RankRow({
   isMe: boolean
   onTap: () => void
 }) {
+  const { t } = useTranslation()
   const name = row.pseudo || 'Spotter'
   const podium = rank <= 3
   const medal = rank === 1 ? '👑' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : null
@@ -121,13 +123,13 @@ function RankRow({
       <div className="min-w-0 flex-1">
         <p className="flex items-center gap-1.5 truncate text-sm font-semibold text-white">
           {name}
-          {isMe && <span className="text-white/45">(toi)</span>}
+          {isMe && <span className="text-white/45">{t('community.you')}</span>}
           {rank === 1 && (
             <span
               className="flex-none rounded-full px-1.5 py-0.5 text-[8px] font-extrabold uppercase tracking-wider text-black"
               style={{ background: GOLD, letterSpacing: '0.08em' }}
             >
-              Meilleur
+              {t('community.best')}
             </span>
           )}
         </p>
@@ -139,7 +141,7 @@ function RankRow({
             {levelName(row.xp)}
           </span>
           {' · '}
-          {row.spots} spot{row.spots > 1 ? 's' : ''}
+          {t('community.spotsCount', { count: row.spots })}
         </p>
       </div>
 
@@ -205,6 +207,7 @@ function CountryRow({
   row: CountryStanding
   isMine: boolean
 }) {
+  const { t } = useTranslation()
   const medalColor =
     rank === 1 ? GOLD : rank === 2 ? SILVER : rank === 3 ? BRONZE : null
   return (
@@ -229,10 +232,10 @@ function CountryRow({
       <div className="min-w-0 flex-1">
         <p className="flex items-center gap-1.5 truncate text-sm font-semibold text-white">
           {row.country}
-          {isMine && <span className="text-white/45">(toi)</span>}
+          {isMine && <span className="text-white/45">{t('community.you')}</span>}
         </p>
         <p className="mt-0.5 truncate text-[11px] text-white/45">
-          {row.spotters} spotter{row.spotters > 1 ? 's' : ''}
+          {t('community.spottersCount', { count: row.spotters })}
         </p>
       </div>
       <span
@@ -248,6 +251,7 @@ function CountryRow({
 
 // ─────────────────────────── Page ───────────────────────────
 export default function Leaderboard() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const [scope, setScope] = useState<Scope>('global')
   const [meId, setMeId] = useState<string | null>(null)
@@ -340,9 +344,9 @@ export default function Leaderboard() {
   }, [scope, myCity, cityRows])
 
   const tabs: { key: Scope; label: string }[] = [
-    { key: 'global', label: '🌍 Global' },
-    { key: 'country', label: '🌍 Pays' },
-    { key: 'city', label: '📍 Ma Ville' },
+    { key: 'global', label: `🌍 ${t('community.scopeGlobal')}` },
+    { key: 'country', label: `🌍 ${t('community.scopeCountry')}` },
+    { key: 'city', label: `📍 ${t('community.scopeCity')}` },
   ]
 
   const open = (id: string) => navigate(`/u/${id}`)
@@ -365,19 +369,19 @@ export default function Leaderboard() {
         >
           <ArrowLeft className="h-6 w-6" />
         </button>
-        <h1 className="display-xl text-fg">Classement</h1>
+        <h1 className="display-xl text-fg">{t('community.leaderboardTitle')}</h1>
       </div>
 
       {/* Three pill tabs */}
       <div className="mb-5 flex gap-2">
-        {tabs.map((t) => {
-          const active = scope === t.key
+        {tabs.map((tb) => {
+          const active = scope === tb.key
           return (
             <button
-              key={t.key}
+              key={tb.key}
               onClick={() => {
                 hapticSelection()
-                setScope(t.key)
+                setScope(tb.key)
               }}
               className="tappable flex-1 rounded-full py-2.5 text-center text-[13px] font-bold transition-colors"
               style={
@@ -390,7 +394,7 @@ export default function Leaderboard() {
                     }
               }
             >
-              {t.label}
+              {tb.label}
             </button>
           )
         })}
@@ -402,7 +406,7 @@ export default function Leaderboard() {
           loadingSkeleton
         ) : globalRows.length === 0 ? (
           <p className="py-16 text-center text-sm text-white/40">
-            Pas encore de spotters.
+            {t('community.noSpottersYet')}
           </p>
         ) : (
           <RankList rows={globalRows} meId={meId} onOpen={open} />
@@ -414,7 +418,7 @@ export default function Leaderboard() {
           loadingSkeleton
         ) : countryBoard.length === 0 ? (
           <p className="py-16 text-center text-sm text-white/40">
-            Pas encore de spotters.
+            {t('community.noSpottersYet')}
           </p>
         ) : (
           <div className="space-y-2 pb-8">
@@ -437,14 +441,14 @@ export default function Leaderboard() {
             style={{ background: '#141414', border: '1px solid rgba(255,255,255,0.06)' }}
           >
             <p className="text-sm text-white/60">
-              Ajoute ta ville dans le profil pour le classement local.
+              {t('community.addCityHint')}
             </p>
             <button
               onClick={() => navigate('/profile')}
               className="tappable mt-4 rounded-full px-5 py-2.5 text-sm font-extrabold tracking-wider text-white"
               style={{ background: '#E8203A', boxShadow: '0 8px 24px rgba(232,32,58,0.45)' }}
             >
-              Aller au profil
+              {t('community.goToProfile')}
             </button>
           </div>
         ) : cityRows === null ? (
@@ -458,14 +462,14 @@ export default function Leaderboard() {
                 style={{ background: '#141414', border: '1px solid rgba(255,255,255,0.06)' }}
               >
                 <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/40">
-                  {myCity} en chiffres
+                  {t('community.cityInNumbers', { city: myCity })}
                 </p>
                 <div className="mt-3 grid grid-cols-2 gap-3 divide-x divide-white/[0.08]">
                   <div className="pr-4">
                     <p className="font-display text-3xl font-extrabold tracking-tighter text-white">
                       {cityStats.total_spots}
                     </p>
-                    <p className="text-xs text-white/45">spots</p>
+                    <p className="text-xs text-white/45">{t('community.spots')}</p>
                   </div>
                   {cityStats.top_car && (
                     <div className="min-w-0 pl-4">
@@ -473,7 +477,7 @@ export default function Leaderboard() {
                         {cityStats.top_car}
                       </p>
                       <p className="text-xs text-white/45">
-                        voiture top — {cityStats.top_car_count} fois
+                        {t('community.topCar', { count: cityStats.top_car_count })}
                       </p>
                     </div>
                   )}
@@ -483,7 +487,7 @@ export default function Leaderboard() {
 
             {cityRows.length === 0 ? (
               <p className="py-16 text-center text-sm text-white/40">
-                Pas encore de spotters à {myCity}.
+                {t('community.noSpottersInCity', { city: myCity })}
               </p>
             ) : (
               <RankList rows={cityRows} meId={meId} onOpen={open} />

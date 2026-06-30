@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Car } from 'lucide-react'
 import { supabase } from '../lib/supabase'
@@ -12,6 +13,7 @@ type Prof = { pseudo: string | null; ville: string | null; avatar: string | null
 type Rel = { user_id: string } & Prof
 
 export default function PublicProfile() {
+  const { t } = useTranslation()
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
 
@@ -119,8 +121,8 @@ export default function PublicProfile() {
       const who = await myPseudo()
       void notifyPush({
         user_id: id,
-        title: '👥 Nouvel abonné',
-        body: `${who} a commencé à te suivre`,
+        title: t('community.newFollowerTitle'),
+        body: t('community.newFollowerBody', { who }),
         url: `/u/${meId}`,
         type: 'followers',
       })
@@ -238,7 +240,7 @@ export default function PublicProfile() {
                     ? 'bg-[#FFD700]/15 text-[#FFD700]'
                     : 'bg-accent/15 text-accent'
                 }`}
-                aria-label={tier === 'vip' ? 'Membre VIP' : 'Membre Premium'}
+                aria-label={tier === 'vip' ? t('community.memberVip') : t('community.memberPremium')}
               >
                 {tier === 'vip' ? '👑 VIP' : '⚡ Premium'}
               </span>
@@ -261,7 +263,7 @@ export default function PublicProfile() {
                   : 'bg-accent text-fg'
               }`}
             >
-              {isFollowing ? 'Suivi ✓' : 'Suivre'}
+              {isFollowing ? t('community.following') : t('community.follow')}
             </button>
           )}
 
@@ -271,28 +273,28 @@ export default function PublicProfile() {
               <span className="block font-display text-xl font-extrabold text-fg">
                 {spots.length}
               </span>
-              <span className="text-[11px] text-fg/40">spots</span>
+              <span className="text-[11px] text-fg/40">{t('community.spots')}</span>
             </div>
             <span className="w-px self-center bg-fg/10" style={{ height: 26 }} />
             <div className="flex-1 text-center">
               <span className="block font-display text-xl font-extrabold text-fg">
                 {uniqueBrands}
               </span>
-              <span className="text-[11px] text-fg/40">marques</span>
+              <span className="text-[11px] text-fg/40">{t('community.brands')}</span>
             </div>
             <span className="w-px self-center bg-fg/10" style={{ height: 26 }} />
             <button onClick={() => openList('followers')} className="flex-1 text-center">
               <span className="block font-display text-xl font-extrabold text-fg">
                 {followers}
               </span>
-              <span className="text-[11px] text-fg/40">abonnés</span>
+              <span className="text-[11px] text-fg/40">{t('community.followers')}</span>
             </button>
             <span className="w-px self-center bg-fg/10" style={{ height: 26 }} />
             <button onClick={() => openList('following')} className="flex-1 text-center">
               <span className="block font-display text-xl font-extrabold text-fg">
                 {following}
               </span>
-              <span className="text-[11px] text-fg/40">abonnements</span>
+              <span className="text-[11px] text-fg/40">{t('community.followingCount')}</span>
             </button>
           </div>
 
@@ -300,7 +302,7 @@ export default function PublicProfile() {
           {earnedBadges.length > 0 && (
             <div className="mt-6 w-full">
               <h3 className="mb-3 text-left text-[10px] font-black uppercase tracking-[0.2em] text-fg/45">
-                Badges · {earnedBadges.length}
+                {t('community.badgesCount', { n: earnedBadges.length })}
               </h3>
               <div className="grid grid-cols-5 gap-2.5">
                 {earnedBadges.slice(0, 15).map((b) => (
@@ -333,7 +335,7 @@ export default function PublicProfile() {
         <div className="mt-5 space-y-2">
           {list.length === 0 ? (
             <p className="py-6 text-center text-sm text-fg/40">
-              Personne pour le moment.
+              {t('community.nobodyYet')}
             </p>
           ) : (
             list.map((r) => (
@@ -359,10 +361,10 @@ export default function PublicProfile() {
       )}
 
       <h3 className="mb-3 mt-7 font-display text-lg font-bold">
-        Derniers spots
+        {t('community.latestSpots')}
       </h3>
       {spots.length === 0 ? (
-        <p className="pb-10 text-sm text-fg/40">Aucun spot.</p>
+        <p className="pb-10 text-sm text-fg/40">{t('community.noSpot')}</p>
       ) : (
         <div className="grid grid-cols-3 gap-2 pb-10">
           {spots.slice(0, 12).map((s) => (

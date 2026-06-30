@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { ArrowLeft, Copy, Share2, Users, Zap, Check } from 'lucide-react'
 import {
   fetchMyReferralStats,
@@ -7,11 +8,9 @@ import {
 } from '../lib/referrals'
 import { Skeleton } from '../components/Skeleton'
 
-const SHARE_TEXT = (code: string) =>
-  `Rejoins-moi sur REVS — l'app pour spotter les voitures iconiques. Utilise mon code ${code} et on gagne tous les deux +50 XP 🚗⚡`
-
 export default function Referral() {
   const navigate = useNavigate()
+  const { t } = useTranslation()
   const [stats, setStats] = useState<ReferralStats | null>(null)
   const [copied, setCopied] = useState(false)
 
@@ -38,10 +37,13 @@ export default function Referral() {
 
   async function share() {
     if (!stats?.invite_code) return
-    const text = SHARE_TEXT(stats.invite_code)
+    const text = t('miscpages.referral.shareText', { code: stats.invite_code })
     if (navigator.share) {
       try {
-        await navigator.share({ text, title: 'Rejoins-moi sur REVS' })
+        await navigator.share({
+          text,
+          title: t('miscpages.referral.shareTitle'),
+        })
         return
       } catch {
         // Fall through to clipboard fallback
@@ -61,24 +63,23 @@ export default function Referral() {
       <div className="flex items-center gap-4 py-4">
         <button
           onClick={() => navigate(-1)}
-          aria-label="Retour"
+          aria-label={t('miscpages.referral.back')}
           className="tappable text-fg2 hover:text-fg"
         >
           <ArrowLeft className="h-6 w-6" />
         </button>
         <h1 className="flex items-center gap-2 display-xl text-fg">
           <Users className="h-7 w-7 text-accent" />
-          Parrainage
+          {t('miscpages.referral.title')}
         </h1>
       </div>
 
       <p className="mb-6 text-sm text-fg2">
-        Invite tes amis avec ton code unique. Quand quelqu'un s'inscrit avec,
-        vous recevez{' '}
+        {t('miscpages.referral.introBefore')}{' '}
         <span className="font-extrabold tracking-wider text-accent">
-          +50 XP
+          {t('miscpages.referral.introXp')}
         </span>{' '}
-        chacun.
+        {t('miscpages.referral.introAfter')}
       </p>
 
       {stats === null ? (
@@ -95,7 +96,9 @@ export default function Referral() {
               boxShadow: '0 12px 36px rgba(232,32,58,0.2)',
             }}
           >
-            <p className="label-up text-[10px] text-fg2">Ton code</p>
+            <p className="label-up text-[10px] text-fg2">
+              {t('miscpages.referral.yourCode')}
+            </p>
             <p
               className="mt-3 font-display font-extrabold text-fg"
               style={{
@@ -117,12 +120,12 @@ export default function Referral() {
                 {copied ? (
                   <>
                     <Check className="h-4 w-4" />
-                    COPIÉ
+                    {t('miscpages.referral.copied')}
                   </>
                 ) : (
                   <>
                     <Copy className="h-4 w-4" />
-                    COPIER
+                    {t('miscpages.referral.copy')}
                   </>
                 )}
               </button>
@@ -133,7 +136,7 @@ export default function Referral() {
                 style={{ boxShadow: '0 8px 24px rgba(232,32,58,0.45)' }}
               >
                 <Share2 className="h-4 w-4" />
-                PARTAGER
+                {t('miscpages.referral.share')}
               </button>
             </div>
           </div>
@@ -145,7 +148,9 @@ export default function Referral() {
             >
               <div className="flex items-center gap-1.5 text-fg2">
                 <Users className="h-3.5 w-3.5" />
-                <span className="label-up text-[10px]">Amis invités</span>
+                <span className="label-up text-[10px]">
+                  {t('miscpages.referral.friendsInvited')}
+                </span>
               </div>
               <p className="mt-2 font-display text-3xl font-extrabold tracking-tighter text-fg">
                 {stats.referred_count}
@@ -157,7 +162,9 @@ export default function Referral() {
             >
               <div className="flex items-center gap-1.5 text-fg2">
                 <Zap className="h-3.5 w-3.5" />
-                <span className="label-up text-[10px]">XP gagné</span>
+                <span className="label-up text-[10px]">
+                  {t('miscpages.referral.xpEarned')}
+                </span>
               </div>
               <p className="mt-2 font-display text-3xl font-extrabold tracking-tighter text-accent">
                 +{stats.xp_from_referrals}
@@ -170,13 +177,13 @@ export default function Referral() {
             style={{ border: '1px solid var(--color-border)' }}
           >
             <p className="font-display text-base font-extrabold tracking-tighter text-fg">
-              Comment ça marche ?
+              {t('miscpages.referral.howItWorks')}
             </p>
             <ol className="mt-3 space-y-2.5 text-sm text-fg/80">
               {[
-                'Partage ton code unique à un ami.',
-                "Il s'inscrit sur REVS et entre ton code.",
-                'Vous recevez tous les deux +50 XP instantanément.',
+                t('miscpages.referral.step1'),
+                t('miscpages.referral.step2'),
+                t('miscpages.referral.step3'),
               ].map((step, i) => (
                 <li key={i} className="flex items-start gap-3">
                   <span className="flex h-6 w-6 flex-none items-center justify-center rounded-full bg-accent/15 font-display text-xs font-extrabold text-accent">

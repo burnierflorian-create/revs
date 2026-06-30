@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
+import type { TFunction } from 'i18next'
 import { ArrowLeft, Target, Check } from 'lucide-react'
 import {
   challengePct,
@@ -8,17 +10,17 @@ import {
 } from '../lib/challenges'
 import { Skeleton } from '../components/Skeleton'
 
-function endsAtLabel(iso: string): string {
+function endsAtLabel(iso: string, t: TFunction): string {
   const end = new Date(iso)
   const now = new Date()
   const diffMs = end.getTime() - now.getTime()
   const days = Math.max(0, Math.ceil(diffMs / 86_400_000))
-  if (days === 0) return 'se termine aujourd’hui'
-  if (days === 1) return 'reste 1 jour'
-  return `reste ${days} jours`
+  if (days === 0) return t('gamif.endsToday')
+  return t('gamif.daysLeft', { count: days })
 }
 
 export default function Challenges() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const [items, setItems] = useState<Challenge[] | null>(null)
 
@@ -37,20 +39,19 @@ export default function Challenges() {
       <div className="flex items-center gap-4 py-4">
         <button
           onClick={() => navigate(-1)}
-          aria-label="Retour"
+          aria-label={t('gamif.back')}
           className="tappable text-fg2 hover:text-fg"
         >
           <ArrowLeft className="h-6 w-6" />
         </button>
         <h1 className="flex items-center gap-2 display-xl text-fg">
           <Target className="h-7 w-7 text-accent" />
-          Challenges
+          {t('gamif.challenges')}
         </h1>
       </div>
 
       <p className="mb-5 text-sm text-fg2">
-        3 défis renouvelés chaque lundi. Complète-les avant la fin de la
-        semaine pour empocher l'XP.
+        {t('gamif.challengesIntro')}
       </p>
 
       {items === null ? (
@@ -63,10 +64,10 @@ export default function Challenges() {
         <div className="flex flex-col items-center px-8 py-16 text-center">
           <p className="font-display text-2xl">🏆</p>
           <p className="mt-3 font-display text-lg font-extrabold tracking-tighter text-fg">
-            Tous les challenges complétés
+            {t('gamif.allCompleted')}
           </p>
           <p className="mt-1 text-sm text-fg2">
-            De nouveaux arrivent lundi matin.
+            {t('gamif.newOnesMonday')}
           </p>
         </div>
       ) : (
@@ -111,12 +112,12 @@ export default function Challenges() {
 
                 <div className="mt-2.5 flex items-center justify-between">
                   <span className="label-up text-[10px] text-fg2">
-                    {c.progress}/{c.target_value} · {endsAtLabel(c.ends_at)}
+                    {c.progress}/{c.target_value} · {endsAtLabel(c.ends_at, t)}
                   </span>
                   {done && (
                     <span className="flex items-center gap-1 text-[11px] font-extrabold tracking-wider text-green-400">
                       <Check className="h-3.5 w-3.5" />
-                      COMPLÉTÉ
+                      {t('gamif.completed')}
                     </span>
                   )}
                 </div>
@@ -127,7 +128,7 @@ export default function Challenges() {
                     className="tappable mt-4 w-full rounded-full bg-fg/[0.06] py-3 text-sm font-bold tracking-wide text-fg/80 hover:bg-fg/[0.10]"
                     style={{ border: '1px solid var(--color-border)' }}
                   >
-                    Continuer le défi
+                    {t('gamif.continueChallenge')}
                   </button>
                 )}
               </div>

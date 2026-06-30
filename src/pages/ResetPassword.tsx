@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { supabase } from '../lib/supabase'
 import { translateError } from '../lib/errors'
 import { useAuth } from '../hooks/useAuth'
@@ -11,6 +12,7 @@ import { PasswordField } from './Auth'
 // one required), then we drop into the app.
 export default function ResetPassword() {
   const navigate = useNavigate()
+  const { t } = useTranslation()
   const { setPasswordRecovery } = useAuth()
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
@@ -21,11 +23,11 @@ export default function ResetPassword() {
     e.preventDefault()
     setError(null)
     if (password.length < 8) {
-      setError('Mot de passe trop court (min. 8 caractères).')
+      setError(t('miscpages.resetPassword.errTooShort'))
       return
     }
     if (password !== confirm) {
-      setError('Les deux mots de passe ne correspondent pas.')
+      setError(t('miscpages.resetPassword.errMismatch'))
       return
     }
     setLoading(true)
@@ -65,22 +67,22 @@ export default function ResetPassword() {
             <span className="text-fg">EVS</span>
           </h1>
           <p className="mt-3 text-sm text-fg2">
-            Choisis ton nouveau mot de passe.
+            {t('miscpages.resetPassword.subtitle')}
           </p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <PasswordField
-            label="Nouveau mot de passe"
+            label={t('miscpages.resetPassword.newPassword')}
             autoComplete="new-password"
             required
             minLength={8}
             value={password}
             onChange={setPassword}
-            hint="Minimum 8 caractères."
+            hint={t('miscpages.resetPassword.hint')}
           />
           <PasswordField
-            label="Confirme le nouveau mot de passe"
+            label={t('miscpages.resetPassword.confirmPassword')}
             autoComplete="new-password"
             required
             minLength={8}
@@ -100,7 +102,7 @@ export default function ResetPassword() {
             className="tappable mt-2 w-full rounded-full bg-accent py-4 text-sm font-extrabold tracking-wider text-fg transition-opacity disabled:opacity-50"
             style={{ boxShadow: '0 10px 28px rgba(232,32,58,0.45)' }}
           >
-            {loading ? '…' : 'ENREGISTRER LE NOUVEAU MOT DE PASSE'}
+            {loading ? '…' : t('miscpages.resetPassword.submit')}
           </button>
         </form>
       </div>

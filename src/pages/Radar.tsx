@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { ArrowLeft, Radar as RadarIcon, MapPin, Crown } from 'lucide-react'
 import {
   fetchMyRadarPrefs,
@@ -26,6 +27,7 @@ const DEFAULT_PREFS: RadarPrefs = {
 
 export default function Radar() {
   const navigate = useNavigate()
+  const { t } = useTranslation()
   const [tier, setTier] = useState<'premium' | 'vip' | null | 'loading'>('loading')
   const [prefs, setPrefs] = useState<RadarPrefs | null>(null)
   const [busy, setBusy] = useState(false)
@@ -39,9 +41,9 @@ export default function Radar() {
         if (active) setTier(null)
         return
       }
-      const { data: t } = await supabase.rpc('user_tier', { p_user: user.id })
+      const { data: tierData } = await supabase.rpc('user_tier', { p_user: user.id })
       if (!active) return
-      setTier((t as 'premium' | 'vip' | null) ?? null)
+      setTier((tierData as 'premium' | 'vip' | null) ?? null)
       const p = await fetchMyRadarPrefs()
       if (active) setPrefs(p ?? DEFAULT_PREFS)
     })()
@@ -65,7 +67,7 @@ export default function Radar() {
           lat = pos.lat
           lng = pos.lng
         } catch {
-          setError('Active la géolocalisation pour utiliser le Mode Radar.')
+          setError(t('activities.errorGeoPermission'))
           setBusy(false)
           return
         }
@@ -94,7 +96,7 @@ export default function Radar() {
       const saved = await saveRadarPrefs({ lat: pos.lat, lng: pos.lng })
       if (saved) setPrefs(saved)
     } catch {
-      setError('Impossible de récupérer ta position. Vérifie les permissions du navigateur.')
+      setError(t('activities.errorLocationFetch'))
     } finally {
       setBusy(false)
     }
@@ -105,19 +107,19 @@ export default function Radar() {
       <div className="flex items-center gap-4 py-4">
         <button
           onClick={() => navigate(-1)}
-          aria-label="Retour"
+          aria-label={t('activities.back')}
           className="tappable text-fg2 hover:text-fg"
         >
           <ArrowLeft className="h-6 w-6" />
         </button>
         <h1 className="flex items-center gap-2 display-xl text-fg">
           <RadarIcon className="h-7 w-7 text-accent" />
-          Mode Radar
+          {t('activities.radarMode')}
         </h1>
       </div>
 
       <p className="mb-6 text-sm text-fg2">
-        Reçois une notification dès qu'une voiture est spottée dans ton rayon.
+        {t('activities.radarIntro')}
       </p>
 
       {tier === 'loading' || prefs === null ? (
@@ -142,17 +144,17 @@ export default function Radar() {
             <Crown className="h-7 w-7 text-accent" />
           </div>
           <p className="mt-4 font-display text-xl font-extrabold tracking-tighter text-fg">
-            Réservé aux membres Premium
+            {t('activities.premiumOnlyTitle')}
           </p>
           <p className="mt-2 text-sm text-fg2">
-            Active un abonnement Premium ou VIP pour débloquer le Mode Radar.
+            {t('activities.premiumOnlyDesc')}
           </p>
           <button
             onClick={() => navigate('/premium')}
             className="tappable mt-5 rounded-full bg-accent px-5 py-3 text-sm font-extrabold tracking-wider text-fg"
             style={{ boxShadow: '0 8px 24px rgba(232,32,58,0.45)' }}
           >
-            DÉCOUVRIR PREMIUM ⚡
+            {t('activities.discoverPremium')} ⚡
           </button>
         </div>
       ) : (
@@ -189,14 +191,14 @@ export default function Radar() {
             <div className="relative flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <p className="font-display text-lg font-extrabold tracking-tighter text-fg">
-                  Mode Radar
+                  {t('activities.radarMode')}
                 </p>
                 <p
                   className={`label-up mt-1 text-[10px] ${
                     prefs.enabled ? 'text-accent' : 'text-fg2'
                   }`}
                 >
-                  {prefs.enabled ? 'ACTIF — TU SERAS NOTIFIÉ' : 'DÉSACTIVÉ'}
+                  {prefs.enabled ? t('activities.statusActive') : t('activities.statusInactive')}
                 </p>
               </div>
               <button
@@ -232,7 +234,7 @@ export default function Radar() {
                 style={{ border: '1px solid var(--color-border)' }}
               >
                 <p className="label-up text-[10px] text-fg2">
-                  Rayon de détection
+                  {t('activities.detectionRadius')}
                 </p>
                 <div className="mt-3 grid grid-cols-3 gap-2">
                   {RADIUS_OPTIONS.map((opt) => (
@@ -265,7 +267,7 @@ export default function Radar() {
                 <div className="flex items-center gap-2 text-fg2">
                   <MapPin className="h-4 w-4 text-accent" />
                   <span className="label-up text-[10px]">
-                    Position de référence
+                    {t('activities.referencePosition')}
                   </span>
                 </div>
                 <p className="mt-2 font-display text-base font-extrabold tracking-tighter text-fg">
@@ -279,7 +281,7 @@ export default function Radar() {
                   className="tappable mt-4 w-full rounded-full bg-fg/[0.06] py-3 text-sm font-bold tracking-wide text-fg/80 hover:bg-fg/[0.10] disabled:opacity-50"
                   style={{ border: '1px solid var(--color-border)' }}
                 >
-                  {busy ? '…' : 'Actualiser ma position'}
+                  {busy ? '…' : t('activities.refreshLocation')}
                 </button>
               </div>
             </>

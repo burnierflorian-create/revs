@@ -1,6 +1,7 @@
 import { useMemo, useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { ArrowLeft, Lock } from 'lucide-react'
 import {
   allBadges,
@@ -108,6 +109,7 @@ function badgeObtainedDate(b: Badge, ctx: BadgeContext): string | null {
 // ─────────────────────────── page ───────────────────────────
 
 export default function Badges() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const ctx = useBadgeContext()
   const [selected, setSelected] = useState<Badge | null>(null)
@@ -131,20 +133,24 @@ export default function Badges() {
       <div className="flex items-center gap-4 py-4">
         <button
           onClick={() => navigate(-1)}
-          aria-label="Retour"
+          aria-label={t('gamif.back')}
           className="tappable text-white/60 hover:text-white"
         >
           <ArrowLeft className="h-6 w-6" />
         </button>
         <h1 className="font-display text-2xl font-extrabold tracking-tight">
-          Mes Badges
+          {t('gamif.myBadges')}
         </h1>
         {data && (
           <span
             className="ml-auto font-display text-sm font-extrabold"
             style={{ color: '#E8203A' }}
           >
-            {data.unlocked.length} / {data.total} débloqués
+            {t('gamif.unlockedCount', {
+              count: data.total,
+              current: data.unlocked.length,
+              total: data.total,
+            })}
           </span>
         )}
       </div>
@@ -159,7 +165,7 @@ export default function Badges() {
         <div className="space-y-8 pb-16">
           {data.unlocked.length > 0 && (
             <BadgeSection
-              title="Débloqués"
+              title={t('gamif.sectionUnlocked')}
               badges={data.unlocked}
               unlocked
               onTap={setSelected}
@@ -167,7 +173,7 @@ export default function Badges() {
           )}
           {data.locked.length > 0 && (
             <BadgeSection
-              title="À débloquer"
+              title={t('gamif.sectionToUnlock')}
               badges={data.locked}
               unlocked={false}
               onTap={setSelected}
@@ -268,6 +274,7 @@ function BadgeSheet({
   ctx: BadgeContext
   onClose: () => void
 }) {
+  const { t } = useTranslation()
   useEffect(() => {
     const prev = document.body.style.overflow
     document.body.style.overflow = 'hidden'
@@ -283,7 +290,7 @@ function BadgeSheet({
   return createPortal(
     <div className="fixed inset-0 z-50" role="dialog" aria-modal="true">
       <button
-        aria-label="Fermer"
+        aria-label={t('gamif.close')}
         onClick={onClose}
         className="absolute inset-0"
         style={{
@@ -361,14 +368,14 @@ function BadgeSheet({
                 className="font-semibold"
                 style={{ fontSize: '13px', color: '#34D399' }}
               >
-                Débloqué le {obtainedAt}
+                {t('gamif.unlockedOn', { date: obtainedAt })}
               </p>
             )}
             <p
               className="mt-1 font-bold"
               style={{ fontSize: '15px', color: '#34D399' }}
             >
-              ✓ Débloqué
+              {t('gamif.unlockedCheck')}
             </p>
           </div>
         ) : (
@@ -395,7 +402,7 @@ function BadgeSheet({
                   />
                 </div>
                 <p className="mt-1.5 text-[12px] font-medium text-white/55">
-                  {prog.current}/{prog.target} {prog.unit}
+                  {prog.current}/{prog.target} {t(`gamif.unit_${prog.unit}`)}
                 </p>
               </div>
             )}
@@ -407,7 +414,7 @@ function BadgeSheet({
           className="tappable mt-6 w-full rounded-full py-3 font-semibold text-white"
           style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid #333' }}
         >
-          Fermer
+          {t('gamif.close')}
         </button>
       </div>
     </div>,

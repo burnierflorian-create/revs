@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { ArrowLeft, ChevronRight, Flag, Gamepad2, Zap } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import type { Spot } from '../lib/spots'
@@ -13,6 +14,7 @@ import { appConfig } from '../config/appConfig'
  *  circuit SVG as the background. */
 export default function Games() {
   const navigate = useNavigate()
+  const { t } = useTranslation()
   const [hero, setHero] = useState<Spot | null | undefined>(undefined)
 
   useEffect(() => {
@@ -87,7 +89,7 @@ export default function Games() {
             {/* Top-left back button */}
             <button
               onClick={() => navigate(-1)}
-              aria-label="Retour"
+              aria-label={t('activities.back')}
               className="tappable absolute left-3 z-20 flex h-9 w-9 items-center justify-center rounded-full"
               style={{
                 top: 'max(12px, env(safe-area-inset-top))',
@@ -104,7 +106,7 @@ export default function Games() {
               <p
                 className="text-[10px] uppercase tracking-[0.3em] text-fg/65"
               >
-                Jeux REVS
+                {t('activities.gamesKicker')}
               </p>
               <h1
                 className="mt-1 font-display font-extrabold tracking-tighter text-white"
@@ -115,16 +117,16 @@ export default function Games() {
                   textShadow: '0 6px 24px rgba(0,0,0,0.55)',
                 }}
               >
-                JEUX REVS
+                {t('activities.gamesTitle')}
               </h1>
               <p className="mt-1.5 text-[13px] text-fg/80">
-                Affronte d'autres passionnés
+                {t('activities.gamesSubtitle')}
               </p>
               {hero?.brand && hero?.model && (
                 <p
                   className="mt-2 text-[10px] uppercase tracking-widest text-fg/45"
                 >
-                  Mis en avant : {hero.brand} {hero.model}
+                  {t('activities.featured', { brand: hero.brand, model: hero.model })}
                 </p>
               )}
             </div>
@@ -162,7 +164,7 @@ export default function Games() {
                 <p
                   className="text-[10px] uppercase tracking-[0.3em] text-accent"
                 >
-                  Drag race
+                  {t('activities.dragRace')}
                 </p>
                 <p
                   className="mt-1 font-display font-extrabold tracking-tighter text-white"
@@ -175,21 +177,20 @@ export default function Games() {
                   REVS RACE
                 </p>
                 <p className="mt-1.5 max-w-[80%] text-[12px] text-fg/75">
-                  Choisis ta carte, vise le départ parfait, empoche
-                  l'enjeu.
+                  {t('activities.raceDescription')}
                 </p>
                 <div className="mt-3 flex items-center gap-1.5">
                   <span
                     className="rounded-full bg-accent/22 px-2.5 py-1 font-extrabold uppercase tracking-wider text-accent"
                     style={{ fontSize: '9.5px', letterSpacing: '0.08em' }}
                   >
-                    Solo · IA
+                    {t('activities.soloAi')}
                   </span>
                   <span
                     className="flex items-center gap-1 rounded-full bg-fg/[0.10] px-2.5 py-1 font-extrabold uppercase tracking-wider text-fg/85"
                     style={{ fontSize: '9.5px', letterSpacing: '0.08em' }}
                   >
-                    <Zap className="h-3 w-3" /> jusqu'à +1000 XP
+                    <Zap className="h-3 w-3" /> {t('activities.upToXp', { count: 1000 })}
                   </span>
                 </div>
               </div>
@@ -214,8 +215,7 @@ export default function Games() {
         >
           <Gamepad2 className="h-4 w-4 flex-none" />
           <span>
-            Multi-joueur, défi d'amis et matchmaking arrivent dans la
-            prochaine mise à jour.
+            {t('activities.comingSoon')}
           </span>
           <ChevronRight className="h-4 w-4 flex-none text-fg2/50" />
         </div>
