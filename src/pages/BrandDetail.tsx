@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Bell, Check, Loader2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
@@ -38,6 +39,7 @@ function ilikeOr(column: string, patterns: string[]): string {
 }
 
 export default function BrandDetail() {
+  const { t } = useTranslation()
   const { slug } = useParams<{ slug: string }>()
   const navigate = useNavigate()
   const brand = getBrand(slug)
@@ -273,13 +275,13 @@ export default function BrandDetail() {
   if (!brand) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-bg px-8 text-center text-fg">
-        <p className="text-sm text-fg2">Marque introuvable.</p>
+        <p className="text-sm text-fg2">{t('brandspage.brandNotFound')}</p>
         <button
           onClick={() => navigate('/brands')}
           className="tappable rounded-full bg-accent px-6 py-3 text-sm font-extrabold tracking-wider text-fg"
           style={{ boxShadow: '0 8px 24px rgba(232,32,58,0.45)' }}
         >
-          VOIR TOUTES LES MARQUES
+          {t('brandspage.seeAllBrands')}
         </button>
       </div>
     )
@@ -305,7 +307,7 @@ export default function BrandDetail() {
         />
         <button
           onClick={() => navigate(-1)}
-          aria-label="Retour"
+          aria-label={t('brandspage.back')}
           className="tappable absolute left-4 top-[max(1rem,env(safe-area-inset-top))] z-10 flex h-10 w-10 items-center justify-center rounded-full bg-black/30 backdrop-blur"
           style={{ border: '1px solid rgba(255,255,255,0.08)' }}
         >
@@ -338,10 +340,10 @@ export default function BrandDetail() {
             {brand.verified ? (
               <>
                 <Check className="h-3 w-3" strokeWidth={3} />
-                Compte officiel
+                {t('brandspage.officialAccount')}
               </>
             ) : (
-              'Page communautaire'
+              t('brandspage.communityPage')
             )}
           </span>
 
@@ -366,18 +368,19 @@ export default function BrandDetail() {
               {following ? (
                 <>
                   <Check className="h-4 w-4" strokeWidth={3} />
-                  Alertes activées
+                  {t('brandspage.alertsEnabled')}
                 </>
               ) : (
                 <>
                   <Bell className="h-4 w-4" />
-                  Activer les alertes
+                  {t('brandspage.enableAlerts')}
                 </>
               )}
             </button>
             <p className="mt-2.5 text-[11px] text-fg/55">
-              {followerCount ?? 0} passionné
-              {(followerCount ?? 0) > 1 ? 's ont' : ' a'} activé les alertes
+              {t('brandspage.followersEnabledAlerts', {
+                count: followerCount ?? 0,
+              })}
             </p>
             {followErr && (
               <p className="mt-2 text-xs text-accent">{followErr}</p>
@@ -396,7 +399,7 @@ export default function BrandDetail() {
               style={{ border: '1px solid var(--color-border)' }}
             >
               <Loader2 className="h-4 w-4 animate-spin" />
-              Rédaction de la fiche…
+              {t('brandspage.writingProfile')}
             </div>
           ) : description ? (
             <article
@@ -412,7 +415,7 @@ export default function BrandDetail() {
               className="rounded-3xl bg-card p-6 text-sm text-fg2"
               style={{ border: '1px solid var(--color-border)' }}
             >
-              Description indisponible pour le moment.
+              {t('brandspage.descriptionUnavailable')}
             </p>
           )}
         </section>
@@ -430,7 +433,7 @@ export default function BrandDetail() {
             >
               <CountUp value={totalSpots} />
             </span>
-            <span className="label-up mt-1 text-[10px] text-fg2">Spots</span>
+            <span className="label-up mt-1 text-[10px] text-fg2">{t('brandspage.spots')}</span>
           </div>
 
           <span className="w-px self-stretch bg-white/10" />
@@ -443,7 +446,7 @@ export default function BrandDetail() {
             >
               <CountUp value={modelsCount} />
             </span>
-            <span className="label-up mt-1 text-[10px] text-fg2">Modèles</span>
+            <span className="label-up mt-1 text-[10px] text-fg2">{t('brandspage.models')}</span>
           </div>
 
           <span className="w-px self-stretch bg-white/10" />
@@ -473,16 +476,16 @@ export default function BrandDetail() {
                 )}
               </span>
               <span className="max-w-[68px] truncate text-[13px] font-bold text-white">
-                {topSpotter?.pseudo || (topSpotter ? 'Spotter' : '—')}
+                {topSpotter?.pseudo || (topSpotter ? t('brandspage.spotter') : '—')}
               </span>
             </span>
-            <span className="label-up text-[10px] text-fg2">Top spotter</span>
+            <span className="label-up text-[10px] text-fg2">{t('brandspage.topSpotter')}</span>
           </button>
         </section>
 
         {/* ─────────────────── COMMUNITY SPOTS (par modèle) ─────────────────── */}
         <section>
-          <SectionTitle>Spots de la communauté</SectionTitle>
+          <SectionTitle>{t('brandspage.communitySpots')}</SectionTitle>
           {spots === null ? (
             <div className="grid grid-cols-2 gap-2">
               {Array.from({ length: 6 }).map((_, i) => (
@@ -494,9 +497,9 @@ export default function BrandDetail() {
               className="rounded-3xl bg-card p-8 text-center text-sm text-fg2"
               style={{ border: '1px solid var(--color-border)' }}
             >
-              Aucun spot {brand.name} pour le moment.
+              {t('brandspage.noSpotsYet', { brand: brand.name })}
               <br />
-              Sois le premier à en spotter une !
+              {t('brandspage.beTheFirst')}
             </p>
           ) : (
             <div className="space-y-6">
@@ -527,7 +530,7 @@ export default function BrandDetail() {
         {/* ─────────────────── NEWS ─────────────────── */}
         {news.length > 0 && (
           <section>
-            <SectionTitle>Actus {brand.name}</SectionTitle>
+            <SectionTitle>{t('brandspage.news', { brand: brand.name })}</SectionTitle>
             <div className="space-y-3">
               {news.slice(0, 4).map((n) => (
                 <a
@@ -619,6 +622,7 @@ function CommunityCard({
   pseudo?: string
   onTap: () => void
 }) {
+  const { t } = useTranslation()
   const rb = rarityBadge(spot.rarity)
   return (
     <button
@@ -640,7 +644,7 @@ function CommunityCard({
         {rb.label}
       </span>
       <span className="absolute bottom-1.5 left-1.5 max-w-[80%] truncate rounded-full bg-black/55 px-2 py-0.5 text-[10px] font-semibold text-white backdrop-blur-sm">
-        @{pseudo ?? 'Spotter'}
+        @{pseudo ?? t('brandspage.spotter')}
       </span>
     </button>
   )

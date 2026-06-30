@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, Check, Crown, Lock, Sparkles, Users } from 'lucide-react'
 import { supabase } from '../lib/supabase'
@@ -24,6 +25,7 @@ const SHOW_VIP_TIER = appConfig.SHOW_VIP_PLAN
 type Tier = 'premium' | 'vip'
 
 export default function Premium() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const [params] = useSearchParams()
   const status = params.get('status')
@@ -68,8 +70,8 @@ export default function Premium() {
   // they tap "C'est parti !".
   useEffect(() => {
     if (status !== 'cancel') return
-    const t = setTimeout(() => navigate('/premium', { replace: true }), 4000)
-    return () => clearTimeout(t)
+    const timer = setTimeout(() => navigate('/premium', { replace: true }), 4000)
+    return () => clearTimeout(timer)
   }, [status, navigate])
 
   const tier = planTier(currentPlan)
@@ -87,7 +89,7 @@ export default function Premium() {
         data: { session },
       } = await supabase.auth.getSession()
       const token = session?.access_token
-      if (!token) throw new Error('Session introuvable')
+      if (!token) throw new Error(t('premiumpage.errSessionNotFound'))
       const res = await fetch('/api/create-checkout-session?action=portal', {
         method: 'POST',
         headers: {
@@ -100,19 +102,19 @@ export default function Premium() {
         window.location.href = data.url
         return
       }
-      throw new Error(data.error || 'Portail indisponible')
+      throw new Error(data.error || t('premiumpage.errPortalUnavailable'))
     } catch (e) {
       setPortalErr(translateError(e))
       setPortalBusy(false)
     }
   }
 
-  function goCheckout(t: Tier) {
+  function goCheckout(target: Tier) {
     if (hasActive) {
       void openPortal()
       return
     }
-    navigate(`/premium/checkout/${t}?interval=${interval}`)
+    navigate(`/premium/checkout/${target}?interval=${interval}`)
   }
 
   return (
@@ -121,12 +123,12 @@ export default function Premium() {
         <div className="flex items-center gap-4 py-4">
           <button
             onClick={() => navigate(-1)}
-            aria-label="Retour"
+            aria-label={t('premiumpage.back')}
             className="tappable text-fg2 hover:text-fg"
           >
             <ArrowLeft className="h-6 w-6" />
           </button>
-          <h1 className="display-xl text-fg">Premium</h1>
+          <h1 className="display-xl text-fg">{t('premiumpage.title')}</h1>
         </div>
 
         {/* ─────────────── LAUNCH BANNER ─────────────── */}
@@ -141,14 +143,14 @@ export default function Premium() {
         >
           <span aria-hidden>🚀</span>
           <span className="leading-tight">
-            <strong>Offre de lancement</strong> — prix garanti à vie pour les
-            premiers membres
+            <strong>{t('premiumpage.launchOfferTitle')}</strong>
+            {t('premiumpage.launchOfferRest')}
           </span>
         </div>
 
         {status === 'success' && (
           <div className="mb-4 rounded-2xl bg-accent/15 px-4 py-3 text-sm">
-            🔥 Bienvenue ! Ton abonnement est activé.
+            {t('premiumpage.welcomeActivated')}
           </div>
         )}
         {portalErr && (
@@ -161,7 +163,7 @@ export default function Premium() {
             className="mb-4 rounded-2xl bg-card px-4 py-3 text-sm text-fg2"
             style={{ border: '1px solid var(--color-border)' }}
           >
-            Paiement annulé — aucun montant n'a été débité.
+            {t('premiumpage.paymentCancelled')}
           </div>
         )}
 
@@ -170,12 +172,12 @@ export default function Premium() {
           <Users className="h-4 w-4 text-accent" />
           {memberCount && memberCount > 0 ? (
             <span>
-              Rejoins les{' '}
-              <strong className="font-extrabold text-fg">{memberCount}</strong>{' '}
-              spotters Premium 🔥
+              {t('premiumpage.joinSpottersBefore')}
+              <strong className="font-extrabold text-fg">{memberCount}</strong>
+              {t('premiumpage.joinSpottersAfter')}
             </span>
           ) : (
-            <span>Rejoins les spotters Premium 🔥</span>
+            <span>{t('premiumpage.joinSpotters')}</span>
           )}
         </div>
 
@@ -191,7 +193,7 @@ export default function Premium() {
                 interval === 'month' ? 'bg-fg text-bg' : 'text-fg2'
               }`}
             >
-              Mensuel
+              {t('premiumpage.monthly')}
             </button>
             <button
               onClick={() => setInterval('year')}
@@ -199,7 +201,7 @@ export default function Premium() {
                 interval === 'year' ? 'bg-fg text-bg' : 'text-fg2'
               }`}
             >
-              Annuel
+              {t('premiumpage.annual')}
             </button>
           </div>
         </div>
@@ -208,7 +210,7 @@ export default function Premium() {
             interval === 'year' ? 'text-accent opacity-100' : 'text-fg2/70 opacity-70'
           }`}
         >
-          🎁 2 mois offerts sur l'année
+          {t('premiumpage.twoMonthsFreeYear')}
         </p>
 
         {/* ─────────────── TIER CARDS ─────────────── */}
@@ -249,6 +251,7 @@ export default function Premium() {
 // ─────────────────────── Cards ───────────────────────
 
 function FreeCard({ current }: { current: boolean }) {
+  const { t } = useTranslation()
   return (
     <section
       className="relative overflow-hidden rounded-3xl bg-card p-5"
@@ -256,10 +259,10 @@ function FreeCard({ current }: { current: boolean }) {
     >
       <header className="flex items-baseline justify-between gap-3">
         <h3 className="font-display text-xl font-extrabold tracking-tighter text-fg">
-          Gratuit
+          {t('premiumpage.free')}
           {current && (
             <span className="label-up ml-2 align-middle text-[10px] text-fg2">
-              · Actuel
+              {t('premiumpage.currentBadge')}
             </span>
           )}
         </h3>
@@ -297,14 +300,15 @@ function PremiumCard({
   portalBusy: boolean
   onPick: () => void
 }) {
+  const { t } = useTranslation()
   // Subscribed users (any tier) never see a checkout CTA — the button
   // morphs into the portal redirect. Prevents double subscriptions
   // and gives them one-tap access to cancel / change card.
   const ctaLabel = hasActive
     ? portalBusy
-      ? 'Ouverture…'
-      : 'Gérer mon abonnement'
-    : 'Voir les avantages Premium ⚡'
+      ? t('premiumpage.opening')
+      : t('premiumpage.manageSubscription')
+    : t('premiumpage.seePremiumPerks')
   const disabled = portalBusy
   return (
     <section
@@ -315,15 +319,15 @@ function PremiumCard({
       }}
     >
       <span className="label-up absolute -top-px right-5 rounded-b-md bg-accent px-2.5 py-1 text-[10px] text-fg">
-        POPULAIRE
+        {t('premiumpage.popular')}
       </span>
       <header className="flex items-baseline justify-between gap-3">
         <h3 className="flex items-center gap-1.5 font-display text-xl font-extrabold tracking-tighter text-fg">
-          Premium
+          {t('premiumpage.premiumPlan')}
           <Sparkles className="h-4 w-4 text-accent" />
           {current && (
             <span className="label-up ml-2 align-middle text-[10px] text-fg2">
-              · Actuel
+              {t('premiumpage.currentBadge')}
             </span>
           )}
         </h3>
@@ -332,7 +336,7 @@ function PremiumCard({
             {price}
           </div>
           <div className="-mt-0.5 text-[11px] text-fg2">
-            / {interval === 'year' ? 'an' : 'mois'}
+            {interval === 'year' ? t('premiumpage.perYear') : t('premiumpage.perMonth')}
           </div>
         </div>
       </header>
@@ -357,7 +361,7 @@ function PremiumCard({
       </button>
       {!disabled && (
         <p className="mt-2 text-center text-[11px] text-fg2">
-          ✨ 7 jours gratuits — annule quand tu veux
+          {t('premiumpage.sevenDaysFree')}
         </p>
       )}
     </section>
@@ -381,11 +385,12 @@ function VipCard({
   onPick: () => void
   locked?: boolean
 }) {
+  const { t } = useTranslation()
   const ctaLabel = hasActive
     ? portalBusy
-      ? 'Ouverture…'
-      : 'Gérer mon abonnement'
-    : 'Découvrir le cercle VIP 👑'
+      ? t('premiumpage.opening')
+      : t('premiumpage.manageSubscription')
+    : t('premiumpage.discoverVipCircle')
   return (
     <section
       className="relative overflow-hidden rounded-3xl p-5"
@@ -399,10 +404,10 @@ function VipCard({
       <span className="label-up absolute -top-px right-5 inline-flex items-center gap-1 rounded-b-md bg-gradient-to-r from-[#d4af37] to-[#ffd700] px-2.5 py-1 text-[10px] text-black">
         {locked ? (
           <>
-            <Lock className="h-3 w-3" strokeWidth={2.4} /> SOON
+            <Lock className="h-3 w-3" strokeWidth={2.4} /> {t('premiumpage.soon')}
           </>
         ) : (
-          'CERCLE FERMÉ'
+          t('premiumpage.closedCircle')
         )}
       </span>
       <header className="flex items-baseline justify-between gap-3">
@@ -411,7 +416,7 @@ function VipCard({
           <Crown className="h-4 w-4 text-[#ffd700]" />
           {current && (
             <span className="label-up ml-2 align-middle text-[10px] text-fg2">
-              · Actuel
+              {t('premiumpage.currentBadge')}
             </span>
           )}
         </h3>
@@ -420,7 +425,7 @@ function VipCard({
             {price}
           </div>
           <div className="-mt-0.5 text-[11px] text-fg2">
-            / {interval === 'year' ? 'an' : 'mois'}
+            {interval === 'year' ? t('premiumpage.perYear') : t('premiumpage.perMonth')}
           </div>
         </div>
       </header>
@@ -464,7 +469,7 @@ function VipCard({
       >
         <span className="relative z-10 flex items-center justify-center gap-1.5">
           {locked && <Lock className="h-3.5 w-3.5" strokeWidth={2.4} />}
-          {locked ? 'Bientôt disponible' : ctaLabel}
+          {locked ? t('premiumpage.comingSoon') : ctaLabel}
         </span>
       </button>
     </section>

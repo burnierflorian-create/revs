@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import {
@@ -21,6 +22,7 @@ export default function F1Roster({
 }: {
   embedded?: boolean
 }) {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const [tab, setTab] = useState<Tab>('teams')
   // Championship points per team, pulled from the cached f1_teams sheet
@@ -50,18 +52,18 @@ export default function F1Roster({
     <div className="px-4 pb-8">
       {/* Écuries / Pilotes — Apple text nav (no pills) */}
       <div className="mb-5 flex gap-6 px-1">
-        {(['teams', 'drivers'] as Tab[]).map((t) => {
-          const active = tab === t
+        {(['teams', 'drivers'] as Tab[]).map((tabKey) => {
+          const active = tab === tabKey
           return (
             <button
-              key={t}
-              onClick={() => setTab(t)}
+              key={tabKey}
+              onClick={() => setTab(tabKey)}
               className="relative pb-2 text-sm transition-colors"
             >
               <span
                 className={active ? 'font-medium text-fg' : 'font-normal text-fg2'}
               >
-                {t === 'teams' ? 'Écuries' : 'Pilotes'}
+                {tabKey === 'teams' ? t('f1gp.teams') : t('f1gp.drivers')}
               </span>
               {active && (
                 <span className="absolute inset-x-0 -bottom-px h-px bg-fg" />
@@ -86,12 +88,12 @@ export default function F1Roster({
       <div className="flex items-center gap-4 px-4 py-4">
         <button
           onClick={() => navigate(-1)}
-          aria-label="Retour"
+          aria-label={t('f1gp.back')}
           className="tappable text-fg2 hover:text-fg"
         >
           <ArrowLeft className="h-6 w-6" />
         </button>
-        <h1 className="display-xl text-fg">Écuries &amp; Pilotes</h1>
+        <h1 className="display-xl text-fg">{t('f1gp.teamsAndDrivers')}</h1>
       </div>
       {grid}
     </div>
@@ -118,6 +120,7 @@ function TeamsGrid({
 // colour. The monoplace sits on top; a footer row carries the team name
 // (white, bold) on the left and the championship points (red) on the right.
 function TeamCard({ team, pts }: { team: F1Team; pts?: string }) {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const [photoFailed, setPhotoFailed] = useState(false)
   const photoUrl = !photoFailed ? proxyImage(team.carPhoto) : undefined
@@ -152,7 +155,7 @@ function TeamCard({ team, pts }: { team: F1Team; pts?: string }) {
           className="flex-none font-display text-[13px] font-extrabold tabular-nums"
           style={{ color: hasPts ? '#E8203A' : 'rgba(255,255,255,0.25)' }}
         >
-          {hasPts ? `${pts} pts` : '—'}
+          {hasPts ? t('f1gp.points', { pts }) : '—'}
         </span>
       </div>
     </button>

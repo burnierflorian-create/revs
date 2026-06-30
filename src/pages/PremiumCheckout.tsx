@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, Crown, Sparkles } from 'lucide-react'
 import { supabase } from '../lib/supabase'
@@ -24,6 +25,7 @@ type CheckoutPlanId =
 // Renders as a stack route so it slides in over the kept-alive tabs —
 // the layout-level push/pop transition handles the appearance.
 export default function PremiumCheckout() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const { tier: tierParam } = useParams<{ tier: string }>()
   const [params] = useSearchParams()
@@ -61,7 +63,7 @@ export default function PremiumCheckout() {
       const {
         data: { user },
       } = await supabase.auth.getUser()
-      if (!user) throw new Error('Non authentifié')
+      if (!user) throw new Error(t('premiumpage.errNotAuthenticated'))
       const res = await fetch('/api/create-checkout-session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -76,7 +78,7 @@ export default function PremiumCheckout() {
         window.location.href = data.url
         return
       }
-      throw new Error(data.error || 'Impossible de démarrer le paiement')
+      throw new Error(data.error || t('premiumpage.errCannotStartPayment'))
     } catch (e) {
       setError(translateError(e))
       setBusy(false)
@@ -96,7 +98,7 @@ export default function PremiumCheckout() {
       >
         <button
           onClick={() => navigate(-1)}
-          aria-label="Retour"
+          aria-label={t('premiumpage.back')}
           className="tappable absolute left-4 top-[max(1rem,env(safe-area-inset-top))] z-10 flex h-10 w-10 items-center justify-center rounded-full bg-fg/10 backdrop-blur"
           style={{ border: '1px solid rgb(var(--color-fg) / 0.08)' }}
         >
@@ -133,12 +135,12 @@ export default function PremiumCheckout() {
               isVip ? 'text-[#ffd700]' : 'text-fg'
             }`}
           >
-            {isVip ? 'Cercle VIP' : 'Premium'}
+            {isVip ? t('premiumpage.vipCircle') : t('premiumpage.premiumPlan')}
           </h1>
           <p className="mt-2 text-sm text-fg/65">
             {isVip
-              ? 'L’expérience REVS au sommet'
-              : 'Débloque l’expérience complète'}
+              ? t('premiumpage.vipSubtitle')
+              : t('premiumpage.premiumSubtitle')}
           </p>
 
           {/* Big price card */}
@@ -161,12 +163,12 @@ export default function PremiumCheckout() {
               {price}
             </span>
             <span className="text-sm text-fg/55">
-              / {interval === 'year' ? 'an' : 'mois'}
+              {interval === 'year' ? t('premiumpage.perYear') : t('premiumpage.perMonth')}
             </span>
           </div>
           {interval === 'year' ? (
             <p className="label-up mt-3 text-[11px] text-fg/70">
-              🎁 2 mois offerts vs le tarif mensuel
+              {t('premiumpage.twoMonthsFreeVsMonthly')}
             </p>
           ) : (
             <button
@@ -179,17 +181,20 @@ export default function PremiumCheckout() {
                 isVip ? 'text-[#ffd700]/85' : 'text-accent/90'
               }`}
             >
-              ou {isVip ? '249,99 €' : '79,99 €'} / an — économise 2 mois
+              {t('premiumpage.annualUpsell', {
+                price: isVip ? '249,99 €' : '79,99 €',
+              })}
             </button>
           )}
 
           {/* 7-day trial pitch (Premium only) */}
           {!isVip && (
             <p className="mt-4 max-w-[28ch] text-center text-[12px] leading-relaxed text-fg/70">
-              ✨ Tu ne seras pas débité pendant{' '}
-              <strong className="text-fg">7 jours</strong>.
+              {t('premiumpage.trialPitchBefore')}
+              <strong className="text-fg">{t('premiumpage.trialPitchDays')}</strong>
+              {t('premiumpage.trialPitchAfter')}
               <br />
-              Annule à tout moment avant la fin de l'essai.
+              {t('premiumpage.trialPitchCancel')}
             </p>
           )}
         </div>
@@ -262,20 +267,20 @@ export default function PremiumCheckout() {
           >
             <span className="relative z-10">
               {busy
-                ? 'Redirection…'
+                ? t('premiumpage.redirecting')
                 : isVip
-                  ? 'REJOINDRE LE CERCLE VIP'
-                  : 'CONTINUER VERS LE PAIEMENT'}
+                  ? t('premiumpage.joinVipCircle')
+                  : t('premiumpage.continueToPayment')}
             </span>
           </button>
           <button
             onClick={() => navigate(-1)}
             className="tappable mt-2 block w-full py-2.5 text-center text-xs text-fg2 hover:text-fg"
           >
-            Annuler
+            {t('premiumpage.cancel')}
           </button>
           <p className="label-up mt-4 text-center text-[10px] text-fg2/70">
-            Paiement sécurisé Stripe · Résiliation libre à tout moment
+            {t('premiumpage.stripeFooter')}
           </p>
         </div>
       </main>

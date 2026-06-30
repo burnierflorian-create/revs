@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, ChevronRight, Search as SearchIcon, X } from 'lucide-react'
 import { BRANDS, brandFlag, type Brand } from '../lib/brands'
@@ -13,6 +14,7 @@ function sectionLetter(name: string): string {
 // Explorer brands — an iOS Contacts / Apple Music-style typographic list.
 // Used standalone (/brands) and embedded inside Discover's "Marques" tab.
 export default function Brands({ embedded = false }: { embedded?: boolean }) {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const [q, setQ] = useState('')
   const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({})
@@ -81,7 +83,7 @@ export default function Brands({ embedded = false }: { embedded?: boolean }) {
             type="text"
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Rechercher une marque…"
+            placeholder={t('brandspage.searchBrand')}
             // 16px font-size prevents the iOS focus auto-zoom.
             style={{ fontSize: '16px' }}
             className="flex-1 bg-transparent font-medium tracking-tight text-fg/80 outline-none placeholder:text-fg2"
@@ -89,7 +91,7 @@ export default function Brands({ embedded = false }: { embedded?: boolean }) {
           {q && (
             <button
               onClick={() => setQ('')}
-              aria-label="Effacer"
+              aria-label={t('brandspage.clear')}
               className="tappable text-fg2 hover:text-fg"
             >
               <X className="h-4 w-4" />
@@ -100,7 +102,7 @@ export default function Brands({ embedded = false }: { embedded?: boolean }) {
 
       {sections.length === 0 ? (
         <p className="px-8 py-16 text-center text-sm text-fg2">
-          Aucune marque pour « {q} ».
+          {t('brandspage.noBrandsFor', { query: q })}
         </p>
       ) : (
         sections.map(([letter, brands]) => (
@@ -128,7 +130,7 @@ export default function Brands({ embedded = false }: { embedded?: boolean }) {
                   </span>
                   {b.type === 'tuner' && (
                     <span className="flex-none text-xs font-light text-fg2">
-                      (Préparateur)
+                      {t('brandspage.tuner')}
                     </span>
                   )}
                 </span>
@@ -173,12 +175,12 @@ export default function Brands({ embedded = false }: { embedded?: boolean }) {
       <div className="flex items-center gap-4 px-4 py-4">
         <button
           onClick={() => navigate(-1)}
-          aria-label="Retour"
+          aria-label={t('brandspage.back')}
           className="tappable text-fg2 hover:text-fg"
         >
           <ArrowLeft className="h-6 w-6" />
         </button>
-        <h1 className="display-xl text-fg">Marques</h1>
+        <h1 className="display-xl text-fg">{t('brandspage.brands')}</h1>
       </div>
       {list}
     </div>

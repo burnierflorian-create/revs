@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Loader2, Trophy } from 'lucide-react'
 import { supabase } from '../lib/supabase'
@@ -51,6 +52,7 @@ type NewsRow = {
 }
 
 export default function F1TeamDetail() {
+  const { t } = useTranslation()
   const { slug } = useParams<{ slug: string }>()
   const navigate = useNavigate()
   const team = getF1Team(slug)
@@ -114,13 +116,13 @@ export default function F1TeamDetail() {
   if (!team) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-bg px-8 text-center text-fg">
-        <p className="text-sm text-fg2">Écurie introuvable.</p>
+        <p className="text-sm text-fg2">{t('f1people.teamNotFound')}</p>
         <button
           onClick={() => navigate('/discover')}
           className="tappable rounded-full bg-accent px-6 py-3 text-sm font-extrabold tracking-wider text-fg"
           style={{ boxShadow: '0 8px 24px rgba(232,32,58,0.45)' }}
         >
-          VOIR LES ÉCURIES
+          {t('f1people.seeTeams')}
         </button>
       </div>
     )
@@ -137,7 +139,7 @@ export default function F1TeamDetail() {
       >
         <button
           onClick={() => navigate(-1)}
-          aria-label="Retour"
+          aria-label={t('f1people.back')}
           className="tappable absolute left-4 top-[max(1rem,env(safe-area-inset-top))] z-10 flex h-10 w-10 items-center justify-center rounded-full bg-black/30 backdrop-blur"
           style={{ border: '1px solid rgb(var(--color-fg) / 0.08)' }}
         >
@@ -145,7 +147,7 @@ export default function F1TeamDetail() {
         </button>
         <div className="relative flex flex-col items-center px-6 pb-12 pt-[calc(env(safe-area-inset-top)+4rem)] text-center">
           <span className="label-up text-[11px] text-fg/65">
-            Formule 1 · 2026
+            {t('f1people.formula1Season')}
           </span>
           <h1 className="mt-3 font-display text-[34px] font-extrabold leading-none tracking-tighter text-white">
             {team.name}
@@ -171,16 +173,16 @@ export default function F1TeamDetail() {
             </div>
           ) : (
             <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
-              <Fact label="Nationalité" value={data?.nationality} />
-              <Fact label="Base" value={data?.base} />
-              <Fact label="Fondée en" value={data?.foundedYear} />
+              <Fact label={t('f1people.nationality')} value={data?.nationality} />
+              <Fact label={t('f1people.base')} value={data?.base} />
+              <Fact label={t('f1people.foundedIn')} value={data?.foundedYear} />
               <Fact
-                label="Classement 2026"
+                label={t('f1people.ranking2026')}
                 value={
                   data?.currentPosition && data.currentPosition !== 'N/A'
                     ? `${data.currentPosition}${ordinal(data.currentPosition)} · ${
                         data.currentPoints ?? '—'
-                      } pts`
+                      } ${t('f1people.pts')}`
                     : '—'
                 }
                 highlight
@@ -191,7 +193,7 @@ export default function F1TeamDetail() {
 
         {/* Palmarès */}
         <section>
-          <SectionTitle>Palmarès</SectionTitle>
+          <SectionTitle>{t('f1people.palmares')}</SectionTitle>
           {loading && !data ? (
             <div className="grid grid-cols-3 gap-2">
               {Array.from({ length: 3 }).map((_, i) => (
@@ -202,11 +204,11 @@ export default function F1TeamDetail() {
             <div className="grid grid-cols-3 gap-2">
               <KeyStat
                 value={data?.championships ?? '—'}
-                label="Titres constructeurs"
+                label={t('f1people.constructorTitles')}
                 icon={<Trophy className="h-4 w-4" />}
               />
-              <KeyStat value={data?.totalWins ?? '—'} label="Victoires" />
-              <KeyStat value={data?.totalPoles ?? '—'} label="Pole positions" />
+              <KeyStat value={data?.totalWins ?? '—'} label={t('f1people.wins')} />
+              <KeyStat value={data?.totalPoles ?? '—'} label={t('f1people.polePositions')} />
             </div>
           )}
         </section>
@@ -214,15 +216,15 @@ export default function F1TeamDetail() {
         {/* Saison 2026 — chiffres + dernier GP */}
         {data && hasSeasonStats(data) && (
           <section>
-            <SectionTitle>Saison 2026</SectionTitle>
+            <SectionTitle>{t('f1people.season2026')}</SectionTitle>
             <div
               className="rounded-3xl bg-card p-5"
               style={{ border: '1px solid var(--color-border)' }}
             >
               <div className="grid grid-cols-3 gap-4">
-                <SeasonCell value={data.seasonWins} label="Victoires" />
-                <SeasonCell value={data.seasonPodiums} label="Podiums" />
-                <SeasonCell value={data.seasonPoles} label="Poles" />
+                <SeasonCell value={data.seasonWins} label={t('f1people.wins')} />
+                <SeasonCell value={data.seasonPodiums} label={t('f1people.podiums')} />
+                <SeasonCell value={data.seasonPoles} label={t('f1people.poles')} />
               </div>
               {data.lastRaceGp &&
                 data.lastRaceGp !== 'N/A' &&
@@ -236,7 +238,7 @@ export default function F1TeamDetail() {
                     }}
                   >
                     <p className="label-up text-[10px] text-fg2">
-                      Dernier GP — {data.lastRaceGp}
+                      {t('f1people.lastGp', { name: data.lastRaceGp })}
                     </p>
                     <p className="mt-1.5 text-sm font-bold text-fg">
                       {data.lastRaceResults}
@@ -250,14 +252,14 @@ export default function F1TeamDetail() {
         {/* Voiture 2026 */}
         {data && (data.carName !== 'N/A' || data.engine !== 'N/A') && (
           <section>
-            <SectionTitle>Monoplace 2026</SectionTitle>
+            <SectionTitle>{t('f1people.car2026')}</SectionTitle>
             <div
               className="rounded-3xl bg-card p-5"
               style={{ border: '1px solid var(--color-border)' }}
             >
               <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
-                <Fact label="Désignation" value={data.carName} />
-                <Fact label="Moteur" value={data.engine} />
+                <Fact label={t('f1people.designation')} value={data.carName} />
+                <Fact label={t('f1people.engine')} value={data.engine} />
               </dl>
               {data.specs && data.specs !== 'N/A' && (
                 <p
@@ -274,7 +276,7 @@ export default function F1TeamDetail() {
         {/* Pilotes 2026 */}
         {drivers.length > 0 && (
           <section>
-            <SectionTitle>Pilotes 2026</SectionTitle>
+            <SectionTitle>{t('f1people.drivers2026')}</SectionTitle>
             <div className="grid grid-cols-2 gap-2">
               {drivers.map((d) => (
                 <DriverPill
@@ -290,7 +292,7 @@ export default function F1TeamDetail() {
 
         {/* Histoire */}
         <section>
-          <SectionTitle>Histoire</SectionTitle>
+          <SectionTitle>{t('f1people.history')}</SectionTitle>
           {loading && !data ? (
             <Skeleton className="h-32 rounded-3xl" />
           ) : data?.history && data.history !== 'N/A' ? (
@@ -312,7 +314,7 @@ export default function F1TeamDetail() {
               className="rounded-3xl bg-card p-5 text-sm text-fg2"
               style={{ border: '1px solid var(--color-border)' }}
             >
-              Fiche en cours de rédaction…
+              {t('f1people.sheetInProgress')}
             </p>
           )}
         </section>
@@ -320,7 +322,7 @@ export default function F1TeamDetail() {
         {/* Moments marquants */}
         {data?.highlights && data.highlights !== 'N/A' && (
           <section>
-            <SectionTitle>Moments marquants</SectionTitle>
+            <SectionTitle>{t('f1people.highlights')}</SectionTitle>
             <p
               className="rounded-3xl bg-card p-5 font-serif text-[15px] leading-relaxed text-fg/85"
               style={{ border: '1px solid var(--color-border)' }}
@@ -333,7 +335,7 @@ export default function F1TeamDetail() {
         {/* News */}
         {news.length > 0 && (
           <section>
-            <SectionTitle>Actu {team.name}</SectionTitle>
+            <SectionTitle>{t('f1people.newsAbout', { name: team.name })}</SectionTitle>
             <div className="space-y-3">
               {news.slice(0, 4).map((n) => (
                 <a
@@ -377,13 +379,13 @@ export default function F1TeamDetail() {
         {loading && data == null && (
           <p className="flex items-center justify-center gap-2 pt-4 text-sm text-fg2">
             <Loader2 className="h-4 w-4 animate-spin" />
-            Recherche en cours sur le web…
+            {t('f1people.searchingWeb')}
           </p>
         )}
 
         {generatedAt && (
           <p className="label-up pt-2 text-center text-[10px] text-fg2/70">
-            Mis à jour le {formatUpdated(generatedAt)}
+            {t('f1people.updatedOn', { date: formatUpdated(generatedAt) })}
           </p>
         )}
       </main>
