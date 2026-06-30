@@ -454,5 +454,105 @@
       "noArticles": "No articles for now.",
       "new": "NEW"
     }
+  },
+  "legal": {
+    "terms": {
+      "title": "Terms of Service",
+      "section1": {
+        "heading": "1. Purpose",
+        "body": "REVS is a community car-spotting app that lets you photograph, geolocate and share the cars you spot, follow auto/F1 news and take part in events. Using the app implies full and complete acceptance of these terms."
+      },
+      "section2": {
+        "heading": "2. Access conditions",
+        "body": "The app is reserved for people aged at least 13. You are responsible for keeping your credentials confidential and for any activity from your account."
+      },
+      "section3": {
+        "heading": "3. Community rules",
+        "body": "The following are prohibited: any unlawful, defamatory or hateful content, or content that infringes on others' privacy (identifiable people, license plates, private property); spam and solicitation; fake photos (screenshots, thumbnails, 3D renders, images not captured live). Spot while respecting traffic laws and your own safety — never take photos while driving. Any breach may result in the removal of content or of the account."
+      },
+      "section4": {
+        "heading": "4. User content",
+        "body": "You remain the owner of your photos and stay responsible for the content you publish. You grant REVS a non-exclusive license to host and display this content within the app."
+      },
+      "section5": {
+        "heading": "5. Subscriptions and refunds",
+        "body": "Paid monthly subscriptions via Stripe: Starter €3, Premium €8, VIP €25 per month. Renewal is automatic each month; you can cancel at any time, with cancellation taking effect at the end of the current period. In accordance with consumer law, you have a 14-day right of withdrawal; by requesting immediate access to the paid features, you accept the immediate performance of the service and the loss of the right of withdrawal once the service has been fully provided. No pro-rata refund is due for a period already started."
+      },
+      "section6": {
+        "heading": "6. Liability",
+        "body": "REVS is provided \"as is\", with no guarantee of continuous availability. REVS cannot be held liable for content published by users, nor for any dangerous or illegal use of the app. The publisher's liability is limited to the extent permitted by law."
+      },
+      "section7": {
+        "heading": "7. Applicable law and jurisdiction",
+        "body": "These terms are governed by French law. Failing an amicable resolution, any dispute falls under the jurisdiction of the courts of Annecy."
+      },
+      "section8": {
+        "heading": "8. Changes to the terms",
+        "body": "REVS may modify these terms. The version in force is the one published in the app; continued use constitutes acceptance of the changes."
+      }
+    },
+    "privacy": {
+      "title": "Privacy Policy",
+      "disclaimer": "GDPR template to be validated by legal counsel before going to production. The DPO/contact email is to be filled in.",
+      "controller": {
+        "heading": "Data controller",
+        "body": "REVS — Florian Burnier, Annecy, France. Contact / DPO: [email à renseigner]."
+      },
+      "data": {
+        "heading": "Data collected",
+        "body": "Email address (account); username and city (profile); photos of spotted cars; geolocation associated with each spot and event; activity and gamification data (XP, badges, likes, comments, subscriptions). Consent preferences (analytics, marketing) are stored on your device."
+      },
+      "purposes": {
+        "heading": "Purposes and legal basis",
+        "body": "Providing the service (map, feed, leaderboard, events, notifications) — performance of the contract. Audience measurement and marketing communications — only on the basis of your consent, which can be withdrawn at any time in Settings → Privacy & legal."
+      },
+      "retention": {
+        "heading": "Retention period",
+        "body": "Account data is kept as long as the account is active and is deleted upon request or when the account is deleted. Spots automatically expire after 1 h if they receive no interaction; news after 24 h."
+      },
+      "recipients": {
+        "heading": "Recipients and processors",
+        "body": "Supabase (database / storage, European Union); Vercel Inc. (application hosting, United States); Stripe (subscription payments); Anthropic (image analysis for car recognition). No data is resold."
+      },
+      "transfers": {
+        "heading": "Transfers outside the European Union",
+        "body": "Application hosting (Vercel Inc., USA) involves a transfer of data outside the EU, governed by the European Commission's Standard Contractual Clauses."
+      },
+      "cookies": {
+        "heading": "Cookies and local storage",
+        "body": "Strictly technical cookies/storage: Supabase authentication session, app preferences. Audience measurement and marketing communications are only enabled with your explicit consent (Settings)."
+      },
+      "rights": {
+        "heading": "Your rights",
+        "body": "In accordance with the GDPR: rights of access, rectification, erasure, portability, restriction and objection. You can delete your account and all your data from Settings → Danger zone, and change your consent at any time. To exercise your rights: [email à renseigner]. You can also lodge a complaint with the CNIL (cnil.fr)."
+      }
+    },
+    "mentions": {
+      "title": "Legal Notice",
+      "disclaimer": "The contact email address is to be filled in by the publisher before public production release.",
+      "publisher": {
+        "heading": "Site publisher",
+        "editedBy": "published by",
+        "status": "sole trader.",
+        "contact": "Contact:"
+      },
+      "director": {
+        "heading": "Publication director"
+      },
+      "hosting": {
+        "heading": "Hosting",
+        "app": "App hosted by",
+        "usa": "United States",
+        "db": "Database and file storage: Supabase, hosted in the European Union."
+      },
+      "ip": {
+        "heading": "Intellectual property",
+        "body": "The REVS brand, design and code are protected. The photos and content published remain the property of their authors, who grant REVS a license to display them within the app."
+      },
+      "report": {
+        "heading": "Reporting",
+        "body": "Any unlawful content can be reported to the contact address above for removal as soon as possible."
+      }
+    }
   }
 }

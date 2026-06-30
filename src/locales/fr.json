@@ -454,5 +454,105 @@
       "noArticles": "Aucun article pour le moment.",
       "new": "NOUVEAU"
     }
+  },
+  "legal": {
+    "terms": {
+      "title": "Conditions générales d'utilisation",
+      "section1": {
+        "heading": "1. Objet",
+        "body": "REVS est une application communautaire de spotting automobile permettant de photographier, géolocaliser et partager des voitures repérées, de suivre l'actualité auto/F1 et de participer à des événements. L'utilisation de l'application implique l'acceptation pleine et entière des présentes conditions."
+      },
+      "section2": {
+        "heading": "2. Conditions d'accès",
+        "body": "L'application est réservée aux personnes âgées d'au moins 13 ans. Tu es responsable de la confidentialité de tes identifiants et de toute activité depuis ton compte."
+      },
+      "section3": {
+        "heading": "3. Règles de la communauté",
+        "body": "Sont interdits : tout contenu illicite, diffamatoire, haineux ou portant atteinte à la vie privée d'autrui (personnes identifiables, plaques, propriété privée) ; le spam et la sollicitation ; les fausses photos (photos d'écran, miniatures, rendus 3D, images non prises sur le vif). Spotte dans le respect du code de la route et de ta sécurité — ne photographie jamais en conduisant. Tout manquement peut entraîner la suppression de contenus ou du compte."
+      },
+      "section4": {
+        "heading": "4. Contenus utilisateurs",
+        "body": "Tu restes propriétaire de tes photos et conserves la responsabilité des contenus publiés. Tu concèdes à REVS une licence non exclusive d'hébergement et d'affichage de ces contenus au sein de l'application."
+      },
+      "section5": {
+        "heading": "5. Abonnements et remboursements",
+        "body": "Abonnements mensuels payants via Stripe : Starter 3 €, Premium 8 €, VIP 25 € par mois. Le renouvellement est automatique chaque mois ; tu peux résilier à tout moment, la résiliation prenant effet à la fin de la période en cours. Conformément au droit de la consommation, tu disposes d'un droit de rétractation de 14 jours ; en demandant l'accès immédiat aux fonctionnalités payantes, tu acceptes l'exécution immédiate du service et la perte du droit de rétractation une fois le service pleinement fourni. Aucun remboursement au prorata n'est dû pour une période entamée."
+      },
+      "section6": {
+        "heading": "6. Responsabilité",
+        "body": "REVS est fournie « en l'état », sans garantie de disponibilité continue. REVS ne saurait être tenue responsable des contenus publiés par les utilisateurs, ni d'un usage dangereux ou illégal de l'application. La responsabilité de l'éditeur est limitée dans les limites autorisées par la loi."
+      },
+      "section7": {
+        "heading": "7. Droit applicable et juridiction",
+        "body": "Les présentes conditions sont régies par le droit français. À défaut de résolution amiable, tout litige relève de la compétence des tribunaux d'Annecy."
+      },
+      "section8": {
+        "heading": "8. Évolution des conditions",
+        "body": "REVS peut modifier les présentes conditions. La version en vigueur est celle publiée dans l'application ; l'usage continu vaut acceptation des modifications."
+      }
+    },
+    "privacy": {
+      "title": "Politique de confidentialité",
+      "disclaimer": "Modèle RGPD à faire valider par un conseil juridique avant mise en production. L'e-mail du DPO/contact est à renseigner.",
+      "controller": {
+        "heading": "Responsable du traitement",
+        "body": "REVS — Florian Burnier, Annecy, France. Contact / DPO : [email à renseigner]."
+      },
+      "data": {
+        "heading": "Données collectées",
+        "body": "Adresse e-mail (compte) ; pseudo et ville (profil) ; photos des voitures spottées ; géolocalisation associée à chaque spot et événement ; données d'activité et de gamification (XP, badges, likes, commentaires, abonnements). Les préférences de consentement (analytics, marketing) sont stockées sur ton appareil."
+      },
+      "purposes": {
+        "heading": "Finalités et base légale",
+        "body": "Fournir le service (carte, feed, classement, événements, notifications) — exécution du contrat. Mesure d'audience et communications marketing — uniquement sur la base de ton consentement, révocable à tout moment dans Paramètres → Confidentialité & légal."
+      },
+      "retention": {
+        "heading": "Durée de conservation",
+        "body": "Données de compte conservées tant que le compte est actif et supprimées sur demande ou à la suppression du compte. Les spots expirent automatiquement après 1 h s'ils ne reçoivent pas d'interaction ; les actualités après 24 h."
+      },
+      "recipients": {
+        "heading": "Destinataires et sous-traitants",
+        "body": "Supabase (base de données / stockage, Union européenne) ; Vercel Inc. (hébergement applicatif, États-Unis) ; Stripe (paiements des abonnements) ; Anthropic (analyse d'image pour la reconnaissance des voitures). Aucune donnée n'est revendue."
+      },
+      "transfers": {
+        "heading": "Transferts hors Union européenne",
+        "body": "L'hébergement applicatif (Vercel Inc., USA) implique un transfert de données hors UE, encadré par les clauses contractuelles types de la Commission européenne (Standard Contractual Clauses)."
+      },
+      "cookies": {
+        "heading": "Cookies et stockage local",
+        "body": "Cookies/stockage strictement techniques : session d'authentification Supabase, préférences de l'application. Les mesures d'audience et communications marketing ne sont activées qu'avec ton consentement explicite (Paramètres)."
+      },
+      "rights": {
+        "heading": "Tes droits",
+        "body": "Conformément au RGPD : droit d'accès, de rectification, d'effacement, de portabilité, de limitation et d'opposition. Tu peux supprimer ton compte et toutes tes données depuis Paramètres → Danger zone, et modifier tes consentements à tout moment. Pour exercer tes droits : [email à renseigner]. Tu peux aussi introduire une réclamation auprès de la CNIL (cnil.fr)."
+      }
+    },
+    "mentions": {
+      "title": "Mentions légales",
+      "disclaimer": "L'adresse e-mail de contact est à renseigner par l'éditeur avant la mise en production publique.",
+      "publisher": {
+        "heading": "Éditeur du site",
+        "editedBy": "éditée par",
+        "status": "entrepreneur individuel.",
+        "contact": "Contact :"
+      },
+      "director": {
+        "heading": "Directeur de la publication"
+      },
+      "hosting": {
+        "heading": "Hébergement",
+        "app": "Application hébergée par",
+        "usa": "États-Unis",
+        "db": "Base de données et stockage des fichiers : Supabase, hébergement en Union européenne."
+      },
+      "ip": {
+        "heading": "Propriété intellectuelle",
+        "body": "La marque, le design et le code de REVS sont protégés. Les photos et contenus publiés restent la propriété de leurs auteurs, qui concèdent à REVS une licence d'affichage dans l'application."
+      },
+      "report": {
+        "heading": "Signalement",
+        "body": "Tout contenu illicite peut être signalé à l'adresse de contact ci-dessus pour retrait dans les meilleurs délais."
+      }
+    }
   }
 }
