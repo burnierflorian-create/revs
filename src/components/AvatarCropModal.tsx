@@ -1,6 +1,9 @@
 import { useCallback, useState } from 'react'
 import Cropper from 'react-easy-crop'
 import type { Area } from 'react-easy-crop'
+// REQUIRED in react-easy-crop v5+ — without it the crop surface has no
+// layout (image/drag/zoom don't work), so the modal looks broken.
+import 'react-easy-crop/react-easy-crop.css'
 import { useTranslation } from 'react-i18next'
 
 // Full-screen avatar cropper — circular crop matching the round avatar,
