@@ -35,7 +35,7 @@ import { supabase } from '../lib/supabase'
 import { useTheme } from '../lib/theme'
 import { hapticSuccess } from '../lib/haptic'
 import { clearVault, hasVault, readVault } from '../lib/passwordVault'
-import { resizeImageToJpeg } from '../lib/spots'
+import AvatarCropModal from '../components/AvatarCropModal'
 import { enablePush, pushSupported } from '../lib/push'
 import { translateError } from '../lib/errors'
 import {
@@ -201,6 +201,8 @@ export default function Settings() {
   const [ville, setVille] = useState('')
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [avatarFile, setAvatarFile] = useState<Blob | null>(null)
+  // Object URL of the just-picked file while the crop modal is open.
+  const [cropSrc, setCropSrc] = useState<string | null>(null)
   // Profile extras introduced by migration 0041 — daily-driver brand
   // surfaced as a Settings row, plus optional Instagram / TikTok
   // handles for the public profile card. All three nullable.
@@ -511,17 +513,28 @@ export default function Settings() {
     }
   }, [])
 
-  async function onPickAvatar(e: React.ChangeEvent<HTMLInputElement>) {
+  // Pick → open the circular crop modal. The modal renders the chosen
+  // region to a 512×512 JPEG blob which becomes the avatar to upload.
+  function onPickAvatar(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     e.target.value = ''
     if (!file) return
-    try {
-      const { blob } = await resizeImageToJpeg(file, 512, 0.85)
-      setAvatarFile(blob)
-      setAvatarUrl(URL.createObjectURL(blob))
-    } catch {
-      setErr(t('settingspage.imageUnreadable'))
-    }
+    setCropSrc(URL.createObjectURL(file))
+  }
+
+  function onCropConfirm(blob: Blob) {
+    setAvatarFile(blob)
+    setAvatarUrl((prev) => {
+      if (prev && prev.startsWith('blob:')) URL.revokeObjectURL(prev)
+      return URL.createObjectURL(blob)
+    })
+    if (cropSrc) URL.revokeObjectURL(cropSrc)
+    setCropSrc(null)
+  }
+
+  function onCropCancel() {
+    if (cropSrc) URL.revokeObjectURL(cropSrc)
+    setCropSrc(null)
   }
 
   async function saveProfile() {
@@ -1785,6 +1798,13 @@ export default function Settings() {
             contact@revs.app
           </p>
         </div>
+      )}
+      {cropSrc && (
+        <AvatarCropModal
+          imageSrc={cropSrc}
+          onCancel={onCropCancel}
+          onConfirm={onCropConfirm}
+        />
       )}
     </div>
   )

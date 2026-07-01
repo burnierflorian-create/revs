@@ -779,7 +779,13 @@
     "signOut": "Sign out",
     "deleteAccount": "Delete my account",
     "deleteConfirmText": "Are you sure? This action is permanent and deletes all your data.",
-    "yesDelete": "Yes, delete"
+    "yesDelete": "Yes, delete",
+    "crop": {
+      "title": "Crop your photo",
+      "cancel": "Cancel",
+      "confirm": "Confirm",
+      "zoom": "Zoom"
+    }
   },
   "spotdetail": {
     "notFound": "This spot can't be found.",

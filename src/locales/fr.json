@@ -779,7 +779,13 @@
     "signOut": "Se déconnecter",
     "deleteAccount": "Supprimer mon compte",
     "deleteConfirmText": "Êtes-vous sûr ? Cette action est définitive et supprime toutes tes données.",
-    "yesDelete": "Oui, supprimer"
+    "yesDelete": "Oui, supprimer",
+    "crop": {
+      "title": "Recadre ta photo",
+      "cancel": "Annuler",
+      "confirm": "Valider",
+      "zoom": "Zoom"
+    }
   },
   "spotdetail": {
     "notFound": "Ce spot est introuvable.",

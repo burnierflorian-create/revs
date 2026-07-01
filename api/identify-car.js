@@ -110,6 +110,7 @@ ANALYSE VISUELLE — observe la photo et croise ces indices AVANT de conclure :
 SIGNATURES SUPERCARS — reconnais ces marques même de DERRIÈRE ou de CÔTÉ :
 
 LAMBORGHINI — indices infaillibles :
+- Lignes angulaires TRÈS prononcées, capot avant plat et extrêmement bas.
 - Silhouette ultra-basse et angulaire, lignes en Y caractéristiques.
 - Feux arrière LED en forme de Y ou hexagonaux (Huracán, Urus, Revuelto).
 - Badge taureau doré sur le capot ou les ailes.
@@ -127,7 +128,8 @@ FERRARI — indices infaillibles :
 - 296 GTB : feux en boomerang, prises d'air latérales.
 
 McLAREN — indices infaillibles :
-- Portes papillon dièdre caractéristiques.
+- Portes papillon (dièdre) caractéristiques.
+- Flancs profondément sculptés (écopes latérales creusées vers les prises d'air moteur).
 - Nez très pointu avec splitter intégré.
 - Prises d'air derrière les vitres latérales.
 - Feux arrière fins horizontaux.
@@ -161,23 +163,26 @@ Règles :
 - NE renvoie PAS de prix : le prix du marché est calculé séparément (appel texte dédié, modèle moins cher).
 - RARETÉ = uniquement le volume de production mondial du modèle. JAMAIS le prix, jamais le lieu, jamais le standing perçu.
 - En cas de doute sur la rareté, descends d'un cran (douteux supercar = "performance").
-- Si tu n'identifies pas le modèle exact, donne ta meilleure estimation — JAMAIS "indéterminé" ni "inconnue".
+- Si tu n'identifies pas le modèle exact, donne ta meilleure estimation ; si vraiment incertain, renvoie "Modèle inconnu". Mais la MARQUE reste TOUJOURS obligatoire et ne doit JAMAIS être vide.
 - Pas d'appel web : appuie-toi UNIQUEMENT sur la vision de cette photo et tes connaissances statiques pour une réponse instantanée.
 
-RÈGLE ABSOLUE ANTI-INDÉTERMINÉ :
-Si tu vois une voiture basse et sportive avec des lignes angulaires = Lamborghini minimum.
-Si tu vois des portes papillon = McLaren minimum.
-Si tu vois un grand aileron fixe sur un coupé = Porsche 911 GT3/GT4 minimum.
-Si tu vois des feux ronds arrière sur un coupé bas = Ferrari classique minimum.
-JAMAIS retourner brand="Voiture" ou model="Modèle indéterminé" — toujours donner la meilleure estimation même à confidence=25.
-Si vraiment impossible : brand="Véhicule non identifié", model="Supercar inconnue", confidence=15 — mais ce cas doit être extrêmement rare.`
+OBLIGATION DE MARQUE (NON NÉGOCIABLE — priorité maximale) :
+Si une voiture est visible sur la photo, tu DOIS TOUJOURS identifier sa marque (Lamborghini, Ferrari, Porsche, BMW, Audi, Mercedes, etc.). C'est NON NÉGOCIABLE.
+- Ne renvoie JAMAIS un champ "brand" vide, null, "Voiture", "Voiture inconnue" ou "Véhicule non identifié" dès qu'une voiture est clairement visible.
+- Croise systématiquement les indices pour trouver la marque, même de dos ou de côté :
+  • Lamborghini : lignes angulaires très prononcées, capot avant plat, feux arrière en Y, badge taureau.
+  • Ferrari : feux ronds arrière, sorties d'échappement centrales, badge cheval cabré.
+  • McLaren : portes papillon, flancs profondément sculptés.
+  • Porsche 911 GT3 : grand aileron fixe (swan neck) sur un coupé bas.
+- Si tu reconnais la marque mais PAS le modèle exact, renvoie la marque + "Modèle inconnu" (jamais une marque vide).
+- Donne toujours ta meilleure estimation de marque, même à confidence basse (25). Le champ "brand" ne peut rester générique QUE s'il n'y a réellement AUCUNE voiture sur la photo.`
 
-const SYSTEM_SIMPLE = `Tu es un expert automobile. Identifie la voiture sur la photo. Tu dois TOUJOURS répondre — au pire avec la marque seule + "Modèle indéterminé" + confidence: 20.
+const SYSTEM_SIMPLE = `Tu es un expert automobile. Identifie la voiture sur la photo. La MARQUE est OBLIGATOIRE (non négociable) dès qu'une voiture est visible : ne renvoie JAMAIS une marque vide, null ou "Voiture inconnue". Si le modèle exact est incertain, renvoie la marque + "Modèle inconnu" + confidence: 20.
 
 Réponds UNIQUEMENT par ce JSON, rien d'autre, pas de markdown :
 {"brand":"Marque","model":"Modèle","year":2022,"color":"couleur","category":"supercar|hypercar|classic|youngtimer|JDM|other","confidence":80,"price_estimate":100000,"details_used":["…"],"valid":true,"reason":""}`
 
-const SYSTEM_MINIMAL = `Identifie la voiture. Réponds UNIQUEMENT en JSON avec au minimum brand et model. Pas de markdown, pas de texte. Exemple : {"brand":"Ferrari","model":"488 GTB"}`
+const SYSTEM_MINIMAL = `Identifie la voiture. Réponds UNIQUEMENT en JSON avec au minimum brand et model. La MARQUE est obligatoire, jamais vide (si le modèle est incertain : marque + "Modèle inconnu"). Pas de markdown, pas de texte. Exemple : {"brand":"Ferrari","model":"488 GTB"}`
 
 // ─────────────────────── Helpers ───────────────────────
 
