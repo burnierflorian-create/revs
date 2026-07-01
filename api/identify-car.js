@@ -135,6 +135,11 @@ McLAREN — indices infaillibles :
 - Feux arrière fins horizontaux.
 - GT : ligne plus douce, coffre arrière, moins extrême que la 720S.
 
+PORSCHE — indices infaillibles :
+- Capot arrière bombé (moteur en porte-à-faux arrière), silhouette 911 fuyante inimitable.
+- Bandeau de feux arrière horizontal continu (911 991/992) ; 4 phares ronds pour Cayenne/Macan/Taycan.
+- Écusson Porsche (armoiries de Stuttgart) au centre du capot avant.
+
 PORSCHE 911 GT3 — indices infaillibles :
 - Aileron arrière fixe très large et haut (swan neck).
 - Diffuseur arrière agressif avec sorties d'échappement basses.
@@ -173,7 +178,7 @@ Si une voiture est visible sur la photo, tu DOIS TOUJOURS identifier sa marque (
   • Lamborghini : lignes angulaires très prononcées, capot avant plat, feux arrière en Y, badge taureau.
   • Ferrari : feux ronds arrière, sorties d'échappement centrales, badge cheval cabré.
   • McLaren : portes papillon, flancs profondément sculptés.
-  • Porsche 911 GT3 : grand aileron fixe (swan neck) sur un coupé bas.
+  • Porsche : capot arrière bombé, bandeau de feux horizontal, écusson de Stuttgart (911 GT3 : grand aileron fixe swan-neck).
 - Si tu reconnais la marque mais PAS le modèle exact, renvoie la marque + "Modèle inconnu" (jamais une marque vide).
 - Donne toujours ta meilleure estimation de marque, même à confidence basse (25). Le champ "brand" ne peut rester générique QUE s'il n'y a réellement AUCUNE voiture sur la photo.`
 
