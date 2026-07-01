@@ -35,12 +35,15 @@ const ALLOWED_MIME = new Set([
   'image/webp',
 ])
 
-// `valid` defaults to true so an infra/parse failure never hard-blocks
-// the publish flow. Brand and model never come back empty either —
-// even worst-case we emit "Voiture" / "Modèle indéterminé" so the form
-// auto-fills and the user just tweaks if needed.
-const NEVER_EMPTY_BRAND = 'Voiture'
-const NEVER_EMPTY_MODEL = 'Modèle indéterminé'
+// Last-resort labels. These are reached ONLY after the normal prompt
+// ladder AND the insistent brand re-analysis in the handler ALL fail to
+// name a real brand (should be extremely rare). We deliberately use
+// "Inconnue" — NEVER "Voiture" — so the value is honest and the reprocess
+// job can find these rows. The real "no empty brand" logic is the
+// re-analysis pass (reanalyzeBrand) triggered whenever finalize() yields a
+// generic brand, not this static string.
+const NEVER_EMPTY_BRAND = 'Inconnue'
+const NEVER_EMPTY_MODEL = 'Modèle inconnu'
 
 const BASE = {
   brand: '',
@@ -183,6 +186,15 @@ Règles :
 - Si tu n'identifies pas le modèle exact, donne ta meilleure estimation ; si vraiment incertain, renvoie "Modèle inconnu". Mais la MARQUE reste TOUJOURS obligatoire et ne doit JAMAIS être vide.
 - Pas d'appel web : appuie-toi UNIQUEMENT sur la vision de cette photo et tes connaissances statiques pour une réponse instantanée.
 
+INTERDICTIONS STRICTES (le champ JSON est "brand", pas "make") :
+INTERDIT de retourner "Voiture" ou "Modèle indéterminé" comme valeurs.
+Lamborghini : lignes angulaires extrêmes, feux en Y, badge taureau doré, capot ultra plat → brand: "Lamborghini"
+Ferrari : feux arrière ronds, sorties échappement centrales, badge cheval cabré → brand: "Ferrari"
+Porsche : capot bombé arrière, feux horizontaux fins → brand: "Porsche"
+McLaren : portes papillon, flancs très sculptés → brand: "McLaren"
+Même qualité photo médiocre : identifier la marque par la silhouette et les indices visuels.
+Si vraiment impossible → brand: "Inconnue" mais JAMAIS "Voiture".
+
 OBLIGATION DE MARQUE (NON NÉGOCIABLE — priorité maximale) :
 Si une voiture est visible sur la photo, tu DOIS TOUJOURS identifier sa marque (Lamborghini, Ferrari, Porsche, BMW, Audi, Mercedes, etc.). C'est NON NÉGOCIABLE.
 - Ne renvoie JAMAIS un champ "brand" vide, null, "Voiture", "Voiture inconnue" ou "Véhicule non identifié" dès qu'une voiture est clairement visible.
@@ -200,6 +212,21 @@ Réponds UNIQUEMENT par ce JSON, rien d'autre, pas de markdown :
 {"brand":"Marque","model":"Modèle","year":2022,"color":"couleur","category":"supercar|hypercar|classic|youngtimer|JDM|other","confidence":80,"price_estimate":100000,"details_used":["…"],"valid":true,"reason":""}`
 
 const SYSTEM_MINIMAL = `Identifie la voiture. Réponds UNIQUEMENT en JSON avec au minimum brand et model. La MARQUE est obligatoire, jamais vide (si le modèle est incertain : marque + "Modèle inconnu"). Pas de markdown, pas de texte. Exemple : {"brand":"Ferrari","model":"488 GTB"}`
+
+// Fired ONLY when a first pass came back with a generic/empty brand. A
+// more forceful "look again" prompt that leans entirely on silhouette +
+// brand cues, tuned to never return "Voiture"/"Inconnue" if a body is
+// visible.
+const SYSTEM_INSIST = `Regarde ENCORE cette voiture. Ta première réponse était trop vague. Il est INTERDIT de répondre "Voiture" ou "Inconnue" dès qu'une carrosserie est visible.
+Concentre-toi sur la SILHOUETTE et les indices visuels, même sur une photo médiocre, floue, sombre ou partielle :
+- lignes angulaires extrêmes + feux en Y + capot ultra plat → Lamborghini
+- feux arrière ronds + sorties d'échappement centrales + cheval cabré → Ferrari
+- capot bombé arrière + feux horizontaux fins → Porsche
+- portes papillon + flancs très sculptés → McLaren
+- calandre en haricots → BMW ; calandre mono-cadre → Audi ; étoile → Mercedes ; anneaux → Audi.
+Donne ta MEILLEURE estimation de marque réelle (jamais générique). Le modèle peut être "Modèle inconnu", la marque JAMAIS.
+Réponds UNIQUEMENT en JSON valide, rien d'autre :
+{"brand":"Marque réelle","model":"Modèle ou Modèle inconnu","year":2022,"color":"couleur","category":"supercar|hypercar|classic|youngtimer|JDM|other","confidence":40,"rarity":"standard|premium|performance|exclusif|supercar|hypercar"}`
 
 // ─────────────────────── Helpers ───────────────────────
 
@@ -322,8 +349,9 @@ function normalizeStringArray(v) {
  *  shape returned to the client is always the legacy one. */
 function finalize(raw) {
   const o = raw ?? {}
-  // Field aliases — try the legacy name first, fall back to `car_*`.
-  const brandRaw = normalizeString(o.brand ?? o.car_brand)
+  // Field aliases — try the legacy name first, fall back to `car_*` or the
+  // `make` key some prompts emit.
+  const brandRaw = normalizeString(o.brand ?? o.car_brand ?? o.make)
   const modelRaw = cleanModelName(normalizeString(o.model ?? o.car_model))
   // "Inconnu" / "Véhicule non identifiable" from the prompt's fallback
   // path collapse into the same NEVER_EMPTY pair we used before, so
@@ -485,6 +513,34 @@ function sendJson(res, body, status = 200) {
   res.status(status).json(body)
 }
 
+// True when a brand is empty or a generic placeholder ("Voiture",
+// "Inconnue", "Voiture Modèle indéterminé", …) — i.e. recognition failed
+// to name a real make and we should look again.
+function isGenericBrand(b) {
+  const s = (b ?? '').trim().toLowerCase()
+  return (
+    !s ||
+    s === 'voiture' ||
+    s === 'inconnu' ||
+    s === 'inconnue' ||
+    s.startsWith('voiture ') ||
+    s === 'véhicule non identifié'
+  )
+}
+
+// Second-chance vision call with the more forceful SYSTEM_INSIST prompt.
+// Best-effort — returns a parsed object or null, never throws.
+async function reanalyzeBrand(client, mimeType, imageBase64) {
+  try {
+    const r = await callClaude(client, mimeType, imageBase64, SYSTEM_INSIST, 400)
+    if (r.stop_reason === 'refusal') return null
+    return extractJSON(lastText(r))
+  } catch (e) {
+    console.error('[identify-car] reanalyze threw:', e?.message ?? e)
+    return null
+  }
+}
+
 // ─────────────────────── Handler ───────────────────────
 
 export default async function handler(req, res) {
@@ -567,12 +623,25 @@ export default async function handler(req, res) {
         })
       }
 
-      if (parsed && (parsed.brand || parsed.model)) {
-        // Vision recognition done (Sonnet). The market price is a
-        // separate cheap Haiku text call so the expensive vision model
-        // never spends tokens guessing prices. Rarity/specs still ship
-        // from the strict prompt; history is DB-cached afterwards.
-        const result = finalize(parsed)
+      if (parsed && (parsed.brand || parsed.model || parsed.make)) {
+        // Vision recognition done (Sonnet).
+        let result = finalize(parsed)
+
+        // Point 3 — if the brand came back generic/empty ("Voiture",
+        // "Inconnue"…), don't accept it: fire ONE more insistent vision
+        // call (SYSTEM_INSIST) that leans on silhouette + brand cues. Keep
+        // it only if it actually names a real make.
+        if (isGenericBrand(result.brand)) {
+          const better = await reanalyzeBrand(client, mimeType, imageBase64)
+          if (better && !isGenericBrand(finalize(better).brand)) {
+            // Merge — the insistent pass overrides brand/model/etc, but any
+            // field it omitted keeps the first pass's value.
+            result = finalize({ ...parsed, ...better })
+          }
+        }
+
+        // The market price is a separate cheap Haiku text call so the
+        // expensive vision model never spends tokens guessing prices.
         result.estimated_price = await lookupMarketPrice(
           client,
           result.brand,
@@ -594,7 +663,7 @@ export default async function handler(req, res) {
     return sendJson(res, finalize(rescued))
   }
 
-  // Absolute last resort — the form still auto-fills with "Voiture /
-  // Modèle indéterminé" and the user just edits.
+  // Absolute last resort — the form still auto-fills with "Inconnue /
+  // Modèle inconnu" and the user just edits.
   return sendJson(res, FALLBACK)
 }
