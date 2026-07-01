@@ -5,6 +5,7 @@
     { "path": "/api/fetch-news", "schedule": "0 6 * * *" },
     { "path": "/api/cron-notify", "schedule": "0 17 * * *" },
     { "path": "/api/cron-notify?action=stats", "schedule": "30 3 * * *" },
+    { "path": "/api/cron-notify?action=refresh-prices", "schedule": "0 4 1 * *" },
     { "path": "/api/f1?refresh=1", "schedule": "0 4 */2 * *" }
   ]
 }

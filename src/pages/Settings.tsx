@@ -522,14 +522,47 @@ export default function Settings() {
     setCropSrc(URL.createObjectURL(file))
   }
 
-  function onCropConfirm(blob: Blob) {
-    setAvatarFile(blob)
-    setAvatarUrl((prev) => {
-      if (prev && prev.startsWith('blob:')) URL.revokeObjectURL(prev)
-      return URL.createObjectURL(blob)
-    })
+  // On "Valider": close the modal, show the crop instantly, then upload the
+  // cropped 512² JPEG to Supabase Storage and persist it on the profile
+  // (column `avatar`) right away — no separate save step for the photo.
+  async function onCropConfirm(blob: Blob) {
     if (cropSrc) URL.revokeObjectURL(cropSrc)
     setCropSrc(null)
+    const localUrl = URL.createObjectURL(blob)
+    setAvatarUrl((prev) => {
+      if (prev && prev.startsWith('blob:')) URL.revokeObjectURL(prev)
+      return localUrl
+    })
+    if (!userId) {
+      // No session yet — defer to the normal Save flow.
+      setAvatarFile(blob)
+      return
+    }
+    setSaving(true)
+    setErr(null)
+    try {
+      const path = `${userId}/avatar.jpg`
+      const up = await supabase.storage
+        .from('avatars')
+        .upload(path, blob, { upsert: true, contentType: 'image/jpeg' })
+      if (up.error) throw up.error
+      const { data: pub } = supabase.storage.from('avatars').getPublicUrl(path)
+      const url = `${pub.publicUrl}?v=${Date.now()}`
+      const { error } = await supabase
+        .from('profiles')
+        .upsert({ user_id: userId, avatar: url }, { onConflict: 'user_id' })
+      if (error) throw error
+      setAvatarUrl(url)
+      setAvatarFile(null)
+      hapticSuccess()
+      setMsg(t('settingspage.profileSaved'))
+    } catch (e) {
+      // Fall back to the normal Save (keep the blob queued).
+      setAvatarFile(blob)
+      setErr(translateError(e))
+    } finally {
+      setSaving(false)
+    }
   }
 
   function onCropCancel() {
