@@ -45,6 +45,10 @@ import bRaceUnderdog from '../assets/badges/badge-race-underdog.png'
 import bRaceStreak5 from '../assets/badges/badge-race-streak-5.png'
 import bRaceChampion from '../assets/badges/badge-race-champion.png'
 import bRaceDavidGoliath from '../assets/badges/badge-race-david-goliath.png'
+import bRacePerfect10 from '../assets/badges/badge-race-perfect-10.png'
+import bEarlyAdopter from '../assets/badges/badge-early-adopter.png'
+import bLegendaire from '../assets/badges/badge-legendaire.png'
+import bOrganisateur from '../assets/badges/badge-organisateur.png'
 import bFanBmw from '../assets/badges/badge-fan-bmw.png'
 import bFanRolls from '../assets/badges/badge-fan-rolls-royce.png'
 import bFanChevrolet from '../assets/badges/badge-fan-chevrolet.png'
@@ -87,6 +91,10 @@ const BADGE_ICONS: Record<string, string> = {
   'race-streak-5': bRaceStreak5,
   'race-champion': bRaceChampion,
   'race-david-goliath': bRaceDavidGoliath,
+  'race-perfect-10': bRacePerfect10,
+  'early-adopter': bEarlyAdopter,
+  legendaire: bLegendaire,
+  organisateur: bOrganisateur,
 }
 
 /** Custom icon for a badge slug (incl. dynamic `fan-<brand>` slugs for the
