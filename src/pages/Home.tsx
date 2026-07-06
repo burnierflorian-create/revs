@@ -13,6 +13,7 @@ import {
   fetchActiveChallenges,
   type Challenge,
 } from '../lib/challenges'
+import { challengeIcon } from '../lib/customIcons'
 import { fetchLiveEvents, type LiveEvent } from '../lib/liveEvents'
 import TitleChip from '../components/TitleChip'
 import { checkLevelUp } from '../components/LevelUpOverlay'
@@ -707,7 +708,7 @@ function RpmGauges({
     const st = challengeStyle(c)
     return {
       label: c.title,
-      emoji: st.emoji,
+      icon: challengeIcon(c),
       color: st.color,
       pct: Math.min(100, Math.max(0, computeChallengePct(c))),
       done: c.claimed || c.completed,
@@ -732,9 +733,12 @@ function RpmGauges({
             className="tappable flex min-w-0 flex-1 flex-col items-center"
           >
             <MiniSpeedometer pct={s.pct} done={s.done} />
-            <span aria-hidden className="mt-2" style={{ fontSize: '20px', lineHeight: 1 }}>
-              {s.emoji}
-            </span>
+            <img
+              src={s.icon}
+              alt=""
+              aria-hidden
+              className="mt-2 h-7 w-7 rounded-lg object-cover"
+            />
             <span
               className="mt-1 line-clamp-2 text-center font-semibold text-white"
               style={{ fontSize: '11px', lineHeight: 1.2 }}

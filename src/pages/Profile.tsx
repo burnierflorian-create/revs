@@ -18,6 +18,7 @@ import { supabase } from '../lib/supabase'
 import { type Rarity, type Spot } from '../lib/spots'
 import { planDisplayName, planTier } from '../lib/plans'
 import { allBadges, computeUnlocks, type Badge } from '../lib/badges'
+import { badgeIcon } from '../lib/customIcons'
 import { fetchRaceStats } from '../lib/race'
 import { xpLevel } from '../lib/xp'
 import { useMyTier } from '../lib/tier'
@@ -585,7 +586,19 @@ export default function Profile() {
                       }}
                       aria-label={b.name}
                     >
-                      {isU ? b.emoji : <Lock className="h-4 w-4 text-fg2/50" />}
+                      {isU ? (
+                        badgeIcon(b.slug) ? (
+                          <img
+                            src={badgeIcon(b.slug)}
+                            alt=""
+                            className="h-9 w-9 rounded-full object-cover"
+                          />
+                        ) : (
+                          b.emoji
+                        )
+                      ) : (
+                        <Lock className="h-4 w-4 text-fg2/50" />
+                      )}
                     </button>
                   )
                 })}

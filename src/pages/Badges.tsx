@@ -9,6 +9,7 @@ import {
   type Badge,
   type BadgeContext,
 } from '../lib/badges'
+import { badgeIcon } from '../lib/customIcons'
 import { useBadgeContext } from '../hooks/useBadgeContext'
 import { Skeleton } from '../components/Skeleton'
 
@@ -234,16 +235,28 @@ function BadgeSection({
                 strokeWidth={2.2}
               />
             )}
-            <span
-              style={{
-                fontSize: '36px',
-                lineHeight: 1,
-                opacity: unlocked ? 1 : 0.3,
-                filter: unlocked ? undefined : 'grayscale(1)',
-              }}
-            >
-              {b.emoji}
-            </span>
+            {badgeIcon(b.slug) ? (
+              <img
+                src={badgeIcon(b.slug)}
+                alt=""
+                className="h-9 w-9 rounded-xl object-cover"
+                style={{
+                  opacity: unlocked ? 1 : 0.3,
+                  filter: unlocked ? undefined : 'grayscale(1)',
+                }}
+              />
+            ) : (
+              <span
+                style={{
+                  fontSize: '36px',
+                  lineHeight: 1,
+                  opacity: unlocked ? 1 : 0.3,
+                  filter: unlocked ? undefined : 'grayscale(1)',
+                }}
+              >
+                {b.emoji}
+              </span>
+            )}
             <span
               className="line-clamp-2 leading-tight"
               style={{
@@ -335,16 +348,28 @@ function BadgeSheet({
                 : '1px solid #333',
           }}
         >
-          <span
-            style={{
-              fontSize: '64px',
-              lineHeight: 1,
-              opacity: unlocked ? 1 : 0.35,
-              filter: unlocked ? undefined : 'grayscale(1)',
-            }}
-          >
-            {badge.emoji}
-          </span>
+          {badgeIcon(badge.slug) ? (
+            <img
+              src={badgeIcon(badge.slug)}
+              alt=""
+              className="h-20 w-20 rounded-2xl object-cover"
+              style={{
+                opacity: unlocked ? 1 : 0.35,
+                filter: unlocked ? undefined : 'grayscale(1)',
+              }}
+            />
+          ) : (
+            <span
+              style={{
+                fontSize: '64px',
+                lineHeight: 1,
+                opacity: unlocked ? 1 : 0.35,
+                filter: unlocked ? undefined : 'grayscale(1)',
+              }}
+            >
+              {badge.emoji}
+            </span>
+          )}
         </div>
 
         <h3
