@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.96.0",
+    "@google/genai": "^2.10.0",
     "@stripe/stripe-js": "^9.5.0",
     "@supabase/supabase-js": "^2.105.4",
     "exifr": "^7.1.3",
