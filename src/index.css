@@ -506,3 +506,34 @@ h4 {
     opacity: 1;
   }
 }
+
+/* ── Badge grid (premium) ── */
+/* Staggered pop-in when a section scrolls into view. */
+@keyframes badge-pop {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+/* Light bar that sweeps across unlocked badges then rests. */
+@keyframes badge-shine {
+  0% {
+    transform: translateX(0);
+    opacity: 0;
+  }
+  8% {
+    opacity: 0.5;
+  }
+  32% {
+    transform: translateX(300%);
+    opacity: 0;
+  }
+  100% {
+    transform: translateX(300%);
+    opacity: 0;
+  }
+}

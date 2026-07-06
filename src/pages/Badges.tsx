@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from 'react'
+import { useMemo, useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
@@ -208,6 +208,25 @@ function BadgeSection({
   unlocked: boolean
   onTap: (b: Badge) => void
 }) {
+  // Staggered pop-in the first time the section scrolls into view.
+  const gridRef = useRef<HTMLDivElement>(null)
+  const [visible, setVisible] = useState(false)
+  useEffect(() => {
+    const el = gridRef.current
+    if (!el) return
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          setVisible(true)
+          io.disconnect()
+        }
+      },
+      { threshold: 0.12 },
+    )
+    io.observe(el)
+    return () => io.disconnect()
+  }, [])
+
   return (
     <section>
       <div className="mb-3 flex items-baseline gap-2">
@@ -216,59 +235,109 @@ function BadgeSection({
         </h2>
         <span className="text-sm font-bold text-white/40">{badges.length}</span>
       </div>
-      <div className="grid grid-cols-3 gap-3">
-        {badges.map((b) => (
-          <button
-            key={b.slug}
-            onClick={() => onTap(b)}
-            className="tappable relative flex aspect-square flex-col items-center justify-center gap-2 px-1 text-center transition-transform active:scale-[0.96]"
-            style={{
-              borderRadius: '16px',
-              background: unlocked ? '#141414' : '#0d0d0d',
-              border: '1px solid #333',
-            }}
-            aria-label={b.name}
-          >
-            {!unlocked && (
-              <Lock
-                className="absolute right-2 top-2 h-3.5 w-3.5 text-white/30"
-                strokeWidth={2.2}
-              />
-            )}
-            {badgeIcon(b.slug) ? (
-              <img
-                src={badgeIcon(b.slug)}
-                alt=""
-                className="h-9 w-9 rounded-xl object-cover"
-                style={{
-                  opacity: unlocked ? 1 : 0.3,
-                  filter: unlocked ? undefined : 'grayscale(1)',
-                }}
-              />
-            ) : (
+      <div ref={gridRef} className="grid grid-cols-3 gap-3">
+        {badges.map((b, i) => {
+          const icon = badgeIcon(b.slug)
+          const gold = !!b.gold
+          // Rarity distinction: gold = legendary (gold ring/glow),
+          // unlocked = red accent, locked = neutral grey.
+          const ring = !unlocked
+            ? '#2a2a2a'
+            : gold
+              ? 'rgba(224,179,65,0.55)'
+              : 'rgba(232,32,58,0.42)'
+          const glow = !unlocked
+            ? 'none'
+            : gold
+              ? '0 0 22px rgba(224,179,65,0.26)'
+              : '0 0 18px rgba(232,32,58,0.20)'
+          const iconGlow = !unlocked
+            ? undefined
+            : gold
+              ? 'drop-shadow(0 0 6px rgba(224,179,65,0.55))'
+              : 'drop-shadow(0 0 6px rgba(232,32,58,0.45))'
+          return (
+            <button
+              key={b.slug}
+              onClick={() => onTap(b)}
+              className="tappable relative flex aspect-square flex-col items-center justify-center gap-2 overflow-hidden px-1 text-center transition-transform duration-150 active:scale-[0.92]"
+              style={{
+                borderRadius: '16px',
+                background: unlocked ? '#141414' : '#0d0d0d',
+                border: `1px solid ${ring}`,
+                boxShadow: glow,
+                opacity: visible ? undefined : 0,
+                animation: visible
+                  ? `badge-pop 0.45s cubic-bezier(0.22,1,0.36,1) ${Math.min(i, 14) * 0.035}s both`
+                  : undefined,
+              }}
+              onPointerDown={(e) => {
+                // Tap glow — a brief red flash on press.
+                e.currentTarget.style.boxShadow =
+                  '0 0 26px rgba(232,32,58,0.55)'
+              }}
+              onPointerUp={(e) => {
+                e.currentTarget.style.boxShadow = glow
+              }}
+              onPointerLeave={(e) => {
+                e.currentTarget.style.boxShadow = glow
+              }}
+              aria-label={b.name}
+            >
+              {/* Shine sweep — unlocked badges only. */}
+              {unlocked && (
+                <span
+                  aria-hidden
+                  className="pointer-events-none absolute inset-y-0 -left-1/3 w-1/3"
+                  style={{
+                    background:
+                      'linear-gradient(90deg, transparent, rgba(255,255,255,0.28), transparent)',
+                    animation: `badge-shine 5.5s ease-in-out ${(i % 6) * 0.7 + 1}s infinite`,
+                  }}
+                />
+              )}
+              {!unlocked && (
+                <Lock
+                  className="absolute right-2 top-2 h-3.5 w-3.5 text-white/30"
+                  strokeWidth={2.2}
+                />
+              )}
+              {icon ? (
+                <img
+                  src={icon}
+                  alt=""
+                  className="relative h-10 w-10 rounded-xl object-cover"
+                  style={{
+                    opacity: unlocked ? 1 : 0.3,
+                    filter: unlocked ? iconGlow : 'grayscale(1)',
+                  }}
+                />
+              ) : (
+                <span
+                  className="relative"
+                  style={{
+                    fontSize: '34px',
+                    lineHeight: 1,
+                    opacity: unlocked ? 1 : 0.3,
+                    filter: unlocked ? undefined : 'grayscale(1)',
+                  }}
+                >
+                  {b.emoji}
+                </span>
+              )}
               <span
+                className="relative line-clamp-2 leading-tight"
                 style={{
-                  fontSize: '36px',
-                  lineHeight: 1,
-                  opacity: unlocked ? 1 : 0.3,
-                  filter: unlocked ? undefined : 'grayscale(1)',
+                  fontSize: '10px',
+                  fontWeight: 600,
+                  color: unlocked ? '#fff' : 'rgba(255,255,255,0.4)',
                 }}
               >
-                {b.emoji}
+                {b.name}
               </span>
-            )}
-            <span
-              className="line-clamp-2 leading-tight"
-              style={{
-                fontSize: '10px',
-                fontWeight: 600,
-                color: unlocked ? '#fff' : 'rgba(255,255,255,0.4)',
-              }}
-            >
-              {b.name}
-            </span>
-          </button>
-        ))}
+            </button>
+          )
+        })}
       </div>
     </section>
   )
