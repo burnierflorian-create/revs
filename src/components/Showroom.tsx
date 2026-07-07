@@ -20,6 +20,14 @@ const MAX_VISIBLE = 3 // render this many cars each side of centre
 
 type RenderRow = { make: string; model: string; url: string }
 
+// Normalise pour matcher malgré casse/accents ("Huracán" ≡ "huracan").
+const norm = (s: string) =>
+  s
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+
 export default function Showroom({
   spots,
   onOpen,
@@ -44,8 +52,8 @@ export default function Showroom({
         if (!alive || !data) return
         setRenders(
           (data as { make: string; model: string; render_url: string }[]).map((r) => ({
-            make: r.make.trim().toLowerCase(),
-            model: r.model.trim().toLowerCase(),
+            make: norm(r.make),
+            model: norm(r.model),
             url: r.render_url,
           })),
         )
@@ -59,8 +67,8 @@ export default function Showroom({
   // library model that the spot model starts-with / contains (so a generic
   // "Huracán" render covers "Huracán Tecnica", "Huracán Spyder", …).
   function resolveRender(brand: string, model: string): string | null {
-    const b = brand.trim().toLowerCase()
-    const m = model.trim().toLowerCase()
+    const b = norm(brand)
+    const m = norm(model)
     let best: string | null = null
     let bestLen = -1
     for (const r of renders) {
