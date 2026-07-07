@@ -10,6 +10,7 @@ body,
   height: 100%;
   min-height: 100dvh;
   background-color: rgb(var(--color-bg));
+  background-image: var(--amb-image);
   color: rgb(var(--color-fg));
 }
 
@@ -32,7 +33,8 @@ body {
   position: absolute;
   inset: 0;
   overflow-y: auto;
-  background: rgb(var(--color-bg));
+  background-color: rgb(var(--color-bg));
+  background-image: var(--amb-image);
   /* pb-28 equivalent — leaves enough air above the bottom nav so
      stats blocks / cards never sit flush against the glass strip. */
   padding-bottom: calc(7.5rem + env(safe-area-inset-bottom));
@@ -54,7 +56,8 @@ body {
   inset: 0;
   z-index: 30;
   overflow-y: auto;
-  background: rgb(var(--color-bg));
+  background-color: rgb(var(--color-bg));
+  background-image: var(--amb-image);
   /* Mirrors .tab-pane — 7rem of clearance above the bottom nav. */
   padding-bottom: calc(7.5rem + env(safe-area-inset-bottom));
   -webkit-overflow-scrolling: touch;
@@ -148,45 +151,81 @@ h4 {
   }
 }
 .liquid-nav {
+  /* ── Tunables (adjust the whole bar from here) ── */
+  --nav-i: 2; /* active/dragged slot 0..4 — set live by MainLayout */
+  --nav-accent: 232 32 58; /* red — recolours indicator + active icon */
+  --nav-glow: 0.42; /* indicator outer-glow strength */
+  --nav-spring: cubic-bezier(0.34, 1.4, 0.5, 1); /* slide easing */
+
   position: relative;
   pointer-events: auto;
-  width: 296px;
+  /* Wider — extends toward the edges on phones, capped on large screens.
+     Elegant, not massive. */
+  width: min(440px, calc(100vw - 26px));
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  /* Bigger, more imposing pill — vertical padding 12px → 16px and the
-     26px icons add ~10px of overall height. */
-  padding: 16px 20px;
-  border-radius: 44px;
-  background: rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  align-items: stretch;
+  padding: 7px 8px; /* a touch taller than before, still fine */
+  border-radius: 30px;
+  background: rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(26px) saturate(180%);
+  -webkit-backdrop-filter: blur(26px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   box-shadow:
-    0 8px 32px rgba(0, 0, 0, 0.4),
-    0 0 0 0.5px rgba(255, 255, 255, 0.05);
+    0 12px 36px rgba(0, 0, 0, 0.46),
+    inset 0 1px 0 rgba(255, 255, 255, 0.16), /* luminous top edge */
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.04);
 }
-/* Each icon-only tab. Spring scale-down on press. */
+/* Sliding liquid indicator — a soft red glow pill behind the active icon.
+   GPU-only (translate3d), springs on route change, follows the finger on
+   drag (transition removed via .dragging). */
+.liquid-indicator {
+  position: absolute;
+  top: 50%;
+  left: 8px;
+  width: calc((100% - 16px) / 5);
+  height: 40px;
+  margin-top: -20px;
+  border-radius: 15px;
+  transform: translate3d(calc(var(--nav-i) * 100%), 0, 0);
+  transition: transform 520ms var(--nav-spring);
+  will-change: transform;
+  pointer-events: none;
+  z-index: 0;
+}
+.liquid-indicator::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: rgb(var(--nav-accent) / 0.15);
+  box-shadow:
+    0 0 20px rgb(var(--nav-accent) / var(--nav-glow)),
+    inset 0 0 12px rgb(var(--nav-accent) / 0.22);
+}
+.liquid-nav.dragging .liquid-indicator {
+  transition: none; /* 1:1 finger-follow while dragging */
+}
+/* Each icon-only tab. */
 .liquid-tab {
   position: relative;
+  z-index: 1;
+  flex: 1 1 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  padding: 8px 0;
+  color: rgb(255 255 255 / 0.42);
+  transition:
+    transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    color 260ms ease;
+  -webkit-tap-highlight-color: transparent;
 }
 .liquid-tab:active {
-  transform: scale(0.85);
+  transform: scale(0.86); /* GPU micro-tap */
 }
-/* 4px red dot under the active icon. */
-.liquid-dot {
-  position: absolute;
-  bottom: -6px;
-  left: 50%;
-  width: 4px;
-  height: 4px;
-  margin-left: -2px;
-  border-radius: 50%;
-  background: #e8203a;
+.liquid-tab.is-active {
+  color: rgb(var(--nav-accent));
+  filter: drop-shadow(0 0 6px rgb(var(--nav-accent) / 0.55));
 }
 /* The .liquid-cam (nav-embedded camera) was removed 2026-06-26 — the
    Carte's camera FAB now lives in Map.tsx as a single 60px circle, so the

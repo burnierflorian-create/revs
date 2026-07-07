@@ -44,6 +44,35 @@
      nav height (h-12 = 3rem) + this var = the bar's total footprint, and
      the scroll panes reserve `3.5rem + var` so content sits ~8px above. */
   --safe-bottom: max(11px, calc(env(safe-area-inset-bottom) - 1.4rem));
+
+  /* ── Background ambience (pure CSS, ULTRA subtle depth + warmth) ──
+     Tune everything at once with --amb-intensity (0 = flat #0a0a0a,
+     1 = default, >1 = stronger). Individual layers below can also be
+     dialled independently. GPU-cheap: static gradients painted once,
+     no background-attachment:fixed (that janks mobile scroll). */
+  --amb-intensity: 1;
+  /* Soft lighter halo toward top-centre fading to pure black at the
+     edges → depth. */
+  --amb-radial: radial-gradient(
+    135% 95% at 50% -12%,
+    rgba(255, 255, 255, calc(0.045 * var(--amb-intensity))) 0%,
+    rgba(255, 255, 255, 0) 46%
+  );
+  /* Barely-there warm red glow in the top-right corner. */
+  --amb-glow: radial-gradient(
+    55% 45% at 90% 4%,
+    rgba(232, 32, 58, calc(0.06 * var(--amb-intensity))) 0%,
+    rgba(232, 32, 58, 0) 62%
+  );
+  /* Whisper-thin carbon weave (diagonal hairlines, ~1.5% alpha). */
+  --amb-carbon: repeating-linear-gradient(
+    45deg,
+    rgba(255, 255, 255, calc(0.016 * var(--amb-intensity))) 0,
+    rgba(255, 255, 255, calc(0.016 * var(--amb-intensity))) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+  --amb-image: var(--amb-carbon), var(--amb-glow), var(--amb-radial);
 }
 
 /* ─────────────────────── Light theme overrides ───────────────────────
@@ -65,6 +94,8 @@ html.light {
   --color-glass-strong: rgba(255, 255, 255, 0.90);
   --color-ring-track:   rgba(0, 0, 0, 0.06);
   --tier-glow:       rgba(0, 0, 0, 0.06);
+  /* Light theme stays flat & clean (the ambience is a dark-mode idea). */
+  --amb-intensity: 0;
 }
 
 /* ─────────────────────── Premium / VIP theming ───────────────────────

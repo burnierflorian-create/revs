@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useLayoutEffect, useRef } from 'react'
 import {
   NavLink,
   Outlet,
@@ -28,7 +28,12 @@ import { hapticSelection } from '../lib/haptic'
 import { useTranslation } from 'react-i18next'
 
 const tabClass = ({ isActive }: { isActive: boolean }) =>
-  `liquid-tab ${isActive ? 'text-[#E8203A]' : 'text-white/40'}`
+  `liquid-tab ${isActive ? 'is-active' : ''}`
+
+// Nav slot order (must match the JSX order) + their routes, used to drive
+// the sliding indicator and the finger-follow drag.
+const NAV_ORDER = ['map', 'feed', 'home', 'discover', 'profile'] as const
+const NAV_ROUTES = ['/map', '/feed', '/', '/discover', '/profile']
 
 // Map a pathname to one of the 5 always-mounted tabs. Returns null for
 // stack routes (spot detail, new-spot, public profile, etc.) — those
@@ -73,6 +78,66 @@ export default function MainLayout() {
   // underneath stack routes (e.g. /spot/:id over /feed).
   const lastTabRef = useRef<TabKey | null>(null)
   if (tab) lastTabRef.current = tab
+
+  // ── Liquid nav: sliding indicator + finger-follow ──
+  const navRef = useRef<HTMLElement>(null)
+  const draggingRef = useRef(false)
+  const movedRef = useRef(false)
+  const startXRef = useRef(0)
+  const fracRef = useRef(2)
+  const navTab = tab ?? lastTabRef.current ?? 'home'
+  const activeIndex = Math.max(0, NAV_ORDER.indexOf(navTab as (typeof NAV_ORDER)[number]))
+
+  // Spring the indicator to the active slot on route change (never fights an
+  // in-progress drag). useLayoutEffect → set before paint so the initial
+  // position never flashes. Pure CSS var → transform, GPU-accelerated.
+  useLayoutEffect(() => {
+    if (!draggingRef.current) {
+      navRef.current?.style.setProperty('--nav-i', String(activeIndex))
+      fracRef.current = activeIndex
+    }
+  }, [activeIndex])
+
+  function slotFromClientX(clientX: number): number {
+    const nav = navRef.current
+    if (!nav) return activeIndex
+    const r = nav.getBoundingClientRect()
+    const slotW = (r.width - 16) / 5
+    return Math.max(0, Math.min(4, (clientX - r.left - 8) / slotW - 0.5))
+  }
+  function onNavPointerDown(e: React.PointerEvent) {
+    startXRef.current = e.clientX
+    movedRef.current = false
+  }
+  function onNavPointerMove(e: React.PointerEvent) {
+    if (e.pointerType === 'mouse' && e.buttons === 0) return
+    const dx = e.clientX - startXRef.current
+    if (!movedRef.current) {
+      if (Math.abs(dx) < 6) return // ignore micro-jitter → keep taps working
+      movedRef.current = true
+      draggingRef.current = true
+      navRef.current?.classList.add('dragging')
+      try {
+        navRef.current?.setPointerCapture(e.pointerId)
+      } catch {
+        /* capture unsupported — follow still works */
+      }
+    }
+    const frac = slotFromClientX(e.clientX)
+    fracRef.current = frac
+    navRef.current?.style.setProperty('--nav-i', String(frac))
+  }
+  function onNavPointerEnd() {
+    if (!movedRef.current) return // was a tap → let the NavLink navigate
+    movedRef.current = false
+    draggingRef.current = false
+    navRef.current?.classList.remove('dragging')
+    const nearest = Math.round(fracRef.current)
+    fracRef.current = nearest
+    navRef.current?.style.setProperty('--nav-i', String(nearest)) // spring-snap
+    hapticSelection()
+    navigate(NAV_ROUTES[nearest])
+  }
   const onStack = tab === null
 
 
@@ -258,51 +323,32 @@ export default function MainLayout() {
         {/* The Carte's "Spotter" camera FAB now lives in Map.tsx (a single
             60px circle above the pill). The old nav-embedded .liquid-cam was
             removed 2026-06-26 — it duplicated and overlapped the Map FAB. */}
-        <nav className="liquid-nav" aria-label={t('nav.main')}>
+        <nav
+          ref={navRef}
+          className="liquid-nav"
+          aria-label={t('nav.main')}
+          onPointerDown={onNavPointerDown}
+          onPointerMove={onNavPointerMove}
+          onPointerUp={onNavPointerEnd}
+          onPointerCancel={onNavPointerEnd}
+        >
+          {/* Sliding liquid indicator (glow pill behind the active icon). */}
+          <span className="liquid-indicator" aria-hidden />
 
           <NavLink to="/map" onClick={hapticSelection} className={tabClass} aria-label={t('nav.map')}>
-            {({ isActive }) => (
-              <>
-                <MapPin className="h-[26px] w-[26px]" strokeWidth={1.5} />
-                {isActive && <span className="liquid-dot" />}
-              </>
-            )}
+            <MapPin className="h-[26px] w-[26px]" strokeWidth={1.5} />
           </NavLink>
-
           <NavLink to="/feed" onClick={hapticSelection} className={tabClass} aria-label={t('nav.feed')}>
-            {({ isActive }) => (
-              <>
-                <Radio className="h-[26px] w-[26px]" strokeWidth={1.5} />
-                {isActive && <span className="liquid-dot" />}
-              </>
-            )}
+            <Radio className="h-[26px] w-[26px]" strokeWidth={1.5} />
           </NavLink>
-
           <NavLink to="/" end onClick={hapticSelection} className={tabClass} aria-label={t('nav.home')}>
-            {({ isActive }) => (
-              <>
-                <Home className="h-[26px] w-[26px]" strokeWidth={1.5} />
-                {isActive && <span className="liquid-dot" />}
-              </>
-            )}
+            <Home className="h-[26px] w-[26px]" strokeWidth={1.5} />
           </NavLink>
-
           <NavLink to="/discover" onClick={hapticSelection} className={tabClass} aria-label={t('nav.discover')}>
-            {({ isActive }) => (
-              <>
-                <Newspaper className="h-[26px] w-[26px]" strokeWidth={1.5} />
-                {isActive && <span className="liquid-dot" />}
-              </>
-            )}
+            <Newspaper className="h-[26px] w-[26px]" strokeWidth={1.5} />
           </NavLink>
-
           <NavLink to="/profile" onClick={hapticSelection} className={tabClass} aria-label={t('nav.profile')}>
-            {({ isActive }) => (
-              <>
-                <User className="h-[26px] w-[26px]" strokeWidth={1.5} />
-                {isActive && <span className="liquid-dot" />}
-              </>
-            )}
+            <User className="h-[26px] w-[26px]" strokeWidth={1.5} />
           </NavLink>
         </nav>
       </div>
