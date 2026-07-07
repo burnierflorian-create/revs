@@ -21,11 +21,11 @@ import showroomBg from '../assets/showroom.webp'
 
 const SPACING_RATIO = 0.66 // gap between car centres, × container width
 const MAX_VISIBLE = 3 // render this many cars each side of centre
-const FLOOR_FROM_BOTTOM = '40%' // floor line = 60% from the top (on the decor floor)
+const FLOOR_FROM_BOTTOM = '36%' // floor line = 64% from the top — cars sit a touch lower, better grounded
 const CAR_WIDTH = '90%' // bigger, imposing centrepiece
 const CAR_MAX_WIDTH = 640
 
-type RenderRow = { make: string; model: string; url: string }
+type RenderRow = { make: string; toks: string[]; url: string }
 
 // Normalise for matching despite case / accents ("Huracán" ≡ "huracan").
 const norm = (s: string) =>
@@ -36,9 +36,12 @@ const norm = (s: string) =>
     .replace(/[̀-ͯ]/g, '')
 
 // Aggressive match key: alphanumeric only, so separators don't matter —
-// "Mercedes-AMG" ≡ "Mercedes AMG", "GT-R R35" ≡ "GTR R35", "911 GT3 RS" ≡
-// "911GT3RS". Used to pair a spot with a library render.
+// "Mercedes-AMG" ≡ "Mercedes AMG", "GT-R R35" ≡ "GTR R35". Used for the make.
 const mkey = (s: string) => norm(s).replace(/[^a-z0-9]+/g, '')
+
+// Split a name into normalised tokens: "Fabia Mk3 Monte Carlo" →
+// ["fabia","mk3","monte","carlo"]. Used for token-subset model matching.
+const toks = (s: string) => norm(s).split(/[^a-z0-9]+/).filter(Boolean)
 
 const specsKey = (s: Spot) => `${norm(s.brand)}|${norm(s.model)}|${s.year ?? ''}`
 
@@ -67,7 +70,7 @@ export default function Showroom({
         setRenders(
           (data as { make: string; model: string; render_url: string }[]).map((r) => ({
             make: mkey(r.make),
-            model: mkey(r.model),
+            toks: toks(r.model),
             url: r.render_url,
           })),
         )
@@ -77,20 +80,23 @@ export default function Showroom({
     }
   }, [])
 
-  // Match a spot to a library render: exact make+model first, else the longest
-  // library model the spot model starts-with / contains (a generic "Huracán"
-  // render then covers "Huracán Tecnica", "Huracán Spyder", …).
+  // Match a spot to a library render. Same make, then token-subset: every
+  // token of the render's model must appear in the spot's model, so a canonical
+  // render ("Cayman S", "Fabia Monte Carlo", "911 GT3") covers verbose spots
+  // ("718 Cayman S", "Fabia Mk3 Monte Carlo", "911 GT3 …") without a bare
+  // "911 GT3" render ever stealing a "911 GT3 RS" spot. Most-specific (most
+  // tokens) wins.
   function resolveRender(brand: string, model: string): string | null {
     const b = mkey(brand)
-    const m = mkey(model)
+    const spotToks = new Set(toks(model))
     let best: string | null = null
-    let bestLen = -1
+    let bestScore = -1
     for (const r of renders) {
-      if (r.make !== b) continue
-      if (m === r.model) return r.url
-      if ((m.startsWith(r.model) || m.includes(r.model)) && r.model.length > bestLen) {
+      if (r.make !== b || r.toks.length === 0) continue
+      if (!r.toks.every((tk) => spotToks.has(tk))) continue
+      if (r.toks.length > bestScore) {
         best = r.url
-        bestLen = r.model.length
+        bestScore = r.toks.length
       }
     }
     return best
