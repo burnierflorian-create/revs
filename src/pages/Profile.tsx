@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
@@ -19,6 +19,7 @@ import { type Rarity, type Spot } from '../lib/spots'
 import { planDisplayName, planTier } from '../lib/plans'
 import { allBadges, computeUnlocks, type Badge } from '../lib/badges'
 import { badgeIcon } from '../lib/customIcons'
+import Showroom from '../components/Showroom'
 import { fetchRaceStats } from '../lib/race'
 import { xpLevel } from '../lib/xp'
 import { useMyTier } from '../lib/tier'
@@ -28,7 +29,6 @@ import MyCollection from '../components/MyCollection'
 import LiquidXpBar from '../components/LiquidXpBar'
 import { BadgeUnlockWatcher } from '../components/BadgeUnlocked'
 import { prefersReducedMotion } from '../lib/motion'
-import { rarityRank } from '../components/CollectorCard'
 import { rarityBadge } from '../lib/rarityStyle'
 import {
   COLLECTIONS,
@@ -729,7 +729,7 @@ export default function Profile() {
                   </button>
                 </div>
               ) : (
-                <GarageCoverFlow
+                <Showroom
                   spots={spots}
                   onOpen={(id) => navigate(`/spot/${id}`)}
                 />
@@ -1474,145 +1474,6 @@ function CollectionDecks({ spots }: { spots: Spot[] }) {
  *  in the scroller and sets that one to scale-100 / others to
  *  scale-90 opacity-40 — the classic 3-D depth effect. Tapping the
  *  active card opens the underlying spot. */
-function GarageCoverFlow({
-  spots,
-  onOpen,
-}: {
-  spots: Spot[]
-  onOpen: (id: string) => void
-}) {
-  const scrollerRef = useRef<HTMLDivElement | null>(null)
-
-  const cars = useMemo(() => {
-    const map = new Map<string, Spot>()
-    for (const s of spots) {
-      const key = `${(s.brand ?? '').toLowerCase().trim()}|${(s.model ?? '').toLowerCase().trim()}`
-      if (!key.replace('|', '').trim()) continue
-      const cur = map.get(key)
-      if (!cur || rarityRank(s.rarity) > rarityRank(cur.rarity)) {
-        map.set(key, s)
-      }
-    }
-    return [...map.values()].sort(
-      (a, b) => rarityRank(b.rarity) - rarityRank(a.rarity),
-    )
-  }, [spots])
-
-  return (
-    // The parent profile tab is already full-bleed, so the scroll spans
-    // the whole screen with NO global horizontal padding: only the first
-    // item carries a 16px left inset so the row starts at the screen edge.
-    <div>
-      {/* Garage — horizontal scroll of 160×200 photo cards. Each uses the
-          best (highest-rarity) spot photo of that model as its background,
-          with a dark gradient + brand / year / model overlays. */}
-      <div
-        ref={scrollerRef}
-        className="no-scrollbar flex items-stretch gap-3 overflow-x-auto py-2"
-        style={{
-          // No global horizontal padding — the row is full-bleed so the
-          // scroll spans the whole screen. Only the FIRST card carries a
-          // 16px left inset (below) so it doesn't sit flush against the
-          // screen edge at rest; the last card gets a matching trailing
-          // inset so the end of the scroll breathes.
-          WebkitOverflowScrolling: 'touch',
-        }}
-      >
-        {cars.map((s, i) => (
-          <button
-            key={s.id}
-            onClick={() => onOpen(s.id)}
-            className="relative flex-shrink-0 overflow-hidden rounded-2xl text-left transition-transform active:scale-[0.97]"
-            style={{
-              width: 160,
-              height: 200,
-              background: 'linear-gradient(160deg, #141414 0%, #1a1a1a 100%)',
-              border: '1px solid rgba(255,255,255,0.06)',
-              marginLeft:
-                i === 0 ? 'max(env(safe-area-inset-left), 16px)' : undefined,
-              marginRight:
-                i === cars.length - 1
-                  ? 'max(env(safe-area-inset-right), 16px)'
-                  : undefined,
-            }}
-            aria-label={`${s.brand ?? ''} ${s.model ?? ''}`}
-          >
-            {s.photo_url ? (
-              <img
-                src={s.photo_url}
-                alt=""
-                loading="lazy"
-                decoding="async"
-                className="absolute inset-0 h-full w-full object-cover"
-              />
-            ) : (
-              <span
-                aria-hidden
-                className="pointer-events-none absolute inset-0 flex items-center justify-center px-2 text-center font-display font-black uppercase"
-                style={{
-                  color: 'rgba(255,255,255,0.07)',
-                  fontSize: '30px',
-                  letterSpacing: '-0.02em',
-                  lineHeight: 1,
-                }}
-              >
-                {s.brand}
-              </span>
-            )}
-
-            {/* Dark bottom gradient for legibility */}
-            <div
-              aria-hidden
-              className="pointer-events-none absolute inset-x-0 bottom-0"
-              style={{
-                height: '60%',
-                background:
-                  'linear-gradient(to top, #0a0a0a 0%, rgba(10,10,10,0.4) 55%, transparent 100%)',
-              }}
-            />
-
-            {/* Brand — white with a strong drop shadow so it stays legible
-                over any photo (light or dark). */}
-            <span
-              className="absolute left-3 top-3 font-extrabold uppercase"
-              style={{
-                color: '#FFFFFF',
-                fontSize: '10px',
-                letterSpacing: '0.12em',
-                textShadow: '0 1px 4px rgba(0,0,0,0.8)',
-              }}
-            >
-              {s.brand}
-            </span>
-
-            {/* Year — grey badge top-right */}
-            {typeof s.year === 'number' && s.year > 1900 && (
-              <span
-                className="absolute right-3 top-3 rounded-md px-1.5 py-0.5 text-[9px] font-bold text-white/75"
-                style={{
-                  background: 'rgba(0,0,0,0.45)',
-                  backdropFilter: 'blur(4px)',
-                  WebkitBackdropFilter: 'blur(4px)',
-                }}
-              >
-                {s.year}
-              </span>
-            )}
-
-            {/* Model — white bold, bottom */}
-            <h3
-              className="absolute inset-x-0 bottom-0 line-clamp-2 px-3 pb-3 font-display font-extrabold leading-tight text-white"
-              style={{ fontSize: '15px', letterSpacing: '-0.01em' }}
-            >
-              {s.model}
-            </h3>
-          </button>
-        ))}
-      </div>
-    </div>
-  )
-}
-
 // ────────────────────────── BADGES BOTTOM SHEET ─────────────────────────
 
 /** Slide-up drawer that surfaces the full badge catalogue from the

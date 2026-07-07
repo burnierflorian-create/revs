@@ -70,6 +70,9 @@ export type Spot = {
   garage_image_url?: string | null
   rarity?: Rarity | null
   production?: number | null
+  /** Optional realistic render for the Showroom; falls back to photo_url.
+   *  Enriched progressively (per-spot or via the car_renders library). */
+  realistic_render_url?: string | null
 }
 
 // Flat per-rarity XP ladder — mirrors the 6-tier table in

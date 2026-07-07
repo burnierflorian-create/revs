@@ -308,6 +308,35 @@ html.light .glass {
     transform: translateY(0);
   }
 }
+
+/* ─────────────────────── Showroom (immersive garage) ─────────────────────── */
+/* Cinematic entry — fade + slight zoom-forward, like pushing the door. */
+@keyframes showroom-enter {
+  from {
+    opacity: 0;
+    transform: scale(1.06);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+/* Living spotlight — subtle brightness flicker. */
+@keyframes showroom-flicker {
+  0%,
+  100% {
+    opacity: 0.82;
+  }
+  40% {
+    opacity: 1;
+  }
+  55% {
+    opacity: 0.74;
+  }
+  72% {
+    opacity: 0.94;
+  }
+}
 /* Particle burst on rare/legendary reveal. Each particle sets --px/--py
    (unit-vector end offset) inline. */
 @keyframes cardv2-particle {
