@@ -35,6 +35,11 @@ const norm = (s: string) =>
     .normalize('NFD')
     .replace(/[̀-ͯ]/g, '')
 
+// Aggressive match key: alphanumeric only, so separators don't matter —
+// "Mercedes-AMG" ≡ "Mercedes AMG", "GT-R R35" ≡ "GTR R35", "911 GT3 RS" ≡
+// "911GT3RS". Used to pair a spot with a library render.
+const mkey = (s: string) => norm(s).replace(/[^a-z0-9]+/g, '')
+
 const specsKey = (s: Spot) => `${norm(s.brand)}|${norm(s.model)}|${s.year ?? ''}`
 
 export default function Showroom({
@@ -61,8 +66,8 @@ export default function Showroom({
         if (!alive || !data) return
         setRenders(
           (data as { make: string; model: string; render_url: string }[]).map((r) => ({
-            make: norm(r.make),
-            model: norm(r.model),
+            make: mkey(r.make),
+            model: mkey(r.model),
             url: r.render_url,
           })),
         )
@@ -76,8 +81,8 @@ export default function Showroom({
   // library model the spot model starts-with / contains (a generic "Huracán"
   // render then covers "Huracán Tecnica", "Huracán Spyder", …).
   function resolveRender(brand: string, model: string): string | null {
-    const b = norm(brand)
-    const m = norm(model)
+    const b = mkey(brand)
+    const m = mkey(model)
     let best: string | null = null
     let bestLen = -1
     for (const r of renders) {
