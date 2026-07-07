@@ -52,6 +52,7 @@ import {
   type SpotScore,
 } from '../lib/spotPredictions'
 import { xpLevel } from '../lib/xp'
+import { appConfig } from '../config/appConfig'
 
 const PARIS: [number, number] = [2.3522, 48.8566]
 const DEFAULT_ZOOM = 13
@@ -1927,7 +1928,7 @@ export default function MapPage() {
           SHOW_WEATHER_IA. Both the button and the bottom sheet stay
           wired so flipping the constant back to true revives the
           feature without rewiring fetch / state / sheet code. */}
-      {SHOW_WEATHER_IA && (
+      {appConfig.SHOW_MAP_INFO && SHOW_WEATHER_IA && (
         <button
           onClick={() => setInfoSheetOpen(true)}
           aria-label={t('mappage.spotTipOfDay')}
@@ -1953,7 +1954,7 @@ export default function MapPage() {
       )}
 
       {/* Time-lapse replay — launch pill (left) + playback bar (bottom). */}
-      {mapReady && !replayOpen && (
+      {appConfig.SHOW_REPLAY && mapReady && !replayOpen && (
         <button
           onClick={openReplay}
           aria-label="Replay time-lapse"
