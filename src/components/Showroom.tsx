@@ -1,32 +1,41 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
+import { fetchCardSpecs, type CardSpecs } from '../lib/cardSpecs'
 import type { Spot } from '../lib/spots'
 import showroomBg from '../assets/showroom.webp'
 
 // ─────────────────────────────────────────────────────────────────────
-// "Mon Showroom" — an immersive private car gallery. The user's spots are
-// exhibited like museum pieces on a reflective floor: the centre car sits
-// in a living spotlight, the sides recede into the dark. Swipe to move the
-// light. Gyroscope micro-parallax on the decor. All GPU (transform/opacity).
+// "Mon Showroom" — an immersive private car gallery. Each spot is exhibited
+// like a museum piece on the reflective floor of a dark studio: the centre
+// car sits in the spotlight, RESTING ON THE FLOOR (wheels on the baseline,
+// contact shadow + mirror reflection), with a digital signage panel above it
+// showing the car's specs. Sides recede into the dark. Swipe to move the
+// light. Gyroscope micro-parallax on the decor. Everything is GPU-driven
+// (transform / opacity only) so it stays at 120fps on ProMotion.
 //
 // Image system: realistic_render_url (per-spot) → car_renders library
-// (shared, by make/model) → the user's raw photo. See migration 0056.
+// (shared, by make/model, detoured PNG) → the user's raw photo. See 0056.
 //
-// TUNABLES: the constants below + CSS vars on the root.
+// TUNABLES: the constants below.
 // ─────────────────────────────────────────────────────────────────────
 
 const SPACING_RATIO = 0.58 // gap between car centres, × container width
 const MAX_VISIBLE = 3 // render this many cars each side of centre
+const FLOOR_FROM_BOTTOM = '38%' // floor line = 62% from the top (matches decor)
+const CAR_WIDTH = '72%'
+const CAR_MAX_WIDTH = 500
 
 type RenderRow = { make: string; model: string; url: string }
 
-// Normalise pour matcher malgré casse/accents ("Huracán" ≡ "huracan").
+// Normalise for matching despite case / accents ("Huracán" ≡ "huracan").
 const norm = (s: string) =>
   s
     .trim()
     .toLowerCase()
     .normalize('NFD')
     .replace(/[̀-ͯ]/g, '')
+
+const specsKey = (s: Spot) => `${norm(s.brand)}|${norm(s.model)}|${s.year ?? ''}`
 
 export default function Showroom({
   spots,
@@ -41,7 +50,7 @@ export default function Showroom({
   const [active, setActive] = useState(0)
   const [width, setWidth] = useState(0)
 
-  // Shared render library (detoured realistic renders, by make/model).
+  // ── Shared render library (detoured realistic renders, by make/model) ──
   const [renders, setRenders] = useState<RenderRow[]>([])
   useEffect(() => {
     let alive = true
@@ -64,8 +73,8 @@ export default function Showroom({
   }, [])
 
   // Match a spot to a library render: exact make+model first, else the longest
-  // library model that the spot model starts-with / contains (so a generic
-  // "Huracán" render covers "Huracán Tecnica", "Huracán Spyder", …).
+  // library model the spot model starts-with / contains (a generic "Huracán"
+  // render then covers "Huracán Tecnica", "Huracán Spyder", …).
   function resolveRender(brand: string, model: string): string | null {
     const b = norm(brand)
     const m = norm(model)
@@ -82,15 +91,40 @@ export default function Showroom({
     return best
   }
 
-  // Resolution order: per-spot override → shared render library → raw photo.
-  // isRender = a detoured render (transparent PNG) → floats on the floor;
-  // otherwise it's a rectangular photo → framed like an exhibit.
+  // isRender = detoured render (transparent PNG) → rests on the floor;
+  // otherwise a rectangular photo → framed exhibit.
   function imageFor(s: Spot): { url: string; isRender: boolean } {
     if (s.realistic_render_url) return { url: s.realistic_render_url, isRender: true }
     const r = resolveRender(s.brand, s.model)
     if (r) return { url: r, isRender: true }
     return { url: s.photo_url || '', isRender: false }
   }
+
+  // ── Specs for the info panel (lazy, cached in car_specs server-side) ──
+  // specsMap: loaded results (CardSpecs or null=failed). requestedRef: keys
+  // already in flight, so we never double-fetch. A key absent from specsMap
+  // renders the panel skeleton.
+  const [specsMap, setSpecsMap] = useState<Map<string, CardSpecs | null>>(new Map())
+  const requestedRef = useRef<Set<string>>(new Set())
+  useEffect(() => {
+    let alive = true
+    // Fetch the centre car + its immediate neighbours (prefetch on swipe).
+    const wanted = [active - 1, active, active + 1]
+      .filter((i) => i >= 0 && i < spots.length)
+      .map((i) => spots[i])
+    wanted.forEach((s) => {
+      const key = specsKey(s)
+      if (requestedRef.current.has(key)) return
+      requestedRef.current.add(key)
+      fetchCardSpecs(s.brand, s.model, s.year ?? null).then((res) => {
+        if (!alive) return
+        setSpecsMap((prev) => new Map(prev).set(key, res))
+      })
+    })
+    return () => {
+      alive = false
+    }
+  }, [active, spots])
 
   // Measure the container so the spacing is in real px.
   useLayoutEffect(() => {
@@ -165,14 +199,15 @@ export default function Showroom({
     }
   }, [])
 
-  const activeSpot = spots[active]
+  const activeSpot = spots[active] as Spot | undefined
+  const activeSpecs = activeSpot ? specsMap.get(specsKey(activeSpot)) : undefined
 
   return (
     <div
       ref={containerRef}
       className="relative select-none overflow-hidden"
       style={{
-        height: 'min(66vh, 540px)',
+        height: 'min(68vh, 560px)',
         borderRadius: 22,
         background: '#050506',
         border: '1px solid rgba(255,255,255,0.06)',
@@ -209,7 +244,7 @@ export default function Showroom({
           position: 'absolute',
           inset: 0,
           background:
-            'radial-gradient(120% 80% at 50% 30%, transparent 40%, rgba(0,0,0,0.55) 100%)',
+            'radial-gradient(120% 80% at 50% 34%, transparent 42%, rgba(0,0,0,0.55) 100%)',
           pointerEvents: 'none',
         }}
       />
@@ -219,33 +254,34 @@ export default function Showroom({
         aria-hidden
         style={{
           position: 'absolute',
-          top: '-6%',
+          top: '-4%',
           left: '50%',
-          width: '58%',
-          height: '86%',
+          width: '60%',
+          height: '92%',
           transform: 'translateX(-50%)',
           background:
-            'radial-gradient(50% 42% at 50% 22%, rgba(255,255,255,0.30), rgba(255,255,255,0.06) 45%, transparent 66%)',
+            'radial-gradient(48% 46% at 50% 30%, rgba(255,255,255,0.28), rgba(255,255,255,0.05) 46%, transparent 68%)',
           mixBlendMode: 'screen',
           animation: 'showroom-flicker 4.2s ease-in-out infinite',
           pointerEvents: 'none',
         }}
       />
 
-      {/* Counter (bottom — the top is owned by the display panel) */}
+      {/* Counter (top) */}
       <div
         style={{
           position: 'absolute',
-          bottom: 14,
+          top: 12,
           left: 0,
           right: 0,
           textAlign: 'center',
-          color: 'rgba(255,255,255,0.8)',
+          color: 'rgba(255,255,255,0.82)',
           fontSize: 11,
           fontWeight: 700,
           letterSpacing: '0.05em',
           textShadow: '0 1px 8px rgba(0,0,0,0.85)',
           pointerEvents: 'none',
+          zIndex: 31,
         }}
       >
         <span style={{ color: '#E8203A' }}>{spots.length}</span>{' '}
@@ -253,19 +289,16 @@ export default function Showroom({
       </div>
 
       {/* Stage — the cars */}
-      <div
-        ref={stageRef}
-        style={{ position: 'absolute', inset: 0, willChange: 'transform' }}
-      >
+      <div ref={stageRef} style={{ position: 'absolute', inset: 0, willChange: 'transform' }}>
         {spots.map((s, i) => {
           const d = i - active
           const abs = Math.abs(d)
           if (abs > MAX_VISIBLE) return null
           const isCenter = d === 0
-          const scale = isCenter ? 1 : Math.max(0.55, 0.78 - abs * 0.1)
-          const opacity = isCenter ? 1 : Math.max(0.22, 0.62 - abs * 0.2)
-          const brightness = isCenter ? 1 : Math.max(0.32, 0.6 - abs * 0.12)
-          const blur = isCenter ? 0 : Math.min(2.2, 0.7 + abs * 0.5)
+          const scale = isCenter ? 1 : Math.max(0.5, 0.74 - abs * 0.1)
+          const opacity = isCenter ? 1 : Math.max(0.2, 0.6 - abs * 0.2)
+          const brightness = isCenter ? 1 : Math.max(0.3, 0.58 - abs * 0.12)
+          const blur = isCenter ? 0 : Math.min(2.4, 0.8 + abs * 0.5)
           const { url: img, isRender } = imageFor(s)
           return (
             <div
@@ -273,18 +306,17 @@ export default function Showroom({
               style={{
                 position: 'absolute',
                 left: '50%',
-                // 60% = the wall/floor horizon of the decor. The car element is
-                // car-box + its mirror (equal halves), so its centre is the
-                // baseline where the wheels meet the floor.
-                top: '60%',
-                width: '78%',
-                maxWidth: 520,
-                transform: `translate(-50%, -50%) translateX(${d * spacing}px) scale(${scale})`,
+                bottom: FLOOR_FROM_BOTTOM, // the div's BOTTOM sits on the floor line
+                width: CAR_WIDTH,
+                maxWidth: CAR_MAX_WIDTH,
+                transform: `translateX(-50%) translateX(${d * spacing}px) scale(${scale})`,
+                transformOrigin: 'center bottom', // scaling keeps wheels on the floor
                 transition:
                   'transform 0.52s cubic-bezier(0.22,1,0.36,1), opacity 0.52s ease, filter 0.52s ease',
                 opacity,
                 filter: `brightness(${brightness}) blur(${blur}px)`,
                 zIndex: 20 - abs,
+                willChange: 'transform, opacity',
               }}
             >
               <button
@@ -303,49 +335,42 @@ export default function Showroom({
                 }}
               >
                 {isRender ? (
-                  /* Detoured render — the car RESTS on the floor (wheels on the
-                     baseline), with a contact shadow and an aligned reflection. */
-                  <>
+                  /* Detoured render — RESTS on the floor. The <img> keeps its
+                     natural ratio (height:auto) so the tightly-trimmed PNG has
+                     its wheels exactly on the wrapper's bottom = the floor. */
+                  <div style={{ position: 'relative', width: '100%' }}>
+                    {/* Ambient + contact shadow, right under the wheels */}
                     <div
+                      aria-hidden
                       style={{
-                        position: 'relative',
-                        width: '100%',
-                        aspectRatio: '16 / 9',
+                        position: 'absolute',
+                        left: '10%',
+                        right: '10%',
+                        bottom: '-3%',
+                        height: '9%',
+                        borderRadius: '50%',
+                        background:
+                          'radial-gradient(ellipse at center, rgba(0,0,0,0.5), rgba(0,0,0,0.22) 46%, transparent 72%)',
+                        filter: 'blur(9px)',
+                        zIndex: 0,
                       }}
-                    >
-                      {/* Ambient shadow — wide, soft, cast on the floor */}
-                      <div
-                        aria-hidden
-                        style={{
-                          position: 'absolute',
-                          bottom: '-2%',
-                          left: '12%',
-                          right: '12%',
-                          height: '9%',
-                          borderRadius: '50%',
-                          background:
-                            'radial-gradient(ellipse at center, rgba(0,0,0,0.5), rgba(0,0,0,0.22) 46%, transparent 72%)',
-                          filter: 'blur(9px)',
-                          zIndex: 0,
-                        }}
-                      />
-                      {/* Contact shadow — tight & dark right under the tyres */}
-                      <div
-                        aria-hidden
-                        style={{
-                          position: 'absolute',
-                          bottom: '0%',
-                          left: '24%',
-                          right: '24%',
-                          height: '4.5%',
-                          borderRadius: '50%',
-                          background:
-                            'radial-gradient(ellipse at center, rgba(0,0,0,0.82), rgba(0,0,0,0.5) 40%, transparent 74%)',
-                          filter: 'blur(3px)',
-                          zIndex: 0,
-                        }}
-                      />
-                      {/* The car — wheels aligned to the bottom baseline */}
+                    />
+                    <div
+                      aria-hidden
+                      style={{
+                        position: 'absolute',
+                        left: '24%',
+                        right: '24%',
+                        bottom: '-1%',
+                        height: '4.5%',
+                        borderRadius: '50%',
+                        background:
+                          'radial-gradient(ellipse at center, rgba(0,0,0,0.85), rgba(0,0,0,0.5) 40%, transparent 74%)',
+                        filter: 'blur(3px)',
+                        zIndex: 0,
+                      }}
+                    />
+                    {img ? (
                       <img
                         src={img}
                         alt=""
@@ -353,47 +378,46 @@ export default function Showroom({
                         style={{
                           position: 'relative',
                           zIndex: 1,
+                          display: 'block',
                           width: '100%',
-                          height: '100%',
-                          objectFit: 'contain',
-                          objectPosition: 'center bottom',
+                          height: 'auto',
                           filter: isCenter
                             ? 'drop-shadow(0 4px 6px rgba(0,0,0,0.4))'
                             : 'drop-shadow(0 3px 5px rgba(0,0,0,0.35))',
                         }}
                       />
-                    </div>
-                    {/* Floor reflection — mirrored from the baseline, fading into
-                        the glossy floor (wheels meet wheels at the seam) */}
+                    ) : (
+                      <div style={{ width: '100%', paddingBottom: '42%', background: '#141418' }} />
+                    )}
+                    {/* Floor reflection — mirrored, faded, blurred */}
                     <div
                       aria-hidden
                       style={{
+                        position: 'absolute',
+                        top: '100%',
+                        left: 0,
                         width: '100%',
-                        aspectRatio: '16 / 9',
                         transform: 'scaleY(-1)',
-                        opacity: isCenter ? 0.26 : 0.16,
+                        opacity: isCenter ? 0.26 : 0.15,
                         WebkitMaskImage:
-                          'linear-gradient(to top, rgba(0,0,0,0.9), transparent 52%)',
-                        maskImage: 'linear-gradient(to top, rgba(0,0,0,0.9), transparent 52%)',
+                          'linear-gradient(to top, rgba(0,0,0,0.9), transparent 55%)',
+                        maskImage: 'linear-gradient(to top, rgba(0,0,0,0.9), transparent 55%)',
                         filter: 'blur(2px)',
                       }}
                     >
-                      <img
-                        src={img}
-                        alt=""
-                        draggable={false}
-                        style={{
-                          width: '100%',
-                          height: '100%',
-                          objectFit: 'contain',
-                          objectPosition: 'center bottom',
-                        }}
-                      />
+                      {img && (
+                        <img
+                          src={img}
+                          alt=""
+                          draggable={false}
+                          style={{ display: 'block', width: '100%', height: 'auto' }}
+                        />
+                      )}
                     </div>
-                  </>
+                  </div>
                 ) : (
-                  /* Raw photo — framed like a museum exhibit */
-                  <>
+                  /* Raw photo — framed exhibit standing on the floor */
+                  <div style={{ position: 'relative', width: '100%' }}>
                     <div
                       style={{
                         width: '100%',
@@ -419,16 +443,18 @@ export default function Showroom({
                     <div
                       aria-hidden
                       style={{
+                        position: 'absolute',
+                        top: '100%',
+                        left: 0,
                         width: '100%',
                         aspectRatio: '16 / 10',
-                        marginTop: 2,
                         transform: 'scaleY(-1)',
-                        opacity: 0.22,
+                        opacity: 0.2,
                         borderRadius: 12,
                         overflow: 'hidden',
                         WebkitMaskImage:
-                          'linear-gradient(to bottom, rgba(0,0,0,0.85), transparent 62%)',
-                        maskImage: 'linear-gradient(to bottom, rgba(0,0,0,0.85), transparent 62%)',
+                          'linear-gradient(to top, rgba(0,0,0,0.85), transparent 60%)',
+                        maskImage: 'linear-gradient(to top, rgba(0,0,0,0.85), transparent 60%)',
                         filter: 'blur(1px)',
                       }}
                     >
@@ -441,7 +467,7 @@ export default function Showroom({
                         />
                       )}
                     </div>
-                  </>
+                  </div>
                 )}
               </button>
             </div>
@@ -449,19 +475,19 @@ export default function Showroom({
         })}
       </div>
 
-      {/* Suspended display panel above the car (brand · year · model) */}
+      {/* Digital signage panel above the car (brand · year · model + specs) */}
       {activeSpot && (
         <div
           key={activeSpot.id}
           style={{
             position: 'absolute',
-            top: 30,
+            top: 34,
             left: '50%',
             transform: 'translateX(-50%)',
+            width: 'min(320px, 84%)',
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
-            maxWidth: '88%',
             zIndex: 30,
             pointerEvents: 'none',
             animation: 'cardv2-appear 0.45s cubic-bezier(0.22,1,0.36,1) both',
@@ -472,39 +498,38 @@ export default function Showroom({
             aria-hidden
             style={{
               width: 1,
-              height: 16,
-              background: 'linear-gradient(to bottom, transparent, rgba(255,255,255,0.4))',
+              height: 12,
+              background: 'linear-gradient(to bottom, transparent, rgba(255,255,255,0.35))',
             }}
           />
-          {/* Digital signage panel */}
+          {/* Flat-screen bezel */}
           <div
             style={{
               position: 'relative',
-              minWidth: 210,
-              maxWidth: '100%',
-              padding: '9px 22px 10px',
-              borderRadius: 13,
-              textAlign: 'center',
-              background: 'linear-gradient(180deg, rgba(26,26,30,0.86), rgba(9,9,11,0.86))',
-              border: '1px solid rgba(255,255,255,0.14)',
-              backdropFilter: 'blur(12px) saturate(160%)',
-              WebkitBackdropFilter: 'blur(12px) saturate(160%)',
+              width: '100%',
+              padding: '9px 14px 11px',
+              borderRadius: 14,
+              background:
+                'linear-gradient(180deg, rgba(20,22,28,0.92), rgba(8,9,12,0.94))',
+              border: '1px solid rgba(255,255,255,0.10)',
+              backdropFilter: 'blur(12px) saturate(150%)',
+              WebkitBackdropFilter: 'blur(12px) saturate(150%)',
               boxShadow:
-                '0 14px 36px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.10)',
+                '0 16px 40px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.08), 0 0 22px rgba(232,32,58,0.10)',
             }}
           >
-            {/* Red LED accent strip */}
+            {/* Red LED accent strip (screen "power" glow) */}
             <div
               aria-hidden
               style={{
                 position: 'absolute',
                 top: 0,
-                left: '16%',
-                right: '16%',
+                left: '14%',
+                right: '14%',
                 height: 2,
                 borderRadius: 2,
                 background: 'linear-gradient(90deg, transparent, #E8203A, transparent)',
-                boxShadow: '0 0 10px rgba(232,32,58,0.85)',
+                boxShadow: '0 0 12px 1px rgba(232,32,58,0.75)',
               }}
             />
             <div
@@ -513,6 +538,7 @@ export default function Showroom({
                 fontWeight: 800,
                 letterSpacing: '0.16em',
                 color: '#E8203A',
+                textAlign: 'center',
               }}
             >
               {activeSpot.brand.toUpperCase()}
@@ -526,23 +552,39 @@ export default function Showroom({
                 letterSpacing: '-0.02em',
                 color: '#fff',
                 marginTop: 1,
+                textAlign: 'center',
                 whiteSpace: 'nowrap',
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
-                maxWidth: '78vw',
               }}
             >
               {activeSpot.model}
             </div>
+            {/* Spec grid */}
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(4, 1fr)',
+                gap: 4,
+                marginTop: 9,
+                borderTop: '1px solid rgba(255,255,255,0.08)',
+                paddingTop: 8,
+              }}
+            >
+              <StatCell label="PUISSANCE" value={activeSpecs?.horsepower} loading={activeSpecs === undefined} />
+              <StatCell label="0–100" value={activeSpecs?.zero_to_100} loading={activeSpecs === undefined} />
+              <StatCell label="V.MAX" value={activeSpecs?.top_speed} loading={activeSpecs === undefined} />
+              <StatCell label="COUPLE" value={activeSpecs?.torque} loading={activeSpecs === undefined} />
+            </div>
           </div>
-          {/* Soft light the panel throws down onto the car */}
+          {/* Screen underglow spilling onto the car */}
           <div
             aria-hidden
             style={{
-              width: '76%',
-              height: 30,
+              width: '72%',
+              height: 26,
               background:
-                'radial-gradient(60% 100% at 50% 0%, rgba(232,32,58,0.14), transparent 72%)',
+                'radial-gradient(60% 100% at 50% 0%, rgba(232,32,58,0.13), transparent 72%)',
             }}
           />
         </div>
@@ -553,13 +595,14 @@ export default function Showroom({
         <div
           style={{
             position: 'absolute',
-            bottom: 34,
+            bottom: 16,
             left: 0,
             right: 0,
             display: 'flex',
             justifyContent: 'center',
             gap: 5,
             pointerEvents: 'none',
+            zIndex: 31,
           }}
         >
           {spots.slice(0, 12).map((_, i) => (
@@ -576,6 +619,48 @@ export default function Showroom({
           ))}
         </div>
       )}
+    </div>
+  )
+}
+
+// One spec on the digital panel. Shows a subtle skeleton while the specs
+// request is in flight, "—" if unavailable.
+function StatCell({
+  label,
+  value,
+  loading,
+}: {
+  label: string
+  value?: string
+  loading: boolean
+}) {
+  return (
+    <div style={{ textAlign: 'center', minWidth: 0 }}>
+      <div
+        style={{
+          fontSize: 12,
+          fontWeight: 800,
+          color: '#fff',
+          letterSpacing: '-0.01em',
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          opacity: loading ? 0.5 : 1,
+        }}
+      >
+        {loading ? '···' : value || '—'}
+      </div>
+      <div
+        style={{
+          fontSize: 8,
+          fontWeight: 700,
+          letterSpacing: '0.08em',
+          color: 'rgba(255,255,255,0.45)',
+          marginTop: 2,
+        }}
+      >
+        {label}
+      </div>
     </div>
   )
 }

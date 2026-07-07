@@ -24,7 +24,7 @@
 // écriture service-role only).
 
 import { readFileSync, readdirSync, existsSync, statSync, mkdirSync, writeFileSync } from 'node:fs'
-import { extname, join, basename } from 'node:path'
+import { extname, join, basename, isAbsolute } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createClient } from '@supabase/supabase-js'
 import { removeBackground } from '@imgly/background-removal-node'
@@ -62,7 +62,8 @@ const flagVal = (name, def) => {
   return i >= 0 && args[i + 1] ? args[i + 1] : def
 }
 const BUCKET = flagVal('--bucket', 'car-renders')
-const SRC_DIR = join(ROOT, flagVal('--dir', 'src/assets/car-renders'))
+const DIR_ARG = flagVal('--dir', 'src/assets/car-renders')
+const SRC_DIR = isAbsolute(DIR_ARG) ? DIR_ARG : join(ROOT, DIR_ARG)
 const OUT_DIR = join(SRC_DIR, 'detoured')
 
 const INPUT_EXT = new Set(['.png', '.jpg', '.jpeg', '.webp'])
@@ -77,15 +78,58 @@ const slug = (s) =>
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
 
-// "Make__Model.ext" → { make, model }
+// Marques en plusieurs mots à reconnaître AVANT de découper sur le tiret,
+// sinon "mercedes-amg-gt" donnerait make="mercedes". Slugs en minuscules.
+const MULTIWORD_MAKES = [
+  'mercedes-amg',
+  'mercedes-benz',
+  'rolls-royce',
+  'aston-martin',
+  'alfa-romeo',
+  'land-rover',
+  'range-rover',
+  'de-tomaso',
+]
+const titleCase = (s) =>
+  s
+    .split(' ')
+    .map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w))
+    .join(' ')
+
+// Deux conventions de nom acceptées :
+//   • "Make__Model.ext"  → "__" sépare marque/modèle, "_" = espace  (casse gardée)
+//   • "make-model.ext"   → tout en tiret/minuscule (ex. ferrari-f8-tributo,
+//     mercedes-amg-gt-63-s) : la marque = 1er token, ou une marque composée
+//     connue ; le reste = modèle ; les tirets deviennent des espaces.
 function parseName(file) {
   const stem = basename(file, extname(file))
-  const idx = stem.indexOf('__')
-  if (idx < 0) return null
-  const make = stem.slice(0, idx).replace(/_/g, ' ').trim()
-  const model = stem.slice(idx + 2).replace(/_/g, ' ').trim()
-  if (!make || !model) return null
-  return { make, model }
+
+  // Convention historique : double underscore.
+  const dbl = stem.indexOf('__')
+  if (dbl >= 0) {
+    const make = stem.slice(0, dbl).replace(/_/g, ' ').trim()
+    const model = stem.slice(dbl + 2).replace(/_/g, ' ').trim()
+    if (make && model) return { make, model }
+    return null
+  }
+
+  // Convention tirets/minuscules.
+  const low = stem.toLowerCase()
+  if (low.includes('-')) {
+    let makeSlug = low.split('-')[0]
+    let rest = low.slice(makeSlug.length + 1)
+    for (const mm of MULTIWORD_MAKES) {
+      if (low === mm || low.startsWith(mm + '-')) {
+        makeSlug = mm
+        rest = low.slice(mm.length + 1)
+        break
+      }
+    }
+    const make = titleCase(makeSlug.replace(/-/g, ' '))
+    const model = titleCase(rest.replace(/-/g, ' ')).trim()
+    if (make && model) return { make, model }
+  }
+  return null
 }
 
 if (!existsSync(SRC_DIR) || !statSync(SRC_DIR).isDirectory()) {
