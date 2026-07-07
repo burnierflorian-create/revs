@@ -36,6 +36,8 @@ const F1Roster = lazy(() => import('./pages/F1Roster'))
 const F1TeamDetail = lazy(() => import('./pages/F1TeamDetail'))
 const F1DriverDetail = lazy(() => import('./pages/F1DriverDetail'))
 const PublicProfile = lazy(() => import('./pages/PublicProfile'))
+// TEMP — card redesign preview (remove after direction sign-off).
+const CardPreview = lazy(() => import('./pages/CardPreview'))
 
 function StackFallback() {
   return <div className="min-h-screen bg-bg" />
@@ -98,6 +100,8 @@ export default function App() {
         {/* Public — landing page for the password-reset email link. Always
             reachable (the recovery session is briefly non-null). */}
         <Route path="/reset-password" element={<ResetPassword />} />
+        {/* TEMP public preview of the card redesign. */}
+        <Route path="/card-preview" element={lazyRoute(<CardPreview />)} />
         <Route
           path="/auth"
           element={

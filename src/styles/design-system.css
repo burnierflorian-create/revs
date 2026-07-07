@@ -227,6 +227,77 @@ html.light .glass {
   box-shadow: 0 0 10px rgba(232, 32, 58, 0.85);
 }
 
+/* ─────────────────────── Collector card v2 ───────────────────────
+   All GPU (transform/opacity). Amplitudes exposed as CSS vars on the
+   card root so they're trivial to tune. */
+@keyframes cardv2-float {
+  0%,
+  100% {
+    transform: translate3d(0, calc(-1 * var(--cv-float, 5px)), 0) rotateX(0deg);
+  }
+  50% {
+    transform: translate3d(0, var(--cv-float, 5px), 0) rotateX(0deg);
+  }
+}
+/* Diagonal light bar sweeping across rare cards, then resting. */
+@keyframes cardv2-shine {
+  0% {
+    transform: translateX(-140%) rotate(8deg);
+    opacity: 0;
+  }
+  10% {
+    opacity: 0.55;
+  }
+  34% {
+    transform: translateX(240%) rotate(8deg);
+    opacity: 0;
+  }
+  100% {
+    transform: translateX(240%) rotate(8deg);
+    opacity: 0;
+  }
+}
+/* Slow rainbow drift for animated (holo) tiers when idle. */
+@keyframes cardv2-holo-drift {
+  0% {
+    background-position:
+      0% 50%,
+      50% 50%;
+  }
+  100% {
+    background-position:
+      100% 50%,
+      50% 50%;
+  }
+}
+/* Legendary aura pulse. */
+@keyframes cardv2-aura {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.9;
+    transform: scale(1.04);
+  }
+}
+/* Reveal: rise + settle. */
+@keyframes cardv2-reveal {
+  0% {
+    opacity: 0;
+    transform: translateY(28px) scale(0.86) rotateY(-16deg);
+  }
+  60% {
+    opacity: 1;
+    transform: translateY(0) scale(1.03) rotateY(6deg);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1) rotateY(0deg);
+  }
+}
+
 /* ─────────────────────── F1 calendar "PROCHAIN" pulse ───────────────────────
    Subtle attention-pulse used by the F1 calendar to mark the next GP.
    Brightness + shadow oscillate gently — strong enough to catch the eye
