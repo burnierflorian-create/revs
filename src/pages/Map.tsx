@@ -286,7 +286,7 @@ const MODE_KEY = 'revs-map-mode'
  *  Sparkles entry button + the MapPredictionSheet render + the lazy
  *  fetch. Component, lib and bottom-sheet code all stay in place so
  *  reviving the feature is a one-line flip. */
-const SHOW_WEATHER_IA = false
+const SHOW_WEATHER_IA = true
 
 // Snapchat-soft palette + a REVS red accent on the big roads.
 const SNAP = {
