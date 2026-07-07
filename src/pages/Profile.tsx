@@ -829,18 +829,19 @@ export default function Profile() {
                       })}
                     </span>
                   </div>
-                  <div className="grid grid-cols-4 gap-3">
+                  <div className="grid grid-cols-4 gap-x-2 gap-y-4">
                     {[...unlocked, ...locked].map((b) => {
                       const isU = unlocks.has(b.slug)
+                      const icon = badgeIcon(b.slug)
                       return (
                         <button
                           key={b.slug}
                           onClick={() => navigate(`/badges/${b.slug}`)}
-                          className="tappable flex flex-col items-center gap-1.5"
+                          className="tappable flex min-w-0 flex-col items-center gap-1.5"
                           aria-label={b.name}
                         >
                           <span
-                            className="flex h-16 w-16 items-center justify-center rounded-full text-2xl"
+                            className="flex h-14 w-14 flex-none items-center justify-center overflow-hidden rounded-full text-2xl"
                             style={{
                               background: isU
                                 ? b.gold
@@ -855,7 +856,19 @@ export default function Profile() {
                               opacity: isU ? 1 : 0.55,
                             }}
                           >
-                            {isU ? b.emoji : <Lock className="h-5 w-5 text-fg2/50" />}
+                            {isU ? (
+                              icon ? (
+                                <img
+                                  src={icon}
+                                  alt=""
+                                  className="h-full w-full rounded-full object-cover"
+                                />
+                              ) : (
+                                b.emoji
+                              )
+                            ) : (
+                              <Lock className="h-5 w-5 text-fg2/50" />
+                            )}
                           </span>
                           <span
                             className="line-clamp-2 text-center font-semibold leading-tight"
@@ -1703,9 +1716,10 @@ function BadgesBottomSheet({
             WebkitOverflowScrolling: 'touch',
           }}
         >
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-3 gap-2.5">
             {badges.map((b) => {
               const isUnlocked = unlocks.has(b.slug)
+              const icon = badgeIcon(b.slug)
               return (
                 <div
                   key={b.slug}
@@ -1728,14 +1742,24 @@ function BadgesBottomSheet({
                   }}
                 >
                   {isUnlocked ? (
-                    <span className="text-2xl">{b.emoji}</span>
+                    icon ? (
+                      <img
+                        src={icon}
+                        alt=""
+                        className="h-12 w-12 rounded-xl object-cover"
+                      />
+                    ) : (
+                      <span className="flex h-12 items-center justify-center text-2xl">
+                        {b.emoji}
+                      </span>
+                    )
                   ) : (
-                    <span className="flex h-7 items-center justify-center">
+                    <span className="flex h-12 items-center justify-center">
                       <Lock className="h-4 w-4 text-fg2/50" />
                     </span>
                   )}
                   <span
-                    className={`text-[10px] font-semibold leading-tight ${
+                    className={`line-clamp-2 text-[10px] font-semibold leading-tight ${
                       isUnlocked
                         ? b.gold
                           ? 'text-[#E0B341]'

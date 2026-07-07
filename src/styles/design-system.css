@@ -297,6 +297,17 @@ html.light .glass {
     transform: translateY(0) scale(1) rotateY(0deg);
   }
 }
+/* Gentle scroll-in appearance (stagger via per-card IntersectionObserver). */
+@keyframes cardv2-appear {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
 /* Particle burst on rare/legendary reveal. Each particle sets --px/--py
    (unit-vector end offset) inline. */
 @keyframes cardv2-particle {

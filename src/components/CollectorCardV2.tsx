@@ -148,7 +148,26 @@ export default function CollectorCardV2({
 }) {
   const look = RARITY_FRAME[rarity] ?? RARITY_FRAME.standard
   const rootRef = useRef<HTMLDivElement>(null)
+  const tiltRef = useRef<HTMLDivElement>(null)
   const [flipped, setFlipped] = useState(false)
+  const [visible, setVisible] = useState(false)
+
+  // Scroll-in appearance (per-card → natural stagger down a grid).
+  useEffect(() => {
+    const el = rootRef.current
+    if (!el) return
+    const io = new IntersectionObserver(
+      (es) => {
+        if (es[0].isIntersecting) {
+          setVisible(true)
+          io.disconnect()
+        }
+      },
+      { threshold: 0.15 },
+    )
+    io.observe(el)
+    return () => io.disconnect()
+  }, [])
 
   // Real specs — provided, else lazy-fetched on first flip (server-cached
   // per model, so it's paid once site-wide).
@@ -172,28 +191,48 @@ export default function CollectorCardV2({
       ? { power: eff.horsepower, accel: eff.zero_to_100, vmax: eff.top_speed, torque: eff.torque }
       : {})
 
-  // Holo tilt → --hx/--hy (-0.5..0.5). Pointer everywhere + real gyroscope.
+  // Micro-tilt parallax (ALL tiers) + holo sheen tracking (rare tiers).
+  // nx/ny are normalized -0.5..0.5. GPU: tilt = transform on the tilt
+  // wrapper, holo = --hx/--hy CSS vars. Works with pointer everywhere and
+  // the real gyroscope on phones.
+  const MAX_TILT = 9 // deg
   useEffect(() => {
-    if (!look.holo) return
-    const el = rootRef.current
-    if (!el) return
-    const set = (hx: number, hy: number) => {
-      el.style.setProperty('--hx', hx.toFixed(3))
-      el.style.setProperty('--hy', hy.toFixed(3))
+    const root = rootRef.current
+    if (!root) return
+    const apply = (nx: number, ny: number) => {
+      if (look.holo) {
+        root.style.setProperty('--hx', nx.toFixed(3))
+        root.style.setProperty('--hy', ny.toFixed(3))
+      }
+      const t = tiltRef.current
+      if (t) {
+        t.style.transition = 'transform 0.12s ease-out'
+        t.style.transform = `rotateY(${(nx * 2 * MAX_TILT).toFixed(2)}deg) rotateX(${(-ny * 2 * MAX_TILT).toFixed(2)}deg)`
+      }
     }
-    const onPointer = (e: PointerEvent) => {
-      const r = el.getBoundingClientRect()
-      set((e.clientX - r.left) / r.width - 0.5, (e.clientY - r.top) / r.height - 0.5)
+    const onMove = (e: PointerEvent) => {
+      const r = root.getBoundingClientRect()
+      apply((e.clientX - r.left) / r.width - 0.5, (e.clientY - r.top) / r.height - 0.5)
+    }
+    const onLeave = () => {
+      const t = tiltRef.current
+      if (t) {
+        t.style.transition = 'transform 0.55s cubic-bezier(0.34,1.4,0.5,1)'
+        t.style.transform = 'rotateY(0deg) rotateX(0deg)'
+      }
     }
     const onOrient = (e: DeviceOrientationEvent) => {
+      if (!look.holo) return
       const g = Math.max(-45, Math.min(45, e.gamma ?? 0)) / 45
       const b = Math.max(-45, Math.min(45, (e.beta ?? 0) - 45)) / 45
-      set(g * 0.5, b * 0.5)
+      apply(g * 0.5, b * 0.5)
     }
-    el.addEventListener('pointermove', onPointer)
+    root.addEventListener('pointermove', onMove)
+    root.addEventListener('pointerleave', onLeave)
     window.addEventListener('deviceorientation', onOrient)
     return () => {
-      el.removeEventListener('pointermove', onPointer)
+      root.removeEventListener('pointermove', onMove)
+      root.removeEventListener('pointerleave', onLeave)
       window.removeEventListener('deviceorientation', onOrient)
     }
   }, [look.holo])
@@ -218,9 +257,12 @@ export default function CollectorCardV2({
             width: '100%',
             perspective: '1100px',
             position: 'relative',
+            opacity: reveal || visible ? undefined : 0,
             animation: reveal
               ? 'cardv2-reveal 0.9s cubic-bezier(0.22,1,0.36,1) both'
-              : undefined,
+              : visible
+                ? 'cardv2-appear 0.5s cubic-bezier(0.22,1,0.36,1) both'
+                : undefined,
           } as React.CSSProperties
         }
       >
@@ -288,12 +330,20 @@ export default function CollectorCardV2({
             />
           )}
 
+          <div
+            ref={tiltRef}
+            style={{
+              position: 'relative',
+              zIndex: 1,
+              transformStyle: 'preserve-3d',
+              willChange: 'transform',
+            }}
+          >
           <button
             onClick={() => setFlipped((f) => !f)}
             aria-label={`${brand} ${model}`}
             style={{
               position: 'relative',
-              zIndex: 1,
               display: 'block',
               width: '100%',
               aspectRatio: '3 / 4.2',
@@ -302,7 +352,7 @@ export default function CollectorCardV2({
               padding: 0,
               cursor: 'pointer',
               transformStyle: 'preserve-3d',
-              transition: 'transform 0.65s cubic-bezier(0.22,1,0.36,1)',
+              transition: 'transform 0.55s cubic-bezier(0.34,1.35,0.45,1)',
               transform: flipped ? 'rotateY(180deg)' : 'rotateY(0deg)',
             }}
           >
@@ -586,6 +636,7 @@ export default function CollectorCardV2({
               </div>
             </div>
           </button>
+          </div>
         </div>
       </div>
 
