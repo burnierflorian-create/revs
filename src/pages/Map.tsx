@@ -13,6 +13,10 @@ import {
   Search as SearchIcon,
   SlidersHorizontal,
   Sparkles,
+  Film,
+  Play,
+  Pause,
+  RotateCcw,
   X,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
@@ -750,6 +754,19 @@ export default function MapPage() {
   const [mapReady, setMapReady] = useState(false)
   // Spots of a tapped same-place cluster, shown in a bottom sheet.
   const [clusterSheet, setClusterSheet] = useState<ClusterLeaf[] | null>(null)
+
+  // ── Time-lapse replay: reveals every spot chronologically. Self-
+  // contained (its own DOM markers + a container CSS class that hides the
+  // normal markers), so it never touches the clustering/source engine.
+  const [replayOpen, setReplayOpen] = useState(false)
+  const [replayPlaying, setReplayPlaying] = useState(false)
+  const [replayPct, setReplayPct] = useState(0)
+  const [replayDate, setReplayDate] = useState('')
+  const replayMarkersRef = useRef<mapboxgl.Marker[]>([])
+  const replaySpotsRef = useRef<Spot[]>([])
+  const replayRafRef = useRef<number | null>(null)
+  const replayStartRef = useRef(0) // performance.now() of the current run
+  const replayElapsedRef = useRef(0) // accumulated ms across pauses
 
   const [mode, setMode] = useState<MapMode>(() => {
     try {
@@ -1714,6 +1731,115 @@ export default function MapPage() {
     }
   }, [mapReady])
 
+  // ─────────────────────── Time-lapse replay ───────────────────────
+  const REPLAY_MAX_MARKERS = 600 // perf guard for very large histories
+  function clearReplayMarkers() {
+    for (const m of replayMarkersRef.current) m.remove()
+    replayMarkersRef.current = []
+  }
+  function addReplayMarker(s: Spot) {
+    const map = mapRef.current
+    if (!map) return
+    // Root el is positioned by mapbox (transform: translate). The scale
+    // pop animation MUST live on an inner dot, else it overrides the
+    // translate and the marker jumps to (0,0).
+    const el = document.createElement('div')
+    el.className = 'revs-replay'
+    const dot = document.createElement('div')
+    dot.className = 'revs-replay-dot replay-pop'
+    el.appendChild(dot)
+    const m = new mapboxgl.Marker({ element: el })
+      .setLngLat([s.lng, s.lat])
+      .addTo(map)
+    replayMarkersRef.current.push(m)
+  }
+  const replayDuration = () =>
+    Math.min(20000, Math.max(8000, replaySpotsRef.current.length * 350))
+  function replayTick(now: number) {
+    const spots = replaySpotsRef.current
+    if (spots.length === 0) return
+    const elapsed = replayElapsedRef.current + (now - replayStartRef.current)
+    const pct = Math.min(1, elapsed / replayDuration())
+    const target = Math.floor(pct * spots.length)
+    while (replayMarkersRef.current.length < target) {
+      addReplayMarker(spots[replayMarkersRef.current.length])
+    }
+    setReplayPct(Math.round(pct * 100))
+    const idx = Math.max(0, Math.min(spots.length - 1, target - 1))
+    if (spots[idx]?.created_at) {
+      setReplayDate(
+        new Intl.DateTimeFormat('fr-FR', {
+          day: 'numeric',
+          month: 'short',
+          year: 'numeric',
+        }).format(new Date(spots[idx].created_at)),
+      )
+    }
+    if (pct >= 1) {
+      setReplayPlaying(false)
+      return
+    }
+    replayRafRef.current = requestAnimationFrame(replayTick)
+  }
+  function openReplay() {
+    const map = mapRef.current
+    if (!map) return
+    const spots = [...allSpotsRef.current.values()]
+      .filter((s) => s.created_at && Number.isFinite(s.lat) && Number.isFinite(s.lng))
+      .sort(
+        (a, b) =>
+          new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+      )
+      .slice(-REPLAY_MAX_MARKERS)
+    if (spots.length === 0) return
+    replaySpotsRef.current = spots
+    // Fit the whole history in view.
+    const b = new mapboxgl.LngLatBounds()
+    for (const s of spots) b.extend([s.lng, s.lat])
+    map.fitBounds(b, { padding: 64, duration: 700, maxZoom: 12 })
+    map.getContainer().classList.add('replay-active')
+    clearReplayMarkers()
+    replayElapsedRef.current = 0
+    setReplayPct(0)
+    setReplayDate('')
+    setReplayOpen(true)
+    setReplayPlaying(true)
+    replayStartRef.current = performance.now()
+    replayRafRef.current = requestAnimationFrame(replayTick)
+  }
+  function toggleReplayPlay() {
+    if (replayRafRef.current != null) {
+      cancelAnimationFrame(replayRafRef.current)
+      replayRafRef.current = null
+    }
+    if (replayPlaying) {
+      // pause
+      replayElapsedRef.current += performance.now() - replayStartRef.current
+      setReplayPlaying(false)
+      return
+    }
+    // resume — or restart from scratch if we're at the end
+    if (replayPct >= 100) {
+      clearReplayMarkers()
+      replayElapsedRef.current = 0
+      setReplayPct(0)
+    }
+    setReplayPlaying(true)
+    replayStartRef.current = performance.now()
+    replayRafRef.current = requestAnimationFrame(replayTick)
+  }
+  function closeReplay() {
+    if (replayRafRef.current != null) {
+      cancelAnimationFrame(replayRafRef.current)
+      replayRafRef.current = null
+    }
+    clearReplayMarkers()
+    mapRef.current?.getContainer().classList.remove('replay-active')
+    setReplayOpen(false)
+    setReplayPlaying(false)
+    setReplayPct(0)
+  }
+
   return (
     <div className="fixed inset-0">
       <div
@@ -1824,6 +1950,92 @@ export default function MapPage() {
           loading={predictionLoading}
           onClose={() => setInfoSheetOpen(false)}
         />
+      )}
+
+      {/* Time-lapse replay — launch pill (left) + playback bar (bottom). */}
+      {mapReady && !replayOpen && (
+        <button
+          onClick={openReplay}
+          aria-label="Replay time-lapse"
+          className="tappable absolute left-4 z-10 flex h-10 items-center gap-1.5 rounded-full px-3.5"
+          style={{
+            top: 'calc(max(3rem, env(safe-area-inset-top) + 2rem) + 3.25rem)',
+            background: 'rgb(var(--color-card))',
+            border: '1px solid rgb(var(--color-fg) / 0.10)',
+            boxShadow: '0 8px 22px rgba(0,0,0,0.45)',
+            color: 'rgb(var(--color-accent))',
+          }}
+        >
+          <Film className="h-4 w-4" />
+          <span className="text-[12px] font-extrabold tracking-wide">REPLAY</span>
+        </button>
+      )}
+
+      {replayOpen && (
+        <div
+          className="absolute inset-x-0 z-20 px-4"
+          style={{
+            bottom: 'calc(max(5.5rem, env(safe-area-inset-bottom) + 5rem))',
+          }}
+        >
+          <div
+            className="mx-auto flex max-w-sm items-center gap-3 rounded-2xl px-4 py-3"
+            style={{
+              background: '#141414',
+              border: '1px solid #E8203A',
+              boxShadow: '0 12px 40px rgba(0,0,0,0.6)',
+            }}
+          >
+            <button
+              onClick={toggleReplayPlay}
+              aria-label={
+                replayPct >= 100
+                  ? 'Rejouer'
+                  : replayPlaying
+                    ? 'Pause'
+                    : 'Lecture'
+              }
+              className="tappable flex h-9 w-9 flex-none items-center justify-center rounded-full text-white"
+              style={{ background: '#E8203A' }}
+            >
+              {replayPct >= 100 ? (
+                <RotateCcw className="h-4 w-4" />
+              ) : replayPlaying ? (
+                <Pause className="h-4 w-4" />
+              ) : (
+                <Play className="h-4 w-4" />
+              )}
+            </button>
+            <div className="min-w-0 flex-1">
+              <div className="mb-1 flex items-center justify-between gap-2">
+                <span className="text-[11px] font-bold text-white/80">
+                  Time-lapse · {replaySpotsRef.current.length} spots
+                </span>
+                <span className="text-[11px] tabular-nums text-white/50">
+                  {replayDate}
+                </span>
+              </div>
+              <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/[0.12]">
+                <div
+                  className="h-full rounded-full"
+                  style={{
+                    width: `${replayPct}%`,
+                    background: '#E8203A',
+                    transition: 'width 0.1s linear',
+                  }}
+                />
+              </div>
+            </div>
+            <button
+              onClick={closeReplay}
+              aria-label="Fermer"
+              className="tappable flex h-9 w-9 flex-none items-center justify-center rounded-full text-white/70"
+              style={{ background: 'rgba(255,255,255,0.08)' }}
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
       )}
 
       {/* Bottom-right control stack — slim 2D/3D pill sitting just
