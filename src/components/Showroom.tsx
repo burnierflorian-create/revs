@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { fetchCardSpecs, type CardSpecs } from '../lib/cardSpecs'
 import type { Spot } from '../lib/spots'
@@ -57,6 +57,26 @@ export default function Showroom({
   const stageRef = useRef<HTMLDivElement>(null)
   const [active, setActive] = useState(0)
   const [width, setWidth] = useState(0)
+
+  // Only exhibit real, identified cars. Hide "unknown model" captures (e.g. a
+  // photo that's mostly grass with no recognisable car). New spots passed in
+  // via props are picked up automatically.
+  const cars = useMemo(
+    () =>
+      spots.filter((s) => {
+        const b = (s.brand ?? '').trim()
+        const m = (s.model ?? '').trim()
+        if (!b || !m) return false
+        return !/inconnu|unknown|^n\/?a$/i.test(m) && !/inconnue?|unknown/i.test(b)
+      }),
+    [spots],
+  )
+  const n = cars.length
+  // Infinite loop: `active` is unbounded; wrap into [0, n). `side` caps the
+  // neighbours shown so a car never appears twice on a small collection.
+  const wrap = (i: number) => (n ? ((i % n) + n) % n : 0)
+  const aw = wrap(active)
+  const side = Math.min(MAX_VISIBLE, Math.floor((n - 1) / 2))
 
   // ── Shared render library (detoured realistic renders, by make/model) ──
   const [renders, setRenders] = useState<RenderRow[]>([])
@@ -120,9 +140,9 @@ export default function Showroom({
   useEffect(() => {
     let alive = true
     // Fetch the centre car + its immediate neighbours (prefetch on swipe).
-    const wanted = [active - 1, active, active + 1]
-      .filter((i) => i >= 0 && i < spots.length)
-      .map((i) => spots[i])
+    const wanted = n
+      ? [active - 1, active, active + 1].map((i) => cars[wrap(i)])
+      : []
     wanted.forEach((s) => {
       const key = specsKey(s)
       if (requestedRef.current.has(key)) return
@@ -182,7 +202,7 @@ export default function Showroom({
     if (!d || !d.moved || spacing === 0) return
     const dx = e.clientX - d.x
     const delta = -Math.round(dx / spacing)
-    setActive((a) => Math.max(0, Math.min(spots.length - 1, a + delta)))
+    setActive((a) => a + delta) // unbounded — wraps at render time
   }
 
   // ── Gyroscope + pointer parallax on the decor ──
@@ -210,8 +230,10 @@ export default function Showroom({
     }
   }, [])
 
-  const activeSpot = spots[active] as Spot | undefined
+  const activeSpot = cars[aw] as Spot | undefined
   const activeSpecs = activeSpot ? specsMap.get(specsKey(activeSpot)) : undefined
+
+  if (n === 0) return null // nothing identified to exhibit
 
   return (
     <div
@@ -295,16 +317,20 @@ export default function Showroom({
           zIndex: 31,
         }}
       >
-        <span style={{ color: '#E8203A' }}>{spots.length}</span>{' '}
-        {spots.length > 1 ? 'voitures dans votre showroom' : 'voiture dans votre showroom'}
+        <span style={{ color: '#E8203A' }}>{n}</span>{' '}
+        {n > 1 ? 'voitures dans votre showroom' : 'voiture dans votre showroom'}
       </div>
 
       {/* Stage — the cars */}
       <div ref={stageRef} style={{ position: 'absolute', inset: 0, willChange: 'transform' }}>
-        {spots.map((s, i) => {
-          const d = i - active
+        {cars.map((s, i) => {
+          // Shortest signed distance from the active car on the ring, so the
+          // first car sits just right of the last one (seamless infinite loop).
+          let d = i - aw
+          if (d > n / 2) d -= n
+          else if (d < -n / 2) d += n
           const abs = Math.abs(d)
-          if (abs > MAX_VISIBLE) return null
+          if (abs > side) return null
           const isCenter = d === 0
           const scale = isCenter ? 1 : Math.max(0.5, 0.74 - abs * 0.1)
           const opacity = isCenter ? 1 : Math.max(0.2, 0.6 - abs * 0.2)
@@ -333,7 +359,7 @@ export default function Showroom({
               <button
                 onClick={() => {
                   if (isCenter) onOpen(s.id)
-                  else setActive(i)
+                  else setActive((a) => a + d)
                 }}
                 aria-label={`${s.brand} ${s.model}`}
                 style={{
@@ -603,7 +629,7 @@ export default function Showroom({
       )}
 
       {/* Progress dots */}
-      {spots.length > 1 && (
+      {n > 1 && (
         <div
           style={{
             position: 'absolute',
@@ -617,14 +643,14 @@ export default function Showroom({
             zIndex: 31,
           }}
         >
-          {spots.slice(0, 12).map((_, i) => (
+          {cars.slice(0, 12).map((_, i) => (
             <span
               key={i}
               style={{
-                width: i === active ? 14 : 5,
+                width: i === aw ? 14 : 5,
                 height: 5,
                 borderRadius: 9999,
-                background: i === active ? '#E8203A' : 'rgba(255,255,255,0.35)',
+                background: i === aw ? '#E8203A' : 'rgba(255,255,255,0.35)',
                 transition: 'width 0.3s ease, background 0.3s ease',
               }}
             />
