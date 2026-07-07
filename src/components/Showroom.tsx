@@ -19,11 +19,11 @@ import showroomBg from '../assets/showroom.webp'
 // TUNABLES: the constants below.
 // ─────────────────────────────────────────────────────────────────────
 
-const SPACING_RATIO = 0.58 // gap between car centres, × container width
+const SPACING_RATIO = 0.66 // gap between car centres, × container width
 const MAX_VISIBLE = 3 // render this many cars each side of centre
-const FLOOR_FROM_BOTTOM = '38%' // floor line = 62% from the top (matches decor)
-const CAR_WIDTH = '72%'
-const CAR_MAX_WIDTH = 500
+const FLOOR_FROM_BOTTOM = '40%' // floor line = 60% from the top (on the decor floor)
+const CAR_WIDTH = '90%' // bigger, imposing centrepiece
+const CAR_MAX_WIDTH = 640
 
 type RenderRow = { make: string; model: string; url: string }
 
@@ -475,16 +475,17 @@ export default function Showroom({
         })}
       </div>
 
-      {/* Digital signage panel above the car (brand · year · model + specs) */}
+      {/* Digital signage panel above the car (brand · year · model + specs).
+          left/right insets guarantee it can NEVER overflow the screen edges;
+          the inner panel is centred and capped so it stays a tidy screen. */}
       {activeSpot && (
         <div
           key={activeSpot.id}
           style={{
             position: 'absolute',
-            top: 34,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            width: 'min(320px, 84%)',
+            top: 20,
+            left: 12,
+            right: 12,
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
@@ -507,7 +508,8 @@ export default function Showroom({
             style={{
               position: 'relative',
               width: '100%',
-              padding: '9px 14px 11px',
+              maxWidth: 340,
+              padding: '9px 16px 11px',
               borderRadius: 14,
               background:
                 'linear-gradient(180deg, rgba(20,22,28,0.92), rgba(8,9,12,0.94))',
@@ -560,12 +562,12 @@ export default function Showroom({
             >
               {activeSpot.model}
             </div>
-            {/* Spec grid */}
+            {/* Spec grid — 3 stats so everything fits without truncation */}
             <div
               style={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(4, 1fr)',
-                gap: 4,
+                gridTemplateColumns: 'repeat(3, 1fr)',
+                gap: 6,
                 marginTop: 9,
                 borderTop: '1px solid rgba(255,255,255,0.08)',
                 paddingTop: 8,
@@ -574,7 +576,6 @@ export default function Showroom({
               <StatCell label="PUISSANCE" value={activeSpecs?.horsepower} loading={activeSpecs === undefined} />
               <StatCell label="0–100" value={activeSpecs?.zero_to_100} loading={activeSpecs === undefined} />
               <StatCell label="V.MAX" value={activeSpecs?.top_speed} loading={activeSpecs === undefined} />
-              <StatCell label="COUPLE" value={activeSpecs?.torque} loading={activeSpecs === undefined} />
             </div>
           </div>
           {/* Screen underglow spilling onto the car */}
