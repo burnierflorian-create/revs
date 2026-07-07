@@ -14,7 +14,15 @@ import {
   type Challenge,
 } from '../lib/challenges'
 import { challengeIcon } from '../lib/customIcons'
+import { prefersReducedMotion } from '../lib/motion'
 import { fetchLiveEvents, type LiveEvent } from '../lib/liveEvents'
+
+// ── Shared premium treatment across the 3 home blocks (cohesive "supercar
+// dashboard" look): a whisper red liseré + layered depth (inner top sheen +
+// soft inner-bottom shadow so each panel "breathes"). Reused inline. ──
+const PREMIUM_BORDER = '1px solid rgba(232,32,58,0.16)'
+const PREMIUM_SHADOW =
+  '0 14px 32px rgba(0,0,0,0.5), 0 0 22px rgba(232,32,58,0.07), inset 0 1px 0 rgba(255,255,255,0.06), inset 0 -26px 44px rgba(0,0,0,0.30)'
 import TitleChip from '../components/TitleChip'
 import { checkLevelUp } from '../components/LevelUpOverlay'
 import LiquidXpBar from '../components/LiquidXpBar'
@@ -418,10 +426,16 @@ function CockpitWidget({
         backdropFilter: 'saturate(160%) blur(26px)',
         WebkitBackdropFilter: 'saturate(160%) blur(26px)',
         boxShadow:
-          '0 30px 70px rgba(0, 0, 0, 0.18), inset 0 1px 0 rgb(var(--color-fg) / 0.07)',
+          '0 30px 70px rgba(0,0,0,0.18), 0 0 22px rgba(232,32,58,0.06), inset 0 1px 0 rgb(var(--color-fg) / 0.07), inset 0 0 0 1px rgba(232,32,58,0.10), inset 0 -30px 52px rgba(0,0,0,0.22)',
         padding: '22px 22px 26px',
       }}
     >
+      {/* Subtle carbon-fibre weave over the surface. */}
+      <span
+        aria-hidden
+        className="carbon-weave pointer-events-none absolute inset-0"
+        style={{ opacity: 0.55 }}
+      />
       {/* Soft top-left sheen for depth — invariant white glint, low alpha. */}
       <span
         aria-hidden
@@ -491,15 +505,49 @@ function MiniSpeedometer({ pct, done }: { pct: number; done: boolean }) {
   const uid = useId().replace(/:/g, '')
   const [disp, setDisp] = useState(0)
   const fromRef = useRef(0)
+  const sweptRef = useRef(false)
   useEffect(() => {
+    let raf = 0
+    const easeOut = (k: number) => 1 - Math.pow(1 - k, 3)
+    const easeInOut = (k: number) =>
+      k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2
+    const reduce = prefersReducedMotion()
+
+    // First reveal → a full startup sweep (0 → 100 → live value), like a
+    // supercar cluster self-test. Subsequent updates just ease to the value.
+    if (!sweptRef.current && !reduce) {
+      sweptRef.current = true
+      const t0 = performance.now()
+      const P1 = 520 // sweep up to redline
+      const P2 = 780 // settle back to the real value
+      const anim = (now: number) => {
+        const e = now - t0
+        let v: number
+        if (e < P1) {
+          v = 100 * easeOut(e / P1)
+        } else {
+          const k = Math.min(1, (e - P1) / P2)
+          v = 100 + (pct - 100) * easeInOut(k)
+          if (k >= 1) {
+            fromRef.current = pct
+            setDisp(pct)
+            return
+          }
+        }
+        fromRef.current = v
+        setDisp(v)
+        raf = requestAnimationFrame(anim)
+      }
+      raf = requestAnimationFrame(anim)
+      return () => cancelAnimationFrame(raf)
+    }
+
     const from = fromRef.current
     const to = pct
     const start = performance.now()
-    const dur = 1200
-    let raf = 0
-    const easeOut = (k: number) => 1 - Math.pow(1 - k, 3)
+    const dur = reduce ? 0 : 900
     const tick = (now: number) => {
-      const k = Math.min(1, (now - start) / dur)
+      const k = dur === 0 ? 1 : Math.min(1, (now - start) / dur)
       const v = from + (to - from) * easeOut(k)
       fromRef.current = v
       setDisp(v)
@@ -862,6 +910,7 @@ function GpCountdownCard({
   onTap: () => void
 }) {
   const { t } = useTranslation()
+  const reduce = prefersReducedMotion()
   const cd = {
     d: Math.max(0, Math.floor(gpDiff / 86400000)),
     h: Math.max(0, Math.floor((gpDiff % 86400000) / 3600000)),
@@ -880,8 +929,8 @@ function GpCountdownCard({
       style={{
         background:
           'repeating-linear-gradient(45deg, rgba(255,255,255,0.04) 0px, rgba(255,255,255,0.04) 1px, transparent 1px, transparent 5px), #141414',
-        border: '1px solid rgba(255,255,255,0.06)',
-        boxShadow: '0 8px 22px rgba(0,0,0,0.45)',
+        border: PREMIUM_BORDER,
+        boxShadow: PREMIUM_SHADOW,
       }}
       aria-label={t('home.gp.aria', { name })}
     >
@@ -910,17 +959,21 @@ function GpCountdownCard({
           {blocks.map((b, i) => (
             <div key={b.label} className="flex flex-1 items-stretch gap-2">
               <div
-                className="flex flex-1 flex-col items-center justify-center py-2.5"
-                style={{ background: '#0d0d0d', borderRadius: '10px' }}
+                className="flip-digit flex flex-1 flex-col items-center justify-center py-2.5"
+                style={{ borderRadius: '10px' }}
               >
                 <span
-                  className="font-display font-extrabold leading-none text-white tabular-nums"
-                  style={{ fontSize: '28px' }}
+                  className="font-display font-extrabold leading-none tabular-nums"
+                  style={{
+                    fontSize: '28px',
+                    color: '#fff',
+                    textShadow: '0 1px 2px rgba(0,0,0,0.8), 0 0 12px rgba(232,32,58,0.20)',
+                  }}
                 >
                   {b.v}
                 </span>
                 <span
-                  className="mt-1 font-bold uppercase text-white/40"
+                  className="mt-1.5 font-bold uppercase text-white/40"
                   style={{ fontSize: '10px', letterSpacing: '0.1em' }}
                 >
                   {b.label}
@@ -930,7 +983,11 @@ function GpCountdownCard({
                 <span
                   aria-hidden
                   className="flex items-center font-display font-extrabold"
-                  style={{ fontSize: '18px', color: '#E8203A' }}
+                  style={{
+                    fontSize: '18px',
+                    color: '#E8203A',
+                    textShadow: '0 0 8px rgba(232,32,58,0.7)',
+                  }}
                 >
                   :
                 </span>
@@ -947,23 +1004,43 @@ function GpCountdownCard({
         </p>
       )}
 
-      {/* Real(istic) circuit silhouette — stylised per-track SVG */}
+      {/* Real(istic) circuit silhouette — glowing red trace with a light
+          point lapping the track like a car on a hot lap. */}
       <svg
         aria-hidden
         viewBox={CIRCUIT_VIEWBOX}
         preserveAspectRatio="xMidYMid meet"
-        className="mt-4 w-full"
+        className="circuit-glow mt-4 w-full"
         style={{ height: 70 }}
         fill="none"
       >
+        {/* Dim full track */}
         <path
           d={circuitPath(round)}
           stroke="#E8203A"
-          strokeOpacity={0.8}
+          strokeOpacity={0.3}
           strokeWidth={2}
           strokeLinejoin="round"
           strokeLinecap="round"
         />
+        {/* Bright track (also the motion path for the light) */}
+        <path
+          id={`circuit-${round}`}
+          d={circuitPath(round)}
+          stroke="#E8203A"
+          strokeOpacity={0.9}
+          strokeWidth={2}
+          strokeLinejoin="round"
+          strokeLinecap="round"
+        />
+        {/* The car — a glowing light lapping the circuit */}
+        {!reduce && (
+          <circle r={3.1} fill="#ffffff">
+            <animateMotion dur="7s" repeatCount="indefinite" rotate="auto">
+              <mpath href={`#circuit-${round}`} />
+            </animateMotion>
+          </circle>
+        )}
       </svg>
 
       {/* Contextual info line under the circuit */}
@@ -1009,8 +1086,8 @@ function CityRankCard({
 
   const cardStyle = {
     background: '#141414',
-    border: '1px solid rgba(255,255,255,0.06)',
-    boxShadow: '0 8px 22px rgba(0,0,0,0.45)',
+    border: PREMIUM_BORDER,
+    boxShadow: PREMIUM_SHADOW,
   }
 
   // No city set → invite to add one.
@@ -1041,13 +1118,21 @@ function CityRankCard({
         className="tappable relative block w-full overflow-hidden rounded-2xl py-4 pl-5 pr-4 text-left transition-transform active:scale-[0.99]"
         style={cardStyle}
       >
-        {/* 3px gold gradient left border */}
+        {/* Subtle carbon-fibre weave over the surface. */}
+        <span
+          aria-hidden
+          className="carbon-weave pointer-events-none absolute inset-0"
+          style={{ opacity: 0.5 }}
+        />
+        {/* Reinforced gold left border — metallic gradient + glow */}
         <span
           aria-hidden
           className="absolute inset-y-0 left-0"
           style={{
             width: '3px',
-            background: 'linear-gradient(180deg, #C8A96E 0%, transparent 100%)',
+            background:
+              'linear-gradient(180deg, #FBE7B6 0%, #E8C979 30%, #C8A96E 60%, rgba(200,169,110,0) 100%)',
+            boxShadow: '0 0 12px rgba(200,169,110,0.55)',
           }}
         />
         {/* Soft golden glow at the centre (replaces the podium SVG) */}
@@ -1078,12 +1163,19 @@ function CityRankCard({
           <div className="relative flex items-end justify-between gap-3">
             <div className="min-w-0">
               <p
-                className="font-display italic leading-none text-white"
+                className="font-display italic leading-none"
                 style={{
-                  fontSize: '48px',
+                  fontSize: '52px',
                   fontWeight: 900,
                   letterSpacing: '-0.04em',
-                  textShadow: '0 0 30px rgba(200,169,110,0.3)',
+                  backgroundImage:
+                    'linear-gradient(155deg, #FCEFC7 0%, #EFCF83 30%, #C8A96E 52%, #8E6E38 74%, #F0DAA0 100%)',
+                  WebkitBackgroundClip: 'text',
+                  backgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  color: 'transparent',
+                  filter:
+                    'drop-shadow(0 2px 5px rgba(0,0,0,0.5)) drop-shadow(0 0 16px rgba(200,169,110,0.4))',
                 }}
               >
                 #1
@@ -1105,7 +1197,8 @@ function CityRankCard({
               </p>
             </div>
 
-            {/* Mini podium — your rank (#1) in red, the next two greyed */}
+            {/* Mini podium — your rank (#1) in glowing red, next two metallic
+                grey; each bar rises on mount (staggered). */}
             <div className="flex flex-none items-end gap-1.5" aria-hidden>
               {[
                 { h: 60, me: true },
@@ -1114,14 +1207,17 @@ function CityRankCard({
               ].map((b, i) => (
                 <span
                   key={i}
-                  className="rounded-t-[3px]"
+                  className="home-bar-rise rounded-t-[3px]"
                   style={{
                     width: 11,
                     height: b.h,
-                    background: b.me ? '#E8203A' : '#222',
+                    background: b.me
+                      ? 'linear-gradient(180deg, #FF5A6E 0%, #E8203A 55%, #B3121F 100%)'
+                      : 'linear-gradient(180deg, #3a3a3d 0%, #202022 60%, #161617 100%)',
                     boxShadow: b.me
-                      ? '0 0 12px rgba(232,32,58,0.5)'
-                      : undefined,
+                      ? '0 0 14px rgba(232,32,58,0.6), inset 0 1px 0 rgba(255,255,255,0.25)'
+                      : 'inset 0 1px 0 rgba(255,255,255,0.10)',
+                    animationDelay: `${0.15 + i * 0.12}s`,
                   }}
                 />
               ))}
@@ -1151,7 +1247,8 @@ function CityRankCard({
                 className="h-full rounded-full"
                 style={{
                   width: `${Math.round(rank.progressToNext * 100)}%`,
-                  background: '#E8203A',
+                  background: 'linear-gradient(90deg, #B3121F 0%, #E8203A 60%, #FF5A6E 100%)',
+                  boxShadow: '0 0 10px rgba(232,32,58,0.6)',
                   transition: 'width 800ms cubic-bezier(0.22, 1, 0.36, 1)',
                 }}
               />

@@ -1426,3 +1426,57 @@ html.light .brand-logo-mono {
   .splash-letter { opacity: 1; filter: none; transform: none; }
   .splash-tagline { opacity: 1; letter-spacing: 6px; }
 }
+
+/* ═══════════ HOME · premium "supercar dashboard" blocks ═══════════ */
+
+/* Subtle carbon-fibre weave overlay (fine ±45° cross-hatch). Drop as an
+   absolute inset layer inside a card; keep it low-opacity so it only
+   whispers texture over the base surface. */
+.carbon-weave {
+  background-image:
+    repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.032) 0, rgba(255, 255, 255, 0.032) 1px, transparent 1px, transparent 3px),
+    repeating-linear-gradient(135deg, rgba(0, 0, 0, 0.20) 0, rgba(0, 0, 0, 0.20) 1px, transparent 1px, transparent 3px);
+  background-size: 4px 4px;
+}
+
+/* Mini bar-chart / podium bars grow up on mount. GPU: transform only. */
+@keyframes home-bar-rise {
+  from { transform: scaleY(0.02); }
+  to   { transform: scaleY(1); }
+}
+.home-bar-rise {
+  transform-origin: bottom center;
+  animation: home-bar-rise 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Red neon glow on the F1 circuit trace. */
+.circuit-glow {
+  filter: drop-shadow(0 0 2px rgba(232, 32, 58, 0.85))
+          drop-shadow(0 0 6px rgba(232, 32, 58, 0.35));
+}
+
+/* Flip-clock digit: subtle vertical bevel + a hairline mid seam (added via
+   the ::after) to read like a mechanical race chronometer split-flap. */
+.flip-digit {
+  position: relative;
+  background: linear-gradient(180deg, #191919 0%, #0c0c0c 48%, #070707 52%, #101010 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 -6px 12px rgba(0, 0, 0, 0.6),
+    0 2px 6px rgba(0, 0, 0, 0.5);
+}
+.flip-digit::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1px;
+  transform: translateY(-0.5px);
+  background: rgba(0, 0, 0, 0.75);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-bar-rise { animation: none !important; }
+}
