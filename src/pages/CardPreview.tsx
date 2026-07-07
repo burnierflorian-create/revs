@@ -1,100 +1,65 @@
 import CollectorCardV2 from '../components/CollectorCardV2'
+import type { Rarity } from '../lib/spots'
 
-// TEMPORARY preview — Légendaire vs Commune side by side to validate the
-// card redesign direction before rolling it out to all rarities. Public
-// route (/card-preview); remove once the direction is signed off.
+// TEMPORARY preview — the full rarity ladder, to validate the redesign.
+// Public route (/card-preview); remove once signed off.
 
-const LEGENDARY = {
-  photo:
-    'https://images.unsplash.com/photo-1567808291548-fc3ee04dbcf0?w=900',
-  brand: 'Bugatti',
-  model: 'Chiron Super Sport',
-  year: 2023,
-  category: 'hypercar',
-  rarity: 'hypercar' as const,
-  serial: 12,
-  serialTotal: 500,
-  stats: { power: '1600', accel: '2.4s', vmax: '440', torque: '1600' },
-}
+const P1 = 'https://images.unsplash.com/photo-1567808291548-fc3ee04dbcf0?w=800'
+const P2 = 'https://images.unsplash.com/photo-1541348263662-e068662d82af?w=800'
+const P3 = 'https://images.unsplash.com/photo-1544829099-b9a0c07fad1a?w=800'
 
-const COMMON = {
-  photo:
-    'https://images.unsplash.com/photo-1541348263662-e068662d82af?w=900',
-  brand: 'Volkswagen',
-  model: 'Golf GTI',
-  year: 2021,
-  category: 'other',
-  rarity: 'standard' as const,
-  serial: 247,
-  serialTotal: 999,
-  stats: { power: '245', accel: '6.2s', vmax: '250', torque: '370' },
-}
+const CARDS: {
+  rarity: Rarity
+  photo: string
+  brand: string
+  model: string
+  year: number
+  category: string
+  serial: number
+  total: number
+  stats: { power: string; accel: string; vmax: string; torque: string }
+}[] = [
+  { rarity: 'standard', photo: P2, brand: 'Volkswagen', model: 'Golf GTI', year: 2021, category: 'other', serial: 247, total: 9999, stats: { power: '245', accel: '6.2s', vmax: '250', torque: '370' } },
+  { rarity: 'premium', photo: P3, brand: 'BMW', model: 'M240i', year: 2022, category: 'other', serial: 88, total: 5000, stats: { power: '374', accel: '4.3s', vmax: '250', torque: '500' } },
+  { rarity: 'performance', photo: P1, brand: 'Porsche', model: '718 Cayman GTS', year: 2023, category: 'performance', serial: 51, total: 2000, stats: { power: '400', accel: '4.0s', vmax: '293', torque: '430' } },
+  { rarity: 'exclusif', photo: P2, brand: 'Mercedes-AMG', model: 'GT 63 S', year: 2023, category: 'performance', serial: 34, total: 500, stats: { power: '639', accel: '3.2s', vmax: '315', torque: '900' } },
+  { rarity: 'supercar', photo: P3, brand: 'Lamborghini', model: 'Huracán EVO', year: 2022, category: 'supercar', serial: 19, total: 250, stats: { power: '640', accel: '2.9s', vmax: '325', torque: '600' } },
+  { rarity: 'hypercar', photo: P1, brand: 'Bugatti', model: 'Chiron Super Sport', year: 2023, category: 'hypercar', serial: 12, total: 100, stats: { power: '1600', accel: '2.4s', vmax: '440', torque: '1600' } },
+]
 
 export default function CardPreview() {
   return (
-    <div
-      style={{
-        minHeight: '100dvh',
-        background: '#0a0a0a',
-        color: '#fff',
-        padding: '28px 16px 48px',
-      }}
-    >
-      <div style={{ maxWidth: 760, margin: '0 auto' }}>
-        <h1
-          style={{
-            fontFamily: 'var(--font-display, inherit)',
-            fontSize: 22,
-            fontWeight: 900,
-            letterSpacing: '-0.02em',
-          }}
-        >
-          Cartes collector — direction
+    <div style={{ minHeight: '100dvh', background: '#0a0a0a', color: '#fff', padding: '28px 16px 60px' }}>
+      <div style={{ maxWidth: 820, margin: '0 auto' }}>
+        <h1 style={{ fontFamily: 'var(--font-display, inherit)', fontSize: 22, fontWeight: 900, letterSpacing: '-0.02em' }}>
+          Cartes collector — échelle de rareté
         </h1>
         <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.55)', marginTop: 6 }}>
-          Légendaire vs Commune. Incline le téléphone (ou glisse le doigt sur la
-          Légendaire) pour l'holo. Touche une carte pour le flip. Photos =
-          placeholders.
+          Du Commun au Légendaire. Incline le téléphone (ou glisse le doigt) sur
+          Ultra Rare / Légendaire pour l'holo. Touche une carte pour le flip.
         </p>
-
         <div
           style={{
-            display: 'flex',
+            marginTop: 28,
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))',
             gap: 22,
-            justifyContent: 'center',
-            flexWrap: 'wrap',
-            marginTop: 30,
           }}
         >
-          <div style={{ textAlign: 'center' }}>
-            <CollectorCardV2 {...LEGENDARY} width={280} />
-            <div
-              style={{
-                marginTop: 14,
-                fontSize: 12,
-                fontWeight: 800,
-                letterSpacing: '0.08em',
-                color: '#FFD700',
-              }}
-            >
-              LÉGENDAIRE
-            </div>
-          </div>
-
-          <div style={{ textAlign: 'center' }}>
-            <CollectorCardV2 {...COMMON} width={280} />
-            <div
-              style={{
-                marginTop: 14,
-                fontSize: 12,
-                fontWeight: 800,
-                letterSpacing: '0.08em',
-                color: 'rgba(255,255,255,0.6)',
-              }}
-            >
-              COMMUNE
-            </div>
-          </div>
+          {CARDS.map((c) => (
+            <CollectorCardV2
+              key={c.rarity}
+              photo={c.photo}
+              brand={c.brand}
+              model={c.model}
+              year={c.year}
+              category={c.category}
+              rarity={c.rarity}
+              serial={c.serial}
+              serialTotal={c.total}
+              stats={c.stats}
+            />
+          ))}
         </div>
       </div>
     </div>

@@ -297,6 +297,26 @@ html.light .glass {
     transform: translateY(0) scale(1) rotateY(0deg);
   }
 }
+/* Particle burst on rare/legendary reveal. Each particle sets --px/--py
+   (unit-vector end offset) inline. */
+@keyframes cardv2-particle {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 0, 0) scale(0.4);
+  }
+  15% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(
+        calc(var(--px, 0) * 1px),
+        calc(var(--py, 0) * 1px),
+        0
+      )
+      scale(1);
+  }
+}
 
 /* ─────────────────────── F1 calendar "PROCHAIN" pulse ───────────────────────
    Subtle attention-pulse used by the F1 calendar to mark the next GP.
