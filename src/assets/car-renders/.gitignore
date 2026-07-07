@@ -1,0 +1,4 @@
+# Rendus studio bruts + PNG détourés : uploadés dans Storage, pas dans git.
+*
+!.gitignore
+!README.md

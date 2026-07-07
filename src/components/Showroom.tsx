@@ -18,9 +18,7 @@ import showroomBg from '../assets/showroom.webp'
 const SPACING_RATIO = 0.58 // gap between car centres, × container width
 const MAX_VISIBLE = 3 // render this many cars each side of centre
 
-function renderKey(brand: string, model: string) {
-  return `${brand} ${model}`.trim().toLowerCase()
-}
+type RenderRow = { make: string; model: string; url: string }
 
 export default function Showroom({
   spots,
@@ -35,8 +33,8 @@ export default function Showroom({
   const [active, setActive] = useState(0)
   const [width, setWidth] = useState(0)
 
-  // Shared render library (make/model → url).
-  const [renders, setRenders] = useState<Map<string, string>>(new Map())
+  // Shared render library (detoured realistic renders, by make/model).
+  const [renders, setRenders] = useState<RenderRow[]>([])
   useEffect(() => {
     let alive = true
     supabase
@@ -44,22 +42,47 @@ export default function Showroom({
       .select('make, model, render_url')
       .then(({ data }) => {
         if (!alive || !data) return
-        const m = new Map<string, string>()
-        for (const r of data as { make: string; model: string; render_url: string }[]) {
-          m.set(renderKey(r.make, r.model), r.render_url)
-        }
-        setRenders(m)
+        setRenders(
+          (data as { make: string; model: string; render_url: string }[]).map((r) => ({
+            make: r.make.trim().toLowerCase(),
+            model: r.model.trim().toLowerCase(),
+            url: r.render_url,
+          })),
+        )
       })
     return () => {
       alive = false
     }
   }, [])
 
-  const imageFor = (s: Spot) =>
-    s.realistic_render_url ||
-    renders.get(renderKey(s.brand, s.model)) ||
-    s.photo_url ||
-    ''
+  // Match a spot to a library render: exact make+model first, else the longest
+  // library model that the spot model starts-with / contains (so a generic
+  // "Huracán" render covers "Huracán Tecnica", "Huracán Spyder", …).
+  function resolveRender(brand: string, model: string): string | null {
+    const b = brand.trim().toLowerCase()
+    const m = model.trim().toLowerCase()
+    let best: string | null = null
+    let bestLen = -1
+    for (const r of renders) {
+      if (r.make !== b) continue
+      if (m === r.model) return r.url
+      if ((m.startsWith(r.model) || m.includes(r.model)) && r.model.length > bestLen) {
+        best = r.url
+        bestLen = r.model.length
+      }
+    }
+    return best
+  }
+
+  // Resolution order: per-spot override → shared render library → raw photo.
+  // isRender = a detoured render (transparent PNG) → floats on the floor;
+  // otherwise it's a rectangular photo → framed like an exhibit.
+  function imageFor(s: Spot): { url: string; isRender: boolean } {
+    if (s.realistic_render_url) return { url: s.realistic_render_url, isRender: true }
+    const r = resolveRender(s.brand, s.model)
+    if (r) return { url: r, isRender: true }
+    return { url: s.photo_url || '', isRender: false }
+  }
 
   // Measure the container so the spacing is in real px.
   useLayoutEffect(() => {
@@ -235,7 +258,7 @@ export default function Showroom({
           const opacity = isCenter ? 1 : Math.max(0.22, 0.62 - abs * 0.2)
           const brightness = isCenter ? 1 : Math.max(0.32, 0.6 - abs * 0.12)
           const blur = isCenter ? 0 : Math.min(2.2, 0.7 + abs * 0.5)
-          const img = imageFor(s)
+          const { url: img, isRender } = imageFor(s)
           return (
             <div
               key={s.id}
@@ -268,56 +291,121 @@ export default function Showroom({
                   cursor: 'pointer',
                 }}
               >
-                {/* Car */}
-                <div
-                  style={{
-                    width: '100%',
-                    aspectRatio: '16 / 10',
-                    borderRadius: 12,
-                    overflow: 'hidden',
-                    boxShadow: isCenter
-                      ? '0 24px 60px rgba(0,0,0,0.7), 0 0 40px rgba(255,255,255,0.10)'
-                      : '0 16px 40px rgba(0,0,0,0.6)',
-                  }}
-                >
-                  {img ? (
-                    <img
-                      src={img}
-                      alt=""
-                      draggable={false}
-                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                    />
-                  ) : (
-                    <div style={{ width: '100%', height: '100%', background: '#141418' }} />
-                  )}
-                </div>
-                {/* Floor reflection */}
-                <div
-                  aria-hidden
-                  style={{
-                    width: '100%',
-                    aspectRatio: '16 / 10',
-                    marginTop: 2,
-                    transform: 'scaleY(-1)',
-                    opacity: 0.22,
-                    borderRadius: 12,
-                    overflow: 'hidden',
-                    WebkitMaskImage:
-                      'linear-gradient(to bottom, rgba(0,0,0,0.85), transparent 62%)',
-                    maskImage:
-                      'linear-gradient(to bottom, rgba(0,0,0,0.85), transparent 62%)',
-                    filter: 'blur(1px)',
-                  }}
-                >
-                  {img && (
-                    <img
-                      src={img}
-                      alt=""
-                      draggable={false}
-                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                    />
-                  )}
-                </div>
+                {isRender ? (
+                  /* Detoured render — the car floats on the floor, no frame */
+                  <>
+                    <div
+                      style={{
+                        position: 'relative',
+                        width: '100%',
+                        aspectRatio: '16 / 10',
+                      }}
+                    >
+                      {/* Soft ground shadow anchoring the car */}
+                      <div
+                        aria-hidden
+                        style={{
+                          position: 'absolute',
+                          bottom: '3%',
+                          left: '14%',
+                          right: '14%',
+                          height: '11%',
+                          borderRadius: '50%',
+                          background:
+                            'radial-gradient(ellipse at center, rgba(0,0,0,0.6), rgba(0,0,0,0.28) 45%, transparent 72%)',
+                          filter: 'blur(7px)',
+                        }}
+                      />
+                      <img
+                        src={img}
+                        alt=""
+                        draggable={false}
+                        style={{
+                          position: 'relative',
+                          width: '100%',
+                          height: '100%',
+                          objectFit: 'contain',
+                          filter: isCenter
+                            ? 'drop-shadow(0 18px 26px rgba(0,0,0,0.55))'
+                            : 'drop-shadow(0 12px 20px rgba(0,0,0,0.5))',
+                        }}
+                      />
+                    </div>
+                    {/* Floor reflection (mirrored, faded) */}
+                    <div
+                      aria-hidden
+                      style={{
+                        width: '100%',
+                        aspectRatio: '16 / 10',
+                        marginTop: '-14%',
+                        transform: 'scaleY(-1)',
+                        opacity: 0.2,
+                        WebkitMaskImage:
+                          'linear-gradient(to top, rgba(0,0,0,0.9), transparent 55%)',
+                        maskImage: 'linear-gradient(to top, rgba(0,0,0,0.9), transparent 55%)',
+                        filter: 'blur(1.5px)',
+                      }}
+                    >
+                      <img
+                        src={img}
+                        alt=""
+                        draggable={false}
+                        style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                      />
+                    </div>
+                  </>
+                ) : (
+                  /* Raw photo — framed like a museum exhibit */
+                  <>
+                    <div
+                      style={{
+                        width: '100%',
+                        aspectRatio: '16 / 10',
+                        borderRadius: 12,
+                        overflow: 'hidden',
+                        boxShadow: isCenter
+                          ? '0 24px 60px rgba(0,0,0,0.7), 0 0 40px rgba(255,255,255,0.10)'
+                          : '0 16px 40px rgba(0,0,0,0.6)',
+                      }}
+                    >
+                      {img ? (
+                        <img
+                          src={img}
+                          alt=""
+                          draggable={false}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        />
+                      ) : (
+                        <div style={{ width: '100%', height: '100%', background: '#141418' }} />
+                      )}
+                    </div>
+                    <div
+                      aria-hidden
+                      style={{
+                        width: '100%',
+                        aspectRatio: '16 / 10',
+                        marginTop: 2,
+                        transform: 'scaleY(-1)',
+                        opacity: 0.22,
+                        borderRadius: 12,
+                        overflow: 'hidden',
+                        WebkitMaskImage:
+                          'linear-gradient(to bottom, rgba(0,0,0,0.85), transparent 62%)',
+                        maskImage: 'linear-gradient(to bottom, rgba(0,0,0,0.85), transparent 62%)',
+                        filter: 'blur(1px)',
+                      }}
+                    >
+                      {img && (
+                        <img
+                          src={img}
+                          alt=""
+                          draggable={false}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        />
+                      )}
+                    </div>
+                  </>
+                )}
               </button>
             </div>
           )
