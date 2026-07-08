@@ -229,10 +229,23 @@ export default function Onboarding() {
       if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(
           () => {
+            // Remember the granted choice so no screen ever needs to re-ask.
+            try {
+              localStorage.setItem('revs_geo', '1')
+            } catch {
+              /* ignore */
+            }
             setGeoOn(true)
             goNext()
           },
-          () => goNext(),
+          () => {
+            try {
+              localStorage.setItem('revs_geo', '0')
+            } catch {
+              /* ignore */
+            }
+            goNext()
+          },
           { enableHighAccuracy: false, timeout: 10000, maximumAge: 30000 },
         )
         return

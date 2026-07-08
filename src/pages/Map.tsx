@@ -20,6 +20,7 @@ import {
   X,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { hasGeoPermission } from '../lib/geo'
 import { setPendingPhoto } from '../lib/pendingPhoto'
 import { SkeletonMap } from '../components/Skeleton'
 import {
@@ -496,18 +497,20 @@ function applySnapStyle(map: mapboxgl.Map, theme: 'dark' | 'light' = 'light') {
           type: 'fill-extrusion',
           source: buildingSource ?? 'composite',
           'source-layer': buildingSourceLayer ?? 'building',
-          minzoom: 14,
+          minzoom: 13,
           layout: { visibility: 'none' },
           paint: {
             'fill-extrusion-color': isDark ? BUILDING_3D_DARK : SNAP.building3d,
             'fill-extrusion-vertical-gradient': true,
+            // Grow height over a wider zoom range (13→16) so buildings rise
+            // gradually instead of snapping up in a narrow 14→15.5 band.
             'fill-extrusion-height': [
               'interpolate',
               ['linear'],
               ['zoom'],
-              14,
+              13,
               0,
-              15.5,
+              16,
               ['coalesce', ['get', 'render_height'], ['get', 'height'], 6],
             ],
             'fill-extrusion-base': [
@@ -516,7 +519,19 @@ function applySnapStyle(map: mapboxgl.Map, theme: 'dark' | 'light' = 'light') {
               ['get', 'min_height'],
               0,
             ],
-            'fill-extrusion-opacity': 0.95,
+            // Fade in across 13→14.5 (was a hard pop at minzoom 14) so the 3D
+            // buildings never appear/disappear abruptly on zoom.
+            'fill-extrusion-opacity': [
+              'interpolate',
+              ['linear'],
+              ['zoom'],
+              13,
+              0,
+              14.5,
+              0.92,
+            ],
+            'fill-extrusion-height-transition': { duration: 300 },
+            'fill-extrusion-opacity-transition': { duration: 300 },
           },
         } as unknown as AddLayer,
         firstRoadLineId ?? firstSymbolId,
@@ -527,16 +542,30 @@ function applySnapStyle(map: mapboxgl.Map, theme: 'dark' | 'light' = 'light') {
   }
 }
 
-// 2D = flat top-down. 3D = Snap-like tilt (50°) with a subtle terrain
-// relief + extruded buildings (great over Annecy / Genève / the Alps).
-// Pitch is eased 800ms for a smooth transition.
+// Tilt matched to zoom: a gentle tilt when zoomed out (avoids the low-zoom
+// terrain/horizon instability) ramping to the full Snap-style tilt when close
+// in — keeps 3D clean and stable at ALL zoom levels.
+function pitchForZoom(zoom: number): number {
+  const MIN_PITCH = 30
+  const MAX_PITCH = 50
+  const Z_LO = 11
+  const Z_HI = 14.5
+  const t = Math.max(0, Math.min(1, (zoom - Z_LO) / (Z_HI - Z_LO)))
+  return MIN_PITCH + (MAX_PITCH - MIN_PITCH) * t
+}
+
+// 2D = flat top-down. 3D = Snap-like tilt with a subtle terrain relief +
+// extruded buildings (great over Annecy / Genève / the Alps). Pitch is eased
+// 800ms for a smooth transition and stays matched to zoom afterwards.
 function applyMode(map: mapboxgl.Map, mode: MapMode) {
   try {
     if (mode === '3D') {
-      map.setTerrain({ source: 'mapbox-dem', exaggeration: 1.2 })
+      // Exaggeration 1.0 (was 1.2) — less dramatic relief = far more stable at
+      // low zoom, still clearly 3D over the Alps.
+      map.setTerrain({ source: 'mapbox-dem', exaggeration: 1.0 })
       if (map.getLayer('revs-3d-buildings'))
         map.setLayoutProperty('revs-3d-buildings', 'visibility', 'visible')
-      map.easeTo({ pitch: 50, duration: 800 })
+      map.easeTo({ pitch: pitchForZoom(map.getZoom()), duration: 800 })
     } else {
       map.setTerrain(null)
       if (map.getLayer('revs-3d-buildings'))
@@ -954,15 +983,18 @@ export default function MapPage() {
     // Resolve the freshest GPS fix BEFORE building the map so it opens
     // straight on the user — never a Paris flash. Paris only if the fix
     // is unavailable or takes longer than 3s.
-    function initialView(): Promise<{
+    async function initialView(): Promise<{
       center: [number, number]
       zoom: number
     }> {
+      // Only read GPS if permission is ALREADY granted — NEVER auto-prompt on
+      // map open. If not granted, open on the default view; the user grants +
+      // centres by tapping the locate-me FAB (user-initiated).
+      const granted = await hasGeoPermission()
+      if (!granted || !navigator.geolocation) {
+        return { center: PARIS, zoom: DEFAULT_ZOOM }
+      }
       return new Promise((resolve) => {
-        if (!navigator.geolocation) {
-          resolve({ center: PARIS, zoom: DEFAULT_ZOOM })
-          return
-        }
         let settled = false
         const fallback = setTimeout(() => {
           if (settled) return
@@ -1689,6 +1721,25 @@ export default function MapPage() {
     if (mapReady && mapRef.current) applyMode(mapRef.current, mode)
   }, [mode, mapReady])
 
+  // In 3D, keep the tilt matched to the zoom on every zoom change so the
+  // relief stays stable across the whole zoom range (no glitch when zooming
+  // out). No-op in 2D. Detached on mode change / unmount.
+  useEffect(() => {
+    if (!mapReady || mode !== '3D') return
+    const map = mapRef.current
+    if (!map) return
+    const onZoom = (e: mapboxgl.MapboxEvent) => {
+      // Only follow USER zoom gestures. During a programmatic flyTo/easeTo
+      // there's no originalEvent — and setPitch then would abort the fly.
+      if (!(e as { originalEvent?: unknown }).originalEvent) return
+      map.setPitch(pitchForZoom(map.getZoom()))
+    }
+    map.on('zoom', onZoom)
+    return () => {
+      map.off('zoom', onZoom)
+    }
+  }, [mode, mapReady])
+
   // ── Live user-location compass marker (Apple Plans style) ──
   // A CompassMarker instance owns the SVG marker, its rAF rotation loop
   // and the DeviceOrientation listeners. We just feed it GPS fixes from
@@ -1699,29 +1750,36 @@ export default function MapPage() {
     const map = mapRef.current
     if (!map || !navigator.geolocation) return
 
+    let cancelled = false
     let compass: CompassMarker | null = null
 
-    const watchId = navigator.geolocation.watchPosition(
-      (pos) => {
-        const lng = pos.coords.longitude
-        const lat = pos.coords.latitude
-        posRef.current = { lat, lng }
-        if (!compass) {
-          compass = new CompassMarker()
-          compass.init(map, [lng, lat])
-          userMarkerRef.current = compass
-        } else {
-          compass.updatePosition(lng, lat)
-        }
-      },
-      () => {
-        /* permission denied / unavailable → no dot, silent */
-      },
-      { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 },
-    )
-    watchIdRef.current = watchId
+    // Only start the location watch if permission is ALREADY granted — never
+    // auto-prompt on mount. The locate-me FAB handles the user-initiated grant.
+    void hasGeoPermission().then((granted) => {
+      if (cancelled || !granted) return
+      const watchId = navigator.geolocation.watchPosition(
+        (pos) => {
+          const lng = pos.coords.longitude
+          const lat = pos.coords.latitude
+          posRef.current = { lat, lng }
+          if (!compass) {
+            compass = new CompassMarker()
+            compass.init(map, [lng, lat])
+            userMarkerRef.current = compass
+          } else {
+            compass.updatePosition(lng, lat)
+          }
+        },
+        () => {
+          /* permission denied / unavailable → no dot, silent */
+        },
+        { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 },
+      )
+      watchIdRef.current = watchId
+    })
 
     return () => {
+      cancelled = true
       if (watchIdRef.current != null) {
         navigator.geolocation.clearWatch(watchIdRef.current)
         watchIdRef.current = null

@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { Car, Heart, Layers, Loader2, MessageCircle, Search as SearchIcon, SlidersHorizontal, X, Zap } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { hasGeoPermission } from '../lib/geo'
 import {
   distanceMeters,
   timeAgo,
@@ -371,12 +372,17 @@ export default function Feed() {
       }
       if (feedFilters.sort === 'nearby') {
         sideFetches.push(
-          getPosition().then((p) => {
-            userPosRef.current = p
-            if (!p) {
+          (async () => {
+            // Never auto-prompt on load — only use GPS if already granted
+            // (the 'nearby' sort is persisted, so this runs on every open).
+            if (!(await hasGeoPermission())) {
               setGeoMsg(t('feedpage.geoDisabled'))
+              return
             }
-          }),
+            const p = await getPosition()
+            userPosRef.current = p
+            if (!p) setGeoMsg(t('feedpage.geoDisabled'))
+          })(),
         )
       }
       // City filter needs profiles to resolve villes — resolve them eagerly

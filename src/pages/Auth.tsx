@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { Eye, EyeOff } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { hasGeoPermission } from '../lib/geo'
 import { translateError } from '../lib/errors'
 import { stashPendingReferral } from '../lib/referrals'
 import { useAuth } from '../hooks/useAuth'
@@ -110,23 +111,32 @@ export default function Auth() {
     }
   }, [pseudo, mode])
 
-  // On entering signup, try to auto-fill ville/pays from GPS (once).
+  // On entering signup, auto-fill ville/pays from GPS — but ONLY if the user
+  // has already granted location (never auto-prompt here; the single ask is
+  // the onboarding step). If not yet granted, the fields stay manual.
   useEffect(() => {
     if (mode !== 'signup' || geoTried || !navigator.geolocation) return
     setGeoTried(true)
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        reverseGeocode(pos.coords.latitude, pos.coords.longitude).then((r) => {
-          if (!r) return
-          setVille((cur) => cur || r.city)
-          setCountry(r.country)
-        })
-      },
-      () => {
-        /* refused → leave the fields for manual entry */
-      },
-      { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 },
-    )
+    let cancelled = false
+    void hasGeoPermission().then((granted) => {
+      if (cancelled || !granted) return
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          reverseGeocode(pos.coords.latitude, pos.coords.longitude).then((r) => {
+            if (!r) return
+            setVille((cur) => cur || r.city)
+            setCountry(r.country)
+          })
+        },
+        () => {
+          /* unavailable → leave the fields for manual entry */
+        },
+        { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 },
+      )
+    })
+    return () => {
+      cancelled = true
+    }
   }, [mode, geoTried])
 
   // Sync mode to the recovery flag — fires when Supabase event lands
