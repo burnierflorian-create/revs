@@ -65,13 +65,16 @@ body {
 }
 .stack-page {
   min-height: 100%;
-  will-change: transform, opacity;
+  /* will-change applied ONLY on the animating classes below, not permanently
+     on every routed page (permanent promotion wastes memory). */
 }
 .stack-page.push-in {
   animation: stackPushIn 260ms cubic-bezier(0.32, 0.72, 0, 1) both;
+  will-change: transform, opacity;
 }
 .stack-page.pop-in {
   animation: stackPopIn 260ms cubic-bezier(0.32, 0.72, 0, 1) both;
+  will-change: transform, opacity;
 }
 @keyframes stackPushIn {
   from {
@@ -188,7 +191,6 @@ h4 {
   border-radius: 15px;
   transform: translate3d(calc(var(--nav-i) * 100%), 0, 0);
   transition: transform 520ms var(--nav-spring);
-  will-change: transform;
   pointer-events: none;
   z-index: 0;
 }
@@ -204,6 +206,7 @@ h4 {
 }
 .liquid-nav.dragging .liquid-indicator {
   transition: none; /* 1:1 finger-follow while dragging */
+  will-change: transform; /* promote only while actively dragging */
 }
 /* Each icon-only tab. */
 .liquid-tab {

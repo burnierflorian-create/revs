@@ -257,14 +257,27 @@ export default function MainLayout() {
   // Server-side bump_last_seen() is a no-op when unauthenticated.
   useEffect(() => {
     const bump = () => void supabase.rpc('bump_last_seen')
-    bump()
-    const t = setInterval(bump, 60_000)
-    const onVis = () => {
-      if (document.visibilityState === 'visible') bump()
+    let t: ReturnType<typeof setInterval> | null = null
+    const stop = () => {
+      if (t != null) {
+        clearInterval(t)
+        t = null
+      }
     }
+    const start = () => {
+      if (t == null) t = setInterval(bump, 60_000)
+    }
+    // Only poll while visible — no background network churn off-screen.
+    const onVis = () => {
+      if (document.visibilityState === 'visible') {
+        bump()
+        start()
+      } else stop()
+    }
+    onVis()
     document.addEventListener('visibilitychange', onVis)
     return () => {
-      clearInterval(t)
+      stop()
       document.removeEventListener('visibilitychange', onVis)
     }
   }, [])

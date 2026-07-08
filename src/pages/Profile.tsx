@@ -591,6 +591,8 @@ export default function Profile() {
                           <img
                             src={badgeIcon(b.slug)}
                             alt=""
+                            loading="lazy"
+                            decoding="async"
                             className="h-9 w-9 rounded-full object-cover"
                           />
                         ) : (
@@ -861,6 +863,8 @@ export default function Profile() {
                                 <img
                                   src={icon}
                                   alt=""
+                                  loading="lazy"
+                                  decoding="async"
                                   className="h-full w-full rounded-full object-cover"
                                 />
                               ) : (

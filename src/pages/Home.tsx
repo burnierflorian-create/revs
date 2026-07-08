@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useId, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { ChevronRight } from 'lucide-react'
@@ -94,10 +94,32 @@ export default function Home() {
   )
   const [now, setNow] = useState(() => Date.now())
 
-  // 1 Hz tick — feeds the Motorsport countdown frieze.
+  // 1 Hz tick — feeds the Motorsport countdown frieze. Paused while the tab
+  // is hidden (no point re-rendering the countdown off-screen — saves battery).
   useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 1000)
-    return () => clearInterval(t)
+    let t: ReturnType<typeof setInterval> | null = null
+    const stop = () => {
+      if (t != null) {
+        clearInterval(t)
+        t = null
+      }
+    }
+    const start = () => {
+      if (t == null) t = setInterval(() => setNow(Date.now()), 1000)
+    }
+    const onVis = () => {
+      if (document.hidden) stop()
+      else {
+        setNow(Date.now())
+        start()
+      }
+    }
+    onVis()
+    document.addEventListener('visibilitychange', onVis)
+    return () => {
+      stop()
+      document.removeEventListener('visibilitychange', onVis)
+    }
   }, [])
 
   // Live community stats — refresh every 60s while on the home tab so
@@ -233,6 +255,11 @@ export default function Home() {
 
   const lvl = xpLevel(xp)
 
+  // Stable handlers so the memoised cards below don't re-render on the 1 Hz tick.
+  const goChallenges = useCallback(() => navigate('/challenges'), [navigate])
+  const goRanking = useCallback(() => navigate('/classement'), [navigate])
+  const goSettings = useCallback(() => navigate('/settings'), [navigate])
+
   const upcomingGp = GP_2026.find((g) => new Date(g.date).getTime() >= now)
   const gpDiff = upcomingGp ? new Date(upcomingGp.date).getTime() - now : 0
   const daysToNextGp = upcomingGp
@@ -326,7 +353,7 @@ export default function Home() {
         xp={xp}
         title={title}
         challenges={challenges}
-        onChallenges={() => navigate('/challenges')}
+        onChallenges={goChallenges}
       />
 
       {/* LIVE EVENTS — kept as a conditional safety surface; only renders
@@ -374,8 +401,8 @@ export default function Home() {
             rank={cityRank}
             daysToNextGp={daysToNextGp}
             spotsThisWeek={spotsThisWeek}
-            onTap={() => navigate('/classement')}
-            onSetCity={() => navigate('/settings')}
+            onTap={goRanking}
+            onSetCity={goSettings}
           />
         </div>
 
@@ -402,7 +429,7 @@ export default function Home() {
  *  "jet glass" — near-black satin at night, alabaster frost by day — so a
  *  single surface anchors the whole cockpit while honouring the dual
  *  theme (deep shadow in the dark, soft vaporous shadow in the light). */
-function CockpitWidget({
+const CockpitWidget = memo(function CockpitWidget({
   name,
   xp,
   title,
@@ -473,7 +500,7 @@ function CockpitWidget({
       <SpotterAction />
     </section>
   )
-}
+})
 
 // ─────────────────────────────── RPM GAUGES ───────────────────────────────
 
@@ -501,7 +528,13 @@ const GAUGE_COLORS = ['#E8203A', '#F0C040', '#4DA6FF']
 /** One 110px supercar-dashboard speedometer: brushed-metal frame, radial
  *  black face, 60-tick scale with a red danger zone, and a thin gradient
  *  needle that sweeps from −135° to the live % over 1.2s (ease-out). */
-function MiniSpeedometer({ pct, done }: { pct: number; done: boolean }) {
+const MiniSpeedometer = memo(function MiniSpeedometer({
+  pct,
+  done,
+}: {
+  pct: number
+  done: boolean
+}) {
   const uid = useId().replace(/:/g, '')
   const [disp, setDisp] = useState(0)
   const fromRef = useRef(0)
@@ -707,7 +740,7 @@ function MiniSpeedometer({ pct, done }: { pct: number; done: boolean }) {
       </div>
     </div>
   )
-}
+})
 
 // Local emoji + colour for a challenge, derived by reading its title /
 // brand / category — no catalogue change, no API. Brand-specific emojis
@@ -785,6 +818,8 @@ function RpmGauges({
               src={s.icon}
               alt=""
               aria-hidden
+              loading="lazy"
+              decoding="async"
               className="mt-2 h-7 w-7 rounded-lg object-cover"
             />
             <span
@@ -1068,7 +1103,7 @@ function GpCountdownCard({
  *  the number of spotters, and the XP gap to the rank just above (a clear
  *  nudge to keep spotting). First place gets a "👑 Tu domines" hero line.
  *  When the profile has no city, it invites the user to set one. */
-function CityRankCard({
+const CityRankCard = memo(function CityRankCard({
   rank,
   daysToNextGp,
   spotsThisWeek,
@@ -1268,4 +1303,4 @@ function CityRankCard({
       </button>
     </section>
   )
-}
+})

@@ -131,6 +131,15 @@ export default function Showroom({
     return { url: s.photo_url || '', isRender: false }
   }
 
+  // Resolve every car's image ONCE per (cars, renders) change instead of
+  // re-running the token matcher for every card on every render / swipe frame.
+  const imageById = useMemo(() => {
+    const m = new Map<string, { url: string; isRender: boolean }>()
+    for (const s of cars) m.set(s.id, imageFor(s))
+    return m
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cars, renders])
+
   // ── Specs for the info panel (lazy, cached in car_specs server-side) ──
   // specsMap: loaded results (CardSpecs or null=failed). requestedRef: keys
   // already in flight, so we never double-fetch. A key absent from specsMap
@@ -258,6 +267,8 @@ export default function Showroom({
         src={showroomBg}
         alt=""
         draggable={false}
+        loading="lazy"
+        decoding="async"
         style={{
           position: 'absolute',
           inset: 0,
@@ -336,7 +347,10 @@ export default function Showroom({
           const opacity = isCenter ? 1 : Math.max(0.2, 0.6 - abs * 0.2)
           const brightness = isCenter ? 1 : Math.max(0.3, 0.58 - abs * 0.12)
           const blur = isCenter ? 0 : Math.min(2.4, 0.8 + abs * 0.5)
-          const { url: img, isRender } = imageFor(s)
+          const { url: img, isRender } = imageById.get(s.id) ?? {
+            url: '',
+            isRender: false,
+          }
           return (
             <div
               key={s.id}
@@ -348,8 +362,12 @@ export default function Showroom({
                 maxWidth: CAR_MAX_WIDTH,
                 transform: `translateX(-50%) translateX(${d * spacing}px) scale(${scale})`,
                 transformOrigin: 'center bottom', // scaling keeps wheels on the floor
+                // Only transform + opacity are transitioned (GPU). `filter`
+                // (brightness/blur) is left OUT of the transition — animating
+                // blur every frame during a swipe is a heavy repaint; snapping
+                // it is imperceptible and keeps the gesture at 120fps.
                 transition:
-                  'transform 0.52s cubic-bezier(0.22,1,0.36,1), opacity 0.52s ease, filter 0.52s ease',
+                  'transform 0.52s cubic-bezier(0.22,1,0.36,1), opacity 0.52s ease',
                 opacity,
                 filter: `brightness(${brightness}) blur(${blur}px)`,
                 zIndex: 20 - abs,
@@ -412,6 +430,8 @@ export default function Showroom({
                         src={img}
                         alt=""
                         draggable={false}
+        loading="lazy"
+        decoding="async"
                         style={{
                           position: 'relative',
                           zIndex: 1,
@@ -447,6 +467,8 @@ export default function Showroom({
                           src={img}
                           alt=""
                           draggable={false}
+        loading="lazy"
+        decoding="async"
                           style={{ display: 'block', width: '100%', height: 'auto' }}
                         />
                       )}
@@ -471,6 +493,8 @@ export default function Showroom({
                           src={img}
                           alt=""
                           draggable={false}
+        loading="lazy"
+        decoding="async"
                           style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                         />
                       ) : (
@@ -500,6 +524,8 @@ export default function Showroom({
                           src={img}
                           alt=""
                           draggable={false}
+        loading="lazy"
+        decoding="async"
                           style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                         />
                       )}

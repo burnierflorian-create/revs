@@ -306,6 +306,8 @@ function BadgeSection({
                 <img
                   src={icon}
                   alt=""
+                  loading="lazy"
+                  decoding="async"
                   className="relative h-10 w-10 rounded-xl object-cover"
                   style={{
                     opacity: unlocked ? 1 : 0.3,

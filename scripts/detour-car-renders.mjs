@@ -161,8 +161,11 @@ async function detour(inputBuf, ext) {
   // Recadre le vide transparent, borne la taille, ré-encode en PNG.
   return sharp(cutBuf)
     .trim({ threshold: 12 })
-    .resize({ width: 1600, height: 1000, fit: 'inside', withoutEnlargement: true })
-    .png({ compressionLevel: 9 })
+    // Showroom displays cars ≤640 CSS px → 1100px covers retina generously.
+    .resize({ width: 1100, height: 700, fit: 'inside', withoutEnlargement: true })
+    // WebP (lossy + alpha) — 5–10× lighter than lossless PNG on these
+    // photographic renders, and much faster to decode on the swipe.
+    .webp({ quality: 82, alphaQuality: 92, effort: 5 })
     .toBuffer()
 }
 
@@ -174,7 +177,7 @@ for (const f of files) {
     continue
   }
   const ext = extname(f).toLowerCase()
-  const outName = `${slug(parsed.make)}__${slug(parsed.model)}.png`
+  const outName = `${slug(parsed.make)}__${slug(parsed.model)}.webp`
   const outPath = join(OUT_DIR, outName)
 
   let pngBuf
@@ -197,7 +200,7 @@ for (const f of files) {
     )
   }
 
-  const objectPath = `${slug(parsed.make)}/${slug(parsed.model)}.png`
+  const objectPath = `${slug(parsed.make)}/${slug(parsed.model)}.webp`
   rows.push({ ...parsed, objectPath, pngBuf })
 }
 
@@ -228,7 +231,7 @@ const dbRows = []
 for (const r of rows) {
   const up = await supabase.storage
     .from(BUCKET)
-    .upload(r.objectPath, r.pngBuf, { upsert: true, contentType: 'image/png' })
+    .upload(r.objectPath, r.pngBuf, { upsert: true, contentType: 'image/webp' })
   if (up.error) {
     console.log(`  ❌ upload ${r.make}/${r.model} : ${up.error.message}`)
     continue

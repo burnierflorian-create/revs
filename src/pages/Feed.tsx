@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { Car, Heart, Layers, Loader2, MessageCircle, Search as SearchIcon, SlidersHorizontal, X, Zap } from 'lucide-react'
@@ -152,6 +152,8 @@ export default function Feed() {
   const navigate = useNavigate()
   const [spots, setSpots] = useState<Spot[] | null>(null)
   const [profiles, setProfiles] = useState<Record<string, Prof>>({})
+  // Dedupe/group once per spots change — not on every keystroke/re-render.
+  const grouped = useMemo(() => groupSpots(spots ?? []), [spots])
   // Feed-only state — search + filters live entirely here and sort ONLY
   // the community post list. Filters persisted under their own key
   // (revs_feed_filters, distinct from the map's), restored on mount, so
@@ -567,7 +569,7 @@ export default function Feed() {
           {(() => {
             const needle = feedSearchQuery.trim().toLowerCase()
             const filtered = needle
-              ? groupSpots(spots).filter(({ primary: s }) => {
+              ? grouped.filter(({ primary: s }) => {
                   const p = profiles[s.user_id]
                   const hay = [
                     s.brand,
@@ -580,7 +582,7 @@ export default function Feed() {
                     .toLowerCase()
                   return hay.includes(needle)
                 })
-              : groupSpots(spots)
+              : grouped
             if (filtered.length === 0) {
               return (
                 <p className="px-8 py-12 text-center text-sm text-fg2">
@@ -637,7 +639,7 @@ const HEART_DIRS = [0, 45, 90, 135, 180, 225, 270, 315].map((deg, i) => {
  *  (like + count, comment + count, XP badge), tappable title block (the
  *  only path to the detail page), and a quick-comment row that opens the
  *  comments sheet. All theme-aware. */
-function FeedCard({
+const FeedCard = memo(function FeedCard({
   spot,
   prof,
   burstCount,
@@ -839,6 +841,7 @@ function FeedCard({
             src={spot.photo_url}
             alt={title}
             loading="lazy"
+            decoding="async"
             className="absolute left-0 top-0 w-full object-cover contrast-[1.03] brightness-[0.98]"
             style={{ height: '120%', willChange: 'transform' }}
           />
@@ -1060,4 +1063,4 @@ function FeedCard({
       />
     </article>
   )
-}
+})

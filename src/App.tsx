@@ -39,8 +39,21 @@ const PublicProfile = lazy(() => import('./pages/PublicProfile'))
 // TEMP — card redesign preview (remove after direction sign-off).
 const CardPreview = lazy(() => import('./pages/CardPreview'))
 
+// Elegant lazy-route placeholder — a soft skeleton of the page chrome (back
+// button, title, hero, text lines) instead of a blank flash. Pulse animates
+// opacity only (cheap, GPU-friendly).
 function StackFallback() {
-  return <div className="min-h-screen bg-bg" />
+  return (
+    <div className="min-h-screen bg-bg px-5 pt-14">
+      <div className="mx-auto max-w-md animate-pulse space-y-4">
+        <div className="h-9 w-9 rounded-full bg-fg/10" />
+        <div className="h-7 w-2/3 rounded-lg bg-fg/10" />
+        <div className="mt-2 h-44 w-full rounded-2xl bg-fg/10" />
+        <div className="h-4 w-1/2 rounded bg-fg/10" />
+        <div className="h-4 w-3/4 rounded bg-fg/10" />
+      </div>
+    </div>
+  )
 }
 
 function lazyRoute(node: React.ReactNode) {
