@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { ArrowLeft, Bell, Check, MapPin, Search, Shield } from 'lucide-react'
+import { ArrowLeft, Bell, Check, MapPin, Search } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { searchCars } from '../lib/cars'
 import { currentLang, type Lang } from '../i18n'
 
 // ─────────────────────────────────────────────────────────────────────
@@ -18,7 +19,9 @@ import { currentLang, type Lang } from '../i18n'
 // ─────────────────────────────────────────────────────────────────────
 
 const RED = '#E8203A'
-const TOTAL = 8
+// 7-step flow (the "community rules" step was removed). Last step = S_GEO,
+// which finishes the flow via advance().
+const TOTAL = 7
 
 // Step indices (kept named for readability).
 const S_LANG = 0
@@ -28,33 +31,6 @@ const S_INTERESTS = 3
 const S_SOURCE = 4
 const S_NOTIF = 5
 const S_GEO = 6
-const S_RULES = 7
-
-// Dream-car suggestions — proper nouns, identical in both languages.
-const DREAM_CARS = [
-  'Ferrari F40',
-  'Ferrari 488 Pista',
-  'Lamborghini Aventador',
-  'Lamborghini Huracán',
-  'Porsche 911 GT3 RS',
-  'Porsche 911 Turbo S',
-  'McLaren 720S',
-  'McLaren P1',
-  'Bugatti Chiron',
-  'Nissan GT-R R34',
-  'Toyota GR Supra',
-  'Mercedes-AMG GT',
-  'BMW M4 Competition',
-  'Audi R8 V10',
-  'Aston Martin Vantage',
-  'Ford Mustang GT',
-  'Chevrolet Corvette C8',
-  'Tesla Model S Plaid',
-  'Pagani Huayra',
-  'Koenigsegg Jesko',
-  'Mazda RX-7',
-  'Honda NSX',
-]
 
 const INTERESTS = [
   'supercars',
@@ -172,6 +148,12 @@ export default function Onboarding() {
     setDir('back')
     setStep((s) => Math.max(s - 1, 0))
   }
+  // Advance to the next step, or finish the onboarding on the last one — so
+  // whichever step is last (now S_GEO) closes the flow, no matter the count.
+  function advance() {
+    if (step >= TOTAL - 1) finish()
+    else goNext()
+  }
 
   function pickLang(l: Lang) {
     setLang(l)
@@ -221,7 +203,7 @@ export default function Onboarding() {
     } catch {
       /* ignore — unsupported */
     }
-    goNext()
+    advance()
   }
 
   function requestGeo() {
@@ -236,7 +218,7 @@ export default function Onboarding() {
               /* ignore */
             }
             setGeoOn(true)
-            goNext()
+            advance()
           },
           () => {
             try {
@@ -244,7 +226,7 @@ export default function Onboarding() {
             } catch {
               /* ignore */
             }
-            goNext()
+            advance()
           },
           { enableHighAccuracy: false, timeout: 10000, maximumAge: 30000 },
         )
@@ -253,7 +235,7 @@ export default function Onboarding() {
     } catch {
       /* ignore */
     }
-    goNext()
+    advance()
   }
 
   // Persist every answer + flip the completed flag, then close to the map.
@@ -281,11 +263,9 @@ export default function Onboarding() {
 
   if (!show) return null
 
-  const dreamSuggestions = (() => {
-    const q = dreamQuery.trim().toLowerCase()
-    if (!q) return DREAM_CARS.slice(0, 6)
-    return DREAM_CARS.filter((c) => c.toLowerCase().includes(q)).slice(0, 6)
-  })()
+  // Autocomplete over the full car database (src/lib/cars.ts) — so "Maserati"
+  // surfaces MC20/Ghibli/Levante…, etc.
+  const dreamSuggestions = searchCars(dreamQuery, 8)
 
   // ── Footer (primary CTA + optional secondary skip), per step ──
   function renderFooter() {
@@ -310,20 +290,20 @@ export default function Onboarding() {
 
     switch (step) {
       case S_LANG:
-        return primary(t('onboarding.ui.continue'), goNext)
+        return primary(t('onboarding.ui.continue'), advance)
       case S_FLORIAN:
-        return primary(t('onboarding.florian.cta'), goNext)
+        return primary(t('onboarding.florian.cta'), advance)
       case S_DREAM:
         return (
           <>
-            {primary(t('onboarding.ui.continue'), goNext)}
-            {!dreamCar && secondary(t('onboarding.dreamCar.skip'), goNext)}
+            {primary(t('onboarding.ui.continue'), advance)}
+            {!dreamCar && secondary(t('onboarding.dreamCar.skip'), advance)}
           </>
         )
       case S_INTERESTS:
-        return primary(t('onboarding.ui.continue'), goNext, interests.length === 0)
+        return primary(t('onboarding.ui.continue'), advance, interests.length === 0)
       case S_SOURCE:
-        return primary(t('onboarding.ui.continue'), goNext, source === null)
+        return primary(t('onboarding.ui.continue'), advance, source === null)
       case S_NOTIF:
         return (
           <>
@@ -331,9 +311,9 @@ export default function Onboarding() {
               notifOn
                 ? t('onboarding.notifications.enabled')
                 : t('onboarding.notifications.enable'),
-              notifOn ? goNext : requestNotif,
+              notifOn ? advance : requestNotif,
             )}
-            {!notifOn && secondary(t('onboarding.notifications.skip'), goNext)}
+            {!notifOn && secondary(t('onboarding.notifications.skip'), advance)}
           </>
         )
       case S_GEO:
@@ -343,13 +323,11 @@ export default function Onboarding() {
               geoOn
                 ? t('onboarding.location.enabled')
                 : t('onboarding.location.enable'),
-              geoOn ? goNext : requestGeo,
+              geoOn ? advance : requestGeo,
             )}
-            {!geoOn && secondary(t('onboarding.location.skip'), goNext)}
+            {!geoOn && secondary(t('onboarding.location.skip'), advance)}
           </>
         )
-      case S_RULES:
-        return primary(t('onboarding.rules.accept'), finish)
       default:
         return null
     }
@@ -563,40 +541,6 @@ export default function Onboarding() {
             subtitle={t('onboarding.location.subtitle')}
             centered
           />
-        )
-
-      case S_RULES:
-        return (
-          <StepShell
-            icon={<Shield className="h-8 w-8" style={{ color: RED }} />}
-            title={t('onboarding.rules.title')}
-            subtitle={t('onboarding.rules.subtitle')}
-          >
-            <div className="flex flex-col gap-3">
-              {(['respect', 'privacy', 'safety', 'authentic'] as const).map(
-                (k) => (
-                  <div
-                    key={k}
-                    className="flex items-start gap-3 rounded-2xl px-4 py-3"
-                    style={{
-                      background: 'rgba(255,255,255,0.04)',
-                      border: '1px solid rgba(255,255,255,0.1)',
-                    }}
-                  >
-                    <span
-                      className="mt-0.5 flex h-6 w-6 flex-none items-center justify-center rounded-full"
-                      style={{ background: 'rgba(232,32,58,0.16)' }}
-                    >
-                      <Check className="h-3.5 w-3.5" style={{ color: RED }} />
-                    </span>
-                    <span className="text-[13.5px] leading-snug text-white/80">
-                      {t(`onboarding.rules.items.${k}`)}
-                    </span>
-                  </div>
-                ),
-              )}
-            </div>
-          </StepShell>
         )
 
       default:
