@@ -87,21 +87,29 @@ const FALLBACK = {
 const SYSTEM_STRICT = `Tu es le moteur de détection officiel de l'application REVS. Ton rôle est d'analyser la photo d'un véhicule.
 Tu réponds UNIQUEMENT par du JSON valide, sans markdown, sans texte avant ou après.
 
-GARDE-FOU ANTI-TRICHE (conservateur — ne rejette qu'en cas de CERTITUDE) :
-Ne rejette QUE si tu es certain à 90 %+ que ce n'est PAS une vraie voiture réelle, c'est-à-dire uniquement dans ces cas flagrants :
-- une photo D'UN ÉCRAN (télé/ordi/téléphone) avec moirage marqué + bords d'écran/interface visibles,
-- une MINIATURE de jouet évidente (jante carrée en plastique, proportions enfantines, décor de bureau),
-- un DESSIN / rendu 3D / jeu vidéo manifeste,
-- une photo D'UNE AUTRE PHOTO (bords de papier/affiche visibles).
+VALIDATION AVANT IDENTIFICATION — DEUX vérifications obligatoires, dans l'ordre. Elles priment sur tout le reste : effectue-les AVANT d'identifier le modèle.
 
-NE rejette JAMAIS une vraie voiture pour ces raisons (ce sont des conditions NORMALES) :
-- carrosserie noire ou foncée, peinture brillante/vernie, chrome, reflets, éblouissement ou flash,
-- photo de nuit, faible luminosité, contre-jour, pluie, reflets de vitrine ou de flaque,
-- voiture partielle, floue, de loin, de dos ou de côté, sous un angle inhabituel.
+① Y A-T-IL UNE VRAIE VOITURE COMME SUJET ?
+Si la photo ne contient AUCUNE voiture / automobile comme sujet principal — par exemple une personne, un animal, de la nourriture, un paysage, un bâtiment ou un intérieur sans voiture, un document, un objet quelconque, ou uniquement une moto/un vélo — renvoie STRICTEMENT et rien d'autre :
+{"error":"NO_CAR_DETECTED"}
 
-RÈGLE DU DOUTE : si tu hésites, ce N'EST PAS de la triche → considère que c'est une vraie voiture et IDENTIFIE-la (n'émets pas d'erreur). Le rejet doit rester rare.
-Uniquement dans les cas flagrants ci-dessus, renvoie strictement :
-{"error":"VIRTUAL_SCREEN_DETECTED"}
+② EST-CE UNE VRAIE VOITURE PHOTOGRAPHIÉE EN VRAI, MAINTENANT ?
+Si une voiture est bien présente MAIS que ce n'est PAS une vraie voiture réelle prise en photo sur le moment, renvoie STRICTEMENT et rien d'autre :
+{"error":"INVALID_PHOTO"}
+Déclenche INVALID_PHOTO UNIQUEMENT sur des indices FIABLES de triche parmi ces cas :
+- PHOTO D'UN ÉCRAN (téléphone / ordinateur / télé / tablette) : moirage ou grille de pixels / sous-pixels RGB visibles, bord ou cadre d'écran, reflets d'écran, ET SURTOUT des éléments d'INTERFACE (barre d'état, heure/batterie/wifi, chrome de navigateur, logo/contrôles YouTube, curseur de souris, boutons de lecture, vignettes).
+- CAPTURE D'ÉCRAN (screenshot) : interface d'application ou de site web, texte en superposition, barre de statut, proportions exactes d'un écran de téléphone.
+- PHOTO D'UNE IMAGE IMPRIMÉE : affiche, magazine, brochure, poster, calendrier, livre → trame d'impression (points/halftone), reflets de papier glacé, bords ou pliures de page, texture de papier.
+- MINIATURE / JOUET / MAQUETTE : plastique brillant irréaliste, proportions de jouet, jantes moulées d'un bloc, joints de panneaux surdimensionnés, marques de moulage, vitres peintes (pas de vrai verre), contexte de bureau/table/main, macro à très faible profondeur de champ sur petit objet.
+- DESSIN / RENDU 3D / IMAGE GÉNÉRÉE (IA) / JEU VIDÉO : traits de croquis ou cel-shading, éclairage de studio trop parfait sans aucune imperfection réelle, reflets/ombres irréalistes, arrière-plan de studio artificiel, HUD de jeu, filigrane/watermark, aspect "render/artstation".
+
+TOLÉRANCE — NE JAMAIS rejeter une vraie voiture pour ces raisons (conditions NORMALES qui doivent PASSER et être identifiées) :
+- floue, de loin, mal cadrée, partielle, de dos ou de côté, angle inhabituel ;
+- nuit, sombre, contre-jour, flash, pluie, éblouissement, reflets de vitrine, de carrosserie ou de flaque ;
+- peinture noire/foncée/brillante, chrome, bruit de capteur, basse résolution, image compressée.
+Ces imperfections sont la SIGNATURE d'une vraie photo prise sur le vif → identifie la voiture normalement.
+
+RÈGLE DU DOUTE (essentielle) : le rejet doit rester RARE. Si tu hésites entre « vraie voiture de mauvaise qualité » et « triche », choisis TOUJOURS la vraie voiture et identifie-la. Ne déclenche INVALID_PHOTO ou NO_CAR_DETECTED que sur des indices FIABLES et clairement visibles — jamais sur un simple doute ni sur une mauvaise qualité de photo.
 
 ÉCHELLE DE RARETÉ — basée EXCLUSIVEMENT sur le VOLUME DE PRODUCTION MONDIAL réel du modèle. Le prix N'A AUCUNE influence sur la rareté, ne le prends JAMAIS en compte :
 - "standard"    : modèle premium classique de grande série, gros volume (Mercedes CLA, BMW Série 2, Audi A3, VW Golf).
@@ -207,6 +215,8 @@ Si une voiture est visible sur la photo, tu DOIS TOUJOURS identifier sa marque (
 - Donne toujours ta meilleure estimation de marque, même à confidence basse (25). Le champ "brand" ne peut rester générique QUE s'il n'y a réellement AUCUNE voiture sur la photo.`
 
 const SYSTEM_SIMPLE = `Tu es un expert automobile. Identifie la voiture sur la photo. La MARQUE est OBLIGATOIRE (non négociable) dès qu'une voiture est visible : ne renvoie JAMAIS une marque vide, null ou "Voiture inconnue". Si le modèle exact est incertain, renvoie la marque + "Modèle inconnu" + confidence: 20.
+
+VALIDATION D'ABORD : s'il n'y a AUCUNE voiture (personne, animal, objet, paysage…), réponds {"error":"NO_CAR_DETECTED"}. Si c'est une triche évidente — photo d'un écran, capture d'écran, photo d'une image imprimée (affiche/magazine), jouet/miniature/maquette, dessin/rendu 3D/image générée — réponds {"error":"INVALID_PHOTO"}. Mais une VRAIE voiture, même floue, sombre, de loin ou mal cadrée, doit PASSER (ne la rejette pas).
 
 Réponds UNIQUEMENT par ce JSON, rien d'autre, pas de markdown :
 {"brand":"Marque","model":"Modèle","year":2022,"color":"couleur","category":"supercar|hypercar|classic|youngtimer|JDM|other","confidence":80,"price_estimate":100000,"details_used":["…"],"valid":true,"reason":""}`
@@ -613,13 +623,18 @@ export default async function handler(req, res) {
       // photos-of-photos. Surface that as a hard rejection so the
       // frontend bounces the publish flow.
       if (parsed && typeof parsed.error === 'string' && parsed.error) {
+        const code = parsed.error
+        const reason =
+          code === 'NO_CAR_DETECTED'
+            ? 'Aucune voiture détectée, réessaie avec une vraie voiture.'
+            : code === 'INVALID_PHOTO' || code === 'VIRTUAL_SCREEN_DETECTED'
+              ? 'Photo non valide, prends une vraie voiture en photo.'
+              : `Image refusée (${code}).`
         return sendJson(res, {
           ...FALLBACK,
           valid: false,
-          reason:
-            parsed.error === 'VIRTUAL_SCREEN_DETECTED'
-              ? 'Image suspecte détectée (écran, jouet ou photo de photo). Prends ta photo en conditions réelles.'
-              : `Image refusée (${parsed.error}).`,
+          reason,
+          error_code: code,
         })
       }
 
