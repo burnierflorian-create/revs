@@ -24,6 +24,7 @@ import { getCurrentPositionSafe } from '../lib/geo'
 import { hapticError, hapticHeartbeat, hapticSuccess } from '../lib/haptic'
 import { maybePromptPush, myPseudo, notifyPush } from '../lib/push'
 import { brandSlugFor, getBrand } from '../lib/brands'
+import { searchCars, modelsForMake, findMake } from '../lib/cars'
 import { Skeleton } from '../components/Skeleton'
 import CollectorCard from '../components/CollectorCard'
 import type { Spot } from '../lib/spots'
@@ -970,7 +971,13 @@ export default function NewSpot() {
 
           <div className="space-y-4">
             <Field label={t('newspot.fieldBrand')} value={brand} onChange={setBrand} />
-            <Field label={t('newspot.fieldModel')} value={model} onChange={setModel} />
+            <ModelField
+              label={t('newspot.fieldModel')}
+              brand={brand}
+              model={model}
+              onModel={setModel}
+              onBrand={setBrand}
+            />
             <Field
               label={t('newspot.fieldYear')}
               value={year}
@@ -1136,6 +1143,97 @@ function Field({
         className="w-full rounded-2xl bg-card px-4 py-3.5 text-fg outline-none focus:border-accent"
         style={{ border: '1px solid var(--color-border)' }}
       />
+    </div>
+  )
+}
+
+/** Model field with live autocomplete over the car catalogue (src/lib/cars.ts).
+ *  If a brand is set, it suggests that make's models (tap → fills the model).
+ *  If not, it searches the whole DB as "Make Model" (tap → fills brand + model).
+ *  Typing "Maserati" in Brand then opening Model lists MC20, Ghibli, Levante… */
+function ModelField({
+  label,
+  brand,
+  model,
+  onModel,
+  onBrand,
+}: {
+  label: string
+  brand: string
+  model: string
+  onModel: (v: string) => void
+  onBrand: (v: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const hasMake = !!findMake(brand)
+  const suggestions = useMemo(() => {
+    if (hasMake) {
+      return modelsForMake(brand, model, 6).map((m) => ({
+        label: m,
+        make: '',
+        model: m,
+      }))
+    }
+    return searchCars(model, 6).map((s) => {
+      const i = s.indexOf(' ')
+      return {
+        label: s,
+        make: i > 0 ? s.slice(0, i) : s,
+        model: i > 0 ? s.slice(i + 1) : '',
+      }
+    })
+  }, [brand, model, hasMake])
+
+  // Don't show the list when the value already equals the only suggestion.
+  const showList =
+    open &&
+    suggestions.length > 0 &&
+    !(suggestions.length === 1 && suggestions[0].model === model)
+
+  return (
+    <div className="relative space-y-2">
+      <label className="label-up text-[10px] text-fg2">{label}</label>
+      <input
+        value={model}
+        autoComplete="off"
+        onChange={(e) => {
+          onModel(e.target.value)
+          setOpen(true)
+        }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => window.setTimeout(() => setOpen(false), 150)}
+        className="w-full rounded-2xl bg-card px-4 py-3.5 text-fg outline-none focus:border-accent"
+        style={{ border: '1px solid var(--color-border)' }}
+      />
+      {showList && (
+        <div
+          className="absolute left-0 right-0 top-full z-20 mt-1 max-h-56 overflow-y-auto rounded-2xl bg-card py-1 shadow-xl"
+          style={{ border: '1px solid var(--color-border)' }}
+        >
+          {suggestions.map((s) => (
+            <button
+              key={s.label}
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => {
+                if (s.make) onBrand(s.make)
+                onModel(s.model || s.label)
+                setOpen(false)
+              }}
+              className="tappable block w-full px-4 py-2.5 text-left text-sm text-fg transition-colors hover:bg-fg/5"
+            >
+              {s.make ? (
+                <>
+                  <span className="text-fg2">{s.make} </span>
+                  <span className="font-semibold">{s.model}</span>
+                </>
+              ) : (
+                <span className="font-semibold">{s.model}</span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

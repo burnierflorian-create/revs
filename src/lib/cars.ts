@@ -118,3 +118,26 @@ export function searchCars(query: string, limit = 8): string[] {
   )
   return out.slice(0, limit).map((r) => r.label)
 }
+
+// Resolve a free-typed brand to a canonical make key ("mercedes-amg" →
+// "Mercedes", "citroen" → "Citroën"). Exact, then prefix, then contains.
+export function findMake(brand: string): string | null {
+  const b = norm(brand)
+  if (!b) return null
+  return (
+    CAR_MAKES.find((m) => norm(m) === b) ??
+    CAR_MAKES.find((m) => norm(m).startsWith(b) || b.startsWith(norm(m))) ??
+    CAR_MAKES.find((m) => norm(m).includes(b) || b.includes(norm(m))) ??
+    null
+  )
+}
+
+// Models of a given make, optionally filtered by a typed query. Empty if the
+// make isn't in the DB.
+export function modelsForMake(brand: string, query = '', limit = 8): string[] {
+  const key = findMake(brand)
+  if (!key) return []
+  const q = norm(query)
+  const models = CARS[key]
+  return (q ? models.filter((m) => norm(m).includes(q)) : models).slice(0, limit)
+}
