@@ -601,6 +601,7 @@ export default async function handler(req, res) {
     { system: SYSTEM_MINIMAL, max: 250 },
   ]
   let lastRawText = ''
+  let lastErr = '' // temp diagnostic (surfaced only with ?debug=1)
   for (let i = 0; i < attempts.length; i += 1) {
     try {
       const r = await callClaude(
@@ -666,6 +667,7 @@ export default async function handler(req, res) {
         return sendJson(res, result)
       }
     } catch (e) {
+      lastErr = e?.message ?? String(e)
       console.error(`[identify-car] attempt ${i + 1} threw:`, e?.message ?? e)
       // Continue to next attempt unless we're out.
     }
@@ -680,5 +682,11 @@ export default async function handler(req, res) {
 
   // Absolute last resort — the form still auto-fills with "Inconnue /
   // Modèle inconnu" and the user just edits.
+  if (req.query && req.query.debug === '1') {
+    return sendJson(res, {
+      ...FALLBACK,
+      _debug: { lastErr, rawLen: lastRawText.length, raw: lastRawText.slice(0, 400) },
+    })
+  }
   return sendJson(res, FALLBACK)
 }
