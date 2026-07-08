@@ -700,6 +700,8 @@
     "tapPhotoToChange": "Tap the photo to change it (camera or gallery)",
     "pseudo": "Username",
     "ville": "City",
+    "dreamCar": "Dream car",
+    "dreamCarPlaceholder": "e.g. Ferrari F40, Porsche 911 GT3…",
     "saveProfile": "Save",
     "newEmail": "New email",
     "newEmailPlaceholder": "new@example.com",

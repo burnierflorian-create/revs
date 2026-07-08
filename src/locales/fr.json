@@ -700,6 +700,8 @@
     "tapPhotoToChange": "Touche la photo pour la changer (caméra ou galerie)",
     "pseudo": "Pseudo",
     "ville": "Ville",
+    "dreamCar": "Voiture de rêve",
+    "dreamCarPlaceholder": "Ex : Ferrari F40, Porsche 911 GT3…",
     "saveProfile": "Sauvegarder",
     "newEmail": "Nouvel e-mail",
     "newEmailPlaceholder": "nouveau@example.com",

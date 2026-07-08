@@ -199,6 +199,7 @@ export default function Settings() {
   const [email, setEmail] = useState('')
   const [pseudo, setPseudo] = useState('')
   const [ville, setVille] = useState('')
+  const [dreamCar, setDreamCar] = useState('')
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [avatarFile, setAvatarFile] = useState<Blob | null>(null)
   // Object URL of the just-picked file while the crop modal is open.
@@ -424,7 +425,7 @@ export default function Settings() {
         await Promise.all([
           supabase
             .from('profiles')
-            .select('pseudo, ville, avatar, is_public, role, garage_brand, instagram, tiktok')
+            .select('pseudo, ville, avatar, is_public, role, garage_brand, instagram, tiktok, dream_car')
             .eq('user_id', user.id)
             .maybeSingle(),
           supabase
@@ -442,6 +443,9 @@ export default function Settings() {
       if (prof) {
         setPseudo(prof.pseudo ?? '')
         setVille(prof.ville ?? '')
+        setDreamCar(
+          (prof as { dream_car?: string | null }).dream_car ?? '',
+        )
         setAvatarUrl(prof.avatar ?? null)
         setIsPublic(prof.is_public ?? true)
         setRole((prof.role as string | undefined) ?? 'user')
@@ -592,7 +596,13 @@ export default function Settings() {
         avatar = `${pub.publicUrl}?v=${Date.now()}`
       }
       const { error } = await supabase.from('profiles').upsert(
-        { user_id: userId, pseudo: pseudo.trim(), ville: ville.trim(), avatar },
+        {
+          user_id: userId,
+          pseudo: pseudo.trim(),
+          ville: ville.trim(),
+          dream_car: dreamCar.trim() || null,
+          avatar,
+        },
         { onConflict: 'user_id' },
       )
       if (error) {
@@ -1088,6 +1098,18 @@ export default function Settings() {
           maxLength={48}
           onChange={(e) => setVille(e.target.value)}
           className="w-full rounded-lg bg-fg/5 px-3 py-3 text-fg outline-none focus:ring-1 focus:ring-accent"
+        />
+      </div>
+      <div className="space-y-2">
+        <label className="text-[11px] uppercase tracking-widest text-fg/40">
+          {t('settingspage.dreamCar')}
+        </label>
+        <input
+          value={dreamCar}
+          maxLength={60}
+          placeholder={t('settingspage.dreamCarPlaceholder')}
+          onChange={(e) => setDreamCar(e.target.value)}
+          className="w-full rounded-lg bg-fg/5 px-3 py-3 text-fg placeholder-fg/30 outline-none focus:ring-1 focus:ring-accent"
         />
       </div>
       <button
