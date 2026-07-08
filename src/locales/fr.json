@@ -342,6 +342,9 @@
       "days_other": "{{count}} jours",
       "days_one": "{{count}} jour"
     },
+    "dreamCar": {
+      "label": "Voiture de rêve"
+    },
     "stats": {
       "spots": "spots",
       "brands": "marques",

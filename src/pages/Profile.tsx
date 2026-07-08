@@ -49,6 +49,7 @@ export default function Profile() {
   const [pseudo, setPseudo] = useState('Spotter')
   const [ville, setVille] = useState('')
   const [title, setTitle] = useState<string | null>(null)
+  const [dreamCar, setDreamCar] = useState<string | null>(null)
   const [avatar, setAvatar] = useState<string | null>(null)
   const [spots, setSpots] = useState<Spot[]>([])
   const [uniqueBrands, setUniqueBrands] = useState(0)
@@ -119,7 +120,7 @@ export default function Profile() {
           supabase.rpc('my_xp'),
           supabase
             .from('profiles')
-            .select('pseudo, ville, avatar, created_at, title')
+            .select('pseudo, ville, avatar, created_at, title, dream_car')
             .eq('user_id', user.id)
             .maybeSingle(),
           supabase
@@ -169,6 +170,10 @@ export default function Profile() {
       )
       setVille(profRes.data?.ville ?? '')
       setTitle((profRes.data as { title?: string | null } | null)?.title ?? null)
+      setDreamCar(
+        (profRes.data as { dream_car?: string | null } | null)?.dream_car?.trim() ||
+          null,
+      )
       setAvatar(profRes.data?.avatar ?? null)
       setSpots(mySpots)
       setUniqueBrands(
@@ -497,6 +502,23 @@ export default function Profile() {
                 }}
               >
                 🔥 {t('profilepage.streak.days', { count: streak })}
+              </span>
+            </div>
+          )}
+
+          {/* Dream car — the model chosen at onboarding (profiles.dream_car). */}
+          {dreamCar && (
+            <div className="mt-2.5 flex justify-center">
+              <span
+                className="inline-flex max-w-[86%] items-center gap-1.5 rounded-full px-3 py-1 text-[12px]"
+                style={{
+                  background: 'rgb(var(--color-fg) / 0.05)',
+                  border: '1px solid rgb(var(--color-fg) / 0.12)',
+                }}
+              >
+                <span aria-hidden>🏁</span>
+                <span className="text-fg2">{t('profilepage.dreamCar.label')}</span>
+                <span className="truncate font-bold text-fg">{dreamCar}</span>
               </span>
             </div>
           )}

@@ -342,6 +342,9 @@
       "days_other": "{{count}} days",
       "days_one": "{{count}} day"
     },
+    "dreamCar": {
+      "label": "Dream car"
+    },
     "stats": {
       "spots": "spots",
       "brands": "brands",
