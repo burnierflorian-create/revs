@@ -82,6 +82,18 @@ const POPULAR = [
 
 export const CAR_MAKES = Object.keys(CARS).sort()
 
+// Common makes surfaced when the brand field is focused but empty.
+const POPULAR_MAKES = [
+  'Ferrari',
+  'Lamborghini',
+  'Porsche',
+  'Mercedes',
+  'BMW',
+  'Audi',
+  'McLaren',
+  'Maserati',
+]
+
 const norm = (s: string) =>
   s.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
 
@@ -117,6 +129,20 @@ export function searchCars(query: string, limit = 8): string[] {
     (a, b) => b.score - a.score || a.idx - b.idx || a.label.localeCompare(b.label),
   )
   return out.slice(0, limit).map((r) => r.label)
+}
+
+// Autocomplete over the make list. Empty query → popular makes. Prefix
+// matches rank before contains, then alphabetical.
+export function searchMakes(query: string, limit = 8): string[] {
+  const q = norm(query)
+  if (!q) return POPULAR_MAKES.slice(0, limit)
+  return CAR_MAKES.filter((m) => norm(m).includes(q))
+    .sort((a, b) => {
+      const as = norm(a).startsWith(q) ? 0 : 1
+      const bs = norm(b).startsWith(q) ? 0 : 1
+      return as - bs || a.localeCompare(b)
+    })
+    .slice(0, limit)
 }
 
 // Resolve a free-typed brand to a canonical make key ("mercedes-amg" →
