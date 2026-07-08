@@ -1263,56 +1263,139 @@ html.light .brand-logo-mono {
 }
 
 /* ── #6 Splash screen ── */
-.splash-screen {
+/* ── Launch splash: supercar speed intro (GPU: transform/opacity only) ── */
+.rvsplash {
   position: fixed;
   inset: 0;
   z-index: 100000;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 14px;
-  background: #0a0a0a;
-  animation: splash-out 0.5s ease-in forwards;
-  animation-delay: 2s;
+  overflow: hidden;
+  background: radial-gradient(120% 90% at 50% 55%, #141416 0%, #08080a 55%, #050506 100%);
+  animation: rvsplash-out 0.4s ease-in 1.92s forwards;
+  will-change: opacity;
 }
-.splash-logo {
+@keyframes rvsplash-out {
+  to { opacity: 0; visibility: hidden; }
+}
+
+/* red horizon glow that flares as the car passes */
+.rvsplash-glow {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 150%;
+  height: 60%;
+  transform: translate(-50%, -50%) scaleX(0.4);
+  background: radial-gradient(50% 50% at 50% 50%, rgba(232, 32, 58, 0.28), rgba(232, 32, 58, 0.06) 45%, transparent 70%);
+  opacity: 0;
+  animation: rvsplash-glow 1.7s ease-out 0.2s both;
+  will-change: transform, opacity;
+}
+@keyframes rvsplash-glow {
+  0% { opacity: 0; transform: translate(-50%, -50%) scaleX(0.4); }
+  35% { opacity: 1; transform: translate(-50%, -50%) scaleX(1); }
+  100% { opacity: 0.35; transform: translate(-50%, -50%) scaleX(1.12); }
+}
+
+/* rushing speed lines (world streaks past the left→right car) */
+.rvsplash-lines { position: absolute; inset: 0; }
+.rvsplash-line {
+  position: absolute;
+  left: 0;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.85), rgba(255, 90, 110, 0.7) 45%, transparent);
+  animation: rvsplash-line 0.5s linear both;
+  will-change: transform, opacity;
+}
+@keyframes rvsplash-line {
+  0% { transform: translateX(122vw); opacity: 0; }
+  15% { opacity: 1; }
+  85% { opacity: 1; }
+  100% { transform: translateX(-70vw); opacity: 0; }
+}
+
+/* REVS revealed in the wake */
+.rvsplash-word {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
   display: flex;
   font-family: var(--font-display, inherit);
   font-weight: 900;
-  font-size: 56px;
+  font-size: clamp(48px, 16vw, 92px);
   letter-spacing: -0.04em;
   color: #fff;
-  animation: splash-pulse 0.5s ease-in-out 0.5s;
 }
-.splash-letter {
+.rvsplash-letter {
   display: inline-block;
   opacity: 0;
-  filter: blur(8px);
-  transform: translateX(300px);
-  animation: splash-letter-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  transform: translateX(-30px);
+  filter: blur(10px);
+  text-shadow: 0 0 24px rgba(232, 32, 58, 0.55), 0 4px 30px rgba(0, 0, 0, 0.6);
+  animation: rvsplash-letter 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+  will-change: transform, opacity, filter;
 }
-@keyframes splash-letter-in {
-  to { opacity: 1; filter: blur(0); transform: translateX(0); }
+@keyframes rvsplash-letter {
+  to { opacity: 1; transform: translateX(0); filter: blur(0); }
 }
-@keyframes splash-pulse {
-  0%, 100% { transform: scale(1); }
-  50%      { transform: scale(1.05); }
+/* a bright glint sweeping across the word once it's revealed */
+.rvsplash-glint {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(105deg, transparent 42%, rgba(255, 255, 255, 0.5) 50%, transparent 58%);
+  mix-blend-mode: screen;
+  transform: translateX(-130%);
+  animation: rvsplash-glint 0.7s ease-in-out 1.2s both;
+  pointer-events: none;
 }
-.splash-tagline {
-  display: flex;
+@keyframes rvsplash-glint {
+  to { transform: translateX(130%); }
+}
+.rvsplash-tag {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, calc(-50% + clamp(40px, 11vw, 74px)));
   color: #E8203A;
   font-weight: 800;
-  font-size: 13px;
-  letter-spacing: 0;
+  font-size: 12px;
+  letter-spacing: 2px;
   opacity: 0;
-  animation: splash-tagline-in 0.5s ease-out 1s forwards;
+  animation: rvsplash-tag 0.5s ease-out 1.35s both;
 }
-@keyframes splash-tagline-in {
-  to { opacity: 1; letter-spacing: 8px; }
+@keyframes rvsplash-tag {
+  to { opacity: 0.9; letter-spacing: 9px; }
 }
-@keyframes splash-out {
-  to { opacity: 0; visibility: hidden; }
+
+/* the car — tears left→right; trailing ghosts = motion blur */
+.rvsplash-car {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 46%;
+  max-width: 460px;
+  aspect-ratio: 340 / 128;
+  transform: translate(-62vw, -50%);
+  animation: rvsplash-car 1.05s cubic-bezier(0.5, 0, 0.25, 1) 0.1s both;
+  will-change: transform;
+}
+@keyframes rvsplash-car {
+  0% { transform: translate(-62vw, -50%); }
+  100% { transform: translate(138vw, -50%); }
+}
+.rvsplash-car > span { position: absolute; inset: 0; }
+.rvsplash-ghost-1 { transform: translateX(-8%); opacity: 0.28; filter: blur(1px); }
+.rvsplash-ghost-2 { transform: translateX(-19%); opacity: 0.15; filter: blur(2px); }
+.rvsplash-ghost-3 { transform: translateX(-32%); opacity: 0.08; filter: blur(3px); }
+.rvsplash-underglow {
+  left: 8%;
+  right: 4%;
+  bottom: 0;
+  top: auto !important;
+  height: 34%;
+  background: radial-gradient(ellipse at 50% 100%, rgba(232, 32, 58, 0.55), transparent 70%);
+  filter: blur(6px);
 }
 
 /* ── #7 Badge unlocked notification ── */
@@ -1417,19 +1500,13 @@ html.light .brand-logo-mono {
 @media (prefers-reduced-motion: reduce) {
   .feed-mini-heart,
   .hot-zone-ring,
-  .splash-screen,
-  .splash-logo,
-  .splash-letter,
-  .splash-tagline,
   .badge-unlocked,
   .badge-unlocked-emoji::after,
   .liquid-xp-fill,
   .liquid-xp-bubble {
     animation: none !important;
   }
-  /* Keep the splash readable (static) instead of mid-animation. */
-  .splash-letter { opacity: 1; filter: none; transform: none; }
-  .splash-tagline { opacity: 1; letter-spacing: 6px; }
+  /* The splash component doesn't mount at all under reduced motion. */
 }
 
 /* ═══════════ HOME · premium "supercar dashboard" blocks ═══════════ */
