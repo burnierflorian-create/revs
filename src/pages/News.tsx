@@ -6,9 +6,9 @@ import { Skeleton } from '../components/Skeleton'
 import { categoryBadge } from '../lib/categoryStyle'
 
 // News is fetched ONLY by the once-daily server cron (vercel.json →
-// /api/fetch-news at 06:00 UTC). The client never triggers a fetch — it
-// just reads the table. "NOUVEAU" badge for articles published in the
-// last hour.
+// /api/fetch-news, gated to 06:00 Europe/Paris). The client never triggers a
+// fetch — it just reads the table + news_meta.last_fetched_at. "NOUVEAU"
+// badge for articles published in the last hour.
 const NEW_MS = 60 * 60 * 1000
 
 function newestStamp(list: { created_at: string }[]): string | null {
@@ -54,6 +54,9 @@ function fallbackImg(cat: string): string {
 export default function News({ categories }: { categories: string[] }) {
   const { t } = useTranslation()
   const [items, setItems] = useState<NewsItem[] | null>(null)
+  // Real last-fetch time (written by the 06:00 Paris cron into news_meta) —
+  // the single source of truth for the "Mis à jour il y a X" label.
+  const [lastFetched, setLastFetched] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const [pull, setPull] = useState(0)
   const startY = useRef<number | null>(null)
@@ -61,27 +64,34 @@ export default function News({ categories }: { categories: string[] }) {
   const load = useCallback(async (initial = false, silent = false) => {
     if (initial) setItems(null)
     else if (!silent) setRefreshing(true)
-    // Show EVERY article in the table (retention is handled server-side by
-    // the daily cron's 50-article cap), newest first — not filtered by an
-    // expiry window, so the tab always lists the full current set.
-    const { data, error } = await supabase
-      .from('news')
-      .select('*')
-      .order('published_at', { ascending: false, nullsFirst: false })
-      .order('created_at', { ascending: false })
-      .limit(50)
-    if (error) console.error('news fetch failed:', error)
-    setItems((data ?? []) as NewsItem[])
+    // Pure DB reads — the client NEVER triggers an RSS fetch (that endpoint is
+    // cron-only). Show EVERY article, newest first, plus the cron's real
+    // last-fetch timestamp.
+    const [newsRes, metaRes] = await Promise.all([
+      supabase
+        .from('news')
+        .select('*')
+        .order('published_at', { ascending: false, nullsFirst: false })
+        .order('created_at', { ascending: false })
+        .limit(50),
+      supabase
+        .from('news_meta')
+        .select('last_fetched_at')
+        .eq('id', 'singleton')
+        .maybeSingle(),
+    ])
+    if (newsRes.error) console.error('news fetch failed:', newsRes.error)
+    setItems((newsRes.data ?? []) as NewsItem[])
+    setLastFetched(
+      (metaRes.data?.last_fetched_at as string | undefined) ?? null,
+    )
     if (!initial && !silent) setRefreshing(false)
   }, [])
 
+  // Read once on mount. No polling interval — news only ever changes at the
+  // daily 06:00 Paris cron, and it's served as-is for the rest of the day.
   useEffect(() => {
     load(true)
-    // Re-read the table every 30 min so a tab left open picks up the
-    // cron's daily refresh. This only READS the DB — it never triggers a
-    // server fetch.
-    const id = window.setInterval(() => load(false), 30 * 60 * 1000)
-    return () => window.clearInterval(id)
   }, [load])
 
   const PULL_THRESHOLD = 70
@@ -142,7 +152,9 @@ export default function News({ categories }: { categories: string[] }) {
       <p className="px-1 pb-3 pt-1 text-[11px] italic text-white/35">
         {items && items.length > 0
           ? t('discoverpage.news.updated', {
-              time: timeAgo(newestStamp(items) ?? items[0].created_at).toUpperCase(),
+              time: timeAgo(
+                lastFetched ?? newestStamp(items) ?? items[0].created_at,
+              ).toUpperCase(),
             })
           : ''}
       </p>

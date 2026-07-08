@@ -554,6 +554,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return
   }
 
+  // Exactly once a day at 06:00 Europe/Paris. Vercel crons are UTC-only and
+  // can't express a DST-shifting local time, so vercel.json fires this at BOTH
+  // 04:00 and 05:00 UTC; only the fire that is 06:00 in Paris does real work
+  // (04:00 UTC in summer / CEST, 05:00 UTC in winter / CET). The other fire
+  // no-ops here. `force`/`purge` bypass the gate for manual maintenance.
+  if (isCron && !force && req.query.purge !== '1' && req.query.purge_en !== '1') {
+    const parisHour =
+      Number(
+        new Intl.DateTimeFormat('en-GB', {
+          timeZone: 'Europe/Paris',
+          hour: '2-digit',
+          hour12: false,
+        }).format(new Date()),
+      ) % 24
+    if (parisHour !== 6) {
+      res.status(200).json({ skipped: true, reason: 'not_0600_paris', parisHour })
+      return
+    }
+  }
+
   // Manual maintenance levers (cron path stays non-destructive):
   //   ?purge=1     → wipes the entire news table before repopulating
   //   ?purge_en=1  → wipes ONLY rows whose title/summary still looks
@@ -902,11 +922,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     trimmed = (await trimBucket(true)) + (await trimBucket(false))
   }
 
+  // Stamp the real last-fetch time — the single source of truth the client
+  // reads for the "Mis à jour il y a X" label (correct even on days with no
+  // new articles, since the fetch still ran at 06:00 Paris).
+  const lastFetchedAt = new Date().toISOString()
+  const { error: metaError } = await admin
+    .from('news_meta')
+    .upsert({ id: 'singleton', last_fetched_at: lastFetchedAt })
+  if (metaError) console.error('news_meta stamp failed:', metaError)
+
   const { count: tableTotal, error: countError } = await admin
     .from('news')
     .select('*', { count: 'exact', head: true })
 
   res.status(200).json({
+    lastFetchedAt,
     purged,
     purgedEn,
     expired,

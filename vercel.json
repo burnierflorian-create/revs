@@ -2,7 +2,8 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }],
   "crons": [
-    { "path": "/api/fetch-news", "schedule": "0 6 * * *" },
+    { "path": "/api/fetch-news?tz=cest", "schedule": "0 4 * * *" },
+    { "path": "/api/fetch-news?tz=cet", "schedule": "0 5 * * *" },
     { "path": "/api/cron-notify", "schedule": "0 17 * * *" },
     { "path": "/api/cron-notify?action=stats", "schedule": "30 3 * * *" },
     { "path": "/api/cron-notify?action=refresh-prices", "schedule": "0 4 1 * *" },
