@@ -1256,6 +1256,11 @@ html.light .brand-logo-mono {
   0%   { transform: scale(0);   opacity: 0.4; }
   100% { transform: scale(1.1); opacity: 0; }
 }
+/* Freeze the radar pulse while the map pans/zooms — no decorative compositing
+   during a gesture (the marker container gets .map-moving on movestart). */
+.map-moving .hot-zone-ring {
+  animation-play-state: paused;
+}
 
 /* ── #6 Splash screen ── */
 .splash-screen {

@@ -1503,15 +1503,24 @@ export default function MapPage() {
           updateMarkers()
         })
       }
-      map.on('move', scheduleSync)
+      // Sync markers ONLY when the camera settles — NEVER per-frame during a
+      // pan/zoom gesture. Mapbox already GPU-transforms the existing markers
+      // while moving; re-querying features + diffing the DOM on every frame
+      // (the old 'move'/'zoom' listeners) was the main pan/zoom jank. 'moveend'
+      // covers the end of pan AND zoom; 'idle' covers programmatic settles.
       map.on('moveend', scheduleSync)
-      map.on('zoom', scheduleSync)
       map.on('idle', scheduleSync)
       map.on('sourcedata', (e) => {
         if (e.sourceId === 'spots' && map.isSourceLoaded('spots'))
           scheduleSync()
       })
       scheduleSync()
+
+      // Pause the decorative hot-zone "radar" animations while the map moves —
+      // they're DOM markers repositioned + composited every frame otherwise.
+      // A single cheap class toggle (CSS pauses animation-play-state).
+      map.on('movestart', () => containerEl.classList.add('map-moving'))
+      map.on('moveend', () => containerEl.classList.remove('map-moving'))
 
       // Fetch new spots when the viewport changes (debounced).
       let fetchTimer: ReturnType<typeof setTimeout> | null = null
@@ -1721,22 +1730,24 @@ export default function MapPage() {
     if (mapReady && mapRef.current) applyMode(mapRef.current, mode)
   }, [mode, mapReady])
 
-  // In 3D, keep the tilt matched to the zoom on every zoom change so the
-  // relief stays stable across the whole zoom range (no glitch when zooming
-  // out). No-op in 2D. Detached on mode change / unmount.
+  // In 3D, match the tilt to the zoom — but ONLY once the zoom gesture ENDS,
+  // eased smoothly. Never per-frame: setPitch on every zoom event recomputes
+  // the camera each frame and was a major source of zoom jank. No-op in 2D.
   useEffect(() => {
     if (!mapReady || mode !== '3D') return
     const map = mapRef.current
     if (!map) return
-    const onZoom = (e: mapboxgl.MapboxEvent) => {
-      // Only follow USER zoom gestures. During a programmatic flyTo/easeTo
-      // there's no originalEvent — and setPitch then would abort the fly.
+    const onZoomEnd = (e: mapboxgl.MapboxEvent) => {
+      // User gestures only (a programmatic flyTo/easeTo has no originalEvent
+      // and sets its own pitch — don't fight it).
       if (!(e as { originalEvent?: unknown }).originalEvent) return
-      map.setPitch(pitchForZoom(map.getZoom()))
+      const target = pitchForZoom(map.getZoom())
+      if (Math.abs(map.getPitch() - target) < 1) return
+      map.easeTo({ pitch: target, duration: 240 })
     }
-    map.on('zoom', onZoom)
+    map.on('zoomend', onZoomEnd)
     return () => {
-      map.off('zoom', onZoom)
+      map.off('zoomend', onZoomEnd)
     }
   }, [mode, mapReady])
 
