@@ -30,7 +30,7 @@ export default defineConfig({
         name: 'revs',
         short_name: 'revs',
         description: 'Spotte les supercars autour de toi',
-        theme_color: '#E63946',
+        theme_color: '#E8203A',
         background_color: '#0A0A0A',
         display: 'standalone',
         orientation: 'portrait',

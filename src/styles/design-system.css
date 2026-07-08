@@ -1314,28 +1314,55 @@ html.light .brand-logo-mono {
   100% { transform: translateX(-70vw); opacity: 0; }
 }
 
-/* REVS revealed in the wake */
-.rvsplash-word {
+/* the logo — the R mark tears in from the left with a motion-blur trail,
+   REVS is revealed in its wake (S in red). Centred lockup. */
+.rvsplash-logo {
   position: absolute;
   left: 50%;
   top: 50%;
   transform: translate(-50%, -50%);
   display: flex;
-  font-family: var(--font-display, inherit);
+  align-items: center;
+  gap: clamp(8px, 2.5vw, 18px);
+}
+.rvsplash-mark {
+  position: relative;
+  display: inline-flex;
+  width: clamp(64px, 20vw, 104px);
+  aspect-ratio: 1;
+  transform: translateX(-66vw);
+  animation: rvsplash-mark 0.92s cubic-bezier(0.16, 1, 0.3, 1) 0.1s both;
+  will-change: transform;
+}
+@keyframes rvsplash-mark {
+  to { transform: translateX(0); }
+}
+.rvsplash-mark > span { position: absolute; inset: 0; }
+.rvsplash-mark svg { width: 100%; height: 100%; }
+.rvsplash-ghost-1 { transform: translateX(-16%); opacity: 0.3; filter: blur(1px); }
+.rvsplash-ghost-2 { transform: translateX(-34%); opacity: 0.15; filter: blur(2px); }
+.rvsplash-ghost-3 { transform: translateX(-54%); opacity: 0.08; filter: blur(3px); }
+
+.rvsplash-word {
+  position: relative;
+  display: flex;
+  font-family: var(--font-display, "Arial Black", Arial, sans-serif);
   font-weight: 900;
-  font-size: clamp(48px, 16vw, 92px);
-  letter-spacing: -0.04em;
-  color: #fff;
+  font-style: italic;
+  font-size: clamp(44px, 14vw, 84px);
+  letter-spacing: -0.05em;
+  color: #F5F5F7;
 }
 .rvsplash-letter {
   display: inline-block;
   opacity: 0;
-  transform: translateX(-30px);
-  filter: blur(10px);
-  text-shadow: 0 0 24px rgba(232, 32, 58, 0.55), 0 4px 30px rgba(0, 0, 0, 0.6);
-  animation: rvsplash-letter 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+  transform: translateX(-28px);
+  filter: blur(9px);
+  text-shadow: 0 0 22px rgba(232, 32, 58, 0.4), 0 4px 26px rgba(0, 0, 0, 0.6);
+  animation: rvsplash-letter 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
   will-change: transform, opacity, filter;
 }
+.rvsplash-letter-s { color: #E8203A; }
 @keyframes rvsplash-letter {
   to { opacity: 1; transform: translateX(0); filter: blur(0); }
 }
@@ -1346,7 +1373,7 @@ html.light .brand-logo-mono {
   background: linear-gradient(105deg, transparent 42%, rgba(255, 255, 255, 0.5) 50%, transparent 58%);
   mix-blend-mode: screen;
   transform: translateX(-130%);
-  animation: rvsplash-glint 0.7s ease-in-out 1.2s both;
+  animation: rvsplash-glint 0.7s ease-in-out 1.25s both;
   pointer-events: none;
 }
 @keyframes rvsplash-glint {
@@ -1356,46 +1383,16 @@ html.light .brand-logo-mono {
   position: absolute;
   left: 50%;
   top: 50%;
-  transform: translate(-50%, calc(-50% + clamp(40px, 11vw, 74px)));
+  transform: translate(-50%, calc(-50% + clamp(46px, 13vw, 82px)));
   color: #E8203A;
   font-weight: 800;
   font-size: 12px;
   letter-spacing: 2px;
   opacity: 0;
-  animation: rvsplash-tag 0.5s ease-out 1.35s both;
+  animation: rvsplash-tag 0.5s ease-out 1.4s both;
 }
 @keyframes rvsplash-tag {
   to { opacity: 0.9; letter-spacing: 9px; }
-}
-
-/* the car — tears left→right; trailing ghosts = motion blur */
-.rvsplash-car {
-  position: absolute;
-  top: 50%;
-  left: 0;
-  width: 46%;
-  max-width: 460px;
-  aspect-ratio: 340 / 128;
-  transform: translate(-62vw, -50%);
-  animation: rvsplash-car 1.05s cubic-bezier(0.5, 0, 0.25, 1) 0.1s both;
-  will-change: transform;
-}
-@keyframes rvsplash-car {
-  0% { transform: translate(-62vw, -50%); }
-  100% { transform: translate(138vw, -50%); }
-}
-.rvsplash-car > span { position: absolute; inset: 0; }
-.rvsplash-ghost-1 { transform: translateX(-8%); opacity: 0.28; filter: blur(1px); }
-.rvsplash-ghost-2 { transform: translateX(-19%); opacity: 0.15; filter: blur(2px); }
-.rvsplash-ghost-3 { transform: translateX(-32%); opacity: 0.08; filter: blur(3px); }
-.rvsplash-underglow {
-  left: 8%;
-  right: 4%;
-  bottom: 0;
-  top: auto !important;
-  height: 34%;
-  background: radial-gradient(ellipse at 50% 100%, rgba(232, 32, 58, 0.55), transparent 70%);
-  filter: blur(6px);
 }
 
 /* ── #7 Badge unlocked notification ── */
