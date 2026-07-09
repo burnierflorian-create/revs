@@ -36,7 +36,8 @@ const API_KEY =
 // ── Args ──
 const args = process.argv.slice(2)
 const modelIdx = args.indexOf('--model')
-const MODEL = modelIdx >= 0 && args[modelIdx + 1] ? args[modelIdx + 1] : 'gemini-2.5-flash-image'
+// Default: Nano Banana 2 Lite — free tier (no billing) on Google AI Studio.
+const MODEL = modelIdx >= 0 && args[modelIdx + 1] ? args[modelIdx + 1] : 'gemini-3.1-flash-lite-image'
 const positional = args.filter((a, i) => a !== '--model' && args[i - 1] !== '--model')
 const PROMPT = positional[0]
 const OUTNAME = positional[1]
@@ -62,15 +63,62 @@ const ai = new GoogleGenAI({ apiKey: API_KEY })
 console.log(`Modèle : ${MODEL}`)
 console.log(`Prompt : ${PROMPT}`)
 
+// The free tier is rate-limited per minute; auto-retry on throttle with a
+// short backoff so a burst of requests doesn't fail outright.
+function isThrottle(e) {
+  const msg = (e?.message ?? String(e ?? '')).toLowerCase()
+  const code = e?.status ?? e?.code
+  // `limit: 0` = the free tier grants ZERO requests for this model (permanent,
+  // needs billing) — retrying is pointless, so don't treat it as a throttle.
+  if (/limit:\s*0\b/.test(msg)) return false
+  return (
+    code === 429 ||
+    code === 'RESOURCE_EXHAUSTED' ||
+    /\b429\b|resource_exhausted|rate.?limit|quota|throttl|too many requests|per minute/i.test(
+      msg,
+    )
+  )
+}
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+
+async function generateWithRetry() {
+  const MAX_ATTEMPTS = 4
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
+    try {
+      return await ai.models.generateContent({
+        model: MODEL,
+        contents: PROMPT,
+        config: { responseModalities: [Modality.IMAGE] },
+      })
+    } catch (e) {
+      if (attempt < MAX_ATTEMPTS && isThrottle(e)) {
+        const waitS = Math.min(60, 15 * attempt) // 15s, 30s, 45s
+        console.log(
+          `⏳ Throttle par minute (tentative ${attempt}/${MAX_ATTEMPTS}) — nouvel essai dans ${waitS}s…`,
+        )
+        await sleep(waitS * 1000)
+        continue
+      }
+      throw e
+    }
+  }
+}
+
 let res
 try {
-  res = await ai.models.generateContent({
-    model: MODEL,
-    contents: PROMPT,
-    config: { responseModalities: [Modality.IMAGE] },
-  })
+  res = await generateWithRetry()
 } catch (e) {
-  console.error('Échec de la génération :', e?.message ?? e)
+  const msg = e?.message ?? String(e ?? '')
+  console.error('Échec de la génération :', msg)
+  if (/resource_exhausted|\b429\b/i.test(msg) && /limit:\s*0\b|free_tier/i.test(msg)) {
+    console.error(
+      "\n⚠️  Le FREE TIER de l'API Gemini est à 0 pour les modèles image sur ce projet " +
+        '— la génération marche dans le playground AI Studio mais PAS via la clé API tant que\n' +
+        "   la FACTURATION n'est pas activée sur le projet Google Cloud lié à la clé.\n" +
+        '   → https://aistudio.google.com/apikey  (associer un projet avec billing activé)\n' +
+        '   → ou active la facturation : https://console.cloud.google.com/billing',
+    )
+  }
   process.exit(2)
 }
 
