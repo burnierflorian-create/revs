@@ -896,6 +896,40 @@ export default function MapPage() {
     }
   }, [infoSheetOpen, predictionTried, predictionLoading])
 
+  // Starts the user-location watch (blue dot + directional compass cone) if it
+  // isn't already running. Idempotent — safe to call from mount (when perm is
+  // already granted) AND from the locate FAB after a fresh grant. Self-heals
+  // the granted flag on the first fix so the marker returns automatically next
+  // launch (crucial on iOS, where the Permissions API can't report state).
+  function startLocationWatch() {
+    const map = mapRef.current
+    if (!map || watchIdRef.current != null || !navigator.geolocation) return
+    watchIdRef.current = navigator.geolocation.watchPosition(
+      (pos) => {
+        const lng = pos.coords.longitude
+        const lat = pos.coords.latitude
+        posRef.current = { lat, lng }
+        try {
+          localStorage.setItem('revs_geo', '1')
+        } catch {
+          /* ignore */
+        }
+        const cur = userMarkerRef.current
+        if (!cur) {
+          const c = new CompassMarker()
+          c.init(map, [lng, lat])
+          userMarkerRef.current = c
+        } else {
+          cur.updatePosition(lng, lat)
+        }
+      },
+      () => {
+        /* denied / unavailable → no dot, silent */
+      },
+      { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 },
+    )
+  }
+
   function locate() {
     if (!navigator.geolocation) {
       setGeoError(t('mappage.geoUnavailable'))
@@ -906,6 +940,14 @@ export default function MapPage() {
         setGeoError(null)
         const p = { lat: pos.coords.latitude, lng: pos.coords.longitude }
         posRef.current = p
+        try {
+          localStorage.setItem('revs_geo', '1')
+        } catch {
+          /* ignore */
+        }
+        // Grant confirmed → make sure the live marker is running so the dot +
+        // cone appear immediately (not just on next launch).
+        startLocationWatch()
         mapRef.current?.flyTo({
           center: [pos.coords.longitude, pos.coords.latitude],
           zoom: RECENTER_ZOOM,
@@ -1008,6 +1050,11 @@ export default function MapPage() {
             clearTimeout(fallback)
             const p = { lat: pos.coords.latitude, lng: pos.coords.longitude }
             posRef.current = p
+            try {
+              localStorage.setItem('revs_geo', '1')
+            } catch {
+              /* ignore */
+            }
             resolve({
               center: [pos.coords.longitude, pos.coords.latitude],
               zoom: USER_ZOOM,
@@ -1762,31 +1809,12 @@ export default function MapPage() {
     if (!map || !navigator.geolocation) return
 
     let cancelled = false
-    let compass: CompassMarker | null = null
 
-    // Only start the location watch if permission is ALREADY granted — never
-    // auto-prompt on mount. The locate-me FAB handles the user-initiated grant.
+    // Start the marker watch automatically when permission is already granted
+    // (no auto-prompt on mount). If not yet granted, the locate FAB starts it
+    // after the user grants. `startLocationWatch` is idempotent.
     void hasGeoPermission().then((granted) => {
-      if (cancelled || !granted) return
-      const watchId = navigator.geolocation.watchPosition(
-        (pos) => {
-          const lng = pos.coords.longitude
-          const lat = pos.coords.latitude
-          posRef.current = { lat, lng }
-          if (!compass) {
-            compass = new CompassMarker()
-            compass.init(map, [lng, lat])
-            userMarkerRef.current = compass
-          } else {
-            compass.updatePosition(lng, lat)
-          }
-        },
-        () => {
-          /* permission denied / unavailable → no dot, silent */
-        },
-        { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 },
-      )
-      watchIdRef.current = watchId
+      if (!cancelled && granted) startLocationWatch()
     })
 
     return () => {
@@ -1795,10 +1823,10 @@ export default function MapPage() {
         navigator.geolocation.clearWatch(watchIdRef.current)
         watchIdRef.current = null
       }
-      compass?.destroy()
-      compass = null
+      userMarkerRef.current?.destroy()
       userMarkerRef.current = null
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mapReady])
 
   // ─────────────────────── Time-lapse replay ───────────────────────
