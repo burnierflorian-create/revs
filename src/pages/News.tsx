@@ -1,22 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { supabase } from '../lib/supabase'
 import { timeAgo } from '../lib/spots'
-import { SkeletonCard } from '../components/Skeleton'
+import { Skeleton } from '../components/Skeleton'
+import { categoryBadge } from '../lib/categoryStyle'
 
-// Opening Discover silently pings /api/fetch-news (server-throttled) if
-// the freshest article is older than this, so news stays fresh without
-// the user noticing.
-const STALE_MS = 30 * 60 * 1000
-// Don't re-ping within this window even across remounts (Discover tab
-// switches remount News).
-const TRIGGER_COOLDOWN_MS = 15 * 60 * 1000
-const TRIGGER_KEY = 'revs_news_triggered_at'
-// "NOUVEAU" badge for articles published in the last hour.
+// News is fetched ONLY by the once-daily server cron (vercel.json →
+// /api/fetch-news, gated to 06:00 Europe/Paris). The client never triggers a
+// fetch — it just reads the table + news_meta.last_fetched_at. "NOUVEAU"
+// badge for articles published in the last hour.
 const NEW_MS = 60 * 60 * 1000
-// When a category has fewer than this, top it up with other recent
-// articles instead of showing a near-empty page.
-const MIN_VISIBLE = 5
-const FILL_WINDOW_MS = 48 * 60 * 60 * 1000
 
 function newestStamp(list: { created_at: string }[]): string | null {
   let max = 0
@@ -43,18 +36,6 @@ type NewsItem = {
   created_at: string
 }
 
-// Badge colour per category — F1 red, Supercar orange, Hypercar violet,
-// Events blue.
-const BADGE: Record<string, string> = {
-  F1: 'bg-accent',
-  Supercar: 'bg-[#F59E0B]',
-  Hypercar: 'bg-[#8B5CF6]',
-  Events: 'bg-[#3B82F6]',
-}
-function badgeClass(cat: string): string {
-  return BADGE[cat] ?? 'bg-white/20'
-}
-
 // Royalty-free Unsplash fallbacks per category (verified URLs) used when
 // the RSS item has no image — instead of a grey placeholder.
 const CATEGORY_IMG: Record<string, string> = {
@@ -71,71 +52,47 @@ function fallbackImg(cat: string): string {
 }
 
 export default function News({ categories }: { categories: string[] }) {
+  const { t } = useTranslation()
   const [items, setItems] = useState<NewsItem[] | null>(null)
+  // Real last-fetch time (written by the 06:00 Paris cron into news_meta) —
+  // the single source of truth for the "Mis à jour il y a X" label.
+  const [lastFetched, setLastFetched] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const [pull, setPull] = useState(0)
   const startY = useRef<number | null>(null)
-  const triedRef = useRef(false)
 
   const load = useCallback(async (initial = false, silent = false) => {
     if (initial) setItems(null)
     else if (!silent) setRefreshing(true)
-    const { data, error } = await supabase
-      .from('news')
-      .select('*')
-      .gt('expires_at', new Date().toISOString())
-      .order('published_at', { ascending: false, nullsFirst: false })
-      .order('created_at', { ascending: false })
-      .limit(50)
-    if (error) console.error('news fetch failed:', error)
-    setItems((data ?? []) as NewsItem[])
+    // Pure DB reads — the client NEVER triggers an RSS fetch (that endpoint is
+    // cron-only). Show EVERY article, newest first, plus the cron's real
+    // last-fetch timestamp.
+    const [newsRes, metaRes] = await Promise.all([
+      supabase
+        .from('news')
+        .select('*')
+        .order('published_at', { ascending: false, nullsFirst: false })
+        .order('created_at', { ascending: false })
+        .limit(50),
+      supabase
+        .from('news_meta')
+        .select('last_fetched_at')
+        .eq('id', 'singleton')
+        .maybeSingle(),
+    ])
+    if (newsRes.error) console.error('news fetch failed:', newsRes.error)
+    setItems((newsRes.data ?? []) as NewsItem[])
+    setLastFetched(
+      (metaRes.data?.last_fetched_at as string | undefined) ?? null,
+    )
     if (!initial && !silent) setRefreshing(false)
   }, [])
 
-  const triggerServerRefresh = useCallback(async () => {
-    try {
-      sessionStorage.setItem(TRIGGER_KEY, String(Date.now()))
-    } catch {
-      /* sessionStorage unavailable */
-    }
-    try {
-      // Server is throttled + idempotent (dedup on url), so a naive
-      // call here is safe even if several users open Discover at once.
-      await fetch('/api/fetch-news', { method: 'GET' })
-    } catch {
-      /* offline — keep showing what we have */
-    }
-    // Silent: reload without flipping any visible refreshing indicator.
-    await load(false, true)
-  }, [load])
-
+  // Read once on mount. No polling interval — news only ever changes at the
+  // daily 06:00 Paris cron, and it's served as-is for the rest of the day.
   useEffect(() => {
     load(true)
-    // Reload from DB every 30 min in case the cron / another client
-    // refreshed it while this tab stayed open.
-    const id = window.setInterval(() => load(false), 30 * 60 * 1000)
-    return () => window.clearInterval(id)
   }, [load])
-
-  // Once the first list arrives, self-heal if it's stale.
-  useEffect(() => {
-    if (triedRef.current || items === null) return
-    triedRef.current = true
-    const stamp = newestStamp(items)
-    const ageMs = stamp ? Date.now() - new Date(stamp).getTime() : Infinity
-    let lastTrigger = 0
-    try {
-      lastTrigger = Number(sessionStorage.getItem(TRIGGER_KEY) || 0)
-    } catch {
-      /* ignore */
-    }
-    if (
-      ageMs > STALE_MS &&
-      Date.now() - lastTrigger > TRIGGER_COOLDOWN_MS
-    ) {
-      void triggerServerRefresh()
-    }
-  }, [items, triggerServerRefresh])
 
   const PULL_THRESHOLD = 70
 
@@ -153,26 +110,12 @@ export default function News({ categories }: { categories: string[] }) {
     startY.current = null
   }
 
-  // Category first; if fewer than MIN_VISIBLE, top up with the most
-  // recent other articles (last 48h) so the page is never near-empty.
-  let visible: NewsItem[] | null = null
-  if (items) {
-    const inCat = items.filter((n) => categories.includes(n.category))
-    if (inCat.length >= MIN_VISIBLE) {
-      visible = inCat
-    } else {
-      const cutoff = Date.now() - FILL_WINDOW_MS
-      const fill = items.filter(
-        (n) =>
-          !categories.includes(n.category) &&
-          new Date(n.published_at ?? n.created_at).getTime() >= cutoff,
-      )
-      visible = [...inCat, ...fill].slice(
-        0,
-        Math.max(MIN_VISIBLE, inCat.length),
-      )
-    }
-  }
+  // Strict category filter — the CarSpotting and F1 tabs must stay fully
+  // separated (no cross-category top-up), so each universe only ever shows
+  // its own articles.
+  const visible: NewsItem[] | null = items
+    ? items.filter((n) => categories.includes(n.category))
+    : null
 
   function isNew(n: NewsItem): boolean {
     return (
@@ -198,131 +141,160 @@ export default function News({ categories }: { categories: string[] }) {
               REVS
             </span>
           ) : pull >= PULL_THRESHOLD ? (
-            'Relâche pour actualiser'
+            t('discoverpage.news.pullRelease')
           ) : (
-            'Tire pour actualiser'
+            t('discoverpage.news.pullStart')
           )}
         </div>
       )}
-      <div className="px-1 pb-3 pt-2 label-up text-[10px] text-fg2">
+      {/* "MIS À JOUR IL Y A X MIN" — discreet italic line under the
+          sub-tabs. */}
+      <p className="px-1 pb-3 pt-1 text-[11px] italic text-white/35">
         {items && items.length > 0
-          ? `Mis à jour ${timeAgo(newestStamp(items) ?? items[0].created_at)}`
+          ? t('discoverpage.news.updated', {
+              time: timeAgo(
+                lastFetched ?? newestStamp(items) ?? items[0].created_at,
+              ).toUpperCase(),
+            })
           : ''}
-      </div>
+      </p>
 
       {items === null ? (
-        <div className="space-y-4">
+        // Animated skeleton loaders — one hero + a few medium cards.
+        <div className="flex flex-col gap-2.5 pt-1">
+          <Skeleton className="h-[248px] w-full rounded-2xl" />
           {Array.from({ length: 4 }).map((_, i) => (
-            <SkeletonCard key={i} />
+            <div
+              key={i}
+              className="flex gap-3 rounded-xl p-[14px]"
+              style={{ background: '#141414' }}
+            >
+              <div className="flex min-w-0 flex-1 flex-col gap-2">
+                <Skeleton className="h-3 w-16 rounded-full" />
+                <Skeleton className="h-3.5 w-full rounded-full" />
+                <Skeleton className="h-3.5 w-3/4 rounded-full" />
+                <Skeleton className="mt-auto h-2.5 w-24 rounded-full" />
+              </div>
+              <Skeleton className="h-[90px] w-[90px] flex-none rounded-[10px]" />
+            </div>
           ))}
         </div>
       ) : items.length === 0 ? (
         <div
-          className="rounded-3xl bg-card p-6 text-center"
-          style={{ border: '1px solid var(--color-border)' }}
+          className="rounded-2xl p-6 text-center"
+          style={{ background: '#141414' }}
         >
-          <p className="text-sm text-fg2">Pas d'actu pour le moment.</p>
+          <p className="text-sm text-white/55">{t('discoverpage.news.empty')}</p>
           <button
             onClick={() => load(false)}
-            className="tappable mt-4 rounded-full bg-accent px-6 py-3 text-sm font-extrabold tracking-wider text-fg"
-            style={{ boxShadow: '0 8px 24px rgba(232,32,58,0.45)' }}
+            className="tappable mt-4 rounded-full px-6 py-3 text-sm font-bold text-white"
+            style={{
+              background: '#E8203A',
+              boxShadow: '0 8px 24px rgba(232,32,58,0.45)',
+            }}
           >
-            Rafraîchir
+            {t('discoverpage.news.refresh')}
           </button>
         </div>
       ) : visible && visible.length === 0 ? (
-        <p className="px-1 py-8 text-center text-sm text-fg2">
-          Aucun article pour le moment.
+        <p className="px-1 py-8 text-center text-sm text-white/45">
+          {t('discoverpage.news.noArticles')}
         </p>
       ) : (
-        // Apple News editorial layout — text block on the left, fixed
-        // thumbnail on the right, glass card shell. Replaces the
-        // previous "image on top, text below" stack so the feed reads
-        // like Apple News rather than a Pinterest stream.
-        <div className="space-y-3 pb-2">
-          {(visible ?? []).map((n) => (
-            <a
-              key={n.id}
-              href={n.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="tappable flex items-center gap-4 p-4 text-left"
-              style={{
-                background: 'var(--color-glass)',
-                border: '1px solid rgba(255, 255, 255, 0.05)',
-                borderRadius: '28px',
-                backdropFilter: 'saturate(160%) blur(12px)',
-                WebkitBackdropFilter: 'saturate(160%) blur(12px)',
-                boxShadow: '0 12px 28px rgba(0, 0, 0, 0.18)',
-              }}
-            >
-              <div className="min-w-0 flex-1 space-y-1.5">
-                {/* Stacked badge row — category + NOUVEAU pill when
-                    fresh. Single .gap row so they wrap gracefully on
-                    long category names. */}
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <span
-                    className={`rounded-full px-2 py-0.5 text-[8px] font-black uppercase tracking-widest text-fg ${badgeClass(
-                      n.category,
-                    )}`}
-                    style={{ letterSpacing: '0.16em' }}
-                  >
-                    {n.category.toUpperCase()}
-                  </span>
-                  {isNew(n) && (
-                    <span
-                      className="badge-new rounded-full font-black uppercase tracking-widest text-red-400"
-                      style={{
-                        background: 'rgba(239, 68, 68, 0.10)',
-                        border: '1px solid rgba(239, 68, 68, 0.20)',
-                        padding: '2px 8px',
-                        fontSize: '8px',
-                        letterSpacing: '0.16em',
-                      }}
-                    >
-                      Nouveau
-                    </span>
-                  )}
-                </div>
-                <h2
-                  className="line-clamp-2 font-display font-black leading-tight tracking-tight text-white"
-                  style={{ fontSize: '14px' }}
+        // Apple News premium layout — a large hero card then medium
+        // horizontal cards, spaced by a 10px gap (no separators).
+        <div className="flex flex-col gap-2.5">
+          {(visible ?? []).map((n, i) => {
+            const b = categoryBadge(n.category) ?? {
+              label: n.category.toUpperCase(),
+              color: '#6B7280',
+            }
+            const meta = [n.source, timeAgo(n.published_at ?? n.created_at)]
+              .filter(Boolean)
+              .join(' · ')
+            const img = n.image_url || fallbackImg(n.category)
+
+            if (i === 0) {
+              // HERO — full-width, 200px image, title over a dark gradient.
+              return (
+                <a
+                  key={n.id}
+                  href={n.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="tappable block overflow-hidden rounded-2xl"
+                  style={{
+                    background: '#141414',
+                    boxShadow: '0 6px 18px rgba(0,0,0,0.45)',
+                  }}
                 >
-                  {n.title}
-                </h2>
-                {n.summary && (
-                  <p className="line-clamp-2 text-xs font-medium leading-normal text-neutral-400">
-                    {n.summary}
-                  </p>
-                )}
-                <p className="text-[10px] font-medium text-fg2/70">
-                  {[n.source, timeAgo(n.published_at ?? n.created_at)]
-                    .filter(Boolean)
-                    .join(' · ')}
-                </p>
-              </div>
-              {/* Right-side fixed-ratio thumbnail. 20×20 (80px) per the
-                  Apple News editorial layout. Falls back to the
-                  category-mapped fallback image. */}
-              <div
-                className="h-20 w-20 flex-none overflow-hidden rounded-2xl"
+                  <div className="relative h-[200px] w-full">
+                    <img
+                      src={img}
+                      alt={n.title}
+                      loading="lazy"
+                      decoding="async"
+                      className="h-full w-full object-cover"
+                    />
+                    <span
+                      className="absolute left-3 top-3 rounded-md px-2 py-1 text-[10px] font-extrabold text-white"
+                      style={{ background: b.color, letterSpacing: '0.06em' }}
+                    >
+                      {b.label}
+                      {isNew(n) && ` · ${t('discoverpage.news.new')}`}
+                    </span>
+                    <div
+                      aria-hidden
+                      className="absolute inset-x-0 bottom-0 h-3/4"
+                      style={{
+                        background:
+                          'linear-gradient(to top, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.4) 45%, transparent 100%)',
+                      }}
+                    />
+                    <h2 className="absolute inset-x-0 bottom-0 line-clamp-3 px-4 pb-3 text-[18px] font-bold leading-snug text-white">
+                      {n.title}
+                    </h2>
+                  </div>
+                  <p className="px-4 py-2.5 text-xs text-white/45">{meta}</p>
+                </a>
+              )
+            }
+
+            // MEDIUM — horizontal card, 90×90 image on the right.
+            return (
+              <a
+                key={n.id}
+                href={n.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="tappable flex gap-3 rounded-xl p-[14px]"
                 style={{
-                  background: '#0a0a0a',
-                  border: '1px solid rgba(255, 255, 255, 0.05)',
-                  boxShadow:
-                    'inset 0 1px 0 rgba(255, 255, 255, 0.03)',
+                  background: '#141414',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
                 }}
               >
+                <div className="flex min-w-0 flex-1 flex-col">
+                  <span
+                    className="self-start rounded px-1.5 py-0.5 text-[9px] font-extrabold text-white"
+                    style={{ background: b.color, letterSpacing: '0.06em' }}
+                  >
+                    {b.label}
+                  </span>
+                  <h3 className="mt-1.5 line-clamp-2 text-[15px] font-semibold leading-snug text-white">
+                    {n.title}
+                  </h3>
+                  <p className="mt-auto pt-2 text-xs text-white/45">{meta}</p>
+                </div>
                 <img
-                  src={n.image_url || fallbackImg(n.category)}
+                  src={img}
                   alt={n.title}
                   loading="lazy"
                   decoding="async"
-                  className="h-full w-full object-cover"
+                  className="h-[90px] w-[90px] flex-none rounded-[10px] object-cover"
                 />
-              </div>
-            </a>
-          ))}
+              </a>
+            )
+          })}
         </div>
       )}
     </div>

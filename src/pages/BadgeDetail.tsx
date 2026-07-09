@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { ArrowLeft, Check, Lock } from 'lucide-react'
 import {
   CATEGORY_LABEL,
@@ -34,6 +35,7 @@ function markSeen(slug: string) {
 }
 
 export default function BadgeDetail() {
+  const { t } = useTranslation()
   const { slug } = useParams<{ slug: string }>()
   const navigate = useNavigate()
   const ctx = useBadgeContext()
@@ -66,21 +68,21 @@ export default function BadgeDetail() {
         <div className="flex items-center gap-4 py-4">
           <button
             onClick={() => navigate(-1)}
-            aria-label="Retour"
+            aria-label={t('gamif.back')}
             className="text-fg/60 hover:text-fg"
           >
             <ArrowLeft className="h-6 w-6" />
           </button>
-          <h1 className="font-display text-2xl font-bold">Badge introuvable</h1>
+          <h1 className="font-display text-2xl font-bold">{t('gamif.badgeNotFound')}</h1>
         </div>
         <p className="text-sm text-fg/50">
-          Ce badge n'existe pas (ou plus). Retour à la galerie ?
+          {t('gamif.badgeNotFoundDesc')}
         </p>
         <button
           onClick={() => navigate('/badges')}
           className="mt-4 rounded-full bg-accent px-5 py-2 text-sm font-semibold text-fg"
         >
-          Voir tous les badges
+          {t('gamif.seeAllBadges')}
         </button>
       </div>
     )
@@ -94,13 +96,13 @@ export default function BadgeDetail() {
       <div className="flex items-center gap-4 py-4">
         <button
           onClick={() => navigate(-1)}
-          aria-label="Retour"
+          aria-label={t('gamif.back')}
           className="tappable text-fg2 hover:text-fg"
         >
           <ArrowLeft className="h-6 w-6" />
         </button>
         <h1 className="font-display text-xl font-extrabold tracking-tighter text-fg">
-          Badge
+          {t('gamif.badge')}
         </h1>
       </div>
 
@@ -122,7 +124,7 @@ export default function BadgeDetail() {
                     boxShadow: '0 12px 38px rgba(232,32,58,0.32)',
                   }
               : {
-                  background: 'var(--color-card)',
+                  background: 'rgb(var(--color-card))',
                   border: '1px solid var(--color-border)',
                 }
           }
@@ -136,7 +138,7 @@ export default function BadgeDetail() {
                       ? 'radial-gradient(circle at 30% 30%, rgba(224,179,65,0.25), #0a0a0a 70%)'
                       : 'radial-gradient(circle at 30% 30%, rgba(232,32,58,0.18), #0a0a0a 70%)',
                   }
-                : { background: 'var(--color-bg)' }
+                : { background: 'rgb(var(--color-bg))' }
             }
           >
             {unlocked ? badge.emoji : <Lock className="h-12 w-12 text-fg2/40" />}
@@ -171,7 +173,7 @@ export default function BadgeDetail() {
               style={{ border: '1px solid var(--color-border)' }}
             >
               <p className="label-up text-[10px] text-fg2">
-                Comment l'obtenir
+                {t('gamif.howToObtain')}
               </p>
               <p className="mt-1 text-sm font-medium text-fg">
                 {badge.condition}
@@ -184,7 +186,7 @@ export default function BadgeDetail() {
                 style={{ border: '1px solid var(--color-border)' }}
               >
                 <span className="label-up text-[10px] text-fg2">
-                  Récompense XP
+                  {t('gamif.xpReward')}
                 </span>
                 <span className="font-display text-2xl font-extrabold tracking-tighter text-accent">
                   +{badge.xp}
@@ -196,16 +198,16 @@ export default function BadgeDetail() {
               className="flex items-center justify-between rounded-3xl bg-card p-4"
               style={{ border: '1px solid var(--color-border)' }}
             >
-              <span className="label-up text-[10px] text-fg2">Statut</span>
+              <span className="label-up text-[10px] text-fg2">{t('gamif.status')}</span>
               {unlocked ? (
                 <span className="flex items-center gap-1.5 text-sm font-extrabold tracking-wider text-green-400">
                   <Check className="h-4 w-4" />
-                  DÉBLOQUÉ
+                  {t('gamif.statusUnlocked')}
                 </span>
               ) : (
                 <span className="flex items-center gap-1.5 text-sm font-bold tracking-wider text-fg2">
                   <Lock className="h-4 w-4" />
-                  VERROUILLÉ
+                  {t('gamif.statusLocked')}
                 </span>
               )}
             </div>
@@ -214,7 +216,7 @@ export default function BadgeDetail() {
 
         {!unlocked && ctx && (
           <p className="mt-6 max-w-xs text-center text-xs text-fg2">
-            Continue à explorer et à spotter pour débloquer ce badge.
+            {t('gamif.keepExploring')}
           </p>
         )}
       </div>

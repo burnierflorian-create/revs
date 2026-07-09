@@ -1,25 +1,35 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
+import type { TFunction } from 'i18next'
 import {
   ArrowLeft,
+  Check,
   ChevronRight,
+  Copy,
   Lock,
   Settings,
+  Share,
   Warehouse,
   X,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { categoryLabel, type Rarity, type Spot } from '../lib/spots'
+import { type Rarity, type Spot } from '../lib/spots'
 import { planDisplayName, planTier } from '../lib/plans'
 import { allBadges, computeUnlocks, type Badge } from '../lib/badges'
+import { badgeIcon } from '../lib/customIcons'
+import Showroom from '../components/Showroom'
 import { fetchRaceStats } from '../lib/race'
 import { xpLevel } from '../lib/xp'
 import { useMyTier } from '../lib/tier'
+import { appConfig } from '../config/appConfig'
 import { Skeleton } from '../components/Skeleton'
 import MyCollection from '../components/MyCollection'
-import TitleChip from '../components/TitleChip'
-import { rarityRank } from '../components/CollectorCard'
+import LiquidXpBar from '../components/LiquidXpBar'
+import { BadgeUnlockWatcher } from '../components/BadgeUnlocked'
+import { prefersReducedMotion } from '../lib/motion'
+import { rarityBadge } from '../lib/rarityStyle'
 import {
   COLLECTIONS,
   claimCollection,
@@ -30,24 +40,17 @@ import {
 import { floatXp } from '../components/XpFloater'
 
 
-function memberSince(iso: string | undefined): string {
-  if (!iso) return ''
-  return new Intl.DateTimeFormat('fr-FR', {
-    month: 'long',
-    year: 'numeric',
-  }).format(new Date(iso))
-}
-
 export default function Profile() {
   const navigate = useNavigate()
   const tier = useMyTier()
+  const { t } = useTranslation()
 
   const [loading, setLoading] = useState(true)
   const [pseudo, setPseudo] = useState('Spotter')
   const [ville, setVille] = useState('')
   const [title, setTitle] = useState<string | null>(null)
+  const [dreamCar, setDreamCar] = useState<string | null>(null)
   const [avatar, setAvatar] = useState<string | null>(null)
-  const [joined, setJoined] = useState('')
   const [spots, setSpots] = useState<Spot[]>([])
   const [uniqueBrands, setUniqueBrands] = useState(0)
   const [rank, setRank] = useState<number | null>(null)
@@ -63,14 +66,21 @@ export default function Profile() {
   // stay always-visible; this gate controls the slide-up sheet that
   // surfaces the remaining N-4 trophies.
   const [badgesSheetOpen, setBadgesSheetOpen] = useState(false)
+  const [shareOpen, setShareOpen] = useState(false)
+  const [xpHistory, setXpHistory] = useState<
+    { amount: number; reason: string; created_at: string }[]
+  >([])
   // Local-only UI state: which of the two sub-tabs (Garage vs
   // Collection) is currently visible at the bottom of the profile.
   // Single segmented control across the lower half of Profile — replaces
   // the older flat scroll of Stats / Challenges / Subscription / Badges /
   // Collections / Garage. Each tab owns its own content block.
+  // Garage is the default active tab for the Phase 1 launch — the raw
+  // chronological spot history. Collection (stylised cards) is locked
+  // behind SHOW_CARD_COLLECTION until Phase 2.
   const [profileTab, setProfileTab] = useState<
     'collection' | 'garage' | 'rewards'
-  >('collection')
+  >('garage')
   // REVS RACE counters drive the race-* badges. Fetched once per
   // mount; absent until the call returns (badges just stay locked).
   const [raceStats, setRaceStats] = useState<{
@@ -79,18 +89,6 @@ export default function Profile() {
     perfectStarts: number
   } | null>(null)
 
-  // Cover backdrop: the user's most valuable spot becomes the hero
-  // image, blurred + dimmed. Falls back to the brand red gradient when
-  // the user has no spot with a photo + price. Computed up here (above
-  // the `if (loading) return …` guard) so hook order stays stable
-  // across the loading → ready transition.
-  const bestSpot = useMemo(() => {
-    return spots
-      .filter((s) => s.photo_url && (s.estimated_price ?? 0) > 0)
-      .sort(
-        (a, b) => (b.estimated_price ?? 0) - (a.estimated_price ?? 0),
-      )[0]
-  }, [spots])
 
   useEffect(() => {
     let active = true
@@ -122,7 +120,7 @@ export default function Profile() {
           supabase.rpc('my_xp'),
           supabase
             .from('profiles')
-            .select('pseudo, ville, avatar, created_at, title')
+            .select('pseudo, ville, avatar, created_at, title, dream_car')
             .eq('user_id', user.id)
             .maybeSingle(),
           supabase
@@ -172,8 +170,11 @@ export default function Profile() {
       )
       setVille(profRes.data?.ville ?? '')
       setTitle((profRes.data as { title?: string | null } | null)?.title ?? null)
+      setDreamCar(
+        (profRes.data as { dream_car?: string | null } | null)?.dream_car?.trim() ||
+          null,
+      )
       setAvatar(profRes.data?.avatar ?? null)
-      setJoined(memberSince(user.created_at))
       setSpots(mySpots)
       setUniqueBrands(
         new Set(mySpots.map((s) => s.brand).filter(Boolean)).size,
@@ -222,11 +223,53 @@ export default function Profile() {
 
   const level = xpLevel(xp)
 
+  // Single furtive identity line: status • level • ville (e.g.
+  // "FONDATEUR • EXPERT • ANNECY") — replaces the stacked gold/red badges.
+  const statusLabel =
+    title ||
+    (planTier(plan) === 'vip'
+      ? 'VIP'
+      : planTier(plan) === 'premium'
+        ? t('profilepage.status.premium')
+        : null)
+  const idLine = [statusLabel, level.name, ville]
+    .filter(Boolean)
+    .map((s) => (s as string).toUpperCase())
+    .join('  •  ')
+
   useEffect(() => {
     if (loading) return
     const id = requestAnimationFrame(() => setAnimPct(level.pct))
     return () => cancelAnimationFrame(id)
   }, [loading, level.pct])
+
+  // Last 10 XP transactions for the Récompenses history list.
+  useEffect(() => {
+    let active = true
+    ;(async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (!user || !active) return
+      const { data } = await supabase
+        .from('xp_transactions')
+        .select('amount, reason, created_at')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(10)
+      if (active)
+        setXpHistory(
+          (data ?? []) as {
+            amount: number
+            reason: string
+            created_at: string
+          }[],
+        )
+    })()
+    return () => {
+      active = false
+    }
+  }, [])
 
   if (loading) {
     return (
@@ -256,6 +299,22 @@ export default function Profile() {
 
   const total = spots.length
   const daysWithSpot = new Set(spots.map((s) => s.created_at.slice(0, 10)))
+  // Current daily streak — consecutive UTC days with a spot, counting
+  // back from today (or yesterday if today has none yet).
+  const streak = (() => {
+    const fmt = (dt: Date) => dt.toISOString().slice(0, 10)
+    const cur = new Date()
+    if (!daysWithSpot.has(fmt(cur))) {
+      cur.setUTCDate(cur.getUTCDate() - 1)
+      if (!daysWithSpot.has(fmt(cur))) return 0
+    }
+    let n = 0
+    while (daysWithSpot.has(fmt(cur))) {
+      n += 1
+      cur.setUTCDate(cur.getUTCDate() - 1)
+    }
+    return n
+  })()
   const badgeCtx = {
     spots,
     hasEvent,
@@ -273,75 +332,52 @@ export default function Profile() {
   // first locked ones so the row is always 4 wide.
   const unlocked = badgeCatalogue.filter((b) => unlocks.has(b.slug))
   const locked = badgeCatalogue.filter((b) => !unlocks.has(b.slug))
-  const topBadges = [...unlocked, ...locked].slice(0, 4)
 
   return (
     <div className="min-h-screen bg-bg text-fg">
+      {/* Fires badge-unlocked notifications for newly-earned badges. Lives
+          here (rendered only once data is loaded) so its hooks are never
+          conditional on this page's loading early-return. */}
+      <BadgeUnlockWatcher badges={unlocked} />
       {/* SECTION 1 — Cover + avatar. When the user has a spot worth
           showing off, we use its photo as the immersive backdrop
           (heavy blur + dim overlay). Falls back to the brand red
           gradient when the garage is empty. */}
       <div className="relative">
-        {bestSpot?.photo_url ? (
-          <div className="relative h-48 w-full overflow-hidden">
-            <img
-              src={bestSpot.photo_url}
-              alt=""
-              aria-hidden
-              // LCP candidate on the profile route — keep eager and
-              // hint the browser to fetch with high priority.
-              fetchPriority="high"
-              decoding="async"
-              className="pointer-events-none absolute inset-0 h-full w-full object-cover"
-              style={{
-                // Heavy blur + 30% opacity per the 2026-06-02 immersive
-                // spec — the photo reads as ambient atmosphere rather
-                // than a recognisable scene. scale(1.15) hides the
-                // blur fringe on the edges.
-                filter: 'blur(24px) saturate(1.10)',
-                transform: 'scale(1.15)',
-                opacity: 0.30,
-              }}
-            />
-            {/* Vertical transparent → black gradient overlay so the
-                backdrop fades smoothly into the dark body of the
-                profile. Replaces the flat 40% scrim. */}
-            <div
-              aria-hidden
-              className="absolute inset-0"
-              style={{
-                background:
-                  'linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.85) 70%, rgba(0,0,0,1) 100%)',
-              }}
-            />
-          </div>
-        ) : (
-          <div
-            className="h-48 w-full"
-            style={{
-              background:
-                'radial-gradient(ellipse 80% 100% at 50% 0%, rgba(232,32,58,0.35) 0%, transparent 60%), linear-gradient(180deg, #4a0f16 0%, #1a060a 55%, #0a0a0a 100%)',
-            }}
-          />
-        )}
-        {/* Bottom edge softener — blends the cover into the page bg */}
+        {/* Plain gradient header (no cover photo) so the avatar can never
+            be clipped by an immersive backdrop. */}
         <div
-          aria-hidden
-          className="pointer-events-none absolute inset-x-0 bottom-0 h-16"
+          className="w-full"
           style={{
-            background:
-              'linear-gradient(180deg, transparent 0%, var(--color-bg) 100%)',
+            height: '120px',
+            background: 'linear-gradient(180deg, #0a0a0a 0%, #141414 100%)',
           }}
         />
+        {/* Share profile — round button left of the settings gear. */}
+        <button
+          onClick={() => setShareOpen(true)}
+          aria-label={t('profilepage.header.shareProfileAria')}
+          className="tappable absolute top-[max(1rem,env(safe-area-inset-top))] flex h-9 w-9 items-center justify-center rounded-full text-white/80 backdrop-blur transition-colors hover:text-white"
+          style={{
+            right: '60px',
+            background: '#222',
+            border: '1px solid rgb(var(--color-fg) / 0.10)',
+          }}
+        >
+          <Share className="h-[18px] w-[18px]" />
+        </button>
         <button
           onClick={() => navigate('/settings')}
-          aria-label="Paramètres"
+          aria-label={t('profilepage.header.settingsAria')}
           className="tappable absolute right-4 top-[max(1rem,env(safe-area-inset-top))] flex h-10 w-10 items-center justify-center rounded-full bg-black/40 text-fg/80 backdrop-blur transition-colors hover:text-fg"
-          style={{ border: '1px solid rgba(255,255,255,0.10)' }}
+          style={{ border: '1px solid rgb(var(--color-fg) / 0.10)' }}
         >
           <Settings className="h-5 w-5" />
         </button>
-        <div className="absolute inset-x-0 -bottom-14 flex justify-center">
+        <div
+          className="absolute left-1/2 z-10 -translate-x-1/2"
+          style={{ bottom: '-44px' }}
+        >
           {/* Avatar with thin white liseré — replaces the conic-gradient
               ring per the immersive header polish. VIP / Premium tier
               still gets its overlay badge at the corner so paid status
@@ -362,16 +398,18 @@ export default function Profile() {
               }}
             />
             <div
-              className="relative z-10 flex h-28 w-28 items-center justify-center overflow-hidden rounded-full bg-card"
+              className="relative z-20 flex items-center justify-center overflow-hidden rounded-full bg-card"
               style={{
+                width: '88px',
+                height: '88px',
                 border:
                   tier === 'vip'
-                    ? '2px solid rgba(255, 215, 0, 0.55)'
-                    : '2px solid rgba(255, 255, 255, 0.20)',
+                    ? '3px solid rgba(255, 215, 0, 0.6)'
+                    : '3px solid #E8203A',
                 boxShadow:
                   tier === 'vip'
                     ? '0 18px 38px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 215, 0, 0.18)'
-                    : '0 18px 38px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.06)',
+                    : '0 18px 38px rgba(0, 0, 0, 0.55), 0 0 0 1px rgb(var(--color-fg) / 0.06)',
               }}
             >
               <div className="flex h-full w-full items-center justify-center overflow-hidden rounded-full font-display text-4xl font-extrabold tracking-tighter text-fg">
@@ -384,6 +422,7 @@ export default function Profile() {
                     fetchPriority="high"
                     decoding="async"
                     className="h-full w-full object-cover"
+                    style={{ objectPosition: 'top' }}
                   />
                 ) : (
                   pseudo.charAt(0).toUpperCase()
@@ -399,10 +438,10 @@ export default function Profile() {
                 style={{
                   background:
                     'linear-gradient(135deg, #FFD700 0%, #E8B225 50%, #B8860B 100%)',
-                  border: '2px solid var(--color-card)',
+                  border: '2px solid rgb(var(--color-card))',
                   boxShadow: '0 4px 14px rgba(255,200,50,0.45)',
                 }}
-                aria-label="Membre Premium"
+                aria-label={t('profilepage.tier.premiumAria')}
               >
                 ⚡
               </span>
@@ -413,10 +452,10 @@ export default function Profile() {
                 style={{
                   background:
                     'linear-gradient(135deg, #FFE066 0%, #FFD700 45%, #B8860B 100%)',
-                  border: '2px solid var(--color-card)',
+                  border: '2px solid rgb(var(--color-card))',
                   boxShadow: '0 6px 18px rgba(255,200,50,0.55)',
                 }}
-                aria-label="Membre VIP"
+                aria-label={t('profilepage.tier.vipAria')}
               >
                 👑
               </span>
@@ -430,166 +469,189 @@ export default function Profile() {
           Collection grid / Garage cover flow / Récompenses drawer
           never slide under the tab bar even on the longest profiles
           (early-adopters with 100+ cards). */}
-      <div className="space-y-7 px-4 pb-40 pt-20">
+      {/* Plus de px-4 global ici : la gouttière 16px est re-appliquée
+          section par section (identité + card Premium) pour que la section
+          des onglets soit nativement pleine largeur, sans marge latérale. */}
+      <div className="space-y-7 pb-40 pt-[54px]">
         {/* Identité */}
-        <div className="text-center">
-          <h1 className="display-xl text-fg">{pseudo}</h1>
-          <div className="mt-2 flex justify-center">
-            <TitleChip xp={xp} title={title} />
-          </div>
-          {/* Subscribers see their plan badge in place of the XP level
-              pill — once you've paid, "Débutant" feels off. Free tier
-              keeps the level pill as before. */}
-          {planTier(plan) === 'vip' ? (
-            <span
-              className="mt-3 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold text-black shadow-md"
-              style={{
-                background:
-                  'linear-gradient(120deg, #d4af37 0%, #ffd700 50%, #b8860b 100%)',
-              }}
+        <div className="px-4 text-center">
+          <h1
+            className="font-display font-extrabold tracking-tight text-fg"
+            style={{ fontSize: '24px' }}
+          >
+            {pseudo}
+          </h1>
+          {/* Furtive identity line — status • level • ville. */}
+          {idLine && (
+            <p
+              className="mt-1.5 text-[11px] font-normal text-fg2"
+              style={{ letterSpacing: '0.18em' }}
             >
-              VIP 👑
-            </span>
-          ) : planTier(plan) === 'premium' ? (
-            <span className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-accent px-3 py-1 text-xs font-bold text-fg shadow-md">
-              Premium ⚡
-            </span>
-          ) : (
-            // Editorial rank chip — sport-red uppercase with a barely-
-            // there 5% red wash + matching border, per the immersive
-            // header spec (309487.jpg).
-            <span
-              className="mt-3 inline-flex items-center rounded-md font-extrabold uppercase"
-              style={{
-                color: '#EF4444',
-                background: 'rgba(239, 68, 68, 0.05)',
-                border: '1px solid rgba(239, 68, 68, 0.30)',
-                padding: '2px 10px',
-                fontSize: '11px',
-                letterSpacing: '0.16em',
-              }}
-            >
-              {level.name}
-            </span>
-          )}
-          {/* Single subtitle line — ville • Membre depuis X. Replaces the
-              two previous standalone paragraphs so the identity block
-              reads in three vertical bands instead of five. */}
-          {(ville || joined) && (
-            <p className="mt-2 text-xs font-semibold text-fg2">
-              {ville && <span>{ville}</span>}
-              {ville && joined && (
-                <span className="mx-1.5 text-fg2/40" aria-hidden>
-                  •
-                </span>
-              )}
-              {joined && <span>Membre depuis {joined}</span>}
+              {idLine}
             </p>
           )}
-          {/* Unified stats pill — replaces both the followers/following
-              card and the section-3 stats row per the 2026-06-01 profile
-              refocus. Four tappable stats on one line (spots, marques,
-              rang, abonnés), separated by tiny dot bullets. Each stat
-              keeps its own deep-link target, the pill is just shared
-              chrome. */}
-          <div className="mt-4 flex justify-center">
-            <div
-              className="inline-flex items-center gap-3.5 rounded-full"
-              style={{
-                background: 'var(--color-glass)',
-                border: '1px solid rgba(255, 255, 255, 0.05)',
-                padding: '8px 16px',
-              }}
-            >
-              <ProfileStatTiny
-                value={String(total)}
-                label="spots"
-                onClick={() => navigate('/ma-galerie')}
-              />
-              <span className="h-1 w-1 rounded-full bg-fg2/40" aria-hidden />
-              <ProfileStatTiny
-                value={String(uniqueBrands)}
-                label="marques"
-                onClick={() => navigate('/mes-marques')}
-              />
-              <span className="h-1 w-1 rounded-full bg-fg2/40" aria-hidden />
-              <ProfileStatTiny
-                value={rank ? `#${rank}` : '—'}
-                label="rang"
-                onClick={() => navigate('/classement')}
-              />
-              {meId && (
-                <>
-                  <span
-                    className="h-1 w-1 rounded-full bg-fg2/40"
-                    aria-hidden
-                  />
-                  <ProfileStatTiny
-                    value={String(followers)}
-                    label={followers === 1 ? 'abonné' : 'abonnés'}
-                    onClick={() => navigate(`/u/${meId}`)}
-                  />
-                </>
-              )}
+          {/* Streak — visible red pill right under the title. */}
+          {streak > 0 && (
+            <div className="mt-2.5 flex justify-center">
+              <span
+                className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[12px] font-bold"
+                style={{
+                  background: 'rgba(232,32,58,0.16)',
+                  color: '#FF7080',
+                  border: '1px solid rgba(232,32,58,0.40)',
+                }}
+              >
+                🔥 {t('profilepage.streak.days', { count: streak })}
+              </span>
             </div>
-          </div>
-        </div>
+          )}
 
-        {/* SECTION 2 — XP */}
-        <section
-          className="rounded-3xl bg-card p-5"
-          style={{ border: '1px solid var(--color-border)' }}
-        >
-          <div className="flex items-baseline justify-between">
-            <span className="label-up text-[10px] text-fg2">
-              Niveau {level.name}
-            </span>
-            <span className="font-display text-2xl font-extrabold tracking-tighter text-fg">
-              {xp} <span className="text-sm text-fg2">XP</span>
-            </span>
-          </div>
-          <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-white/[0.06]">
-            <div
-              className="h-full rounded-full bg-accent transition-[width] duration-1000 ease-out"
-              style={{
-                width: `${animPct}%`,
-                // Discreet red glow on the filled segment so the bar
-                // still reads against the dark surface despite the
-                // thinner 1.5px height.
-                boxShadow:
-                  '0 0 8px rgba(232, 32, 58, 0.55), 0 0 1px rgba(232, 32, 58, 0.75) inset',
-              }}
+          {/* Dream car — the model chosen at onboarding (profiles.dream_car). */}
+          {dreamCar && (
+            <div className="mt-2.5 flex justify-center">
+              <span
+                className="inline-flex max-w-[86%] items-center gap-1.5 rounded-full px-3 py-1 text-[12px]"
+                style={{
+                  background: 'rgb(var(--color-fg) / 0.05)',
+                  border: '1px solid rgb(var(--color-fg) / 0.12)',
+                }}
+              >
+                <span aria-hidden>🏁</span>
+                <span className="text-fg2">{t('profilepage.dreamCar.label')}</span>
+                <span className="truncate font-bold text-fg">{dreamCar}</span>
+              </span>
+            </div>
+          )}
+
+          {/* Stats — four big animated counters; tap deep-links each. */}
+          <div className="mx-auto mt-5 flex max-w-[320px] items-stretch">
+            <StatCounter
+              value={total}
+              label={t('profilepage.stats.spots')}
+              delay={0}
+              onClick={() => navigate('/ma-galerie')}
             />
+            <span className="w-px self-center bg-fg/10" style={{ height: 28 }} />
+            <StatCounter
+              value={uniqueBrands}
+              label={t('profilepage.stats.brands')}
+              delay={100}
+              onClick={() => navigate('/mes-marques')}
+            />
+            <span className="w-px self-center bg-fg/10" style={{ height: 28 }} />
+            <StatCounter
+              value={rank ?? 0}
+              prefix="#"
+              empty={!rank}
+              label={t('profilepage.stats.rank')}
+              delay={200}
+              countdown
+              onClick={() => navigate('/classement')}
+            />
+            {meId && (
+              <>
+                <span
+                  className="w-px self-center bg-fg/10"
+                  style={{ height: 28 }}
+                />
+                <StatCounter
+                  value={followers}
+                  label={t('profilepage.stats.followers', { count: followers })}
+                  delay={300}
+                  onClick={() => navigate(`/u/${meId}`)}
+                />
+              </>
+            )}
           </div>
-          <p className="mt-2 text-xs text-fg2">
-            {level.isMax
-              ? 'Niveau maximum atteint 👑'
-              : `Plus que ${level.toNext} XP avant ${level.next}`}
-          </p>
-        </section>
+
+          {/* Premium XP bar — #222 track, red→#ff4d4d gradient fill. */}
+          <div className="mx-auto mt-5 max-w-[300px]">
+            <div className="mb-1.5 grid grid-cols-3 items-baseline text-[11px]">
+              <span className="text-left font-bold" style={{ color: '#E8203A' }}>
+                {level.name}
+              </span>
+              <span className="text-center font-bold text-fg">
+                {new Intl.NumberFormat('fr-FR').format(xp)} XP
+              </span>
+              <span className="text-right font-normal text-fg2">
+                {level.isMax ? 'MAX' : level.next}
+              </span>
+            </div>
+            <LiquidXpBar pct={animPct} />
+          </div>
+
+          {/* Badge preview — 3 badges (prefer unlocked). Tapping any of
+              them, or the "Voir tous" link below, opens the full
+              /badges page. */}
+          {badgeCatalogue.length > 0 && (
+            <div className="mt-5 flex flex-col items-center gap-2">
+              <div className="flex items-center justify-center gap-2.5">
+                {[...unlocked, ...locked].slice(0, 3).map((b) => {
+                  const isU = unlocks.has(b.slug)
+                  return (
+                    <button
+                      key={b.slug}
+                      onClick={() => navigate('/badges')}
+                      className="tappable flex h-10 w-10 items-center justify-center rounded-full text-lg"
+                      style={{
+                        background: isU
+                          ? b.gold
+                            ? 'rgba(224,179,65,0.14)'
+                            : 'rgba(232,32,58,0.12)'
+                          : 'rgba(255,255,255,0.04)',
+                        border: isU
+                          ? b.gold
+                            ? '1px solid rgba(224,179,65,0.45)'
+                            : '1px solid rgba(232,32,58,0.35)'
+                          : '1px solid rgb(var(--color-fg) / 0.06)',
+                        opacity: isU ? 1 : 0.5,
+                      }}
+                      aria-label={b.name}
+                    >
+                      {isU ? (
+                        badgeIcon(b.slug) ? (
+                          <img
+                            src={badgeIcon(b.slug)}
+                            alt=""
+                            loading="lazy"
+                            decoding="async"
+                            className="h-9 w-9 rounded-full object-cover"
+                          />
+                        ) : (
+                          b.emoji
+                        )
+                      ) : (
+                        <Lock className="h-4 w-4 text-fg2/50" />
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+              <button
+                onClick={() => navigate('/badges')}
+                className="tappable text-[12px] font-semibold text-fg2 hover:text-fg"
+              >
+                {t('profilepage.badges.seeAll')}
+              </button>
+            </div>
+          )}
+        </div>
 
         {/* PREMIUM BANNER moved to the very bottom of the profile
             page per the 2026-06-01 cleanup so the stats pill flows
             directly into the segmented control without a paid CTA
             wedge. See <PremiumTopBanner /> at the end of this block. */}
 
-        {/* SEGMENTED CONTROL — 3 tabs (Collection / Garage / Récompenses) */}
-        <section>
-          <div
-            className="flex gap-1 rounded-xl p-1"
-            style={{
-              background: 'rgba(10, 10, 10, 0.60)',
-              border: '1px solid rgba(255, 255, 255, 0.05)',
-              backdropFilter: 'saturate(160%) blur(14px)',
-              WebkitBackdropFilter: 'saturate(160%) blur(14px)',
-            }}
-            role="tablist"
-          >
+        {/* TAB NAV — three plain words spaced horizontally (Apple text
+            nav): active in pure white under a 1px underline, inactive in
+            muted grey. No pills, no gradient fills, no emoji. */}
+        <section className="w-full">
+          <div className="flex gap-6 px-4" role="tablist">
             {(
               [
-                { key: 'collection', label: 'Collection', emoji: '🃏' },
-                { key: 'garage', label: 'Garage', emoji: '🏎️' },
-                { key: 'rewards', label: 'Récompenses', emoji: '🏆' },
+                { key: 'collection', label: t('profilepage.tabs.collection') },
+                { key: 'garage', label: t('profilepage.tabs.garage') },
+                { key: 'rewards', label: t('profilepage.tabs.rewards') },
               ] as const
             ).map((t) => {
               const active = profileTab === t.key
@@ -599,57 +661,145 @@ export default function Profile() {
                   role="tab"
                   aria-selected={active}
                   onClick={() => setProfileTab(t.key)}
-                  className="tappable flex-1 rounded-lg py-2 text-xs font-bold transition-all"
-                  style={{
-                    background: active
-                      ? 'rgba(255, 255, 255, 0.10)'
-                      : 'transparent',
-                    color: active ? '#fff' : 'rgba(255, 255, 255, 0.45)',
-                    boxShadow: active
-                      ? '0 4px 12px rgba(0, 0, 0, 0.30)'
-                      : undefined,
-                  }}
+                  className="tappable relative pb-2 text-sm transition-colors"
                 >
-                  <span className="mr-1" aria-hidden>
-                    {t.emoji}
+                  <span
+                    className={
+                      active ? 'font-medium text-fg' : 'font-normal text-fg2'
+                    }
+                  >
+                    {t.label}
                   </span>
-                  {t.label}
+                  {active && (
+                    <span className="absolute inset-x-0 -bottom-px h-px bg-fg" />
+                  )}
                 </button>
               )
             })}
           </div>
 
-          {/* Tab content wrapper — px-2 nets px-6 from the screen edge
-              (parent already carries px-4). Gives the 2-col collection
-              grid breathing room so cards don't slam the phone edge. */}
-          <div className="mt-5 px-2">
-            {profileTab === 'collection' && <CollectionDecks spots={spots} />}
+          {/* Tab content wrapper — full width, ZERO horizontal padding/margin
+              (the parent no longer carries px-4). Collection grid + garage
+              scroll go truly edge-to-edge; inner blocks that need breathing
+              room (deck list, empty states, unlocked rewards) re-add their
+              own px-4. */}
+          <div className="mt-5 w-full">
+            {profileTab === 'collection' &&
+              (appConfig.SHOW_CARD_COLLECTION ? (
+                <CollectionDecks spots={spots} />
+              ) : (
+                // Phase 2 lock — the real decks render underneath but are
+                // frosted by the overlay's backdrop-blur (satin), so the
+                // card UI is teasingly visible without being usable.
+                <div className="relative">
+                  <div
+                    aria-hidden
+                    className="pointer-events-none select-none"
+                  >
+                    <CollectionDecks spots={spots} />
+                  </div>
+                  <div
+                    className="absolute inset-0 flex flex-col items-center justify-center gap-4 rounded-3xl text-center"
+                    style={{
+                      background: 'rgba(10,10,10,0.92)',
+                      backdropFilter: 'blur(16px)',
+                      WebkitBackdropFilter: 'blur(16px)',
+                    }}
+                  >
+                    <span
+                      className="flex h-14 w-14 items-center justify-center rounded-full"
+                      style={{
+                        background: 'rgba(255,255,255,0.06)',
+                        border: '1px solid #333',
+                      }}
+                    >
+                      <Lock className="h-6 w-6 text-white/70" strokeWidth={1.6} />
+                    </span>
+                    <p
+                      className="font-bold text-white"
+                      style={{ fontSize: '18px' }}
+                    >
+                      {t('profilepage.collectionLock.title')}
+                    </p>
+                    <p
+                      className="leading-relaxed"
+                      style={{
+                        fontSize: '14px',
+                        color: '#999999',
+                        paddingLeft: '24px',
+                        paddingRight: '24px',
+                      }}
+                    >
+                      {t('profilepage.collectionLock.body')}
+                    </p>
+                  </div>
+                </div>
+              ))}
 
             {profileTab === 'garage' &&
               (total === 0 ? (
-                <div className="flex flex-col items-center rounded-2xl border border-white/5 bg-card px-6 py-12 text-center">
+                <div className="mx-4 flex flex-col items-center rounded-2xl border border-fg/5 bg-card px-6 py-12 text-center">
                   <div className="flex h-16 w-16 items-center justify-center rounded-full bg-accent/10">
                     <Warehouse className="h-8 w-8 text-accent/70" />
                   </div>
                   <p className="mt-4 max-w-[15rem] font-medium">
-                    Ton garage est vide, pars chasser ta première supercar
+                    {t('profilepage.garage.empty')}
                   </p>
                   <button
                     onClick={() => navigate('/new-spot')}
                     className="mt-5 rounded-full bg-accent px-6 py-3 text-sm font-semibold"
                   >
-                    Spotter
+                    {t('profilepage.garage.spot')}
                   </button>
                 </div>
               ) : (
-                <GarageCoverFlow
+                <Showroom
                   spots={spots}
                   onOpen={(id) => navigate(`/spot/${id}`)}
                 />
               ))}
 
-            {profileTab === 'rewards' && (
-              <div className="space-y-7">
+            {/* Récompenses — locked "coming soon" until Phase 2
+                (SHOW_COLLECTIONS_TO_COMPLETE). The tab stays visible and
+                clickable; tapping it lands on this frosted lock panel. */}
+            {profileTab === 'rewards' &&
+              !appConfig.SHOW_COLLECTIONS_TO_COMPLETE && (
+                <div
+                  className="relative overflow-hidden rounded-3xl"
+                  style={{ border: '1px solid var(--color-border)' }}
+                >
+                  <div
+                    aria-hidden
+                    className="absolute inset-0"
+                    style={{
+                      background: 'var(--color-glass)',
+                      backdropFilter: 'saturate(140%) blur(16px)',
+                      WebkitBackdropFilter: 'saturate(140%) blur(16px)',
+                    }}
+                  />
+                  <div
+                    className="relative flex flex-col items-center justify-center gap-4 px-8 py-16 text-center"
+                    style={{ minHeight: '300px' }}
+                  >
+                    <span
+                      className="flex h-14 w-14 items-center justify-center rounded-full bg-fg/[0.06]"
+                      style={{ border: '1px solid var(--color-border)' }}
+                    >
+                      <Lock className="h-6 w-6 text-fg2" strokeWidth={1.6} />
+                    </span>
+                    <p className="text-lg font-semibold text-fg">
+                      {t('profilepage.rewardsLock.title')}
+                    </p>
+                    <p className="max-w-[20rem] text-sm leading-relaxed text-fg2">
+                      {t('profilepage.rewardsLock.body')}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+            {profileTab === 'rewards' &&
+              appConfig.SHOW_COLLECTIONS_TO_COMPLETE && (
+              <div className="space-y-7 px-4">
                 {/* Gérer mon abonnement — paid users only */}
                 {plan && (
                   <button
@@ -666,7 +816,7 @@ export default function Profile() {
                           background:
                             planTier(plan) === 'vip'
                               ? 'linear-gradient(135deg, #d4af37 0%, #ffd700 100%)'
-                              : 'var(--color-accent)',
+                              : 'rgb(var(--color-accent))',
                           color: planTier(plan) === 'vip' ? '#000' : '#fff',
                           fontSize: '16px',
                         }}
@@ -675,83 +825,86 @@ export default function Profile() {
                       </span>
                       <span className="flex flex-col">
                         <span className="text-[10px] uppercase tracking-widest text-fg2">
-                          Abonnement
+                          {t('profilepage.subscription.label')}
                         </span>
                         <span className="font-display text-base font-bold text-fg">
                           {planDisplayName(plan)}
                         </span>
                       </span>
                     </span>
-                    <span className="text-xs text-fg/55">Gérer →</span>
+                    <span className="text-xs text-fg/55">{t('profilepage.subscription.manage')}</span>
                   </button>
                 )}
 
-                {/* SECTION 1 — Trophées équipés. Horizontal scroll of
-                    the 4 featured badges in 64×64 glass squares, with
-                    a tiny inline "Voir les N" trigger that opens the
-                    BadgesBottomSheet drawer. Replaces the previous
-                    grid-cols-4 + full-width pill layout. */}
+                {/* Badges — full 4-col grid; unlocked are coloured, locked
+                    greyed with a cadenas. Tap → badge detail (condition). */}
                 <section>
-                  <div className="flex items-center justify-between">
+                  <div className="mb-3 flex items-baseline justify-between">
                     <h4
                       className="font-black uppercase text-fg2/55"
-                      style={{
-                        fontSize: '10px',
-                        letterSpacing: '0.20em',
-                      }}
+                      style={{ fontSize: '10px', letterSpacing: '0.20em' }}
                     >
-                      Trophées équipés
+                      {t('profilepage.badges.heading')}
                     </h4>
-                    <button
-                      onClick={() => setBadgesSheetOpen(true)}
-                      className="tappable font-bold text-accent hover:underline"
-                      style={{ fontSize: '10px' }}
-                    >
-                      Voir les {badgeCatalogue.length}
-                    </button>
+                    <span className="text-[10px] font-bold text-fg2">
+                      {t('profilepage.badges.unlockedCount', {
+                        unlocked: unlocked.length,
+                        total: badgeCatalogue.length,
+                      })}
+                    </span>
                   </div>
-                  <div className="no-scrollbar mt-3 flex gap-3 overflow-x-auto py-1">
-                    {topBadges.map((b) => {
-                      const isUnlocked = unlocks.has(b.slug)
+                  <div className="grid grid-cols-4 gap-x-2 gap-y-4">
+                    {[...unlocked, ...locked].map((b) => {
+                      const isU = unlocks.has(b.slug)
+                      const icon = badgeIcon(b.slug)
                       return (
                         <button
                           key={b.slug}
                           onClick={() => navigate(`/badges/${b.slug}`)}
-                          className="tappable flex flex-shrink-0 flex-col items-center justify-center gap-1.5 rounded-2xl p-2 text-center"
-                          style={{
-                            width: '64px',
-                            height: '64px',
-                            background: 'var(--color-glass-strong)',
-                            border: isUnlocked
-                              ? b.gold
-                                ? '1px solid rgba(224,179,65,0.40)'
-                                : '1px solid rgba(232,32,58,0.30)'
-                              : '1px solid rgba(255,255,255,0.05)',
-                            backdropFilter: 'saturate(160%) blur(12px)',
-                            WebkitBackdropFilter: 'saturate(160%) blur(12px)',
-                            boxShadow:
-                              isUnlocked && !b.gold
-                                ? '0 8px 22px rgba(232,32,58,0.16)'
-                                : isUnlocked && b.gold
-                                  ? '0 8px 22px rgba(224,179,65,0.20)'
-                                  : 'inset 0 1px 0 rgba(255,255,255,0.03)',
-                          }}
+                          className="tappable flex min-w-0 flex-col items-center gap-1.5"
                           aria-label={b.name}
                         >
-                          {isUnlocked ? (
-                            <span className="text-xl">{b.emoji}</span>
-                          ) : (
-                            <Lock className="h-4 w-4 text-fg2/50" />
-                          )}
                           <span
-                            className="w-full truncate font-bold leading-tight"
+                            className="flex h-14 w-14 flex-none items-center justify-center overflow-hidden rounded-full text-2xl"
                             style={{
-                              fontSize: '8px',
-                              color: isUnlocked
+                              background: isU
+                                ? b.gold
+                                  ? 'rgba(224,179,65,0.14)'
+                                  : 'rgba(232,32,58,0.12)'
+                                : 'rgba(255,255,255,0.04)',
+                              border: isU
+                                ? b.gold
+                                  ? '1px solid rgba(224,179,65,0.45)'
+                                  : '1px solid rgba(232,32,58,0.35)'
+                                : '1px solid rgb(var(--color-fg) / 0.06)',
+                              opacity: isU ? 1 : 0.55,
+                            }}
+                          >
+                            {isU ? (
+                              icon ? (
+                                <img
+                                  src={icon}
+                                  alt=""
+                                  loading="lazy"
+                                  decoding="async"
+                                  className="h-full w-full rounded-full object-cover"
+                                />
+                              ) : (
+                                b.emoji
+                              )
+                            ) : (
+                              <Lock className="h-5 w-5 text-fg2/50" />
+                            )}
+                          </span>
+                          <span
+                            className="line-clamp-2 text-center font-semibold leading-tight"
+                            style={{
+                              fontSize: '9px',
+                              color: isU
                                 ? b.gold
                                   ? '#E0B341'
-                                  : 'var(--color-accent)'
-                                : 'rgba(255,255,255,0.40)',
+                                  : 'rgb(var(--color-fg))'
+                                : 'rgb(var(--color-fg) / 0.4)',
                             }}
                           >
                             {b.name}
@@ -762,25 +915,76 @@ export default function Profile() {
                   </div>
                 </section>
 
-                {/* SECTION 2 — Défis en cours. Renders the top 2
-                    collections by completion ratio (claimed ones are
-                    skipped). Compact h-1 progress bar; the RÉCLAMER
-                    button is enabled only at 100%. */}
+                {/* Collections to complete */}
                 <TopChallenges
                   spots={spots}
                   count={2}
                   onShowAll={() => navigate('/challenges')}
                 />
+
+                {/* Historique XP — last 10 transactions */}
+                {xpHistory.length > 0 && (
+                  <section>
+                    <h4
+                      className="mb-3 font-black uppercase text-fg2/55"
+                      style={{ fontSize: '10px', letterSpacing: '0.20em' }}
+                    >
+                      {t('profilepage.xpHistory.heading')}
+                    </h4>
+                    <div className="space-y-1.5">
+                      {xpHistory.map((tx, i) => {
+                        const r = xpReasonLabel(tx.reason, t)
+                        const date = new Intl.DateTimeFormat('fr-FR', {
+                          day: 'numeric',
+                          month: 'short',
+                        }).format(new Date(tx.created_at))
+                        return (
+                          <div
+                            key={i}
+                            className="flex items-center gap-3 rounded-xl bg-card px-3 py-2.5"
+                            style={{ border: '1px solid var(--color-border)' }}
+                          >
+                            <span className="text-lg" aria-hidden>
+                              {r.emoji}
+                            </span>
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-[13px] font-medium text-fg">
+                                {r.label}
+                              </p>
+                              <p className="text-[11px] text-fg2">{date}</p>
+                            </div>
+                            <span
+                              className="flex-none font-display font-extrabold tabular-nums"
+                              style={{
+                                color:
+                                  tx.amount >= 0
+                                    ? '#E8203A'
+                                    : 'rgb(var(--color-fg) / 0.4)',
+                                fontSize: '14px',
+                              }}
+                            >
+                              {tx.amount >= 0 ? '+' : ''}
+                              {tx.amount} XP
+                            </span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </section>
+                )}
               </div>
             )}
           </div>
         </section>
 
-        {/* PREMIUM BANNER (free users only) — relegated to the very
-            bottom per the 2026-06-01 cleanup. The user lands on a
-            dense identity + stats + tab area first; the paid CTA
-            sits as a soft anchor at the end of the scroll. */}
-        {!plan && <PremiumTopBanner onTap={() => navigate('/premium')} />}
+        {/* PREMIUM CARD — upsell for free users, active-status for
+            subscribers. Re-pads the 16px gutter dropped from the parent. */}
+        <div className="px-4">
+          <PremiumTopBanner
+            onTap={() => navigate('/premium')}
+            plan={plan}
+          />
+        </div>
 
       </div>
 
@@ -790,155 +994,313 @@ export default function Profile() {
         badges={badgeCatalogue}
         unlocks={unlocks}
       />
+
+      <ShareSheet
+        open={shareOpen}
+        onClose={() => setShareOpen(false)}
+        pseudo={pseudo}
+        userId={meId}
+      />
     </div>
+  )
+}
+
+// ────────────────────────── SHARE SHEET ─────────────────────────
+
+/** Slide-up sheet to share the profile: the vanity link to copy + the
+ *  native iOS/Android share sheet. The link points at the public profile
+ *  route that already exists (/u/:id). */
+function ShareSheet({
+  open,
+  onClose,
+  pseudo,
+  userId,
+}: {
+  open: boolean
+  onClose: () => void
+  pseudo: string
+  userId: string | null
+}) {
+  const { t } = useTranslation()
+  const [copied, setCopied] = useState(false)
+  if (!open) return null
+
+  const handle = `revs.app/@${pseudo.toLowerCase().replace(/\s+/g, '')}`
+  const url = userId
+    ? `${window.location.origin}/u/${userId}`
+    : window.location.origin
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(url)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1600)
+    } catch {
+      /* clipboard blocked */
+    }
+  }
+  const share = async () => {
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: t('profilepage.share.nativeTitle', { name: pseudo }),
+          url,
+        })
+      } else {
+        void copy()
+      }
+    } catch {
+      /* user cancelled */
+    }
+  }
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center"
+      role="dialog"
+      aria-modal="true"
+      onClick={onClose}
+    >
+      <div
+        className="absolute inset-0"
+        style={{ background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(6px)' }}
+      />
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="relative w-full max-w-md rounded-t-3xl p-5 pb-[max(1.5rem,env(safe-area-inset-bottom))]"
+        style={{ background: '#141414', border: '1px solid rgba(255,255,255,0.06)' }}
+      >
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-lg font-bold text-white">{t('profilepage.share.title')}</h2>
+          <button onClick={onClose} aria-label={t('profilepage.share.closeAria')} className="text-white/50 hover:text-white">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        {/* Link to copy */}
+        <button
+          onClick={copy}
+          className="tappable flex w-full items-center gap-3 rounded-2xl px-4 py-3.5 text-left"
+          style={{ background: '#0d0d0d', border: '1px solid rgba(255,255,255,0.06)' }}
+        >
+          <span className="min-w-0 flex-1 truncate text-[13px] text-white/80">
+            {handle}
+          </span>
+          {copied ? (
+            <Check className="h-5 w-5 flex-none" style={{ color: '#22C55E' }} />
+          ) : (
+            <Copy className="h-5 w-5 flex-none text-white/45" />
+          )}
+        </button>
+        <p className="mt-1.5 px-1 text-[11px] text-white/35">
+          {copied ? t('profilepage.share.copied') : t('profilepage.share.copyHint')}
+        </p>
+
+        {/* Native share */}
+        <button
+          onClick={share}
+          className="tappable mt-4 flex w-full items-center justify-center gap-2 rounded-full py-3.5 text-sm font-extrabold text-white"
+          style={{ background: '#E8203A', boxShadow: '0 8px 24px rgba(232,32,58,0.45)' }}
+        >
+          <Share className="h-[18px] w-[18px]" />
+          {t('profilepage.share.shareButton')}
+        </button>
+      </div>
+    </div>,
+    document.body,
   )
 }
 
 // ─────────────────────── Profile helpers (post-restructure) ───────────────────────
 
-/** Tiny tappable stat used inside the unified pill that replaced the
- *  followers/following card AND the old section-3 stats row. Compact
- *  one-line format — bold white number, semibold neutral label, same
- *  baseline. Dots between stats are owned by the parent. */
-function ProfileStatTiny({
+/** Human-readable label + emoji for an xp_transactions.reason. */
+function xpReasonLabel(
+  reason: string,
+  t: TFunction,
+): { emoji: string; label: string } {
+  if (reason === 'spot')
+    return { emoji: '📸', label: t('profilepage.xpReason.spot') }
+  if (reason === 'daily_first')
+    return { emoji: '☀️', label: t('profilepage.xpReason.dailyFirst') }
+  if (reason === 'streak')
+    return { emoji: '🔥', label: t('profilepage.xpReason.streak') }
+  if (reason.startsWith('collection:'))
+    return { emoji: '🃏', label: t('profilepage.xpReason.collection') }
+  if (reason.startsWith('referral'))
+    return { emoji: '🤝', label: t('profilepage.xpReason.referral') }
+  if (reason.startsWith('challenge') || reason.startsWith('weekly'))
+    return { emoji: '🎯', label: t('profilepage.xpReason.challenge') }
+  if (reason.startsWith('like'))
+    return { emoji: '❤️', label: t('profilepage.xpReason.like') }
+  if (reason.startsWith('event'))
+    return { emoji: '🎪', label: t('profilepage.xpReason.event') }
+  if (reason === 'reconcile')
+    return { emoji: '⚙️', label: t('profilepage.xpReason.reconcile') }
+  return { emoji: '✨', label: reason }
+}
+
+/** Tappable stat with a count-up animation: the number tweens from 0 to
+ *  its value over ~1s (easeOutCubic) the first time the profile renders.
+ *  `prefix` is prepended (e.g. "#" for rank); `empty` shows "—" instead. */
+function StatCounter({
   value,
   label,
+  prefix = '',
+  empty = false,
+  delay = 0,
+  countdown = false,
   onClick,
 }: {
-  value: string
+  value: number
   label: string
+  prefix?: string
+  empty?: boolean
+  /** Stagger the count animation start (cascade effect). */
+  delay?: number
+  /** Count DOWN from a larger number to `value` (used for rank). */
+  countdown?: boolean
   onClick: () => void
 }) {
+  // Countdown starts from a visibly larger number; count-up starts at 0.
+  const from = countdown ? value + 30 : 0
+  const [disp, setDisp] = useState(() =>
+    prefersReducedMotion() ? value : from,
+  )
+  useEffect(() => {
+    if (empty) return
+    if (prefersReducedMotion()) {
+      setDisp(value)
+      return
+    }
+    const dur = 800
+    let raf = 0
+    let startTime: number | null = null
+    // easeOutExpo
+    const ease = (k: number) => (k >= 1 ? 1 : 1 - Math.pow(2, -10 * k))
+    const tick = (now: number) => {
+      if (startTime === null) startTime = now
+      const k = Math.min(1, (now - startTime) / dur)
+      const e = ease(k)
+      setDisp(Math.round(from + (value - from) * e))
+      if (k < 1) raf = requestAnimationFrame(tick)
+    }
+    // Cascade: hold the start value until `delay` ms have passed.
+    const timer = window.setTimeout(() => {
+      raf = requestAnimationFrame(tick)
+    }, delay)
+    return () => {
+      window.clearTimeout(timer)
+      cancelAnimationFrame(raf)
+    }
+  }, [value, empty, delay, from])
   return (
     <button
       onClick={onClick}
-      className="tappable inline-flex items-baseline gap-1 text-fg2"
-      style={{ fontSize: '11px', fontWeight: 600 }}
+      className="tappable flex flex-1 flex-col items-center justify-center"
     >
       <span
-        className="font-black tabular-nums text-white"
-        style={{ fontSize: '12px' }}
+        className="font-display font-extrabold tabular-nums text-fg"
+        style={{ fontSize: '22px', lineHeight: 1 }}
       >
-        {value}
+        {empty ? '—' : `${prefix}${disp}`}
       </span>
-      <span className="lowercase">{label}</span>
+      <span className="mt-1 text-[11px] text-fg2">{label}</span>
     </button>
   )
 }
 
-/** Jet-black banner with a drifting gold sweep that nudges free
- *  users toward /premium. Lifted from the previous Section 3.5 into
- *  its own component so the top of Profile stays uncluttered. */
-function PremiumTopBanner({ onTap }: { onTap: () => void }) {
+/** Premium card — a real dark-red gradient card (logo + REVS PREMIUM +
+ *  perks + red "Découvrir" CTA). When already subscribed, it shows the
+ *  active tier + renewal date instead of the upsell. */
+function PremiumTopBanner({
+  onTap,
+  plan,
+  renewsAt,
+}: {
+  onTap: () => void
+  plan?: string | null
+  renewsAt?: string | null
+}) {
+  const { t } = useTranslation()
+  const active = !!plan
+  const renew = renewsAt
+    ? new Intl.DateTimeFormat('fr-FR', {
+        day: 'numeric',
+        month: 'long',
+      }).format(new Date(renewsAt))
+    : null
   return (
     <button
       onClick={onTap}
-      className="tappable group relative flex w-full items-center justify-between gap-3 overflow-hidden rounded-2xl px-4 py-4 text-left transition-transform active:scale-[0.99]"
+      className="tappable flex w-full items-center gap-3 text-left transition-transform active:scale-[0.99]"
       style={{
-        background:
-          'linear-gradient(95deg, #050505 0%, #141414 50%, #050505 100%)',
-        border: '1px solid rgba(224, 179, 65, 0.32)',
-        boxShadow:
-          '0 16px 36px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 215, 0, 0.06) inset',
+        background: '#141414',
+        borderRadius: '16px',
+        padding: '16px',
+        border: active ? '1px solid #E8203A' : '1px solid rgba(255,255,255,0.06)',
       }}
     >
+      {/* Small REVS logo */}
       <span
-        aria-hidden
-        className="pointer-events-none absolute inset-0"
+        className="flex h-9 w-9 flex-none items-center justify-center rounded-lg font-display text-base font-black tracking-tighter text-white"
         style={{
-          background:
-            'linear-gradient(95deg, rgba(224, 179, 65, 0) 0%, rgba(255, 215, 0, 0.10) 35%, rgba(255, 246, 200, 0.18) 50%, rgba(255, 215, 0, 0.10) 65%, rgba(184, 134, 11, 0) 100%)',
-          backgroundSize: '220% 100%',
-          animation: 'founder-shimmer 6s linear infinite',
+          background: 'rgba(232,32,58,0.18)',
+          border: '1px solid rgba(232,32,58,0.45)',
         }}
-      />
-      <div className="relative z-10 flex items-center gap-3">
-        <span
-          className="flex h-10 w-10 flex-none items-center justify-center rounded-xl"
-          style={{
-            background:
-              'linear-gradient(135deg, rgba(255, 215, 0, 0.25) 0%, rgba(184, 134, 11, 0.10) 100%)',
-            border: '1px solid rgba(255, 215, 0, 0.35)',
-            color: '#FFD700',
-            fontSize: '18px',
-          }}
+        aria-hidden
+      >
+        R
+      </span>
+
+      <div className="min-w-0 flex-1">
+        <p
+          className="font-display font-extrabold tracking-tight"
+          style={{ color: '#E8203A', fontSize: '14px' }}
         >
-          ⚡
-        </span>
-        <div className="min-w-0">
-          <p
-            className="font-display font-extrabold uppercase tracking-widest"
-            style={{
-              color: '#FFD700',
-              fontSize: '11px',
-              letterSpacing: '0.16em',
-            }}
-          >
-            Club REVS Premium
+          REVS PREMIUM
+        </p>
+        {active && (
+          <p className="mt-0.5 truncate text-[12px]">
+            <span className="font-bold" style={{ color: '#34D399' }}>
+              {t('profilepage.premium.active')}
+            </span>
+            {renew && (
+              <span className="text-white/45"> {t('profilepage.premium.renews', { date: renew })}</span>
+            )}
           </p>
-          <p className="mt-0.5 text-fg/75" style={{ fontSize: '12px' }}>
-            Mode Radar temps réel & spots illimités
-          </p>
-        </div>
+        )}
+        {/* Upsell case: no second line at all — only the logo, the red
+            "REVS PREMIUM" title and the "Découvrir →" button. The price
+            lives exclusively on the /premium page. */}
       </div>
-      <ChevronRight
-        className="relative z-10 h-5 w-5 flex-none text-fg/55 transition-transform group-hover:translate-x-0.5"
-      />
+
+      <span
+        className="flex-none rounded-full px-3.5 py-2 text-[12px] font-extrabold text-white"
+        style={{ background: '#E8203A' }}
+      >
+        {active ? t('profilepage.premium.manage') : t('profilepage.premium.discover')}
+      </span>
     </button>
   )
-}
-
-/** Brand-aware glow used as a soft halo on the GarageCoverFlow horizontal
- *  cards. Lowercase substring match against the brand string keeps
- *  the table small while covering enough variants. Default fallback
- *  is the REVS accent red. */
-function brandGlow(brand: string | null | undefined): string {
-  const b = (brand ?? '').toLowerCase()
-  if (b.includes('ferrari')) return 'rgba(232, 32, 58, 0.30)'
-  if (b.includes('lamborghini') || b.includes('lambo'))
-    return 'rgba(255, 215, 0, 0.28)'
-  if (b.includes('porsche')) return 'rgba(220, 220, 220, 0.25)'
-  if (b.includes('mclaren')) return 'rgba(255, 138, 0, 0.30)'
-  if (b.includes('audi')) return 'rgba(232, 32, 58, 0.25)'
-  if (b.includes('bmw')) return 'rgba(59, 130, 246, 0.28)'
-  if (b.includes('mercedes')) return 'rgba(220, 220, 220, 0.25)'
-  if (b.includes('bentley')) return 'rgba(34, 139, 34, 0.25)'
-  if (b.includes('aston')) return 'rgba(0, 100, 0, 0.25)'
-  if (b.includes('rolls')) return 'rgba(160, 100, 200, 0.25)'
-  if (b.includes('bugatti')) return 'rgba(20, 70, 180, 0.28)'
-  if (b.includes('koenigsegg')) return 'rgba(255, 255, 255, 0.22)'
-  if (b.includes('pagani')) return 'rgba(255, 0, 128, 0.25)'
-  if (b.includes('toyota') || b.includes('lexus'))
-    return 'rgba(140, 140, 140, 0.22)'
-  if (b.includes('honda') || b.includes('acura'))
-    return 'rgba(220, 220, 220, 0.22)'
-  if (b.includes('nissan') || b.includes('nismo'))
-    return 'rgba(170, 0, 0, 0.25)'
-  if (b.includes('volkswagen') || b.includes('vw'))
-    return 'rgba(40, 90, 170, 0.22)'
-  if (b.includes('volvo')) return 'rgba(30, 90, 130, 0.22)'
-  if (b.includes('mazda')) return 'rgba(200, 0, 0, 0.22)'
-  if (b.includes('subaru')) return 'rgba(0, 100, 200, 0.22)'
-  return 'rgba(232, 32, 58, 0.20)'
 }
 
 // ─────────────────────────── COLLECTION DECKS ───────────────────────────
 
-/** Rarity-anchored deck headers per the 2026-06-01 showroom refocus.
- *  The Collection tab no longer dumps every card into a flat 2-col
- *  grid; instead the user lands on 4 horizontal "deck" rectangles
- *  (one per rarity that has at least one spot) and drills into a
- *  filtered grid on tap. Decks ordered high → low so Legendary/Ultra
- *  Rare lead. */
+/** Rarity-anchored collection cards per the 2026-06-04 ennoblissement.
+ *  The Collection tab lands on horizontal "portfolio" cards — one per
+ *  rarity that has at least one spot — each backdropped by the user's
+ *  best (priciest) photographed car in that category, heavily darkened
+ *  and blurred. No neon glyphs, no tints, no emoji: just a white deck
+ *  name and a grey card count. Tapping drills into the filtered grid.
+ *  Ordered high → low so Hypercar leads. */
 type Deck = {
   rarity: Rarity
   label: string
   count: number
-  /** Rarity-tinted accent colour for the eyebrow + glow on the
-   *  deck rectangle. Same palette as the Home recent-spot pills
-   *  (emerald commun, blue rare, violet ultra_rare, gold unique). */
-  tint: string
-  emoji: string
+  /** URL of the priciest photographed spot in this rarity — used as a
+   *  furtive, darkened background for the card. Null when none of the
+   *  rarity's spots carry a photo. */
+  cover: string | null
 }
 const DECK_RARITY_ORDER: Rarity[] = [
   'hypercar',
@@ -948,28 +1310,28 @@ const DECK_RARITY_ORDER: Rarity[] = [
   'premium',
   'standard',
 ]
-const DECK_THEME: Record<
-  Rarity,
-  { label: string; tint: string; emoji: string }
-> = {
-  hypercar:    { label: 'Hypercar',    tint: '#FACC15', emoji: '👑' },
-  supercar:    { label: 'Supercar',    tint: '#C084FC', emoji: '✨' },
-  exclusif:    { label: 'Exclusif',    tint: '#B87333', emoji: '💎' },
-  performance: { label: 'Performance', tint: '#EF4444', emoji: '🏁' },
-  premium:     { label: 'Premium',     tint: '#60A5FA', emoji: '⚡' },
-  standard:    { label: 'Standard',    tint: '#9CA3AF', emoji: '🎯' },
-}
-
 function CollectionDecks({ spots }: { spots: Spot[] }) {
+  const { t } = useTranslation()
   const [openRarity, setOpenRarity] = useState<Rarity | null>(null)
 
   const decks = useMemo<Deck[]>(() => {
     return DECK_RARITY_ORDER.map((r) => {
-      const count = spots.filter((s) => (s.rarity ?? 'standard') === r).length
-      const t = DECK_THEME[r]
-      return { rarity: r, label: t.label, count, tint: t.tint, emoji: t.emoji }
+      const inRarity = spots.filter((s) => (s.rarity ?? 'standard') === r)
+      // Best photo = the priciest spot that actually carries an image.
+      const cover =
+        inRarity
+          .filter((s) => s.photo_url)
+          .sort(
+            (a, b) => (b.estimated_price ?? 0) - (a.estimated_price ?? 0),
+          )[0]?.photo_url ?? null
+      return {
+        rarity: r,
+        label: t(`profilepage.rarity.${r}`),
+        count: inRarity.length,
+        cover,
+      }
     }).filter((d) => d.count > 0)
-  }, [spots])
+  }, [spots, t])
 
   if (spots.length === 0) {
     // Reuse the MyCollection empty state so the message stays
@@ -981,31 +1343,25 @@ function CollectionDecks({ spots }: { spots: Spot[] }) {
     const filtered = spots.filter(
       (s) => (s.rarity ?? 'standard') === openRarity,
     )
-    const theme = DECK_THEME[openRarity]
     return (
       <div>
-        <button
-          onClick={() => setOpenRarity(null)}
-          className="tappable mb-4 inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold text-fg/80 hover:text-fg"
-          style={{
-            background: 'var(--color-glass-mid)',
-            border: '1px solid rgba(255, 255, 255, 0.08)',
-          }}
-        >
-          <ArrowLeft className="h-3.5 w-3.5" />
-          Tous les decks
-        </button>
-        <div className="mb-3 flex items-baseline justify-between">
-          <h3
-            className="font-display font-extrabold tracking-tight text-white"
-            style={{ fontSize: '18px', letterSpacing: '-0.02em' }}
+        {/* Header keeps the 16px gutter; the grid below stays full-bleed. */}
+        <div className="px-4">
+          <button
+            onClick={() => setOpenRarity(null)}
+            className="tappable mb-4 inline-flex items-center gap-2 text-xs font-medium text-fg2 hover:text-fg"
           >
-            <span style={{ color: theme.tint }}>{theme.emoji}</span>{' '}
-            {theme.label}
-          </h3>
-          <span className="text-xs text-fg2 font-semibold">
-            {filtered.length} carte{filtered.length > 1 ? 's' : ''}
-          </span>
+            <ArrowLeft className="h-3.5 w-3.5" />
+            {t('profilepage.decks.allDecks')}
+          </button>
+          <div className="mb-3 flex items-baseline justify-between">
+            <h3 className="text-lg font-semibold tracking-tight text-fg">
+              {t(`profilepage.rarity.${openRarity}`)}
+            </h3>
+            <span className="text-xs font-normal text-fg2">
+              {t('profilepage.decks.cardCount', { count: filtered.length })}
+            </span>
+          </div>
         </div>
         <MyCollection spots={filtered} />
       </div>
@@ -1013,86 +1369,124 @@ function CollectionDecks({ spots }: { spots: Spot[] }) {
   }
 
   return (
-    <div className="space-y-3">
+    // Deck list keeps the 16px gutter (full-bleed only applies to the
+    // 2-col card grid shown after drilling into a deck).
+    <div className="space-y-3 px-4">
+      {/* Collection summary — total cards + rarity distribution pills,
+          ordered Légendaire-first like the decks below. */}
+      <div
+        className="rounded-2xl px-5 py-4"
+        style={{
+          background: 'rgb(var(--color-card))',
+          border: '1px solid var(--color-border)',
+        }}
+      >
+        <div className="flex items-baseline justify-between">
+          <span
+            className="text-[10px] font-black uppercase text-fg2/55"
+            style={{ letterSpacing: '0.2em' }}
+          >
+            {t('profilepage.decks.summaryLabel')}
+          </span>
+          <span className="font-display text-2xl font-extrabold leading-none text-fg">
+            {spots.length}
+            <span className="ml-1.5 text-[11px] font-bold text-fg2">
+              {t('profilepage.decks.cardWord', { count: spots.length })}
+            </span>
+          </span>
+        </div>
+        <div className="no-scrollbar mt-3 flex gap-2 overflow-x-auto py-0.5">
+          {decks.map((d) => {
+            const rb = rarityBadge(d.rarity)
+            return (
+              <span
+                key={d.rarity}
+                className="flex flex-none items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-black uppercase"
+                style={{
+                  background: rb.bg,
+                  color: rb.fg,
+                  border: `1px solid ${rb.border}`,
+                  letterSpacing: '0.04em',
+                }}
+              >
+                {rb.label}
+                <span className="font-extrabold opacity-80">{d.count}</span>
+              </span>
+            )
+          })}
+        </div>
+      </div>
+
       {decks.map((d) => (
         <button
           key={d.rarity}
           onClick={() => setOpenRarity(d.rarity)}
-          className="tappable flex w-full items-center gap-4 rounded-3xl text-left transition-all duration-200 active:scale-[0.98]"
+          className="tappable relative flex w-full items-center gap-4 overflow-hidden rounded-2xl px-5 py-5 text-left transition-transform duration-200 active:scale-[0.98]"
           style={{
-            background: 'var(--color-glass-strong)',
-            border: '1px solid rgba(255, 255, 255, 0.05)',
-            padding: '18px 20px',
-            boxShadow: `0 16px 30px rgba(0, 0, 0, 0.35), inset 0 0 0 1px ${d.tint}10`,
+            background: 'rgb(var(--color-card))',
+            border: '1px solid var(--color-border)',
           }}
         >
-          {/* Stack glyph — three nested tilted squares hinting "deck
-              of cards", tinted in the rarity colour. Pure CSS, no
-              extra fetch. */}
-          <div
-            className="relative flex-none"
-            style={{ width: '44px', height: '44px' }}
-          >
-            <div
-              className="absolute inset-0 rounded-xl"
-              style={{
-                background: `${d.tint}1A`,
-                border: `1px solid ${d.tint}55`,
-                transform: 'rotate(-10deg) translate(-4px, 4px)',
-              }}
-            />
-            <div
-              className="absolute inset-0 rounded-xl"
-              style={{
-                background: `${d.tint}26`,
-                border: `1px solid ${d.tint}77`,
-                transform: 'rotate(4deg) translate(2px, -2px)',
-              }}
-            />
-            <div
-              className="absolute inset-0 flex items-center justify-center rounded-xl text-lg"
-              style={{
-                background: `${d.tint}33`,
-                border: `1px solid ${d.tint}AA`,
-                boxShadow: `0 4px 14px ${d.tint}33`,
-              }}
-            >
-              {d.emoji}
-            </div>
-          </div>
+          {/* Furtive background: the best car of the deck, darkened and
+              blurred so the white text reads cleanly on top. */}
+          {d.cover && (
+            <>
+              <img
+                src={d.cover}
+                alt=""
+                aria-hidden
+                loading="lazy"
+                className="pointer-events-none absolute inset-0 h-full w-full object-cover"
+                style={{ opacity: 0.3, filter: 'blur(6px)' }}
+              />
+              {/* Discreet dark linear filter behind the white text so the
+                  deck name stays perfectly legible over any blurred
+                  background photo. */}
+              <span
+                aria-hidden
+                className="pointer-events-none absolute inset-0 bg-gradient-to-r from-black/60 via-black/20 to-transparent"
+              />
+            </>
+          )}
 
-          <div className="min-w-0 flex-1">
-            <p
-              className="font-black uppercase"
-              style={{
-                color: d.tint,
-                fontSize: '10px',
-                letterSpacing: '0.20em',
-              }}
+          {/* Card level-up teaser — a discreet "Lv.1" + greyed micro-lock
+              hinting the evolution system is coming. Shown until
+              SHOW_CARD_LEVEL_UP flips on. */}
+          {!appConfig.SHOW_CARD_LEVEL_UP && (
+            <span
+              className={`absolute right-3 top-3 z-10 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                d.cover ? 'bg-black/40 text-white/80' : 'bg-fg/[0.06] text-fg2'
+              }`}
             >
-              Deck
-            </p>
+              Lv.1
+              <Lock className="h-2.5 w-2.5 opacity-70" strokeWidth={2.2} />
+            </span>
+          )}
+
+          <div className="relative z-10 min-w-0 flex-1">
             <h4
-              className="mt-0.5 font-display font-extrabold tracking-tight text-white"
-              style={{ fontSize: '16px', letterSpacing: '-0.01em' }}
+              className={`text-base font-semibold tracking-tight ${
+                d.cover ? 'text-white' : 'text-fg'
+              }`}
             >
               {d.label}
             </h4>
             <p
-              className="mt-0.5 text-fg2 font-semibold"
-              style={{ fontSize: '11px' }}
+              className={`mt-0.5 text-xs font-normal ${
+                d.cover ? 'text-white/65' : 'text-fg2'
+              }`}
             >
-              {d.count} carte{d.count > 1 ? 's' : ''} collectionnée
-              {d.count > 1 ? 's' : ''}
+              {t('profilepage.decks.cardsCollected', { count: d.count })}
             </p>
           </div>
 
-          <ChevronRight className="h-4 w-4 flex-none text-fg2/45" />
+          <ChevronRight
+            className={`relative z-10 h-4 w-4 flex-none ${
+              d.cover ? 'text-white/55' : 'text-fg2'
+            }`}
+          />
         </button>
       ))}
-      <p className="pt-2 text-center text-[10px] uppercase tracking-widest text-fg2/40">
-        Decks groupés par rareté
-      </p>
     </div>
   )
 }
@@ -1106,189 +1500,6 @@ function CollectionDecks({ spots }: { spots: Spot[] }) {
  *  in the scroller and sets that one to scale-100 / others to
  *  scale-90 opacity-40 — the classic 3-D depth effect. Tapping the
  *  active card opens the underlying spot. */
-function GarageCoverFlow({
-  spots,
-  onOpen,
-}: {
-  spots: Spot[]
-  onOpen: (id: string) => void
-}) {
-  const scrollerRef = useRef<HTMLDivElement | null>(null)
-  const [activeIdx, setActiveIdx] = useState(0)
-
-  const cars = useMemo(() => {
-    const map = new Map<string, Spot>()
-    for (const s of spots) {
-      const key = `${(s.brand ?? '').toLowerCase().trim()}|${(s.model ?? '').toLowerCase().trim()}`
-      if (!key.replace('|', '').trim()) continue
-      const cur = map.get(key)
-      if (!cur || rarityRank(s.rarity) > rarityRank(cur.rarity)) {
-        map.set(key, s)
-      }
-    }
-    return [...map.values()].sort(
-      (a, b) => rarityRank(b.rarity) - rarityRank(a.rarity),
-    )
-  }, [spots])
-
-  useEffect(() => {
-    const scroller = scrollerRef.current
-    if (!scroller) return
-    const cards = scroller.querySelectorAll('[data-cover-card]')
-    if (!cards.length) return
-
-    const obs = new IntersectionObserver(
-      (entries) => {
-        let bestIdx = activeIdx
-        let bestRatio = 0
-        entries.forEach((e) => {
-          if (e.intersectionRatio > bestRatio) {
-            bestRatio = e.intersectionRatio
-            bestIdx = Number(e.target.getAttribute('data-idx'))
-          }
-        })
-        if (bestRatio > 0) setActiveIdx(bestIdx)
-      },
-      { root: scroller, threshold: [0.5, 0.7, 0.9, 1.0] },
-    )
-    cards.forEach((c) => obs.observe(c))
-    return () => obs.disconnect()
-    // activeIdx omitted on purpose — observer is idempotent re-runs
-    // would just churn the observation set.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cars.length])
-
-  return (
-    <div className="-mx-2">
-      {/* Negative margin neutralises the parent's px-2 so the carousel
-          can full-bleed under the screen edges; padding inside the
-          scroller restores the breathing room at the actual content. */}
-      <div
-        ref={scrollerRef}
-        className="no-scrollbar flex snap-x snap-mandatory items-stretch gap-4 overflow-x-auto py-4"
-        style={{
-          paddingInline: 'max(env(safe-area-inset-left), 24px)',
-          scrollPaddingInline: '24px',
-          // WebKit needs this for smooth snap recovery on momentum
-          // swipes when the scroller is nested inside another
-          // scrolling container.
-          WebkitOverflowScrolling: 'touch',
-        }}
-      >
-        {cars.map((s, i) => {
-          const active = i === activeIdx
-          const glow = brandGlow(s.brand)
-          return (
-            <button
-              key={s.id}
-              data-cover-card
-              data-idx={i}
-              onClick={() => onOpen(s.id)}
-              className="snap-center flex-shrink-0 overflow-hidden rounded-3xl text-left transition-all duration-300 ease-out"
-              style={{
-                width: '280px',
-                height: '160px',
-                background:
-                  'linear-gradient(135deg, #1a1a1a 0%, #0a0a0a 60%, #050505 100%)',
-                border: active
-                  ? '1px solid rgba(255, 255, 255, 0.10)'
-                  : '1px solid rgba(255, 255, 255, 0.05)',
-                transform: active ? 'scale(1)' : 'scale(0.90)',
-                opacity: active ? 1 : 0.4,
-                boxShadow: active
-                  ? `0 0 30px ${glow.replace('0.22', '0.35')}, 0 20px 40px rgba(0, 0, 0, 0.55)`
-                  : '0 12px 24px rgba(0, 0, 0, 0.40)',
-                willChange: 'transform, opacity',
-              }}
-              aria-label={`${s.brand ?? ''} ${s.model ?? ''}`}
-            >
-              <span
-                aria-hidden
-                className="pointer-events-none absolute"
-                style={{
-                  bottom: '-40px',
-                  right: '-40px',
-                  width: '180px',
-                  height: '180px',
-                  borderRadius: '50%',
-                  background: glow,
-                  filter: 'blur(48px)',
-                  opacity: active ? 1 : 0.6,
-                }}
-              />
-              <div className="relative z-10 flex h-full flex-col justify-between p-5">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p
-                      className="font-black uppercase"
-                      style={{
-                        color: active ? '#EF4444' : 'rgba(115,115,115,1)',
-                        fontSize: '9px',
-                        letterSpacing: '0.20em',
-                      }}
-                    >
-                      {s.brand}
-                    </p>
-                    <h3
-                      className="mt-0.5 truncate font-display font-black tracking-tight text-white"
-                      style={{
-                        fontSize: '18px',
-                        letterSpacing: '-0.02em',
-                      }}
-                    >
-                      {s.model}
-                    </h3>
-                  </div>
-                  {typeof s.year === 'number' && s.year > 1900 && (
-                    <span
-                      className="flex-none rounded-md font-bold text-fg2"
-                      style={{
-                        background: 'rgba(255, 255, 255, 0.05)',
-                        padding: '2px 8px',
-                        fontSize: '9px',
-                      }}
-                    >
-                      {s.year}
-                    </span>
-                  )}
-                </div>
-                <p
-                  className="text-fg2/70"
-                  style={{ fontSize: '11px', fontWeight: 500 }}
-                >
-                  {categoryLabel(s.category)}
-                </p>
-              </div>
-            </button>
-          )
-        })}
-      </div>
-
-      {/* Dot indicator — keeps users oriented when many cars are
-          in the garage. Hidden when only one car is present. */}
-      {cars.length > 1 && (
-        <div className="mt-1 flex justify-center gap-1.5">
-          {cars.map((_, i) => (
-            <span
-              key={i}
-              className="rounded-full transition-all duration-200"
-              style={{
-                width: i === activeIdx ? '16px' : '5px',
-                height: '5px',
-                background:
-                  i === activeIdx
-                    ? 'var(--color-accent)'
-                    : 'rgba(255, 255, 255, 0.15)',
-              }}
-              aria-hidden
-            />
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
 // ────────────────────────── BADGES BOTTOM SHEET ─────────────────────────
 
 /** Slide-up drawer that surfaces the full badge catalogue from the
@@ -1308,6 +1519,7 @@ function BadgesBottomSheet({
   badges: Badge[]
   unlocks: Set<string>
 }) {
+  const { t } = useTranslation()
   // Lock body scroll while the sheet is open. We restore the previous
   // overflow value on close so nothing the rest of the app set is
   // accidentally clobbered.
@@ -1325,7 +1537,7 @@ function BadgesBottomSheet({
   return createPortal(
     <div className="fixed inset-0 z-50" role="dialog" aria-modal="true">
       <button
-        aria-label="Fermer"
+        aria-label={t('profilepage.badgesSheet.closeAria')}
         onClick={onClose}
         className="absolute inset-0"
         style={{
@@ -1338,10 +1550,10 @@ function BadgesBottomSheet({
       <div
         className="absolute bottom-0 left-0 right-0 overflow-hidden"
         style={{
-          background: 'rgba(15, 15, 17, 0.96)',
+          background: 'rgb(var(--color-card) / 0.96)',
           borderTopLeftRadius: '28px',
           borderTopRightRadius: '28px',
-          borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+          borderTop: '1px solid rgb(var(--color-fg) / 0.08)',
           maxHeight: '85vh',
           paddingBottom: 'env(safe-area-inset-bottom)',
           backdropFilter: 'saturate(160%) blur(22px)',
@@ -1360,25 +1572,25 @@ function BadgesBottomSheet({
             style={{
               width: '40px',
               height: '4px',
-              background: 'rgba(255, 255, 255, 0.18)',
+              background: 'rgb(var(--color-fg) / 0.18)',
             }}
             aria-hidden
           />
         </div>
         <div className="flex items-center justify-between px-5 pb-3 pt-4">
           <h3
-            className="font-display font-extrabold tracking-tight text-white"
+            className="font-display font-extrabold tracking-tight text-fg"
             style={{ fontSize: '20px', letterSpacing: '-0.02em' }}
           >
-            Tous les badges
+            {t('profilepage.badgesSheet.title')}
           </h3>
           <button
             onClick={onClose}
-            aria-label="Fermer"
+            aria-label={t('profilepage.badgesSheet.closeAria')}
             className="tappable flex h-9 w-9 items-center justify-center rounded-full text-fg2 hover:text-fg"
             style={{
-              background: 'rgba(255, 255, 255, 0.06)',
-              border: '1px solid rgba(255, 255, 255, 0.08)',
+              background: 'rgb(var(--color-fg) / 0.06)',
+              border: '1px solid rgb(var(--color-fg) / 0.08)',
             }}
           >
             <X className="h-4 w-4" />
@@ -1391,9 +1603,10 @@ function BadgesBottomSheet({
             WebkitOverflowScrolling: 'touch',
           }}
         >
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-3 gap-2.5">
             {badges.map((b) => {
               const isUnlocked = unlocks.has(b.slug)
+              const icon = badgeIcon(b.slug)
               return (
                 <div
                   key={b.slug}
@@ -1404,7 +1617,7 @@ function BadgesBottomSheet({
                       ? b.gold
                         ? '1px solid rgba(224,179,65,0.40)'
                         : '1px solid rgba(232,32,58,0.30)'
-                      : '1px solid rgba(255,255,255,0.05)',
+                      : '1px solid rgb(var(--color-fg) / 0.05)',
                     backdropFilter: 'saturate(150%) blur(10px)',
                     WebkitBackdropFilter: 'saturate(150%) blur(10px)',
                     boxShadow:
@@ -1412,18 +1625,28 @@ function BadgesBottomSheet({
                         ? '0 8px 22px rgba(232,32,58,0.16)'
                         : isUnlocked && b.gold
                           ? '0 8px 22px rgba(224,179,65,0.20)'
-                          : 'inset 0 1px 0 rgba(255,255,255,0.03)',
+                          : 'inset 0 1px 0 rgb(var(--color-fg) / 0.03)',
                   }}
                 >
                   {isUnlocked ? (
-                    <span className="text-2xl">{b.emoji}</span>
+                    icon ? (
+                      <img
+                        src={icon}
+                        alt=""
+                        className="h-12 w-12 rounded-xl object-cover"
+                      />
+                    ) : (
+                      <span className="flex h-12 items-center justify-center text-2xl">
+                        {b.emoji}
+                      </span>
+                    )
                   ) : (
-                    <span className="flex h-7 items-center justify-center">
+                    <span className="flex h-12 items-center justify-center">
                       <Lock className="h-4 w-4 text-fg2/50" />
                     </span>
                   )}
                   <span
-                    className={`text-[10px] font-semibold leading-tight ${
+                    className={`line-clamp-2 text-[10px] font-semibold leading-tight ${
                       isUnlocked
                         ? b.gold
                           ? 'text-[#E0B341]'
@@ -1463,6 +1686,7 @@ function TopChallenges({
   count: number
   onShowAll: () => void
 }) {
+  const { t } = useTranslation()
   const [claimed, setClaimed] = useState<Record<string, string>>({})
   const [busyId, setBusyId] = useState<string | null>(null)
 
@@ -1513,14 +1737,14 @@ function TopChallenges({
           className="font-black uppercase text-fg2/55"
           style={{ fontSize: '10px', letterSpacing: '0.20em' }}
         >
-          Défis en cours
+          {t('profilepage.challenges.heading')}
         </h4>
         <button
           onClick={onShowAll}
           className="tappable font-bold text-accent hover:underline"
           style={{ fontSize: '10px' }}
         >
-          Tous les défis
+          {t('profilepage.challenges.seeAll')}
         </button>
       </div>
       <div className="space-y-3">
@@ -1529,10 +1753,10 @@ function TopChallenges({
             className="rounded-2xl p-4 text-center text-xs text-fg2"
             style={{
               background: 'var(--color-glass)',
-              border: '1px solid rgba(255, 255, 255, 0.05)',
+              border: '1px solid rgb(var(--color-fg) / 0.05)',
             }}
           >
-            Tous les défis sont déjà réclamés. Bravo 🏁
+            {t('profilepage.challenges.allClaimed')}
           </div>
         ) : (
           top.map((p) => (
@@ -1558,6 +1782,7 @@ function TopChallengeCard({
   busy: boolean
   onClaim: () => void
 }) {
+  const { t } = useTranslation()
   const { collection, matchedCount, target } = progress
   const pct = Math.min(100, Math.round((matchedCount / target) * 100))
   const complete = matchedCount >= target
@@ -1566,7 +1791,7 @@ function TopChallengeCard({
       className="flex items-center justify-between gap-4 rounded-2xl p-4"
       style={{
         background: 'var(--color-glass)',
-        border: '1px solid rgba(255, 255, 255, 0.05)',
+        border: '1px solid rgb(var(--color-fg) / 0.05)',
         backdropFilter: 'saturate(150%) blur(10px)',
         WebkitBackdropFilter: 'saturate(150%) blur(10px)',
       }}
@@ -1577,7 +1802,7 @@ function TopChallengeCard({
             {collection.emoji}
           </span>
           <h5
-            className="min-w-0 flex-1 truncate font-display font-black tracking-tight text-white"
+            className="min-w-0 flex-1 truncate font-display font-black tracking-tight text-fg"
             style={{ fontSize: '13px', letterSpacing: '-0.01em' }}
           >
             {collection.title}
@@ -1588,7 +1813,7 @@ function TopChallengeCard({
             achievement gauge. */}
         <div
           className="mt-2.5 h-1 w-full overflow-hidden rounded-full"
-          style={{ background: 'rgba(255, 255, 255, 0.06)' }}
+          style={{ background: 'rgb(var(--color-fg) / 0.06)' }}
         >
           <div
             className="h-full rounded-full bg-accent transition-[width] duration-500 ease-out"
@@ -1616,27 +1841,27 @@ function TopChallengeCard({
             style={{
               background:
                 'linear-gradient(135deg, #EF4444 0%, #B91C1C 100%)',
-              border: '1px solid rgba(255, 255, 255, 0.10)',
+              border: '1px solid rgb(var(--color-fg) / 0.10)',
               padding: '6px 12px',
               fontSize: '9px',
               letterSpacing: '0.10em',
               opacity: busy ? 0.6 : 1,
             }}
           >
-            {busy ? '…' : 'Réclamer'}
+            {busy ? '…' : t('profilepage.challenges.claim')}
           </button>
         ) : (
           <span
             className="inline-block cursor-not-allowed rounded-lg font-bold uppercase tracking-wider text-fg2"
             style={{
-              background: 'rgba(40, 40, 42, 0.60)',
-              border: '1px solid rgba(255, 255, 255, 0.05)',
+              background: 'rgb(var(--color-card) / 0.60)',
+              border: '1px solid rgb(var(--color-fg) / 0.05)',
               padding: '6px 12px',
               fontSize: '9px',
               letterSpacing: '0.10em',
             }}
           >
-            En cours
+            {t('profilepage.challenges.inProgress')}
           </span>
         )}
       </div>

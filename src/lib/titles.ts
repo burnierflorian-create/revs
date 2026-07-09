@@ -50,7 +50,7 @@ function xpTitleName(xp: number): string {
 // violet → animated gold-on-fire — so prestige is immediately readable
 // in the leaderboard chips.
 const XP_STYLE: Record<string, Omit<TitleStyle, 'label'>> = {
-  Rookie:          { textClass: 'text-fg/55',     chipClass: 'bg-white/8 ring-1 ring-white/10' },
+  Rookie:          { textClass: 'text-fg/55',     chipClass: 'bg-fg/8 ring-1 ring-fg/10' },
   Chasseur:        { textClass: 'text-[#8AB4F8]', chipClass: 'bg-[#8AB4F8]/12 ring-1 ring-[#8AB4F8]/30' },
   Expert:          { textClass: 'text-[#34D399]', chipClass: 'bg-[#34D399]/12 ring-1 ring-[#34D399]/30' },
   'Élite':         { textClass: 'text-[#A78BFA]', chipClass: 'bg-[#A78BFA]/12 ring-1 ring-[#A78BFA]/30' },
@@ -98,7 +98,7 @@ export function effectiveTitle(
   }
   // Allow a custom manual string that doesn't match a known special.
   if (m) {
-    return { label: m, textClass: 'text-fg/70', chipClass: 'bg-white/8 ring-1 ring-white/10' }
+    return { label: m, textClass: 'text-fg/70', chipClass: 'bg-fg/8 ring-1 ring-fg/10' }
   }
   const name = xpTitleName(xp)
   return { label: name, ...(XP_STYLE[name] ?? XP_STYLE.Rookie) }

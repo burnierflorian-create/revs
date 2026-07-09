@@ -9,8 +9,9 @@ body,
 #root {
   height: 100%;
   min-height: 100dvh;
-  background-color: var(--color-bg);
-  color: var(--color-fg);
+  background-color: rgb(var(--color-bg));
+  background-image: var(--amb-image);
+  color: rgb(var(--color-fg));
 }
 
 body {
@@ -32,10 +33,11 @@ body {
   position: absolute;
   inset: 0;
   overflow-y: auto;
-  background: var(--color-bg);
+  background-color: rgb(var(--color-bg));
+  background-image: var(--amb-image);
   /* pb-28 equivalent — leaves enough air above the bottom nav so
      stats blocks / cards never sit flush against the glass strip. */
-  padding-bottom: calc(9rem + env(safe-area-inset-bottom));
+  padding-bottom: calc(7.5rem + env(safe-area-inset-bottom));
   transition: opacity 150ms ease-out;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-y: contain;
@@ -54,21 +56,25 @@ body {
   inset: 0;
   z-index: 30;
   overflow-y: auto;
-  background: var(--color-bg);
+  background-color: rgb(var(--color-bg));
+  background-image: var(--amb-image);
   /* Mirrors .tab-pane — 7rem of clearance above the bottom nav. */
-  padding-bottom: calc(9rem + env(safe-area-inset-bottom));
+  padding-bottom: calc(7.5rem + env(safe-area-inset-bottom));
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-y: contain;
 }
 .stack-page {
   min-height: 100%;
-  will-change: transform, opacity;
+  /* will-change applied ONLY on the animating classes below, not permanently
+     on every routed page (permanent promotion wastes memory). */
 }
 .stack-page.push-in {
   animation: stackPushIn 260ms cubic-bezier(0.32, 0.72, 0, 1) both;
+  will-change: transform, opacity;
 }
 .stack-page.pop-in {
   animation: stackPopIn 260ms cubic-bezier(0.32, 0.72, 0, 1) both;
+  will-change: transform, opacity;
 }
 @keyframes stackPushIn {
   from {
@@ -117,7 +123,141 @@ h4 {
    La barre de nav fixe réserve sa propre hauteur + l'inset bas ;
    le contenu (panes & stack overlay) gère son propre padding-bottom. */
 .app-nav {
-  padding-bottom: env(safe-area-inset-bottom);
+  padding-bottom: var(--safe-bottom);
+}
+
+/* ───────────────── Liquid-glass floating bottom nav ─────────────────
+   A centred 280px pill that floats 20px above the home-indicator inset,
+   with a separate red camera button hovering 12px above it. The pill
+   blurs the content scrolling underneath (true "liquid glass"). */
+.liquid-nav-wrap {
+  position: fixed;
+  left: 0;
+  right: 0;
+  /* Navbar sits 8px above the safe-area inset. The Carte camera FAB
+     (Map.tsx) sits at safe + 80px so the two never overlap. */
+  bottom: calc(env(safe-area-inset-bottom) + 8px);
+  z-index: 40;
+  display: flex;
+  justify-content: center;
+  pointer-events: none; /* only the pill + camera capture taps */
+  animation: navRise 400ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes navRise {
+  from {
+    opacity: 0;
+    transform: translateY(22px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.liquid-nav {
+  /* ── Tunables (adjust the whole bar from here) ── */
+  --nav-i: 2; /* active/dragged slot 0..4 — set live by MainLayout */
+  --nav-accent: 232 32 58; /* red — recolours indicator + active icon */
+  --nav-glow: 0.42; /* indicator outer-glow strength */
+  --nav-spring: cubic-bezier(0.34, 1.4, 0.5, 1); /* slide easing */
+
+  position: relative;
+  pointer-events: auto;
+  /* Wider — extends toward the edges on phones, capped on large screens.
+     Elegant, not massive. */
+  width: min(440px, calc(100vw - 26px));
+  display: flex;
+  align-items: stretch;
+  padding: 7px 8px; /* a touch taller than before, still fine */
+  border-radius: 30px;
+  background: rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(26px) saturate(180%);
+  -webkit-backdrop-filter: blur(26px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow:
+    0 12px 36px rgba(0, 0, 0, 0.46),
+    inset 0 1px 0 rgba(255, 255, 255, 0.16), /* luminous top edge */
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.04);
+}
+/* Sliding liquid indicator — a soft red glow pill behind the active icon.
+   GPU-only (translate3d), springs on route change, follows the finger on
+   drag (transition removed via .dragging). */
+.liquid-indicator {
+  position: absolute;
+  top: 50%;
+  left: 8px;
+  width: calc((100% - 16px) / 5);
+  height: 40px;
+  margin-top: -20px;
+  border-radius: 15px;
+  transform: translate3d(calc(var(--nav-i) * 100%), 0, 0);
+  transition: transform 520ms var(--nav-spring);
+  pointer-events: none;
+  z-index: 0;
+}
+.liquid-indicator::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: rgb(var(--nav-accent) / 0.15);
+  box-shadow:
+    0 0 20px rgb(var(--nav-accent) / var(--nav-glow)),
+    inset 0 0 12px rgb(var(--nav-accent) / 0.22);
+}
+.liquid-nav.dragging .liquid-indicator {
+  transition: none; /* 1:1 finger-follow while dragging */
+  will-change: transform; /* promote only while actively dragging */
+}
+/* Each icon-only tab. */
+.liquid-tab {
+  position: relative;
+  z-index: 1;
+  flex: 1 1 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 0;
+  color: rgb(255 255 255 / 0.42);
+  transition:
+    transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    color 260ms ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.liquid-tab:active {
+  transform: scale(0.86); /* GPU micro-tap */
+}
+.liquid-tab.is-active {
+  color: rgb(var(--nav-accent));
+  filter: drop-shadow(0 0 6px rgb(var(--nav-accent) / 0.55));
+}
+/* The .liquid-cam (nav-embedded camera) was removed 2026-06-26 — the
+   Carte's camera FAB now lives in Map.tsx as a single 60px circle, so the
+   duplicate that overlapped it is gone. */
+
+/* ── User location marker ──
+   A 50×60 SVG: a clear directional arrow above a blue dot + white core.
+   Mapbox positions the OUTER wrapper element; an inner wrapper carries the
+   compass rotation (CompassMarker in Map.tsx) so we never clobber Mapbox's
+   positioning transform. The arrow is always visible (points up until a
+   heading lands, then rotates). No extra CSS is needed for the SVG. */
+
+/* Map markers (spots + clusters) fade-in with a spring scale on first
+   appearance — covers the cluster merge/explode-into-view moment. */
+@keyframes markerPop {
+  0% {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  60% {
+    transform: scale(1.08);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.map-marker-pop {
+  animation: markerPop 320ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
 
 * {
@@ -273,6 +413,46 @@ h4 {
   animation: newPulse 1.5s ease-out infinite;
 }
 
+/* Brand-red range slider used in the Carte distance filter. Flat track
+   with a white thumb so it reads on the #141414 sheet. */
+.revs-range {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  outline: none;
+}
+.revs-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #e8203a;
+  border: 2px solid #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  cursor: pointer;
+}
+.revs-range::-moz-range-thumb {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #e8203a;
+  border: 2px solid #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  cursor: pointer;
+}
+
+/* Hide the Mapbox logo + attribution controls completely. !important
+   beats mapbox-gl.css regardless of bundle order. */
+.mapboxgl-ctrl-logo,
+.mapboxgl-ctrl-attrib,
+.mapboxgl-ctrl-bottom-left,
+.mapboxgl-ctrl-bottom-right {
+  display: none !important;
+}
+
 /* !important beats mapbox-gl.css regardless of bundle order (its
    default is white-on-... which made our text invisible). */
 .mapboxgl-popup-content {
@@ -301,4 +481,101 @@ h4 {
 }
 .mapboxgl-popup-anchor-right .mapboxgl-popup-tip {
   border-left-color: #ffffff !important;
+}
+
+/* ── Onboarding micro-animations (pure CSS, no assets) ── */
+@keyframes onb-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-7px);
+  }
+}
+@keyframes onb-rise {
+  from {
+    transform: scaleY(0.4);
+    opacity: 0;
+  }
+  to {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+}
+@keyframes onb-slide-up {
+  from {
+    transform: translateY(14px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+/* Guided-tour spotlight — pulsing red halo around the highlighted tab. */
+@keyframes onb-spot {
+  0%,
+  100% {
+    outline: 0 solid rgba(232, 32, 58, 0);
+    outline-offset: 0;
+  }
+  50% {
+    outline: 6px solid rgba(232, 32, 58, 0.3);
+    outline-offset: 3px;
+  }
+}
+/* Step transitions for the multi-step onboarding flow. Forward = slide in
+   from the right, back = slide in from the left. Keyed re-mount per step
+   replays the matching animation. */
+@keyframes onb-step-fwd {
+  from {
+    transform: translateX(28px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+@keyframes onb-step-back {
+  from {
+    transform: translateX(-28px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+/* ── Badge grid (premium) ── */
+/* Staggered pop-in when a section scrolls into view. */
+@keyframes badge-pop {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+/* Light bar that sweeps across unlocked badges then rests. */
+@keyframes badge-shine {
+  0% {
+    transform: translateX(0);
+    opacity: 0;
+  }
+  8% {
+    opacity: 0.5;
+  }
+  32% {
+    transform: translateX(300%);
+    opacity: 0;
+  }
+  100% {
+    transform: translateX(300%);
+    opacity: 0;
+  }
 }

@@ -9,14 +9,20 @@
 
 :root {
   /* Palette — DEFAULT = dark mode. The matching html.light overrides
-     below redefine the same vars for the Apple light variant; every
-     consumer using bg-bg / text-fg / text-fg2 / border-border (Tailwind
-     tokens) auto-flips when ThemeProvider toggles the html class. */
-  --color-bg:        #0a0a0a;  /* fond principal — légèrement nuancé */
-  --color-card:      #141414;  /* surface card */
-  --color-fg:        #ffffff;  /* texte principal */
-  --color-fg-2:      #8a8a8a;  /* texte secondaire / labels */
-  --color-accent:    #e8203a;  /* rouge REVS — invariant cross-theme */
+     below redefine the same vars for the Apple light variant.
+     The 5 core colours are stored as space-separated RGB *channel
+     triplets* (not hex) so the Tailwind tokens in tailwind.config.js
+     can resolve them through `rgb(var(--color-x) / <alpha-value>)` —
+     that's what makes bg-bg / text-fg / text-fg2 / text-accent AND
+     their /opacity variants (text-fg/45) flip when ThemeProvider
+     toggles the html class. Inline consumers wrap them as
+     rgb(var(--color-card)). Border / divider / glass below stay as
+     full rgba() — they layer over surfaces and flip independently. */
+  --color-bg:        10 10 10;     /* #0a0a0a — fond principal */
+  --color-card:      20 20 20;     /* #141414 — surface card */
+  --color-fg:        255 255 255;  /* #ffffff — texte principal */
+  --color-fg-2:      138 138 138;  /* #8a8a8a — texte secondaire */
+  --color-accent:    232 32 58;    /* #e8203a — rouge REVS (invariant) */
   --color-border:    rgba(255, 255, 255, 0.06); /* bordure carte subtile */
   --color-divider:   rgba(255, 255, 255, 0.08); /* séparateur */
   /* Glass plates — used by Home radar card, Feed search bar, Profile
@@ -32,19 +38,55 @@
   /* Tier glow accent — used by the avatar tier badge ring + welcome
      pill. Defaults to white/neutral so non-subscribers see no tint. */
   --tier-glow:       rgba(255, 255, 255, 0.06);
+  /* Trimmed bottom safe-area for the ultra-thin tab bar. We don't
+     reserve the full iPhone home-indicator inset (that made the bar feel
+     massive) — just a minimal clearance, floored at 4px elsewhere. The
+     nav height (h-12 = 3rem) + this var = the bar's total footprint, and
+     the scroll panes reserve `3.5rem + var` so content sits ~8px above. */
+  --safe-bottom: max(11px, calc(env(safe-area-inset-bottom) - 1.4rem));
+
+  /* ── Background ambience (pure CSS, ULTRA subtle depth + warmth) ──
+     Tune everything at once with --amb-intensity (0 = flat #0a0a0a,
+     1 = default, >1 = stronger). Individual layers below can also be
+     dialled independently. GPU-cheap: static gradients painted once,
+     no background-attachment:fixed (that janks mobile scroll). */
+  --amb-intensity: 1;
+  /* Soft lighter halo toward top-centre fading to pure black at the
+     edges → depth. */
+  --amb-radial: radial-gradient(
+    135% 95% at 50% -12%,
+    rgba(255, 255, 255, calc(0.045 * var(--amb-intensity))) 0%,
+    rgba(255, 255, 255, 0) 46%
+  );
+  /* Barely-there warm red glow in the top-right corner. */
+  --amb-glow: radial-gradient(
+    55% 45% at 90% 4%,
+    rgba(232, 32, 58, calc(0.06 * var(--amb-intensity))) 0%,
+    rgba(232, 32, 58, 0) 62%
+  );
+  /* Whisper-thin carbon weave (diagonal hairlines, ~1.5% alpha). */
+  --amb-carbon: repeating-linear-gradient(
+    45deg,
+    rgba(255, 255, 255, calc(0.016 * var(--amb-intensity))) 0,
+    rgba(255, 255, 255, calc(0.016 * var(--amb-intensity))) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+  --amb-image: var(--amb-carbon), var(--amb-glow), var(--amb-radial);
 }
 
 /* ─────────────────────── Light theme overrides ───────────────────────
    Activated by ThemeProvider via html.light (or system preference if
-   no localStorage entry). The 55 files using bg-bg/text-fg/text-fg2/
-   bg-card auto-flip via Tailwind. Hard-coded rgba/hex values across
-   the codebase remain dark-only for now — Phase 1 ships the foundation,
-   subsequent passes will convert surface-by-surface to var(--color-…). */
+   no localStorage entry). Core colours mirror :root as RGB channel
+   triplets so the Tailwind tokens flip; every bg-bg/text-fg/text-fg2/
+   text-accent/bg-card consumer (and the bg-fg/x · border-fg/x overlay
+   pattern used across the sweep) auto-inverts. */
 html.light {
-  --color-bg:        #F5F5F7;  /* Apple grey */
-  --color-card:      #FFFFFF;
-  --color-fg:        #1A1A1A;  /* Charcoal */
-  --color-fg-2:      #6B6B6B;  /* Mid grey */
+  --color-bg:        245 245 247;  /* #F5F5F7 — Apple grey */
+  --color-card:      255 255 255;  /* #FFFFFF */
+  --color-fg:        26 26 26;     /* #1A1A1A — charcoal */
+  --color-fg-2:      107 107 107;  /* #6B6B6B — mid grey */
+  --color-accent:    232 32 58;    /* #e8203a — rouge REVS (invariant) */
   --color-border:    rgba(0, 0, 0, 0.08);
   --color-divider:   rgba(0, 0, 0, 0.06);
   --color-glass:        rgba(255, 255, 255, 0.80);
@@ -52,6 +94,8 @@ html.light {
   --color-glass-strong: rgba(255, 255, 255, 0.90);
   --color-ring-track:   rgba(0, 0, 0, 0.06);
   --tier-glow:       rgba(0, 0, 0, 0.06);
+  /* Light theme stays flat & clean (the ambience is a dark-mode idea). */
+  --amb-intensity: 0;
 }
 
 /* ─────────────────────── Premium / VIP theming ───────────────────────
@@ -103,6 +147,12 @@ html[data-tier='vip'] {
   -webkit-backdrop-filter: saturate(180%) blur(12px);
   border-top: 1px solid rgba(255, 255, 255, 0.05);
 }
+/* Light variant — frosted white instead of frosted black, with a
+   hairline that reads on the pale surface below it. */
+html.light .glass {
+  background: rgba(255, 255, 255, 0.82);
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+}
 
 /* Display headlines — Inter 800, tightest letter-spacing. Use for the
    "Bonjour X" hero + section titles that need to feel large. */
@@ -134,32 +184,8 @@ html[data-tier='vip'] {
   height: var(--hz-size, 80px);
   pointer-events: none;
 }
-.hot-zone-ring {
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  background: radial-gradient(
-    circle,
-    rgba(232, 32, 58, calc(var(--hz-opacity, 0.50) * 0.95)) 0%,
-    rgba(232, 32, 58, calc(var(--hz-opacity, 0.50) * 0.28)) 45%,
-    transparent 70%
-  );
-  animation: hot-zone-pulse 2.8s ease-in-out infinite;
-  will-change: transform, opacity;
-}
-.hot-zone-ring-delay {
-  animation-delay: 1.4s;
-}
-@keyframes hot-zone-pulse {
-  0%, 100% {
-    transform: scale(0.65);
-    opacity: 0.45;
-  }
-  50% {
-    transform: scale(1.05);
-    opacity: 1;
-  }
-}
+/* .hot-zone-ring + waves are defined in the BATCH 2 animation block below
+   (3 concentric waves replacing the old single pulse). */
 
 /* ─────────────────────── Replay time-lapse marker pop ───────────────────────
    One-shot scale + halo animation triggered when a spot enters the
@@ -185,6 +211,151 @@ html[data-tier='vip'] {
 }
 .replay-pop {
   animation: replay-pop-kf 450ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+/* While a replay is running, hide the normal DOM markers (mapbox adds the
+   `mapboxgl-marker` class to every marker element) and show only the
+   replay dots. */
+.replay-active .mapboxgl-marker:not(.revs-replay) {
+  display: none !important;
+}
+.revs-replay-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 9999px;
+  background: #e8203a;
+  border: 2px solid #0a0a0a;
+  box-shadow: 0 0 10px rgba(232, 32, 58, 0.85);
+}
+
+/* ─────────────────────── Collector card v2 ───────────────────────
+   All GPU (transform/opacity). Amplitudes exposed as CSS vars on the
+   card root so they're trivial to tune. */
+@keyframes cardv2-float {
+  0%,
+  100% {
+    transform: translate3d(0, calc(-1 * var(--cv-float, 5px)), 0) rotateX(0deg);
+  }
+  50% {
+    transform: translate3d(0, var(--cv-float, 5px), 0) rotateX(0deg);
+  }
+}
+/* Diagonal light bar sweeping across rare cards, then resting. */
+@keyframes cardv2-shine {
+  0% {
+    transform: translateX(-140%) rotate(8deg);
+    opacity: 0;
+  }
+  10% {
+    opacity: 0.55;
+  }
+  34% {
+    transform: translateX(240%) rotate(8deg);
+    opacity: 0;
+  }
+  100% {
+    transform: translateX(240%) rotate(8deg);
+    opacity: 0;
+  }
+}
+/* Slow rainbow drift for animated (holo) tiers when idle. */
+@keyframes cardv2-holo-drift {
+  0% {
+    background-position:
+      0% 50%,
+      50% 50%;
+  }
+  100% {
+    background-position:
+      100% 50%,
+      50% 50%;
+  }
+}
+/* Legendary aura pulse. */
+@keyframes cardv2-aura {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.9;
+    transform: scale(1.04);
+  }
+}
+/* Reveal: rise + settle. */
+@keyframes cardv2-reveal {
+  0% {
+    opacity: 0;
+    transform: translateY(28px) scale(0.86) rotateY(-16deg);
+  }
+  60% {
+    opacity: 1;
+    transform: translateY(0) scale(1.03) rotateY(6deg);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1) rotateY(0deg);
+  }
+}
+/* Gentle scroll-in appearance (stagger via per-card IntersectionObserver). */
+@keyframes cardv2-appear {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ─────────────────────── Showroom (immersive garage) ─────────────────────── */
+/* Cinematic entry — fade + slight zoom-forward, like pushing the door. */
+@keyframes showroom-enter {
+  from {
+    opacity: 0;
+    transform: scale(1.06);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+/* Living spotlight — subtle brightness flicker. */
+@keyframes showroom-flicker {
+  0%,
+  100% {
+    opacity: 0.82;
+  }
+  40% {
+    opacity: 1;
+  }
+  55% {
+    opacity: 0.74;
+  }
+  72% {
+    opacity: 0.94;
+  }
+}
+/* Particle burst on rare/legendary reveal. Each particle sets --px/--py
+   (unit-vector end offset) inline. */
+@keyframes cardv2-particle {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 0, 0) scale(0.4);
+  }
+  15% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(
+        calc(var(--px, 0) * 1px),
+        calc(var(--py, 0) * 1px),
+        0
+      )
+      scale(1);
+  }
 }
 
 /* ─────────────────────── F1 calendar "PROCHAIN" pulse ───────────────────────
@@ -557,14 +728,34 @@ html[data-tier='vip'] {
    pops (0.32, 0.72, 0, 1) so the peak lands quickly then settles. */
 @keyframes feed-double-heart {
   0%   { transform: scale(0);    opacity: 0; }
-  45%  { transform: scale(1.10); opacity: 1; }
-  65%  { transform: scale(1.00); opacity: 1; }
+  40%  { transform: scale(1.25); opacity: 1; }
+  60%  { transform: scale(1.00); opacity: 1; }
   100% { transform: scale(1.00); opacity: 0; }
 }
 .feed-double-heart {
-  animation: feed-double-heart 350ms cubic-bezier(0.32, 0.72, 0, 1) forwards;
-  filter: drop-shadow(0 8px 24px rgba(232, 32, 58, 0.65));
+  /* Spring rebound (scale 0 → 1.25 → 1), backlit, fades out over 350ms. */
+  animation: feed-double-heart 350ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  filter: drop-shadow(0 8px 28px rgba(232, 32, 58, 0.75));
   pointer-events: none;
+}
+
+/* Feed scroll performance — skip rendering off-screen spot cards so the
+   list stays buttery while images stream in. contain-intrinsic-size
+   reserves an estimated height so the scrollbar doesn't jump. */
+.feed-card {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 620px;
+}
+
+/* Monochrome brand logo for the Explorer grid — collapses any coloured
+   or dark mark to a single high-contrast silhouette so every logo reads
+   on the OLED background (kills the dark-on-dark problem). Theme-aware:
+   pure white at night, charcoal on the alabaster light surface. */
+.brand-logo-mono {
+  filter: brightness(0) invert(1);
+}
+html.light .brand-logo-mono {
+  filter: brightness(0);
 }
 
 /* ─────────────────────── Spot identification reveal ───────────────────────
@@ -685,4 +876,686 @@ html[data-tier='vip'] {
 @keyframes sheet-backdrop-in {
   from { opacity: 0; }
   to   { opacity: 1; }
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   APP-WIDE ANIMATION LAYER (2026-06-26)
+   7 effects: spot celebration, XP toast, collector reveal, tab spring,
+   streak break, map marker drop, level-up. Every decorative effect has a
+   prefers-reduced-motion guard at the very bottom of this block.
+   ════════════════════════════════════════════════════════════════════ */
+
+/* ── #1 Post-spot celebration: confetti burst + collector fly-away ── */
+.fx-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none;
+  overflow: hidden;
+}
+.fx-confetti {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: var(--sz, 6px);
+  height: var(--sz, 6px);
+  background: var(--col, #fff);
+  border-radius: var(--rad, 1px);
+  opacity: 0;
+  animation: fx-burst var(--dur, 1.2s) var(--ease-soft) forwards;
+}
+@keyframes fx-burst {
+  0%   { transform: translate(-50%, -50%) translate(0, 0) rotate(0deg); opacity: 1; }
+  80%  { opacity: 1; }
+  100% { transform: translate(-50%, -50%) translate(var(--dx), var(--dy)) rotate(var(--rot, 540deg)); opacity: 0; }
+}
+.fx-collector-mini {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 132px;
+  height: 184px;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #141414;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.6);
+  animation: fx-collector 2.1s var(--ease-spring) forwards;
+  animation-delay: 0.5s;
+  opacity: 0;
+}
+@keyframes fx-collector {
+  0%   { transform: translate(-50%, -50%) scale(0);   opacity: 0; }
+  18%  { transform: translate(-50%, -50%) scale(1.2); opacity: 1; }
+  32%  { transform: translate(-50%, -50%) scale(1);   opacity: 1; }
+  62%  { transform: translate(-50%, -50%) scale(1);   opacity: 1; }
+  /* Fly to the bottom-right (profile tab) while shrinking away. */
+  100% { transform: translate(calc(50vw - 56px), calc(50vh - 70px)) scale(0.08); opacity: 0; }
+}
+
+/* ── #2 XP toast (game-style, count-up handled in JS) ── */
+.fx-xp-toast {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  font-weight: 800;
+  font-size: 20px;
+  letter-spacing: -0.01em;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.55), 0 0 2px rgba(0, 0, 0, 0.4);
+  animation: fx-xp-rise 1.5s var(--ease-soft) forwards;
+}
+@keyframes fx-xp-rise {
+  0%   { transform: translateX(-50%) translateY(10px); opacity: 0; }
+  12%  { transform: translateX(-50%) translateY(0);    opacity: 1; }
+  70%  { opacity: 1; }
+  100% { transform: translateX(-50%) translateY(-80px); opacity: 0; }
+}
+
+/* ── #3 Collector card reveal (shake → 3D flip → flash + legendary dust) ── */
+.fx-reveal {
+  position: relative;
+  perspective: 1000px;
+}
+.fx-reveal-inner {
+  transform-style: preserve-3d;
+  animation: fx-reveal-flip 1.2s ease-in-out both;
+}
+@keyframes fx-reveal-flip {
+  0%   { transform: rotateY(0deg) rotate(0deg); }
+  8%   { transform: rotateY(0deg) rotate(-2deg); }
+  16%  { transform: rotateY(0deg) rotate(2deg); }
+  24%  { transform: rotateY(0deg) rotate(-2deg); }
+  30%  { transform: rotateY(0deg) rotate(0deg); }
+  /* hide face */
+  55%  { transform: rotateY(90deg) rotate(0deg); }
+  /* instant flip happens via the back/front face swap at the midpoint */
+  56%  { transform: rotateY(-90deg) rotate(0deg); }
+  100% { transform: rotateY(0deg) rotate(0deg); }
+}
+.fx-reveal-back {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 16px;
+  background: radial-gradient(circle at 50% 38%, #2a2a2e 0%, #141416 60%, #0b0b0d 100%);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  color: #E8203A;
+  font-family: var(--font-display, inherit);
+  font-weight: 900;
+  font-size: 30px;
+  letter-spacing: -0.04em;
+  animation: fx-reveal-back-hide 1.2s ease-in-out both;
+  backface-visibility: hidden;
+}
+@keyframes fx-reveal-back-hide {
+  0%, 54%   { opacity: 1; }
+  55%, 100% { opacity: 0; }
+}
+.fx-reveal-flash {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  border-radius: 16px;
+  background: #fff;
+  opacity: 0;
+  pointer-events: none;
+  animation: fx-reveal-flash-kf 1.2s ease-out both;
+}
+@keyframes fx-reveal-flash-kf {
+  0%, 53%  { opacity: 0; }
+  56%      { opacity: 0.8; }
+  66%      { opacity: 0; }
+  100%     { opacity: 0; }
+}
+.fx-gold-dust {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #C8A96E;
+  box-shadow: 0 0 6px rgba(200, 169, 110, 0.8);
+  opacity: 0;
+  pointer-events: none;
+  animation: fx-burst 0.8s var(--ease-soft) forwards;
+  animation-delay: 0.66s;
+}
+
+/* ── #4 Tab spring slide handled in JS (Web Animations API) ── */
+
+/* ── #5 Streak break (flame extinguish) ── */
+.fx-streak {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  background: rgba(0, 0, 0, 0.6);
+  animation: fx-fade-inout 2s ease-out forwards;
+}
+.fx-streak-flame {
+  font-size: 48px;
+  line-height: 1;
+  filter: grayscale(0);
+  animation: fx-flame-die 2s ease-in-out forwards;
+}
+@keyframes fx-flame-die {
+  0%   { transform: scale(1);    filter: grayscale(0); }
+  15%  { transform: scale(1.7);  filter: grayscale(0); }
+  /* quick shake */
+  22%  { transform: scale(1.7) translateX(-4px); }
+  28%  { transform: scale(1.7) translateX(4px); }
+  34%  { transform: scale(1.7) translateX(-4px); }
+  40%  { transform: scale(1.7) translateX(0); }
+  100% { transform: scale(0.2); filter: grayscale(1); opacity: 0.2; }
+}
+.fx-streak-text {
+  color: #9aa0a6;
+  font-weight: 700;
+  font-size: 18px;
+  animation: fx-fade-inout 2s ease-in-out forwards;
+}
+.fx-smoke {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: rgba(160, 160, 160, 0.5);
+  opacity: 0;
+  filter: blur(2px);
+  animation: fx-smoke-rise 1.4s ease-out forwards;
+  animation-delay: 0.5s;
+}
+@keyframes fx-smoke-rise {
+  0%   { transform: translate(-50%, -50%) translateY(0) scale(0.6); opacity: 0; }
+  30%  { opacity: 0.5; }
+  100% { transform: translate(-50%, -50%) translate(var(--sx, 0), -80px) scale(1.6); opacity: 0; }
+}
+@keyframes fx-fade-inout {
+  0%   { opacity: 0; }
+  15%  { opacity: 1; }
+  80%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* ── #6 Map marker drop + ripple ── */
+.map-marker-drop {
+  animation: fx-marker-drop 600ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+@keyframes fx-marker-drop {
+  0%   { transform: translateY(-30px); opacity: 0; }
+  50%  { transform: translateY(8px);   opacity: 1; }
+  75%  { transform: translateY(-4px); }
+  100% { transform: translateY(0); }
+}
+.map-marker-ripple {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  margin: -4px 0 0 -4px;
+  border-radius: 50%;
+  background: rgba(232, 32, 58, 0.45);
+  pointer-events: none;
+  animation: fx-ripple 700ms ease-out forwards;
+  animation-delay: 520ms;
+}
+@keyframes fx-ripple {
+  0%   { transform: scale(0); opacity: 0.6; }
+  100% { transform: scale(5); opacity: 0; }
+}
+
+/* ── #7 Level up (full-screen sequence) ── */
+.fx-levelup {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.95);
+  animation: fx-fade-in 0.3s ease-out forwards;
+}
+.fx-levelup-old {
+  color: #777;
+  font-weight: 800;
+  font-size: 24px;
+  animation: fx-old-rise 0.5s ease-in forwards;
+  animation-delay: 0.3s;
+  opacity: 0;
+}
+@keyframes fx-old-rise {
+  0%   { transform: translateY(0); opacity: 1; }
+  100% { transform: translateY(-40px); opacity: 0; }
+}
+.fx-levelup-new {
+  color: #fff;
+  font-weight: 900;
+  font-size: 48px;
+  letter-spacing: -0.02em;
+  text-align: center;
+  padding: 0 24px;
+  opacity: 0;
+  animation: fx-new-pop 0.5s var(--ease-spring) forwards;
+  animation-delay: 0.8s;
+}
+@keyframes fx-new-pop {
+  0%   { transform: scale(0);   opacity: 0; }
+  60%  { transform: scale(1.3); opacity: 1; }
+  100% { transform: scale(1);   opacity: 1; }
+}
+.fx-levelup-label {
+  margin-top: 14px;
+  color: #E8203A;
+  font-weight: 800;
+  font-size: 16px;
+  opacity: 0;
+  animation: fx-fade-in 0.5s ease-out forwards;
+  animation-delay: 1.8s;
+}
+.fx-levelup-particle {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--rad, 1px);
+  background: var(--col, #fff);
+  opacity: 0;
+  animation: fx-burst 1s var(--ease-soft) forwards;
+  animation-delay: 1.3s;
+}
+@keyframes fx-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* ── prefers-reduced-motion: kill every decorative effect above ── */
+@media (prefers-reduced-motion: reduce) {
+  .fx-confetti,
+  .fx-collector-mini,
+  .fx-xp-toast,
+  .fx-reveal-inner,
+  .fx-reveal-back,
+  .fx-reveal-flash,
+  .fx-gold-dust,
+  .fx-streak,
+  .fx-streak-flame,
+  .fx-streak-text,
+  .fx-smoke,
+  .map-marker-drop,
+  .map-marker-ripple,
+  .fx-levelup,
+  .fx-levelup-old,
+  .fx-levelup-new,
+  .fx-levelup-label,
+  .fx-levelup-particle {
+    animation: none !important;
+  }
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   APP-WIDE ANIMATION LAYER — BATCH 2 (2026-06-26)
+   Parallax, heart burst, collector swipe, profile counters, hot-zone
+   waves, splash, badge-unlocked, liquid XP bar. Reduced-motion guard at
+   the bottom of this block.
+   ════════════════════════════════════════════════════════════════════ */
+
+/* ── #2 Double-tap mini-heart burst (the big heart reuses feed-double-heart) ── */
+.feed-mini-heart {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  color: #E8203A;
+  fill: #E8203A;
+  pointer-events: none;
+  opacity: 0;
+  animation: feed-mini-heart-fly 0.6s ease-out forwards;
+}
+@keyframes feed-mini-heart-fly {
+  0%   { transform: translate(-50%, -50%) translate(0, 0) scale(0.3); opacity: 0; }
+  25%  { opacity: 1; }
+  100% { transform: translate(-50%, -50%) translate(var(--hx), var(--hy)) scale(1); opacity: 0; }
+}
+
+/* ── #5 Hot-zone concentric waves (replaces the pulse) ── */
+.hot-zone-ring {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: var(--hz-size, 120px);
+  height: var(--hz-size, 120px);
+  margin-left: calc(var(--hz-size, 120px) / -2);
+  margin-top: calc(var(--hz-size, 120px) / -2);
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    rgba(232, 32, 58, calc(var(--hz-opacity, 0.5) * 0.9)) 0%,
+    rgba(232, 32, 58, calc(var(--hz-opacity, 0.5) * 0.35)) 45%,
+    transparent 70%
+  );
+  opacity: 0;
+  will-change: transform, opacity;
+  animation: hot-zone-wave 2s ease-out infinite;
+}
+.hot-zone-ring-2 { animation-delay: 0.66s; }
+.hot-zone-ring-3 { animation-delay: 1.33s; }
+@keyframes hot-zone-wave {
+  0%   { transform: scale(0);   opacity: 0.4; }
+  100% { transform: scale(1.1); opacity: 0; }
+}
+/* Freeze the radar pulse while the map pans/zooms — no decorative compositing
+   during a gesture (the marker container gets .map-moving on movestart). */
+.map-moving .hot-zone-ring {
+  animation-play-state: paused;
+}
+
+/* ── #6 Splash screen ── */
+/* ── Launch splash: supercar speed intro (GPU: transform/opacity only) ── */
+.rvsplash {
+  position: fixed;
+  inset: 0;
+  z-index: 100000;
+  overflow: hidden;
+  background: radial-gradient(120% 90% at 50% 55%, #141416 0%, #08080a 55%, #050506 100%);
+  animation: rvsplash-out 0.4s ease-in 1.92s forwards;
+  will-change: opacity;
+}
+@keyframes rvsplash-out {
+  to { opacity: 0; visibility: hidden; }
+}
+
+/* red horizon glow that flares as the car passes */
+.rvsplash-glow {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 150%;
+  height: 60%;
+  transform: translate(-50%, -50%) scaleX(0.4);
+  background: radial-gradient(50% 50% at 50% 50%, rgba(232, 32, 58, 0.28), rgba(232, 32, 58, 0.06) 45%, transparent 70%);
+  opacity: 0;
+  animation: rvsplash-glow 1.7s ease-out 0.2s both;
+  will-change: transform, opacity;
+}
+@keyframes rvsplash-glow {
+  0% { opacity: 0; transform: translate(-50%, -50%) scaleX(0.4); }
+  35% { opacity: 1; transform: translate(-50%, -50%) scaleX(1); }
+  100% { opacity: 0.35; transform: translate(-50%, -50%) scaleX(1.12); }
+}
+
+/* rushing speed lines (world streaks past the left→right car) */
+.rvsplash-lines { position: absolute; inset: 0; }
+.rvsplash-line {
+  position: absolute;
+  left: 0;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.85), rgba(255, 90, 110, 0.7) 45%, transparent);
+  animation: rvsplash-line 0.5s linear both;
+  will-change: transform, opacity;
+}
+@keyframes rvsplash-line {
+  0% { transform: translateX(122vw); opacity: 0; }
+  15% { opacity: 1; }
+  85% { opacity: 1; }
+  100% { transform: translateX(-70vw); opacity: 0; }
+}
+
+/* the logo — the R mark tears in from the left with a motion-blur trail,
+   REVS is revealed in its wake (S in red). Centred lockup. */
+.rvsplash-logo {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  gap: clamp(8px, 2.5vw, 18px);
+}
+.rvsplash-mark {
+  position: relative;
+  display: inline-flex;
+  width: clamp(64px, 20vw, 104px);
+  aspect-ratio: 1;
+  transform: translateX(-66vw);
+  animation: rvsplash-mark 0.92s cubic-bezier(0.16, 1, 0.3, 1) 0.1s both;
+  will-change: transform;
+}
+@keyframes rvsplash-mark {
+  to { transform: translateX(0); }
+}
+.rvsplash-mark > span { position: absolute; inset: 0; }
+.rvsplash-mark svg { width: 100%; height: 100%; }
+.rvsplash-ghost-1 { transform: translateX(-16%); opacity: 0.3; filter: blur(1px); }
+.rvsplash-ghost-2 { transform: translateX(-34%); opacity: 0.15; filter: blur(2px); }
+.rvsplash-ghost-3 { transform: translateX(-54%); opacity: 0.08; filter: blur(3px); }
+
+.rvsplash-word {
+  position: relative;
+  display: flex;
+  font-family: var(--font-display, "Arial Black", Arial, sans-serif);
+  font-weight: 900;
+  font-style: italic;
+  font-size: clamp(44px, 14vw, 84px);
+  letter-spacing: -0.05em;
+  color: #F5F5F7;
+}
+.rvsplash-letter {
+  display: inline-block;
+  opacity: 0;
+  transform: translateX(-28px);
+  filter: blur(9px);
+  text-shadow: 0 0 22px rgba(232, 32, 58, 0.4), 0 4px 26px rgba(0, 0, 0, 0.6);
+  animation: rvsplash-letter 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+  will-change: transform, opacity, filter;
+}
+.rvsplash-letter-s { color: #E8203A; }
+@keyframes rvsplash-letter {
+  to { opacity: 1; transform: translateX(0); filter: blur(0); }
+}
+/* a bright glint sweeping across the word once it's revealed */
+.rvsplash-glint {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(105deg, transparent 42%, rgba(255, 255, 255, 0.5) 50%, transparent 58%);
+  mix-blend-mode: screen;
+  transform: translateX(-130%);
+  animation: rvsplash-glint 0.7s ease-in-out 1.25s both;
+  pointer-events: none;
+}
+@keyframes rvsplash-glint {
+  to { transform: translateX(130%); }
+}
+.rvsplash-tag {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, calc(-50% + clamp(46px, 13vw, 82px)));
+  color: #E8203A;
+  font-weight: 800;
+  font-size: 12px;
+  letter-spacing: 2px;
+  opacity: 0;
+  animation: rvsplash-tag 0.5s ease-out 1.4s both;
+}
+@keyframes rvsplash-tag {
+  to { opacity: 0.9; letter-spacing: 9px; }
+}
+
+/* ── #7 Badge unlocked notification ── */
+.badge-unlocked {
+  position: fixed;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom) + 96px);
+  transform: translateX(-50%) translateY(100px);
+  width: 85%;
+  max-width: 420px;
+  z-index: 9998;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: #141414;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  padding: 16px 20px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.6);
+  animation:
+    badge-in 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards,
+    badge-out 0.3s ease-in forwards 3s;
+}
+@keyframes badge-in {
+  to { transform: translateX(-50%) translateY(0); }
+}
+@keyframes badge-out {
+  to { transform: translateX(-50%) translateY(100px); opacity: 0; }
+}
+.badge-unlocked-emoji {
+  position: relative;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  overflow: hidden;
+  background: rgba(232, 32, 58, 0.18);
+  border: 1px solid rgba(232, 32, 58, 0.5);
+}
+.badge-unlocked-emoji::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    120deg,
+    transparent 30%,
+    rgba(255, 255, 255, 0.6) 50%,
+    transparent 70%
+  );
+  transform: translateX(-100%);
+  animation: badge-shimmer 0.8s ease-out 0.4s;
+}
+@keyframes badge-shimmer {
+  to { transform: translateX(100%); }
+}
+
+/* ── #8 Liquid XP bar ── */
+.liquid-xp-track {
+  position: relative;
+  width: 100%;
+  height: 8px;
+  border-radius: 20px;
+  overflow: hidden;
+  background: #222;
+}
+.liquid-xp-fill {
+  position: relative;
+  height: 100%;
+  border-radius: 20px;
+  background: linear-gradient(90deg, #E8203A, #ff6b6b, #E8203A);
+  background-size: 200% 100%;
+  animation: liquid-flow 2s linear infinite;
+  transition: width 1000ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.liquid-xp-fill.boost {
+  animation: liquid-flow 0.6s linear infinite;
+}
+@keyframes liquid-flow {
+  0%   { background-position: 0% 50%; }
+  100% { background-position: 200% 50%; }
+}
+.liquid-xp-bubble {
+  position: absolute;
+  bottom: 0;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.5);
+  animation: liquid-bubble 2.4s ease-in infinite;
+}
+@keyframes liquid-bubble {
+  0%   { transform: translateY(0); opacity: 0; }
+  20%  { opacity: 0.6; }
+  100% { transform: translateY(-8px); opacity: 0; }
+}
+
+/* ── reduced motion: disable batch-2 decorative effects ── */
+@media (prefers-reduced-motion: reduce) {
+  .feed-mini-heart,
+  .hot-zone-ring,
+  .badge-unlocked,
+  .badge-unlocked-emoji::after,
+  .liquid-xp-fill,
+  .liquid-xp-bubble {
+    animation: none !important;
+  }
+  /* The splash component doesn't mount at all under reduced motion. */
+}
+
+/* ═══════════ HOME · premium "supercar dashboard" blocks ═══════════ */
+
+/* Subtle carbon-fibre weave overlay (fine ±45° cross-hatch). Drop as an
+   absolute inset layer inside a card; keep it low-opacity so it only
+   whispers texture over the base surface. */
+.carbon-weave {
+  background-image:
+    repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.032) 0, rgba(255, 255, 255, 0.032) 1px, transparent 1px, transparent 3px),
+    repeating-linear-gradient(135deg, rgba(0, 0, 0, 0.20) 0, rgba(0, 0, 0, 0.20) 1px, transparent 1px, transparent 3px);
+  background-size: 4px 4px;
+}
+
+/* Mini bar-chart / podium bars grow up on mount. GPU: transform only. */
+@keyframes home-bar-rise {
+  from { transform: scaleY(0.02); }
+  to   { transform: scaleY(1); }
+}
+.home-bar-rise {
+  transform-origin: bottom center;
+  animation: home-bar-rise 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Red neon glow on the F1 circuit trace. */
+.circuit-glow {
+  filter: drop-shadow(0 0 2px rgba(232, 32, 58, 0.85))
+          drop-shadow(0 0 6px rgba(232, 32, 58, 0.35));
+}
+
+/* Flip-clock digit: subtle vertical bevel + a hairline mid seam (added via
+   the ::after) to read like a mechanical race chronometer split-flap. */
+.flip-digit {
+  position: relative;
+  background: linear-gradient(180deg, #191919 0%, #0c0c0c 48%, #070707 52%, #101010 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 -6px 12px rgba(0, 0, 0, 0.6),
+    0 2px 6px rgba(0, 0, 0, 0.5);
+}
+.flip-digit::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1px;
+  transform: translateY(-0.5px);
+  background: rgba(0, 0, 0, 0.75);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-bar-rise { animation: none !important; }
 }

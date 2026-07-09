@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useLayoutEffect, useRef } from 'react'
 import {
   NavLink,
   Outlet,
@@ -7,12 +7,16 @@ import {
   useNavigationType,
   useSearchParams,
 } from 'react-router-dom'
-import { Map as MapIcon, Newspaper, Home, Compass, User } from 'lucide-react'
+import { MapPin, Radio, Home, Newspaper, User } from 'lucide-react'
 import UpdateNotification from '../components/UpdateNotification'
 import InstallBanner from '../components/InstallBanner'
-import SpotFab from '../components/SpotFab'
 import WelcomeCelebration from '../components/WelcomeCelebration'
 import XpFloater from '../components/XpFloater'
+import SpotCelebration from '../components/SpotCelebration'
+import StreakBreak from '../components/StreakBreak'
+import LevelUpOverlay from '../components/LevelUpOverlay'
+import BadgeUnlocked from '../components/BadgeUnlocked'
+import ShareCardSheet from '../components/ShareCardSheet'
 import TabsContainer, { type TabKey } from './TabsContainer'
 import {
   claimReferralCode,
@@ -20,11 +24,16 @@ import {
 } from '../lib/referrals'
 import { supabase } from '../lib/supabase'
 import { useMyTier } from '../lib/tier'
+import { hapticSelection } from '../lib/haptic'
+import { useTranslation } from 'react-i18next'
 
 const tabClass = ({ isActive }: { isActive: boolean }) =>
-  `tappable flex flex-col items-center justify-center gap-1 h-full text-[10px] font-semibold tracking-wider uppercase transition-colors ${
-    isActive ? 'text-accent' : 'text-[#555]'
-  }`
+  `liquid-tab ${isActive ? 'is-active' : ''}`
+
+// Nav slot order (must match the JSX order) + their routes, used to drive
+// the sliding indicator and the finger-follow drag.
+const NAV_ORDER = ['map', 'feed', 'home', 'discover', 'profile'] as const
+const NAV_ROUTES = ['/map', '/feed', '/', '/discover', '/profile']
 
 // Map a pathname to one of the 5 always-mounted tabs. Returns null for
 // stack routes (spot detail, new-spot, public profile, etc.) — those
@@ -46,6 +55,7 @@ function pathToTab(pathname: string): {
 }
 
 export default function MainLayout() {
+  const { t } = useTranslation()
   const { pathname } = useLocation()
   const navigate = useNavigate()
   const navType = useNavigationType()
@@ -68,7 +78,145 @@ export default function MainLayout() {
   // underneath stack routes (e.g. /spot/:id over /feed).
   const lastTabRef = useRef<TabKey | null>(null)
   if (tab) lastTabRef.current = tab
+
+  // ── Liquid nav: sliding indicator + finger-follow ──
+  const navRef = useRef<HTMLElement>(null)
+  const draggingRef = useRef(false)
+  const movedRef = useRef(false)
+  const startXRef = useRef(0)
+  const fracRef = useRef(2)
+  const navTab = tab ?? lastTabRef.current ?? 'home'
+  const activeIndex = Math.max(0, NAV_ORDER.indexOf(navTab as (typeof NAV_ORDER)[number]))
+
+  // Spring the indicator to the active slot on route change (never fights an
+  // in-progress drag). useLayoutEffect → set before paint so the initial
+  // position never flashes. Pure CSS var → transform, GPU-accelerated.
+  useLayoutEffect(() => {
+    if (!draggingRef.current) {
+      navRef.current?.style.setProperty('--nav-i', String(activeIndex))
+      fracRef.current = activeIndex
+    }
+  }, [activeIndex])
+
+  function slotFromClientX(clientX: number): number {
+    const nav = navRef.current
+    if (!nav) return activeIndex
+    const r = nav.getBoundingClientRect()
+    const slotW = (r.width - 16) / 5
+    return Math.max(0, Math.min(4, (clientX - r.left - 8) / slotW - 0.5))
+  }
+  function onNavPointerDown(e: React.PointerEvent) {
+    startXRef.current = e.clientX
+    movedRef.current = false
+  }
+  function onNavPointerMove(e: React.PointerEvent) {
+    if (e.pointerType === 'mouse' && e.buttons === 0) return
+    const dx = e.clientX - startXRef.current
+    if (!movedRef.current) {
+      if (Math.abs(dx) < 6) return // ignore micro-jitter → keep taps working
+      movedRef.current = true
+      draggingRef.current = true
+      navRef.current?.classList.add('dragging')
+      try {
+        navRef.current?.setPointerCapture(e.pointerId)
+      } catch {
+        /* capture unsupported — follow still works */
+      }
+    }
+    const frac = slotFromClientX(e.clientX)
+    fracRef.current = frac
+    navRef.current?.style.setProperty('--nav-i', String(frac))
+  }
+  function onNavPointerEnd() {
+    if (!movedRef.current) return // was a tap → let the NavLink navigate
+    movedRef.current = false
+    draggingRef.current = false
+    navRef.current?.classList.remove('dragging')
+    const nearest = Math.round(fracRef.current)
+    fracRef.current = nearest
+    navRef.current?.style.setProperty('--nav-i', String(nearest)) // spring-snap
+    hapticSelection()
+    navigate(NAV_ROUTES[nearest])
+  }
   const onStack = tab === null
+
+
+  // Force-relogin sweep: when an admin flips profiles.force_relogin = true
+  // (e.g. after a major auth/onboarding change), the user is signed out
+  // once. We clear the flag FIRST (while still authenticated) so re-login
+  // never loops, then sign out — App's guard redirects to /auth.
+  useEffect(() => {
+    let active = true
+    ;(async () => {
+      try {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser()
+        if (!active || !user) return
+        const { data } = await supabase
+          .from('profiles')
+          .select('force_relogin')
+          .eq('user_id', user.id)
+          .maybeSingle()
+        if (!active) return
+        if ((data as { force_relogin?: boolean } | null)?.force_relogin === true) {
+          await supabase
+            .from('profiles')
+            .update({ force_relogin: false })
+            .eq('user_id', user.id)
+          await supabase.auth.signOut()
+        }
+      } catch {
+        /* best-effort */
+      }
+    })()
+    return () => {
+      active = false
+    }
+  }, [])
+
+  // Hydrate the profile from signup metadata (pseudo / ville / country)
+  // on first authenticated mount. Email-confirm signups can't write the
+  // profile at signup time (no session yet), so the fields ride along in
+  // user_metadata and land here once. Idempotent: only writes when the
+  // profile has no pseudo yet, so it never overwrites later edits.
+  useEffect(() => {
+    let active = true
+    ;(async () => {
+      try {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser()
+        if (!active || !user) return
+        const meta = user.user_metadata as
+          | { pseudo?: string; ville?: string; country?: string }
+          | undefined
+        const metaPseudo = (meta?.pseudo ?? '').trim()
+        if (!metaPseudo) return
+        const { data: prof } = await supabase
+          .from('profiles')
+          .select('pseudo')
+          .eq('user_id', user.id)
+          .maybeSingle()
+        const existing = (prof?.pseudo as string | undefined)?.trim()
+        if (existing) return // already has a pseudo → leave it alone
+        await supabase.from('profiles').upsert(
+          {
+            user_id: user.id,
+            pseudo: metaPseudo,
+            ville: (meta?.ville ?? '').trim() || null,
+            country: (meta?.country ?? '').trim() || null,
+          },
+          { onConflict: 'user_id' },
+        )
+      } catch {
+        /* best-effort hydration */
+      }
+    })()
+    return () => {
+      active = false
+    }
+  }, [])
 
   // Redeem a pending referral code on first authenticated mount.
   // Two sources, checked in order:
@@ -109,14 +257,27 @@ export default function MainLayout() {
   // Server-side bump_last_seen() is a no-op when unauthenticated.
   useEffect(() => {
     const bump = () => void supabase.rpc('bump_last_seen')
-    bump()
-    const t = setInterval(bump, 60_000)
-    const onVis = () => {
-      if (document.visibilityState === 'visible') bump()
+    let t: ReturnType<typeof setInterval> | null = null
+    const stop = () => {
+      if (t != null) {
+        clearInterval(t)
+        t = null
+      }
     }
+    const start = () => {
+      if (t == null) t = setInterval(bump, 60_000)
+    }
+    // Only poll while visible — no background network churn off-screen.
+    const onVis = () => {
+      if (document.visibilityState === 'visible') {
+        bump()
+        start()
+      } else stop()
+    }
+    onVis()
     document.addEventListener('visibilitychange', onVis)
     return () => {
-      clearInterval(t)
+      stop()
       document.removeEventListener('visibilitychange', onVis)
     }
   }, [])
@@ -152,8 +313,12 @@ export default function MainLayout() {
         )}
       </main>
 
-      <SpotFab />
       <XpFloater />
+      <SpotCelebration />
+      <StreakBreak />
+      <LevelUpOverlay />
+      <BadgeUnlocked />
+      <ShareCardSheet />
       <UpdateNotification />
       <InstallBanner />
 
@@ -164,34 +329,42 @@ export default function MainLayout() {
         />
       )}
 
-      <nav className="app-nav glass fixed bottom-0 left-0 right-0 z-40">
-        <div className="grid grid-cols-5 items-end h-20 max-w-md mx-auto px-1">
-          <NavLink to="/map" className={tabClass}>
-            <MapIcon className="w-5 h-5" />
-            <span>Carte</span>
-          </NavLink>
+      {/* Liquid-glass floating nav — a centred 280px pill with a separate
+          red camera button hovering above it. Both float over the
+          content, which scrolls (blurred) underneath. */}
+      <div className="liquid-nav-wrap">
+        {/* The Carte's "Spotter" camera FAB now lives in Map.tsx (a single
+            60px circle above the pill). The old nav-embedded .liquid-cam was
+            removed 2026-06-26 — it duplicated and overlapped the Map FAB. */}
+        <nav
+          ref={navRef}
+          className="liquid-nav"
+          aria-label={t('nav.main')}
+          onPointerDown={onNavPointerDown}
+          onPointerMove={onNavPointerMove}
+          onPointerUp={onNavPointerEnd}
+          onPointerCancel={onNavPointerEnd}
+        >
+          {/* Sliding liquid indicator (glow pill behind the active icon). */}
+          <span className="liquid-indicator" aria-hidden />
 
-          <NavLink to="/feed" className={tabClass}>
-            <Newspaper className="w-5 h-5" />
-            <span>Fil</span>
+          <NavLink to="/map" onClick={hapticSelection} className={tabClass} aria-label={t('nav.map')}>
+            <MapPin className="h-[26px] w-[26px]" strokeWidth={1.5} />
           </NavLink>
-
-          <NavLink to="/" end className={tabClass}>
-            <Home className="w-5 h-5" />
-            <span>Accueil</span>
+          <NavLink to="/feed" onClick={hapticSelection} className={tabClass} aria-label={t('nav.feed')}>
+            <Radio className="h-[26px] w-[26px]" strokeWidth={1.5} />
           </NavLink>
-
-          <NavLink to="/discover" className={tabClass}>
-            <Compass className="w-5 h-5" />
-            <span>Explorer</span>
+          <NavLink to="/" end onClick={hapticSelection} className={tabClass} aria-label={t('nav.home')}>
+            <Home className="h-[26px] w-[26px]" strokeWidth={1.5} />
           </NavLink>
-
-          <NavLink to="/profile" className={tabClass}>
-            <User className="w-5 h-5" />
-            <span>Profil</span>
+          <NavLink to="/discover" onClick={hapticSelection} className={tabClass} aria-label={t('nav.discover')}>
+            <Newspaper className="h-[26px] w-[26px]" strokeWidth={1.5} />
           </NavLink>
-        </div>
-      </nav>
+          <NavLink to="/profile" onClick={hapticSelection} className={tabClass} aria-label={t('nav.profile')}>
+            <User className="h-[26px] w-[26px]" strokeWidth={1.5} />
+          </NavLink>
+        </nav>
+      </div>
     </div>
   )
 }

@@ -1,90 +1,188 @@
+import { useMemo, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft } from 'lucide-react'
-import { BRAND_CATEGORIES, BRANDS, type Brand } from '../lib/brands'
+import { ArrowLeft, ChevronRight, Search as SearchIcon, X } from 'lucide-react'
+import { BRANDS, brandFlag, type Brand } from '../lib/brands'
 import BrandLogo from '../components/BrandLogo'
 
-// Used both as a standalone /brands route (with header) and as the
-// "Marques" inner content of Discover (no header). `embedded` flips
-// between the two layouts.
+// First letter for the A-Z section bucket; non-letters fall under '#'.
+function sectionLetter(name: string): string {
+  const c = name.trim().charAt(0).toUpperCase()
+  return /[A-Z]/.test(c) ? c : '#'
+}
+
+// Explorer brands — an iOS Contacts / Apple Music-style typographic list.
+// Used standalone (/brands) and embedded inside Discover's "Marques" tab.
 export default function Brands({ embedded = false }: { embedded?: boolean }) {
+  const { t } = useTranslation()
   const navigate = useNavigate()
-  const byCat = new Map<string, Brand[]>()
-  for (const b of BRANDS) {
-    const arr = byCat.get(b.category) ?? []
-    arr.push(b)
-    byCat.set(b.category, arr)
+  const [q, setQ] = useState('')
+  const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({})
+  const lastLetterRef = useRef<string>('')
+
+  const needle = q.trim().toLowerCase()
+
+  // Filter (instant, from the first keystroke) then sort alphabetically.
+  const sorted = useMemo(() => {
+    const list = needle
+      ? BRANDS.filter(
+          (b) =>
+            b.name.toLowerCase().includes(needle) ||
+            b.match.some((m) => m.includes(needle)),
+        )
+      : BRANDS
+    return [...list].sort((a, b) => a.name.localeCompare(b.name, 'fr'))
+  }, [needle])
+
+  // Bucket into A-Z sections.
+  const sections = useMemo(() => {
+    const groups = new Map<string, Brand[]>()
+    for (const b of sorted) {
+      const l = sectionLetter(b.name)
+      const arr = groups.get(l) ?? []
+      arr.push(b)
+      groups.set(l, arr)
+    }
+    return [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0]))
+  }, [sorted])
+
+  const letters = sections.map(([l]) => l)
+
+  function jumpTo(letter: string) {
+    sectionRefs.current[letter]?.scrollIntoView({ block: 'start' })
   }
 
-  // Nav clearance is handled globally in index.css (.stack-overlay
-  // / .tab-pane). Per-page pb just adds breathing room.
-  //
-  // Card layout:
-  //  - A fixed-aspect logo plate (aspect-square) keeps every cell of the
-  //    grid identically sized regardless of which logo loads. This is
-  //    what visually harmonises the catalogue.
-  //  - Below the plate, the brand name + optional "PRÉPARATEUR" chip.
-  //  - `brand.cardBg` overrides the default near-black surface for
-  //    marques whose logo would otherwise vanish on dark.
-  const grid = (
-    <div className="space-y-8 px-4 pb-8">
-      {BRAND_CATEGORIES.map((cat) => {
-        const list = byCat.get(cat.key) ?? []
-        if (list.length === 0) return null
-        return (
-          <section key={cat.key}>
-            <h2 className="mb-3 flex items-center justify-between px-1">
-              <span className="font-display text-lg font-extrabold tracking-tighter text-fg">
-                {cat.label}
-              </span>
-              <span className="label-up text-[10px] text-fg2">
-                {list.length}
-              </span>
-            </h2>
-            <div className="grid grid-cols-3 gap-3">
-              {list.map((b) => (
-                <button
-                  key={b.slug}
-                  onClick={() => navigate(`/brand/${b.slug}`)}
-                  className="tappable group flex flex-col gap-2 text-center"
-                >
-                  <div
-                    className="flex aspect-square w-full items-center justify-center overflow-hidden rounded-2xl shadow-soft"
-                    style={{
-                      backgroundColor: b.cardBg ?? 'var(--color-card)',
-                      border: b.cardBorder
-                        ? `1px solid ${b.cardBorder}`
-                        : '1px solid var(--color-border)',
-                    }}
-                  >
-                    <BrandLogo brand={b} size={88} />
-                  </div>
-                  <span className="line-clamp-2 px-0.5 text-xs font-semibold leading-tight text-fg">
+  // Drag the alphabet rail like iOS — resolve the letter under the finger,
+  // and only jump when it crosses to a NEW letter (smooth, no scroll spam).
+  function onRailTouch(e: React.TouchEvent) {
+    const t = e.touches[0]
+    if (!t) return
+    const el = document.elementFromPoint(t.clientX, t.clientY) as HTMLElement | null
+    const l = el?.dataset?.letter
+    if (l && l !== lastLetterRef.current) {
+      lastLetterRef.current = l
+      jumpTo(l)
+    }
+  }
+
+  const list = (
+    <div className="relative pb-10">
+      {/* Search — instant filter */}
+      <div className="px-4 pb-2 pt-1">
+        <div
+          className="flex items-center gap-2 rounded-full px-4 py-2.5"
+          style={{
+            background: 'var(--color-glass)',
+            border: '1px solid var(--color-border)',
+            backdropFilter: 'saturate(160%) blur(22px)',
+            WebkitBackdropFilter: 'saturate(160%) blur(22px)',
+          }}
+        >
+          <SearchIcon className="h-4 w-4 flex-none text-fg2" />
+          <input
+            type="text"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder={t('brandspage.searchBrand')}
+            // 16px font-size prevents the iOS focus auto-zoom.
+            style={{ fontSize: '16px' }}
+            className="flex-1 bg-transparent font-medium tracking-tight text-fg/80 outline-none placeholder:text-fg2"
+          />
+          {q && (
+            <button
+              onClick={() => setQ('')}
+              aria-label={t('brandspage.clear')}
+              className="tappable text-fg2 hover:text-fg"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {sections.length === 0 ? (
+        <p className="px-8 py-16 text-center text-sm text-fg2">
+          {t('brandspage.noBrandsFor', { query: q })}
+        </p>
+      ) : (
+        sections.map(([letter, brands]) => (
+          <div
+            key={letter}
+            ref={(el) => {
+              sectionRefs.current[letter] = el
+            }}
+          >
+            {/* Sticky section header (iOS Contacts) */}
+            <div className="sticky top-0 z-10 bg-bg px-4 py-1 text-[11px] font-bold tracking-widest text-fg2">
+              {letter}
+            </div>
+            {brands.map((b) => (
+              <button
+                key={b.slug}
+                onClick={() => navigate(`/brand/${b.slug}`)}
+                className="tappable flex w-full items-center gap-3.5 px-4 py-2.5 text-left"
+                style={{ borderBottom: '1px solid var(--color-divider)' }}
+              >
+                <BrandLogo brand={b} size={28} mono className="flex-none" />
+                <span className="flex min-w-0 flex-1 items-baseline gap-1.5">
+                  <span className="truncate text-sm font-medium uppercase tracking-wider text-fg">
                     {b.name}
                   </span>
-                </button>
-              ))}
-            </div>
-          </section>
-        )
-      })}
+                  {b.type === 'tuner' && (
+                    <span className="flex-none text-xs font-light text-fg2">
+                      {t('brandspage.tuner')}
+                    </span>
+                  )}
+                </span>
+                {/* Country flag — far right, replaces the old category text. */}
+                <span className="flex-none text-lg leading-none">
+                  {brandFlag(b)}
+                </span>
+                <ChevronRight className="h-4 w-4 flex-none text-fg2/50" />
+              </button>
+            ))}
+          </div>
+        ))
+      )}
+
+      {/* A-Z index rail — tap or drag to jump. Hidden while searching. */}
+      {!needle && letters.length > 3 && (
+        <div
+          className="fixed right-0.5 top-1/2 z-20 flex -translate-y-1/2 select-none flex-col items-center py-2"
+          style={{ touchAction: 'none' }}
+          onTouchStart={onRailTouch}
+          onTouchMove={onRailTouch}
+        >
+          {letters.map((l) => (
+            <button
+              key={l}
+              data-letter={l}
+              onClick={() => jumpTo(l)}
+              className="px-1 text-[10px] font-bold leading-[1.18] text-fg2/70 transition-colors active:text-accent"
+            >
+              {l}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   )
 
-  if (embedded) return grid
+  if (embedded) return list
 
   return (
     <div className="min-h-screen bg-bg pt-[max(1rem,env(safe-area-inset-top))] text-fg">
       <div className="flex items-center gap-4 px-4 py-4">
         <button
           onClick={() => navigate(-1)}
-          aria-label="Retour"
+          aria-label={t('brandspage.back')}
           className="tappable text-fg2 hover:text-fg"
         >
           <ArrowLeft className="h-6 w-6" />
         </button>
-        <h1 className="display-xl text-fg">Marques</h1>
+        <h1 className="display-xl text-fg">{t('brandspage.brands')}</h1>
       </div>
-      {grid}
+      {list}
     </div>
   )
 }

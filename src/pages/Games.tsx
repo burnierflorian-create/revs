@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { ArrowLeft, ChevronRight, Flag, Gamepad2, Zap } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import type { Spot } from '../lib/spots'
 import { Skeleton } from '../components/Skeleton'
+import { appConfig } from '../config/appConfig'
 
 /** Index page for in-app games. Hero spotlights the user's best spot
  *  (highest estimated_price with a photo); falls back to a gradient
@@ -12,6 +14,7 @@ import { Skeleton } from '../components/Skeleton'
  *  circuit SVG as the background. */
 export default function Games() {
   const navigate = useNavigate()
+  const { t } = useTranslation()
   const [hero, setHero] = useState<Spot | null | undefined>(undefined)
 
   useEffect(() => {
@@ -86,7 +89,7 @@ export default function Games() {
             {/* Top-left back button */}
             <button
               onClick={() => navigate(-1)}
-              aria-label="Retour"
+              aria-label={t('activities.back')}
               className="tappable absolute left-3 z-20 flex h-9 w-9 items-center justify-center rounded-full"
               style={{
                 top: 'max(12px, env(safe-area-inset-top))',
@@ -101,9 +104,9 @@ export default function Games() {
             {/* Bottom-left title block */}
             <div className="absolute inset-x-0 bottom-0 z-10 px-5 pb-5">
               <p
-                className="text-[10px] uppercase tracking-[0.3em] text-white/65"
+                className="text-[10px] uppercase tracking-[0.3em] text-fg/65"
               >
-                Jeux REVS
+                {t('activities.gamesKicker')}
               </p>
               <h1
                 className="mt-1 font-display font-extrabold tracking-tighter text-white"
@@ -114,16 +117,16 @@ export default function Games() {
                   textShadow: '0 6px 24px rgba(0,0,0,0.55)',
                 }}
               >
-                JEUX REVS
+                {t('activities.gamesTitle')}
               </h1>
-              <p className="mt-1.5 text-[13px] text-white/80">
-                Affronte d'autres spotters
+              <p className="mt-1.5 text-[13px] text-fg/80">
+                {t('activities.gamesSubtitle')}
               </p>
               {hero?.brand && hero?.model && (
                 <p
-                  className="mt-2 text-[10px] uppercase tracking-widest text-white/45"
+                  className="mt-2 text-[10px] uppercase tracking-widest text-fg/45"
                 >
-                  Mis en avant : {hero.brand} {hero.model}
+                  {t('activities.featured', { brand: hero.brand, model: hero.model })}
                 </p>
               )}
             </div>
@@ -133,6 +136,9 @@ export default function Games() {
 
       {/* ────── GAME CARDS ────── */}
       <section className="relative px-4 pt-5 pb-10">
+        {/* REVS RACE entry — phase-gated by SHOW_REVS_RACE (the feature,
+            its page and the back-end stay intact, just unreachable). */}
+        {appConfig.SHOW_REVS_RACE && (
         <button
           onClick={() => navigate('/race')}
           className="tappable relative block w-full overflow-hidden rounded-3xl text-left"
@@ -158,7 +164,7 @@ export default function Games() {
                 <p
                   className="text-[10px] uppercase tracking-[0.3em] text-accent"
                 >
-                  Drag race
+                  {t('activities.dragRace')}
                 </p>
                 <p
                   className="mt-1 font-display font-extrabold tracking-tighter text-white"
@@ -170,22 +176,21 @@ export default function Games() {
                 >
                   REVS RACE
                 </p>
-                <p className="mt-1.5 max-w-[80%] text-[12px] text-white/75">
-                  Choisis ta carte, vise le départ parfait, empoche
-                  l'enjeu.
+                <p className="mt-1.5 max-w-[80%] text-[12px] text-fg/75">
+                  {t('activities.raceDescription')}
                 </p>
                 <div className="mt-3 flex items-center gap-1.5">
                   <span
                     className="rounded-full bg-accent/22 px-2.5 py-1 font-extrabold uppercase tracking-wider text-accent"
                     style={{ fontSize: '9.5px', letterSpacing: '0.08em' }}
                   >
-                    Solo · IA
+                    {t('activities.soloAi')}
                   </span>
                   <span
-                    className="flex items-center gap-1 rounded-full bg-white/[0.10] px-2.5 py-1 font-extrabold uppercase tracking-wider text-white/85"
+                    className="flex items-center gap-1 rounded-full bg-fg/[0.10] px-2.5 py-1 font-extrabold uppercase tracking-wider text-fg/85"
                     style={{ fontSize: '9.5px', letterSpacing: '0.08em' }}
                   >
-                    <Zap className="h-3 w-3" /> jusqu'à +1000 XP
+                    <Zap className="h-3 w-3" /> {t('activities.upToXp', { count: 1000 })}
                   </span>
                 </div>
               </div>
@@ -198,19 +203,19 @@ export default function Games() {
             </div>
           </div>
         </button>
+        )}
 
         {/* Coming-soon hint */}
         <div
           className="mt-4 flex items-center gap-3 rounded-2xl px-4 py-3.5 text-[12px] text-fg2"
           style={{
-            background: 'rgba(255,255,255,0.03)',
+            background: 'rgb(var(--color-fg) / 0.03)',
             border: '1px dashed var(--color-border)',
           }}
         >
           <Gamepad2 className="h-4 w-4 flex-none" />
           <span>
-            Multi-joueur, défi d'amis et matchmaking arrivent dans la
-            prochaine mise à jour.
+            {t('activities.comingSoon')}
           </span>
           <ChevronRight className="h-4 w-4 flex-none text-fg2/50" />
         </div>

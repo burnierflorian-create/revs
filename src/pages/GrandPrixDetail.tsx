@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
   ArrowLeft,
@@ -99,6 +100,7 @@ function initials(name: string): string {
 }
 
 export default function GrandPrixDetail() {
+  const { t } = useTranslation()
   const { round } = useParams<{ round: string }>()
   const navigate = useNavigate()
   const gp = gpByRound(Number(round))
@@ -143,7 +145,7 @@ export default function GrandPrixDetail() {
           setRace(json.data)
         }
       } catch {
-        if (active) setRaceError('Résultats indisponibles.')
+        if (active) setRaceError(t('f1gp.resultsUnavailable'))
       } finally {
         if (active) setRaceLoading(false)
       }
@@ -156,13 +158,13 @@ export default function GrandPrixDetail() {
   if (!gp) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-bg px-8 text-center text-fg">
-        <p className="text-sm text-fg2">Grand Prix introuvable.</p>
+        <p className="text-sm text-fg2">{t('f1gp.gpNotFound')}</p>
         <button
           onClick={() => navigate('/discover')}
           className="tappable rounded-full bg-accent px-6 py-3 text-sm font-extrabold tracking-wider text-fg"
           style={{ boxShadow: '0 8px 24px rgba(232,32,58,0.45)' }}
         >
-          RETOUR
+          {t('f1gp.back')}
         </button>
       </div>
     )
@@ -184,9 +186,9 @@ export default function GrandPrixDetail() {
         <div className="absolute inset-0 bg-gradient-to-t from-bg via-bg/40 to-transparent" />
         <button
           onClick={() => navigate(-1)}
-          aria-label="Retour"
+          aria-label={t('f1gp.back')}
           className="tappable absolute left-4 top-[max(1rem,env(safe-area-inset-top))] flex h-10 w-10 items-center justify-center rounded-full bg-black/50 backdrop-blur"
-          style={{ border: '1px solid rgba(255,255,255,0.08)' }}
+          style={{ border: '1px solid rgb(var(--color-fg) / 0.08)' }}
         >
           <ArrowLeft className="h-5 w-5 text-fg" />
         </button>
@@ -195,7 +197,7 @@ export default function GrandPrixDetail() {
             <span className="text-4xl leading-none">{gp.flag}</span>
             <div className="min-w-0">
               <p className="label-up text-[10px] text-accent">
-                Manche {gp.round} · F1 2026
+                {t('f1gp.roundLabel', { round: gp.round })}
               </p>
               <h1 className="truncate font-display text-2xl font-extrabold tracking-tighter text-fg">
                 {gp.name}
@@ -224,13 +226,13 @@ export default function GrandPrixDetail() {
             }}
           >
             <p className="label-up mb-3 text-center text-[10px] text-fg2">
-              Départ de la course dans
+              {t('f1gp.raceStartsIn')}
             </p>
             <div className="flex items-center justify-center gap-3">
-              <Unit value={cd.d} label="jours" />
-              <Unit value={cd.h} label="hrs" />
-              <Unit value={cd.m} label="min" />
-              <Unit value={cd.s} label="sec" />
+              <Unit value={cd.d} label={t('f1gp.unitDays')} />
+              <Unit value={cd.h} label={t('f1gp.unitHours')} />
+              <Unit value={cd.m} label={t('f1gp.unitMinutes')} />
+              <Unit value={cd.s} label={t('f1gp.unitSeconds')} />
             </div>
           </div>
         ) : isPast ? (
@@ -246,14 +248,14 @@ export default function GrandPrixDetail() {
             className="rounded-3xl bg-card p-5 text-center text-sm text-fg2"
             style={{ border: '1px solid var(--color-border)' }}
           >
-            Ce Grand Prix a déjà eu lieu.
+            {t('f1gp.gpAlreadyHappened')}
           </div>
         )}
 
         <section>
           <h2 className="mb-3 flex items-center gap-2 font-display text-lg font-extrabold tracking-tighter text-fg">
             <Flag className="h-5 w-5 text-accent" />
-            Programme du week-end
+            {t('f1gp.weekendSchedule')}
           </h2>
           <div
             className="overflow-hidden rounded-3xl bg-card"
@@ -263,7 +265,7 @@ export default function GrandPrixDetail() {
               <div
                 key={s.label}
                 className={`flex items-center justify-between gap-3 px-4 py-3.5 ${
-                  i < sessions.length - 1 ? 'border-b border-white/5' : ''
+                  i < sessions.length - 1 ? 'border-b border-fg/5' : ''
                 } ${s.label === 'Course' ? 'bg-accent/10' : ''}`}
               >
                 <span
@@ -280,14 +282,14 @@ export default function GrandPrixDetail() {
             ))}
           </div>
           <p className="label-up mt-2 text-[10px] text-fg2/70">
-            Horaires en heure locale de ton appareil.
+            {t('f1gp.localTimeNote')}
           </p>
         </section>
 
         <section>
           <h2 className="mb-3 flex items-center gap-2 font-display text-lg font-extrabold tracking-tighter text-fg">
             <Trophy className="h-5 w-5 text-accent" />
-            Derniers vainqueurs
+            {t('f1gp.recentWinners')}
           </h2>
           {gp.winners && gp.winners.length > 0 ? (
             <div
@@ -299,7 +301,7 @@ export default function GrandPrixDetail() {
                   key={w.year}
                   className={`flex items-center justify-between px-4 py-3.5 ${
                     i < Math.min(gp.winners!.length, 3) - 1
-                      ? 'border-b border-white/5'
+                      ? 'border-b border-fg/5'
                       : ''
                   }`}
                 >
@@ -317,7 +319,7 @@ export default function GrandPrixDetail() {
               className="rounded-3xl bg-card p-5 text-center text-sm text-fg2"
               style={{ border: '1px solid var(--color-border)' }}
             >
-              Historique à venir pour ce circuit.
+              {t('f1gp.historyComingSoon')}
             </div>
           )}
         </section>
@@ -330,7 +332,7 @@ export default function GrandPrixDetail() {
           style={{ boxShadow: '0 8px 24px rgba(232,32,58,0.45)' }}
         >
           <ExternalLink className="h-4 w-4" />
-          PAGE OFFICIELLE F1
+          {t('f1gp.officialF1Page')}
         </a>
       </div>
     </div>
@@ -348,12 +350,13 @@ function RaceResults({
   error: string | null
   gpName: string
 }) {
+  const { t } = useTranslation()
   if (loading) {
     return (
       <section className="space-y-3">
         <div className="flex items-center gap-2 text-sm text-fg2">
           <Loader2 className="h-4 w-4 animate-spin text-accent" />
-          Récupération des résultats…
+          {t('f1gp.fetchingResults')}
         </div>
         <Skeleton className="h-44 rounded-3xl" />
         <Skeleton className="h-24 rounded-3xl" />
@@ -366,7 +369,7 @@ function RaceResults({
         className="rounded-3xl bg-card p-5 text-center text-sm text-fg2"
         style={{ border: '1px solid var(--color-border)' }}
       >
-        Résultats indisponibles pour le moment.
+        {t('f1gp.resultsUnavailableNow')}
       </div>
     )
   }
@@ -377,7 +380,7 @@ function RaceResults({
       <div>
         <h2 className="mb-3 flex items-center gap-2 font-display text-lg font-extrabold tracking-tighter text-fg">
           <Trophy className="h-5 w-5 text-accent" />
-          Podium · {gpName}
+          {t('f1gp.podiumTitle', { gpName })}
         </h2>
         <div className="space-y-2">
           {race.podium.map((p) => {
@@ -389,7 +392,7 @@ function RaceResults({
                 key={p.position}
                 className="flex items-center gap-3 rounded-2xl px-3 py-3"
                 style={{
-                  background: 'var(--color-card)',
+                  background: 'rgb(var(--color-card))',
                   border: `1px solid ${style.ring}`,
                   boxShadow:
                     p.position === 1
@@ -422,7 +425,9 @@ function RaceResults({
                 >
                   {p.position}
                   <span className="text-xs font-bold opacity-80">
-                    {p.position === 1 ? 'ᵉʳ' : 'ᵉ'}
+                    {p.position === 1
+                      ? t('f1gp.ordinalFirst')
+                      : t('f1gp.ordinalOther')}
                   </span>
                 </span>
               </div>
@@ -435,12 +440,12 @@ function RaceResults({
       <div className="grid grid-cols-3 gap-2.5">
         <RaceStat
           icon={<Flag className="h-4 w-4" />}
-          label="Pole"
+          label={t('f1gp.statPole')}
           value={race.pole !== 'N/A' ? race.pole : '—'}
         />
         <RaceStat
           icon={<Zap className="h-4 w-4" />}
-          label="Tour rapide"
+          label={t('f1gp.statFastestLap')}
           value={
             race.fastestLap.driver !== 'N/A' ? race.fastestLap.driver : '—'
           }
@@ -450,7 +455,7 @@ function RaceResults({
         />
         <RaceStat
           icon={<Repeat className="h-4 w-4" />}
-          label="Tours"
+          label={t('f1gp.statLaps')}
           value={race.laps !== 'N/A' ? race.laps : '—'}
           big
         />
@@ -461,13 +466,15 @@ function RaceResults({
         <div
           className="flex items-start gap-3 rounded-2xl px-4 py-3.5"
           style={{
-            background: 'rgba(255,255,255,0.03)',
+            background: 'rgb(var(--color-fg) / 0.03)',
             border: '1px solid var(--color-divider)',
           }}
         >
           <AlertTriangle className="mt-0.5 h-4 w-4 flex-none text-accent" />
           <div className="min-w-0">
-            <p className="label-up text-[10px] text-fg2">Abandon notable</p>
+            <p className="label-up text-[10px] text-fg2">
+              {t('f1gp.notableRetirement')}
+            </p>
             <p className="mt-1 text-sm leading-snug text-fg/90">
               {race.notableRetirement}
             </p>
@@ -481,7 +488,9 @@ function RaceResults({
           className="rounded-3xl bg-card p-5"
           style={{ border: '1px solid var(--color-border)' }}
         >
-          <p className="label-up text-[10px] text-fg2">Résumé de la course</p>
+          <p className="label-up text-[10px] text-fg2">
+            {t('f1gp.raceSummary')}
+          </p>
           <p className="mt-2 font-serif text-[15px] leading-relaxed text-fg/85">
             {race.summary}
           </p>
@@ -507,7 +516,7 @@ function PodiumPortrait({
       className="relative flex h-11 w-11 flex-none items-center justify-center overflow-hidden rounded-full font-display text-sm font-extrabold tracking-tighter text-fg"
       style={{
         background:
-          'linear-gradient(135deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 100%)',
+          'linear-gradient(135deg, rgb(var(--color-fg) / 0.06) 0%, rgb(var(--color-fg) / 0.02) 100%)',
         border: `2px solid ${ring}`,
       }}
     >

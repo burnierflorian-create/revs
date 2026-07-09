@@ -144,7 +144,7 @@ export default function SearchOverlay({
                   <button
                     key={h}
                     onClick={() => useHistoryEntry(h)}
-                    className="flex items-center gap-1.5 rounded-full bg-card px-3 py-1.5 text-xs text-fg/70 hover:bg-white/10"
+                    className="flex items-center gap-1.5 rounded-full bg-card px-3 py-1.5 text-xs text-fg/70 hover:bg-fg/10"
                   >
                     <Clock className="h-3 w-3" />
                     {h}
@@ -165,7 +165,7 @@ export default function SearchOverlay({
               <button
                 key={`${h.kind}-${h.ref_id}-${i}`}
                 onClick={() => go(h)}
-                className="flex w-full items-center gap-3 rounded-xl bg-card px-3 py-2.5 text-left hover:bg-white/[0.06]"
+                className="flex w-full items-center gap-3 rounded-xl bg-card px-3 py-2.5 text-left hover:bg-fg/[0.06]"
               >
                 <span className="flex h-9 w-9 flex-none items-center justify-center rounded-xl bg-accent/15 text-accent">
                   {KIND_ICON[h.kind]}
@@ -176,7 +176,7 @@ export default function SearchOverlay({
                   </p>
                   <p className="truncate text-xs text-fg/40">{h.sublabel}</p>
                 </div>
-                <span className="rounded-full bg-white/5 px-2 py-0.5 text-[10px] uppercase tracking-wider text-fg/40">
+                <span className="rounded-full bg-fg/5 px-2 py-0.5 text-[10px] uppercase tracking-wider text-fg/40">
                   {h.kind === 'car'
                     ? 'voiture'
                     : h.kind === 'spotter'

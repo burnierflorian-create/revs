@@ -1,8 +1,9 @@
 import { Suspense, lazy, useEffect } from 'react'
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from './hooks/useAuth'
 import MainLayout from './layouts/MainLayout'
 import Auth from './pages/Auth'
+import ResetPassword from './pages/ResetPassword'
 import Onboarding from './components/Onboarding'
 
 // Every stack route is lazy: keeps the first paint chunk small. The
@@ -35,9 +36,24 @@ const F1Roster = lazy(() => import('./pages/F1Roster'))
 const F1TeamDetail = lazy(() => import('./pages/F1TeamDetail'))
 const F1DriverDetail = lazy(() => import('./pages/F1DriverDetail'))
 const PublicProfile = lazy(() => import('./pages/PublicProfile'))
+// TEMP — card redesign preview (remove after direction sign-off).
+const CardPreview = lazy(() => import('./pages/CardPreview'))
 
+// Elegant lazy-route placeholder — a soft skeleton of the page chrome (back
+// button, title, hero, text lines) instead of a blank flash. Pulse animates
+// opacity only (cheap, GPU-friendly).
 function StackFallback() {
-  return <div className="min-h-screen bg-bg" />
+  return (
+    <div className="min-h-screen bg-bg px-5 pt-14">
+      <div className="mx-auto max-w-md animate-pulse space-y-4">
+        <div className="h-9 w-9 rounded-full bg-fg/10" />
+        <div className="h-7 w-2/3 rounded-lg bg-fg/10" />
+        <div className="mt-2 h-44 w-full rounded-2xl bg-fg/10" />
+        <div className="h-4 w-1/2 rounded bg-fg/10" />
+        <div className="h-4 w-3/4 rounded bg-fg/10" />
+      </div>
+    </div>
+  )
 }
 
 function lazyRoute(node: React.ReactNode) {
@@ -46,6 +62,7 @@ function lazyRoute(node: React.ReactNode) {
 
 export default function App() {
   const { session, loading, passwordRecovery } = useAuth()
+  const { pathname } = useLocation()
 
   // After the first idle window, warm-start the Map chunk so its
   // 469 KB gzipped mapbox-gl payload is already in the browser cache
@@ -93,6 +110,11 @@ export default function App() {
   return (
     <>
       <Routes>
+        {/* Public — landing page for the password-reset email link. Always
+            reachable (the recovery session is briefly non-null). */}
+        <Route path="/reset-password" element={<ResetPassword />} />
+        {/* TEMP public preview of the card redesign. */}
+        <Route path="/card-preview" element={lazyRoute(<CardPreview />)} />
         <Route
           path="/auth"
           element={
@@ -169,7 +191,10 @@ export default function App() {
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
-      {session && <Onboarding />}
+      {session &&
+        !passwordRecovery &&
+        pathname !== '/auth' &&
+        pathname !== '/reset-password' && <Onboarding />}
     </>
   )
 }

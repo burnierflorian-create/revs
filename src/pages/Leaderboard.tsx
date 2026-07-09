@@ -1,12 +1,15 @@
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, Crown, MapPin, Globe2 } from 'lucide-react'
+import { ArrowLeft } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { Skeleton } from '../components/Skeleton'
-import TitleChip from '../components/TitleChip'
+import { xpLevel } from '../lib/xp'
+import { detectCountry, countryFlag } from '../lib/country'
+import { hapticSelection } from '../lib/haptic'
 
-type GlobalRow = { user_id: string; xp: number }
-type CityRow = {
+// Uniform leaderboard row (all three RPCs return the same shape now).
+type Row = {
   user_id: string
   xp: number
   spots: number
@@ -20,31 +23,250 @@ type CityStats = {
   top_spotter_id: string | null
   top_spotter_pseudo: string | null
 }
-type Prof = {
-  pseudo: string | null
-  ville: string | null
-  avatar: string | null
-  title: string | null
+// One row of the world "Pays" board — a whole country aggregated.
+type CountryStanding = { country: string; spotters: number; xp: number }
+
+type Scope = 'global' | 'country' | 'city'
+
+const GOLD = '#D4AF37'
+const SILVER = '#C0C5CE'
+const BRONZE = '#CD7F32'
+
+function levelName(xp: number): string {
+  return xp <= 0 ? 'Rookie' : xpLevel(xp).name
 }
 
-const PER = 20
-type Scope = 'global' | 'city'
+// ─────────────────────────── Rank row ───────────────────────────
+function RankRow({
+  rank,
+  row,
+  isMe,
+  onTap,
+}: {
+  rank: number
+  row: Row
+  isMe: boolean
+  onTap: () => void
+}) {
+  const { t } = useTranslation()
+  const name = row.pseudo || 'Spotter'
+  const podium = rank <= 3
+  const medal = rank === 1 ? '👑' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : null
+  const medalColor =
+    rank === 1 ? GOLD : rank === 2 ? SILVER : rank === 3 ? BRONZE : null
+  const avatarPx = podium ? 48 : 40
 
+  // Base background + border by rank; "me" always gets a subtle red border.
+  const baseBg =
+    rank === 1
+      ? 'linear-gradient(95deg, rgba(212,175,55,0.20) 0%, #141414 70%)'
+      : rank === 2
+        ? 'linear-gradient(95deg, rgba(192,197,206,0.16) 0%, #141414 70%)'
+        : rank === 3
+          ? 'linear-gradient(95deg, rgba(205,127,50,0.16) 0%, #141414 70%)'
+          : isMe
+            ? 'rgba(232,32,58,0.10)'
+            : '#141414'
+  const border = isMe
+    ? '1px solid rgba(232,32,58,0.6)'
+    : medalColor
+      ? `1px solid ${medalColor}99`
+      : '1px solid rgba(255,255,255,0.06)'
+
+  return (
+    <button
+      onClick={onTap}
+      className={`tappable relative flex w-full items-center gap-3 overflow-hidden rounded-2xl px-3 py-2.5 text-left transition-transform active:scale-[0.99] ${
+        rank === 1 ? 'gold-shimmer' : ''
+      }`}
+      style={{
+        background: baseBg,
+        border,
+        boxShadow:
+          rank === 1 ? '0 6px 22px rgba(212,175,55,0.18)' : undefined,
+      }}
+    >
+      {/* Rank / medal */}
+      <span
+        className="flex w-7 flex-none items-center justify-center font-display text-base font-extrabold tabular-nums"
+        style={{ color: medalColor ?? 'rgba(255,255,255,0.4)' }}
+      >
+        {medal ?? rank}
+      </span>
+
+      {/* Avatar */}
+      <div
+        className="flex flex-none items-center justify-center overflow-hidden rounded-full font-display text-sm font-extrabold text-white"
+        style={{
+          width: avatarPx,
+          height: avatarPx,
+          background: '#E8203A',
+          boxShadow: medalColor
+            ? `0 0 0 2px ${medalColor}`
+            : '0 0 0 2px rgba(255,255,255,0.06)',
+        }}
+      >
+        {row.avatar ? (
+          <img
+            src={row.avatar}
+            alt=""
+            loading="lazy"
+            decoding="async"
+            className="h-full w-full object-cover object-top"
+          />
+        ) : (
+          name.charAt(0).toUpperCase()
+        )}
+      </div>
+
+      {/* Name + level + spots */}
+      <div className="min-w-0 flex-1">
+        <p className="flex items-center gap-1.5 truncate text-sm font-semibold text-white">
+          {name}
+          {isMe && <span className="text-white/45">{t('community.you')}</span>}
+          {rank === 1 && (
+            <span
+              className="flex-none rounded-full px-1.5 py-0.5 text-[8px] font-extrabold uppercase tracking-wider text-black"
+              style={{ background: GOLD, letterSpacing: '0.08em' }}
+            >
+              {t('community.best')}
+            </span>
+          )}
+        </p>
+        <p className="mt-0.5 truncate text-[11px] text-white/45">
+          <span
+            className="font-bold uppercase"
+            style={{ color: row.xp <= 0 ? 'rgba(255,255,255,0.5)' : '#E8203A' }}
+          >
+            {levelName(row.xp)}
+          </span>
+          {' · '}
+          {t('community.spotsCount', { count: row.spots })}
+        </p>
+      </div>
+
+      {/* XP */}
+      <span
+        className="font-display text-base font-extrabold tabular-nums"
+        style={{ color: '#E8203A' }}
+      >
+        {row.xp}
+        <span className="ml-0.5 text-[11px] font-bold text-white/40">XP</span>
+      </span>
+    </button>
+  )
+}
+
+// Render a list, capped, with the user's own row appended if beyond the cap.
+function RankList({
+  rows,
+  meId,
+  onOpen,
+}: {
+  rows: Row[]
+  meId: string | null
+  onOpen: (id: string) => void
+}) {
+  const CAP = 100
+  const meIdx = rows.findIndex((r) => r.user_id === meId)
+  const shown = rows.slice(0, CAP)
+  const meInShown = meIdx >= 0 && meIdx < CAP
+  return (
+    <div className="space-y-2 pb-8">
+      {shown.map((r, i) => (
+        <RankRow
+          key={r.user_id}
+          rank={i + 1}
+          row={r}
+          isMe={r.user_id === meId}
+          onTap={() => onOpen(r.user_id)}
+        />
+      ))}
+      {!meInShown && meIdx >= 0 && (
+        <>
+          <p className="py-1 text-center text-xs text-white/30">···</p>
+          <RankRow
+            rank={meIdx + 1}
+            row={rows[meIdx]}
+            isMe
+            onTap={() => onOpen(rows[meIdx].user_id)}
+          />
+        </>
+      )}
+    </div>
+  )
+}
+
+// ─────────────────────── Country standing row ───────────────────────
+function CountryRow({
+  rank,
+  row,
+  isMine,
+}: {
+  rank: number
+  row: CountryStanding
+  isMine: boolean
+}) {
+  const { t } = useTranslation()
+  const medalColor =
+    rank === 1 ? GOLD : rank === 2 ? SILVER : rank === 3 ? BRONZE : null
+  return (
+    <div
+      className="relative flex items-center gap-3 overflow-hidden rounded-2xl px-3 py-3"
+      style={{
+        background: isMine ? 'rgba(232,32,58,0.10)' : '#141414',
+        border: isMine
+          ? '1px solid rgba(232,32,58,0.6)'
+          : '1px solid rgba(255,255,255,0.06)',
+      }}
+    >
+      <span
+        className="flex w-7 flex-none items-center justify-center font-display text-base font-extrabold tabular-nums"
+        style={{ color: medalColor ?? 'rgba(255,255,255,0.4)' }}
+      >
+        {rank}
+      </span>
+      <span aria-hidden style={{ fontSize: '26px', lineHeight: 1 }}>
+        {countryFlag(row.country)}
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="flex items-center gap-1.5 truncate text-sm font-semibold text-white">
+          {row.country}
+          {isMine && <span className="text-white/45">{t('community.you')}</span>}
+        </p>
+        <p className="mt-0.5 truncate text-[11px] text-white/45">
+          {t('community.spottersCount', { count: row.spotters })}
+        </p>
+      </div>
+      <span
+        className="font-display text-base font-extrabold tabular-nums"
+        style={{ color: '#E8203A' }}
+      >
+        {new Intl.NumberFormat('fr-FR').format(row.xp)}
+        <span className="ml-0.5 text-[11px] font-bold text-white/40">XP</span>
+      </span>
+    </div>
+  )
+}
+
+// ─────────────────────────── Page ───────────────────────────
 export default function Leaderboard() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const [scope, setScope] = useState<Scope>('global')
-
-  // Global state
-  const [rows, setRows] = useState<GlobalRow[] | null>(null)
-  const [profiles, setProfiles] = useState<Record<string, Prof>>({})
   const [meId, setMeId] = useState<string | null>(null)
-  const [page, setPage] = useState(0)
 
-  // City state
   const [myCity, setMyCity] = useState<string | null>(null)
-  const [cityRows, setCityRows] = useState<CityRow[] | null>(null)
+  const [myCountry, setMyCountry] = useState<string | null>(null)
+
+  const [globalRows, setGlobalRows] = useState<Row[] | null>(null)
+  const [countryBoard, setCountryBoard] = useState<CountryStanding[] | null>(
+    null,
+  )
+  const [cityRows, setCityRows] = useState<Row[] | null>(null)
   const [cityStats, setCityStats] = useState<CityStats | null>(null)
 
+  // Initial load: identity, city/country, and the global board.
   useEffect(() => {
     let active = true
     ;(async () => {
@@ -58,33 +280,62 @@ export default function Leaderboard() {
         user
           ? supabase
               .from('profiles')
-              .select('ville')
+              .select('ville, country')
               .eq('user_id', user.id)
               .maybeSingle()
           : Promise.resolve({ data: null }),
       ])
       if (!active) return
 
-      setRows(Array.isArray(globalRes.data) ? (globalRes.data as GlobalRow[]) : [])
-      const city = (profRes.data as { ville?: string | null } | null)?.ville?.trim()
-      setMyCity(city || null)
+      setGlobalRows(Array.isArray(globalRes.data) ? (globalRes.data as Row[]) : [])
+
+      const prof = profRes.data as
+        | { ville?: string | null; country?: string | null }
+        | null
+      setMyCity(prof?.ville?.trim() || null)
+
+      // Country: from profile, else detect from locale and persist it.
+      let country = prof?.country?.trim() || ''
+      if (!country && user) {
+        country = detectCountry()
+        await supabase
+          .from('profiles')
+          .update({ country })
+          .eq('user_id', user.id)
+      }
+      if (active) setMyCountry(country || null)
     })()
     return () => {
       active = false
     }
   }, [])
 
-  // Lazy-fetch city data the first time the user switches to that tab.
+  // Lazy-fetch the world board grouped by country.
+  useEffect(() => {
+    if (scope !== 'country' || countryBoard !== null) return
+    let active = true
+    supabase.rpc('countries_leaderboard').then(({ data }) => {
+      if (active)
+        setCountryBoard(
+          Array.isArray(data) ? (data as CountryStanding[]) : [],
+        )
+    })
+    return () => {
+      active = false
+    }
+  }, [scope, countryBoard])
+
+  // Lazy-fetch the city board + stats.
   useEffect(() => {
     if (scope !== 'city' || !myCity || cityRows !== null) return
     let active = true
     ;(async () => {
       const [lbRes, statsRes] = await Promise.all([
-        supabase.rpc('city_leaderboard', { p_city: myCity, p_limit: 10 }),
+        supabase.rpc('city_leaderboard', { p_city: myCity, p_limit: 500 }),
         supabase.rpc('city_stats', { p_city: myCity }).maybeSingle(),
       ])
       if (!active) return
-      setCityRows(Array.isArray(lbRes.data) ? (lbRes.data as CityRow[]) : [])
+      setCityRows(Array.isArray(lbRes.data) ? (lbRes.data as Row[]) : [])
       setCityStats((statsRes.data as CityStats | null) ?? null)
     })()
     return () => {
@@ -92,36 +343,21 @@ export default function Leaderboard() {
     }
   }, [scope, myCity, cityRows])
 
-  const slice = rows ? rows.slice(page * PER, page * PER + PER) : []
+  const tabs: { key: Scope; label: string }[] = [
+    { key: 'global', label: `🌍 ${t('community.scopeGlobal')}` },
+    { key: 'country', label: `🌍 ${t('community.scopeCountry')}` },
+    { key: 'city', label: `📍 ${t('community.scopeCity')}` },
+  ]
 
-  useEffect(() => {
-    if (slice.length === 0) return
-    const ids = slice
-      .map((r) => r.user_id)
-      .filter((id) => !(id in profiles))
-    if (ids.length === 0) return
-    supabase
-      .from('profiles')
-      .select('user_id, pseudo, ville, avatar, title')
-      .in('user_id', ids)
-      .then(({ data }) => {
-        setProfiles((cur) => {
-          const next = { ...cur }
-          for (const p of (data ?? []) as ({ user_id: string } & Prof)[])
-            next[p.user_id] = {
-              pseudo: p.pseudo,
-              ville: p.ville,
-              avatar: p.avatar,
-              title: p.title,
-            }
-          for (const id of ids)
-            if (!next[id])
-              next[id] = { pseudo: null, ville: null, avatar: null, title: null }
-          return next
-        })
-      })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, rows])
+  const open = (id: string) => navigate(`/u/${id}`)
+
+  const loadingSkeleton = (
+    <div className="space-y-2">
+      {Array.from({ length: 8 }).map((_, i) => (
+        <Skeleton key={i} className="h-16 rounded-2xl" />
+      ))}
+    </div>
+  )
 
   return (
     <div className="min-h-screen bg-bg px-4 pt-[max(1rem,env(safe-area-inset-top))] text-fg">
@@ -133,319 +369,131 @@ export default function Leaderboard() {
         >
           <ArrowLeft className="h-6 w-6" />
         </button>
-        <h1 className="display-xl text-fg">Classement</h1>
+        <h1 className="display-xl text-fg">{t('community.leaderboardTitle')}</h1>
       </div>
 
-      {/* Scope tabs */}
+      {/* Three pill tabs */}
       <div className="mb-5 flex gap-2">
-        <button
-          onClick={() => setScope('global')}
-          className={`tappable flex flex-1 items-center justify-center gap-2 rounded-full py-2.5 text-sm font-bold tracking-wide transition-colors ${
-            scope === 'global'
-              ? 'bg-accent text-fg'
-              : 'bg-card text-fg2 hover:text-fg'
-          }`}
-          style={
-            scope === 'global'
-              ? undefined
-              : { border: '1px solid var(--color-border)' }
-          }
-        >
-          <Globe2 className="h-4 w-4" />
-          Global
-        </button>
-        <button
-          onClick={() => setScope('city')}
-          disabled={!myCity}
-          className={`tappable flex flex-1 items-center justify-center gap-2 rounded-full py-2.5 text-sm font-bold tracking-wide transition-colors disabled:opacity-30 ${
-            scope === 'city'
-              ? 'bg-accent text-fg'
-              : 'bg-card text-fg2 hover:text-fg'
-          }`}
-          style={
-            scope === 'city'
-              ? undefined
-              : { border: '1px solid var(--color-border)' }
-          }
-        >
-          <MapPin className="h-4 w-4" />
-          {myCity ? `Ma ville · ${myCity}` : 'Ma ville'}
-        </button>
+        {tabs.map((tb) => {
+          const active = scope === tb.key
+          return (
+            <button
+              key={tb.key}
+              onClick={() => {
+                hapticSelection()
+                setScope(tb.key)
+              }}
+              className="tappable flex-1 rounded-full py-2.5 text-center text-[13px] font-bold transition-colors"
+              style={
+                active
+                  ? { background: '#E8203A', color: '#fff' }
+                  : {
+                      background: '#141414',
+                      color: 'rgba(255,255,255,0.55)',
+                      border: '1px solid rgba(255,255,255,0.06)',
+                    }
+              }
+            >
+              {tb.label}
+            </button>
+          )
+        })}
       </div>
 
-      {scope === 'global' ? (
-        rows === null ? (
-          <div className="space-y-2">
-            {Array.from({ length: 8 }).map((_, i) => (
-              <Skeleton key={i} className="h-14 rounded-2xl" />
-            ))}
-          </div>
-        ) : rows.length === 0 ? (
-          <p className="py-16 text-center text-sm text-fg/40">
-            Pas encore de classement — spotte pour gagner de l'XP.
+      {/* GLOBAL */}
+      {scope === 'global' &&
+        (globalRows === null ? (
+          loadingSkeleton
+        ) : globalRows.length === 0 ? (
+          <p className="py-16 text-center text-sm text-white/40">
+            {t('community.noSpottersYet')}
           </p>
         ) : (
+          <RankList rows={globalRows} meId={meId} onOpen={open} />
+        ))}
+
+      {/* PAYS — world board grouped by country */}
+      {scope === 'country' &&
+        (countryBoard === null ? (
+          loadingSkeleton
+        ) : countryBoard.length === 0 ? (
+          <p className="py-16 text-center text-sm text-white/40">
+            {t('community.noSpottersYet')}
+          </p>
+        ) : (
+          <div className="space-y-2 pb-8">
+            {countryBoard.map((c, i) => (
+              <CountryRow
+                key={c.country}
+                rank={i + 1}
+                row={c}
+                isMine={!!myCountry && c.country === myCountry}
+              />
+            ))}
+          </div>
+        ))}
+
+      {/* MA VILLE */}
+      {scope === 'city' &&
+        (!myCity ? (
+          <div
+            className="rounded-2xl p-6 text-center"
+            style={{ background: '#141414', border: '1px solid rgba(255,255,255,0.06)' }}
+          >
+            <p className="text-sm text-white/60">
+              {t('community.addCityHint')}
+            </p>
+            <button
+              onClick={() => navigate('/profile')}
+              className="tappable mt-4 rounded-full px-5 py-2.5 text-sm font-extrabold tracking-wider text-white"
+              style={{ background: '#E8203A', boxShadow: '0 8px 24px rgba(232,32,58,0.45)' }}
+            >
+              {t('community.goToProfile')}
+            </button>
+          </div>
+        ) : cityRows === null ? (
+          loadingSkeleton
+        ) : (
           <>
-            <div className="space-y-2 pb-4">
-              {slice.map((r, i) => {
-                const rank = page * PER + i + 1
-                const p = profiles[r.user_id]
-                const name = p?.pseudo || 'Spotter'
-                const me = r.user_id === meId
-                const isTop1 = rank === 1
-                const isPodium = rank <= 3
-                return (
-                  <button
-                    key={r.user_id}
-                    onClick={() => navigate(`/u/${r.user_id}`)}
-                    className="tappable flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-left"
-                    style={
-                      isTop1
-                        ? {
-                            background:
-                              'linear-gradient(95deg, rgba(212,175,55,0.18) 0%, rgba(15,15,15,0.95) 70%)',
-                            border: '1px solid rgba(212,175,55,0.45)',
-                            boxShadow:
-                              '0 6px 22px rgba(212,175,55,0.18)',
-                          }
-                        : me
-                          ? {
-                              background: 'rgba(232,32,58,0.12)',
-                              border: '1px solid rgba(232,32,58,0.45)',
-                            }
-                          : {
-                              background: 'var(--color-card)',
-                              border: '1px solid var(--color-border)',
-                            }
-                    }
-                  >
-                    <span
-                      className={`w-7 text-center font-display text-base font-extrabold tracking-tighter ${
-                        isTop1
-                          ? 'text-[#FFD700]'
-                          : isPodium
-                            ? 'text-fg'
-                            : 'text-fg2'
-                      }`}
-                    >
-                      {isTop1 ? <Crown className="mx-auto h-5 w-5" /> : rank}
-                    </span>
-                    <div
-                      className="flex h-10 w-10 flex-none items-center justify-center overflow-hidden rounded-full bg-accent font-display text-sm font-extrabold tracking-tighter text-fg"
-                      style={
-                        isTop1
-                          ? { boxShadow: '0 0 0 2px rgba(212,175,55,0.6)' }
-                          : { boxShadow: '0 0 0 2px rgba(255,255,255,0.06)' }
-                      }
-                    >
-                      {p?.avatar ? (
-                        <img
-                          src={p.avatar}
-                          alt=""
-                          loading="lazy"
-                          decoding="async"
-                          className="h-full w-full object-cover"
-                        />
-                      ) : (
-                        name.charAt(0).toUpperCase()
-                      )}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold text-fg">
-                        {name}
-                        {me && ' (toi)'}
+            {/* City stats — kept */}
+            {cityStats && cityStats.total_spots > 0 && (
+              <div
+                className="mb-4 rounded-2xl p-5"
+                style={{ background: '#141414', border: '1px solid rgba(255,255,255,0.06)' }}
+              >
+                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/40">
+                  {t('community.cityInNumbers', { city: myCity })}
+                </p>
+                <div className="mt-3 grid grid-cols-2 gap-3 divide-x divide-white/[0.08]">
+                  <div className="pr-4">
+                    <p className="font-display text-3xl font-extrabold tracking-tighter text-white">
+                      {cityStats.total_spots}
+                    </p>
+                    <p className="text-xs text-white/45">{t('community.spots')}</p>
+                  </div>
+                  {cityStats.top_car && (
+                    <div className="min-w-0 pl-4">
+                      <p className="truncate font-display text-base font-extrabold tracking-tighter text-white">
+                        {cityStats.top_car}
                       </p>
-                      <div className="mt-0.5 flex items-center gap-1.5">
-                        <TitleChip xp={r.xp} title={p?.title} size="xs" />
-                        {p?.ville && (
-                          <span className="truncate text-[11px] text-fg2">
-                            · {p.ville}
-                          </span>
-                        )}
-                      </div>
+                      <p className="text-xs text-white/45">
+                        {t('community.topCar', { count: cityStats.top_car_count })}
+                      </p>
                     </div>
-                    <span className="font-display text-base font-extrabold tracking-tighter text-accent">
-                      {r.xp}
-                      <span className="ml-0.5 text-[11px] font-bold text-fg2">
-                        XP
-                      </span>
-                    </span>
-                  </button>
-                )
-              })}
-            </div>
-            {rows.length > PER && (
-              <div className="flex items-center justify-between pb-8">
-                <button
-                  disabled={page === 0}
-                  onClick={() => setPage((p) => Math.max(0, p - 1))}
-                  className="tappable rounded-full bg-card px-5 py-2 text-sm font-semibold disabled:opacity-30"
-                  style={{ border: '1px solid var(--color-border)' }}
-                >
-                  Précédent
-                </button>
-                <span className="label-up text-[10px] text-fg2">
-                  {page + 1} / {Math.ceil(rows.length / PER)}
-                </span>
-                <button
-                  disabled={(page + 1) * PER >= rows.length}
-                  onClick={() => setPage((p) => p + 1)}
-                  className="tappable rounded-full bg-card px-5 py-2 text-sm font-semibold disabled:opacity-30"
-                  style={{ border: '1px solid var(--color-border)' }}
-                >
-                  Suivant
-                </button>
+                  )}
+                </div>
               </div>
             )}
-          </>
-        )
-      ) : !myCity ? (
-        <div
-          className="rounded-3xl bg-card p-6 text-center"
-          style={{ border: '1px solid var(--color-border)' }}
-        >
-          <p className="text-sm text-fg2">
-            Configure ta ville dans le profil pour débloquer le
-            classement local.
-          </p>
-          <button
-            onClick={() => navigate('/profile')}
-            className="tappable mt-4 rounded-full bg-accent px-5 py-2.5 text-sm font-extrabold tracking-wider text-fg"
-            style={{ boxShadow: '0 8px 24px rgba(232,32,58,0.45)' }}
-          >
-            Aller au profil
-          </button>
-        </div>
-      ) : cityRows === null ? (
-        <div className="space-y-2">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <Skeleton key={i} className="h-14 rounded-2xl" />
-          ))}
-        </div>
-      ) : (
-        <>
-          {/* City stats card */}
-          {cityStats && cityStats.total_spots > 0 && (
-            <div
-              className="mb-4 rounded-3xl bg-card p-5"
-              style={{ border: '1px solid var(--color-border)' }}
-            >
-              <p className="label-up text-[10px] text-fg2">
-                {myCity} en chiffres
-              </p>
-              <div className="mt-3 grid grid-cols-2 gap-3 divide-x divide-white/[0.08]">
-                <div className="pr-4">
-                  <p className="font-display text-3xl font-extrabold tracking-tighter text-fg">
-                    {cityStats.total_spots}
-                  </p>
-                  <p className="text-xs text-fg2">spots</p>
-                </div>
-                {cityStats.top_car && (
-                  <div className="min-w-0 pl-4">
-                    <p className="truncate font-display text-base font-extrabold tracking-tighter text-fg">
-                      {cityStats.top_car}
-                    </p>
-                    <p className="text-xs text-fg2">
-                      voiture top — {cityStats.top_car_count} fois
-                    </p>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
 
-          {cityRows.length === 0 ? (
-            <p className="py-16 text-center text-sm text-fg2">
-              Pas encore de spotteurs publics à {myCity}.
-            </p>
-          ) : (
-            <div className="space-y-2 pb-8">
-              {cityRows.map((r, i) => {
-                const rank = i + 1
-                const me = r.user_id === meId
-                const isTop = rank === 1
-                return (
-                  <button
-                    key={r.user_id}
-                    onClick={() => navigate(`/u/${r.user_id}`)}
-                    className="tappable flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-left"
-                    style={
-                      isTop
-                        ? {
-                            background:
-                              'linear-gradient(95deg, rgba(212,175,55,0.18) 0%, rgba(15,15,15,0.95) 70%)',
-                            border: '1px solid rgba(212,175,55,0.45)',
-                            boxShadow:
-                              '0 6px 22px rgba(212,175,55,0.18)',
-                          }
-                        : me
-                          ? {
-                              background: 'rgba(232,32,58,0.12)',
-                              border: '1px solid rgba(232,32,58,0.45)',
-                            }
-                          : {
-                              background: 'var(--color-card)',
-                              border: '1px solid var(--color-border)',
-                            }
-                    }
-                  >
-                    <span
-                      className={`w-7 text-center font-display text-base font-extrabold tracking-tighter ${
-                        isTop ? 'text-[#FFD700]' : 'text-fg2'
-                      }`}
-                    >
-                      {isTop ? <Crown className="mx-auto h-5 w-5" /> : rank}
-                    </span>
-                    <div
-                      className="flex h-10 w-10 flex-none items-center justify-center overflow-hidden rounded-full bg-accent font-display text-sm font-extrabold tracking-tighter text-fg"
-                      style={
-                        isTop
-                          ? { boxShadow: '0 0 0 2px rgba(212,175,55,0.6)' }
-                          : { boxShadow: '0 0 0 2px rgba(255,255,255,0.06)' }
-                      }
-                    >
-                      {r.avatar ? (
-                        <img
-                          src={r.avatar}
-                          alt=""
-                          loading="lazy"
-                          decoding="async"
-                          className="h-full w-full object-cover"
-                        />
-                      ) : (
-                        (r.pseudo || 'S').charAt(0).toUpperCase()
-                      )}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="flex items-center gap-1.5 truncate text-sm font-semibold text-fg">
-                        {r.pseudo || 'Spotter'}
-                        {me && ' (toi)'}
-                        {isTop && (
-                          <span className="label-up rounded-full bg-yellow-500/20 px-1.5 py-0.5 text-[9px] text-yellow-300">
-                            MEILLEUR 🏆
-                          </span>
-                        )}
-                      </p>
-                      <div className="mt-0.5 flex items-center gap-1.5">
-                        <TitleChip xp={r.xp} size="xs" />
-                        <span className="truncate text-[11px] text-fg2">
-                          · {r.spots} spot{r.spots > 1 ? 's' : ''}
-                        </span>
-                      </div>
-                    </div>
-                    <span className="font-display text-base font-extrabold tracking-tighter text-accent">
-                      {r.xp}
-                      <span className="ml-0.5 text-[11px] font-bold text-fg2">
-                        XP
-                      </span>
-                    </span>
-                  </button>
-                )
-              })}
-            </div>
-          )}
-        </>
-      )}
+            {cityRows.length === 0 ? (
+              <p className="py-16 text-center text-sm text-white/40">
+                {t('community.noSpottersInCity', { city: myCity })}
+              </p>
+            ) : (
+              <RankList rows={cityRows} meId={meId} onOpen={open} />
+            )}
+          </>
+        ))}
     </div>
   )
 }

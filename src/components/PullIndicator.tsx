@@ -26,7 +26,7 @@ export default function PullIndicator({
       }}
     >
       <div
-        className={`flex h-9 w-9 items-center justify-center rounded-full bg-card ring-1 ring-white/10 ${
+        className={`flex h-9 w-9 items-center justify-center rounded-full bg-card ring-1 ring-fg/10 ${
           refreshing ? 'ptr-spin' : ''
         }`}
         style={{

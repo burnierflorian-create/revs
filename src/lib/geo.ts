@@ -33,6 +33,31 @@ export type GeoOptions = {
   maxAgeMs?: number
 }
 
+/** Whether geolocation is ALREADY granted — checked WITHOUT ever prompting.
+ *  Automatic screens (Map open, location watch, signup city prefill) must gate
+ *  on this so they never re-trigger the OS permission dialog: the single ask
+ *  happens once during onboarding. Uses the Permissions API when available;
+ *  falls back to the remembered onboarding/settings choice (`revs_geo`) on
+ *  older iOS Safari builds that lack `permissions.query` for geolocation.
+ *  User-initiated actions (a "locate me" tap) may still prompt — that's fine. */
+export async function hasGeoPermission(): Promise<boolean> {
+  try {
+    const perms =
+      typeof navigator !== 'undefined' ? navigator.permissions : undefined
+    if (perms?.query) {
+      const st = await perms.query({ name: 'geolocation' as PermissionName })
+      return st.state === 'granted'
+    }
+  } catch {
+    /* Permissions API unsupported / threw — fall through to the flag. */
+  }
+  try {
+    return localStorage.getItem('revs_geo') === '1'
+  } catch {
+    return false
+  }
+}
+
 /** Returns a Promise resolving to a GeolocationPosition. Rejects
  *  with a French-language Error.message that callers can surface
  *  in their UI as-is. */

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { ArrowLeft, Car, Camera } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { CATEGORIES, categoryLabel, timeAgo, type Spot } from '../lib/spots'
@@ -9,6 +10,7 @@ const FILTERS = ['Tout', ...CATEGORIES.map((c) => c.label)] as const
 
 export default function MyGallery() {
   const navigate = useNavigate()
+  const { t } = useTranslation()
   const [spots, setSpots] = useState<Spot[] | null>(null)
   const [filter, setFilter] = useState<string>('Tout')
 
@@ -41,16 +43,16 @@ export default function MyGallery() {
       <div className="flex items-center gap-4 py-4">
         <button
           onClick={() => navigate(-1)}
-          aria-label="Retour"
+          aria-label={t('miscpages.myGallery.back')}
           className="tappable text-fg2 hover:text-fg"
         >
           <ArrowLeft className="h-6 w-6" />
         </button>
         <div className="min-w-0">
-          <h1 className="display-xl text-fg">Mes spots</h1>
+          <h1 className="display-xl text-fg">{t('miscpages.myGallery.title')}</h1>
           {spots && spots.length > 0 && (
             <p className="label-up mt-1 text-[10px] text-fg2">
-              {spots.length} spot{spots.length > 1 ? 's' : ''}
+              {t('miscpages.myGallery.spotCount', { count: spots.length })}
             </p>
           )}
         </div>
@@ -72,7 +74,7 @@ export default function MyGallery() {
                 : { border: '1px solid var(--color-border)' }
             }
           >
-            {f}
+            {f === 'Tout' ? t('miscpages.myGallery.filterAll') : f}
           </button>
         ))}
       </div>
@@ -98,22 +100,24 @@ export default function MyGallery() {
             <Camera className="h-7 w-7 text-accent" />
           </div>
           <p className="mt-4 font-display text-xl font-extrabold tracking-tighter text-fg">
-            Ton garage est vide 🏎️
+            {t('miscpages.myGallery.empty')}
           </p>
           <p className="mt-1 text-sm text-fg2">
-            Commence à spotter pour le remplir.
+            {t('miscpages.myGallery.emptyHint')}
           </p>
           <button
             onClick={() => navigate('/new-spot')}
             className="tappable mt-5 rounded-full bg-accent px-6 py-3 text-sm font-extrabold tracking-wider text-fg"
             style={{ boxShadow: '0 8px 24px rgba(232,32,58,0.45)' }}
           >
-            SPOTTER MAINTENANT
+            {t('miscpages.myGallery.spotNow')}
           </button>
         </div>
       ) : !visible || visible.length === 0 ? (
         <p className="py-16 text-center text-sm text-fg2">
-          Aucun spot en {filter}.
+          {t('miscpages.myGallery.noneInFilter', {
+            filter: filter === 'Tout' ? t('miscpages.myGallery.filterAll') : filter,
+          })}
         </p>
       ) : (
         <div className="grid grid-cols-2 gap-2.5 pb-8">
@@ -140,7 +144,7 @@ export default function MyGallery() {
                 <p className="truncate font-display text-xs font-extrabold leading-tight tracking-tighter text-white">
                   {s.brand} {s.model}
                 </p>
-                <p className="mt-0.5 text-[10px] text-white/55">
+                <p className="mt-0.5 text-[10px] text-fg/55">
                   {timeAgo(s.created_at)}
                 </p>
               </div>

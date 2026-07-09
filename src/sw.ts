@@ -8,7 +8,23 @@
 
 declare const self: ServiceWorkerGlobalScope
 
+// Injected at build time by vite-plugin-pwa (index.html only). We do NOT
+// precache or serve these files — the array is read ONLY to derive a
+// per-deploy version string, so the compiled SW bytes change on every
+// deploy. That is what makes the browser detect a new SW and (with
+// registerType:'autoUpdate' + skipWaiting/clients.claim below) auto-swap
+// every client onto the fresh build.
+const BUILD_MANIFEST = (
+  self as unknown as {
+    __WB_MANIFEST: Array<{ url: string; revision: string | null }>
+  }
+).__WB_MANIFEST
+const SW_VERSION = BUILD_MANIFEST.map((e) => e.revision ?? e.url).join('|')
+
 self.addEventListener('install', () => {
+  // Logging SW_VERSION also guarantees it is retained in the bundle, so the
+  // SW file differs on every deploy.
+  console.log('[REVS SW] build', SW_VERSION)
   self.skipWaiting()
 })
 

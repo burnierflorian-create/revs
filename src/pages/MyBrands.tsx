@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, Car, ChevronRight, Tag } from 'lucide-react'
 import { supabase } from '../lib/supabase'
@@ -8,6 +9,7 @@ import { Skeleton } from '../components/Skeleton'
 type Brand = { brand: string; count: number; photo: string | null; slug: string | null }
 
 export default function MyBrands() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const [brands, setBrands] = useState<Brand[] | null>(null)
 
@@ -54,17 +56,16 @@ export default function MyBrands() {
       <div className="flex items-center gap-4 py-4">
         <button
           onClick={() => navigate(-1)}
-          aria-label="Retour"
+          aria-label={t('brandspage.back')}
           className="tappable text-fg2 hover:text-fg"
         >
           <ArrowLeft className="h-6 w-6" />
         </button>
         <div className="min-w-0">
-          <h1 className="display-xl text-fg">Mes marques</h1>
+          <h1 className="display-xl text-fg">{t('brandspage.myBrands')}</h1>
           {brands && brands.length > 0 && (
             <p className="label-up mt-1 text-[10px] text-fg2">
-              {brands.length} marque{brands.length > 1 ? 's' : ''} spottée
-              {brands.length > 1 ? 's' : ''}
+              {t('brandspage.brandsSpotted', { count: brands.length })}
             </p>
           )}
         </div>
@@ -91,17 +92,17 @@ export default function MyBrands() {
             <Tag className="h-7 w-7 text-accent" />
           </div>
           <p className="mt-4 font-display text-xl font-extrabold tracking-tighter text-fg">
-            Pas encore de marques
+            {t('brandspage.noBrandsYet')}
           </p>
           <p className="mt-1 text-sm text-fg2">
-            Spotte une voiture pour commencer ta collection.
+            {t('brandspage.spotToStart')}
           </p>
           <button
             onClick={() => navigate('/new-spot')}
             className="tappable mt-5 rounded-full bg-accent px-6 py-3 text-sm font-extrabold tracking-wider text-fg"
             style={{ boxShadow: '0 8px 24px rgba(232,32,58,0.45)' }}
           >
-            SPOTTER MAINTENANT
+            {t('brandspage.spotNow')}
           </button>
         </div>
       ) : (
@@ -123,7 +124,7 @@ export default function MyBrands() {
                 <div
                   className="h-14 w-14 flex-none overflow-hidden rounded-xl"
                   style={{
-                    background: 'rgba(255,255,255,0.04)',
+                    background: 'rgb(var(--color-fg) / 0.04)',
                     border: '1px solid var(--color-border)',
                   }}
                 >
@@ -146,7 +147,7 @@ export default function MyBrands() {
                 <span className="flex-none rounded-full bg-accent/15 px-2.5 py-1 text-[11px] font-extrabold tracking-wider text-accent">
                   {b.count}
                   <span className="ml-0.5 text-[9px] font-bold opacity-80">
-                    spot{b.count > 1 ? 's' : ''}
+                    {t('brandspage.spotSuffix', { count: b.count })}
                   </span>
                 </span>
                 {clickable && (

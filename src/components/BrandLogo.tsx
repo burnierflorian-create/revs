@@ -27,10 +27,16 @@ export default function BrandLogo({
   brand,
   size = 64,
   className = '',
+  mono = false,
 }: {
   brand: Brand
   size?: number
   className?: string
+  // When true, render the logo as a single theme-aware silhouette
+  // (white on dark, charcoal on light) via the .brand-logo-mono class —
+  // overrides the per-brand colour/invert filters. Used by the Explorer
+  // grid so every mark reads cleanly on the OLED background.
+  mono?: boolean
 }) {
   const sources = useMemo(() => logoCandidates(brand), [brand])
   const [cursor, setCursor] = useState(0)
@@ -49,12 +55,29 @@ export default function BrandLogo({
   const src =
     cursor >= sources.length ? wordmarkDataUrl(brand.name) : sources[cursor]
 
-  const filter = [
+  // Full per-brand treatment used on the colour brand-detail hero.
+  const perBrandFilter = [
     brand.invertOnDark ? 'brightness(0) invert(1)' : '',
     brand.logoFilter ?? '',
   ]
     .filter(Boolean)
     .join(' ')
+
+  // In the Explorer list (mono), the theme-aware monochrome class is only
+  // safe for SVG GLYPHS (inline monograms/wordmarks) and brands flagged as
+  // dark wordmarks — there it flips white↔charcoal cleanly. Colored or
+  // detailed logos (BMW roundel, Ferrari, etc.) keep their REAL colours:
+  // the destructive brightness(0)·invert flattens them into a white blob,
+  // and they read perfectly on both themes as-is. Off the list (detail
+  // page) we keep the original per-brand filter.
+  const inline = src.startsWith('data:')
+  const monoActive = mono && (inline || brand.invertOnDark === true)
+  const monoClass = monoActive ? 'brand-logo-mono' : undefined
+  const appliedFilter = monoActive
+    ? undefined
+    : mono
+      ? brand.logoFilter || undefined
+      : perBrandFilter || undefined
 
   return (
     <div
@@ -66,11 +89,12 @@ export default function BrandLogo({
         alt={brand.name}
         loading="lazy"
         onError={() => setCursor((c) => c + 1)}
+        className={monoClass}
         style={{
           width: imgPx,
           height: imgPx,
           objectFit: 'contain',
-          filter: filter || undefined,
+          filter: appliedFilter,
         }}
       />
     </div>

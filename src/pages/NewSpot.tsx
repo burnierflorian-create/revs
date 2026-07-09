@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
+import i18n from '../i18n'
 import { ArrowLeft, Camera, MapPin } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import {
@@ -8,16 +10,21 @@ import {
   distanceMeters,
   readPhotoMeta,
   resizeImageToJpeg,
+  xpForSpot,
   type BBox,
   type IdentifyResult,
   type PhotoMeta,
+  type Rarity,
   type SpotCategory,
 } from '../lib/spots'
 import { takePendingPhoto } from '../lib/pendingPhoto'
+import { useTheme } from '../lib/theme'
+import { emitNewSpot } from '../lib/feedSync'
 import { getCurrentPositionSafe } from '../lib/geo'
 import { hapticError, hapticHeartbeat, hapticSuccess } from '../lib/haptic'
 import { maybePromptPush, myPseudo, notifyPush } from '../lib/push'
 import { brandSlugFor, getBrand } from '../lib/brands'
+import { searchCars, searchMakes, modelsForMake, findMake } from '../lib/cars'
 import { Skeleton } from '../components/Skeleton'
 import CollectorCard from '../components/CollectorCard'
 import type { Spot } from '../lib/spots'
@@ -51,7 +58,10 @@ function supaError(label: string, e: unknown): Error {
   })
   const detail = [o.message, o.details, o.hint].filter(Boolean).join(' — ')
   return new Error(
-    `${label} : ${detail || 'erreur inconnue'}${code ? ` [${code}]` : ''}`,
+    `${i18n.t('newspot.supaError', {
+      label,
+      detail: detail || i18n.t('newspot.errorUnknown'),
+    })}${code ? ` [${code}]` : ''}`,
   )
 }
 
@@ -77,6 +87,7 @@ const EMPTY_RESULT: IdentifyResult = {
 const getPosition = getCurrentPositionSafe
 
 export default function NewSpot() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const cameraRef = useRef<HTMLInputElement>(null)
 
@@ -85,6 +96,11 @@ export default function NewSpot() {
   const [image, setImage] = useState<{ blob: Blob; base64: string } | null>(
     null,
   )
+  // A separate, smaller (1200px / q0.7) JPEG sent ONLY to the Claude vision
+  // calls (identify-car + detect-plate). The full-res `image` blob is kept
+  // for storage/display + plate blur; the AI never sees the heavy original,
+  // which cuts vision token cost ~60% without hurting display quality.
+  const [aiBase64, setAiBase64] = useState<string | null>(null)
 
   const [result, setResult] = useState<IdentifyResult>(EMPTY_RESULT)
   const [brand, setBrand] = useState('')
@@ -99,6 +115,8 @@ export default function NewSpot() {
   const [pubError, setPubError] = useState<string | null>(null)
   const [limitReached, setLimitReached] = useState(false)
   const [pubStatus, setPubStatus] = useState('')
+  // "Saved to gallery" confirmation flash (2s).
+  const [savedToGallery, setSavedToGallery] = useState(false)
   // Gate: a pseudo is required before spotting (no "Anonyme" spots).
   const [profileOk, setProfileOk] = useState<boolean | null>(null)
   const [gpPseudo, setGpPseudo] = useState('')
@@ -124,8 +142,8 @@ export default function NewSpot() {
     return {
       id: 'preview-' + Date.now(),
       user_id: '',
-      brand: brand || result.brand || 'Voiture',
-      model: model || result.model || 'Modèle',
+      brand: brand || result.brand || t('newspot.previewDefaultBrand'),
+      model: model || result.model || t('newspot.previewDefaultModel'),
       year: Number.isFinite(yearN) ? yearN : null,
       color: color || result.color || '',
       category: (category || result.category) as SpotCategory,
@@ -178,14 +196,25 @@ export default function NewSpot() {
     setPubError(null)
     setPreviewUrl(URL.createObjectURL(file))
     setImage(null)
+    setAiBase64(null)
     // EXIF must be read from the original file: resizing re-encodes via
     // canvas and strips all metadata.
     setPhotoMeta(await readPhotoMeta(file))
     try {
       const resized = await resizeImageToJpeg(file)
       setImage(resized)
+      // AI-only downscale (1200px / q0.7). Larger than the display path on
+      // purpose: more pixels = sharper badges/logos for the vision model.
+      // Best-effort: if it fails we fall back to image.base64 in analyze(),
+      // so capture is never blocked.
+      try {
+        const ai = await resizeImageToJpeg(file, 1200, 0.7)
+        setAiBase64(ai.base64)
+      } catch {
+        /* keep aiBase64 null → analyze() uses the full-res base64 */
+      }
     } catch {
-      setPubError('Impossible de lire cette image.')
+      setPubError(t('newspot.imageReadFailed'))
     }
   }
 
@@ -232,7 +261,7 @@ export default function NewSpot() {
   async function saveProfileGate() {
     const p = gpPseudo.trim()
     if (p.length < 2) {
-      setGpErr('Choisis un pseudo (2 caractères minimum).')
+      setGpErr(t('newspot.gatePseudoTooShort'))
       return
     }
     setGpSaving(true)
@@ -242,7 +271,7 @@ export default function NewSpot() {
     } = await supabase.auth.getUser()
     if (!user) {
       setGpSaving(false)
-      setGpErr('Non authentifié.')
+      setGpErr(t('newspot.notAuthenticated'))
       return
     }
     const { error } = await supabase
@@ -253,7 +282,7 @@ export default function NewSpot() {
       )
     setGpSaving(false)
     if (error) {
-      setGpErr("Échec de l'enregistrement. Réessaie.")
+      setGpErr(t('newspot.profileSaveFailed'))
       return
     }
     setProfileOk(true)
@@ -281,7 +310,9 @@ export default function NewSpot() {
     // out the still-running sibling call.
     const timer = setTimeout(() => ctrl.abort(), 25000)
     const body = JSON.stringify({
-      imageBase64: image.base64,
+      // Send the lightweight 1200px AI image; fall back to the full-res
+      // base64 only if the downscale failed.
+      imageBase64: aiBase64 ?? image.base64,
       mimeType: 'image/jpeg',
     })
     const fetchJson = (path: string) =>
@@ -324,10 +355,7 @@ export default function NewSpot() {
       if (data.valid === false) {
         // rejectAndRestart() owns the error buzz — call it once.
         cancelHeartbeat()
-        rejectAndRestart(
-          data.reason ||
-            "Cette photo ne semble pas être une vraie voiture en conditions réelles.",
-        )
+        rejectAndRestart(data.reason || t('newspot.rejectNotRealCar'))
         return
       }
       applyResult(data)
@@ -361,18 +389,51 @@ export default function NewSpot() {
     publish()
   }
 
+  /** Save the (already plate-blurred) photo to the device gallery —
+   *  independent of publishing. Prefers the Web Share sheet with a file
+   *  (iOS lets the user "Save Image"); falls back to a download link
+   *  (Android / desktop). Cancelling the share sheet is a silent no-op. */
+  async function saveToGallery(): Promise<void> {
+    if (!image) return
+    const file = new File([image.blob], `revs-${Date.now()}.jpg`, {
+      type: 'image/jpeg',
+    })
+    try {
+      const nav = navigator as Navigator & {
+        canShare?: (data?: { files?: File[] }) => boolean
+      }
+      if (nav.canShare?.({ files: [file] }) && nav.share) {
+        await nav.share({ files: [file] })
+      } else {
+        const url = URL.createObjectURL(image.blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = file.name
+        document.body.appendChild(a)
+        a.click()
+        a.remove()
+        window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+      }
+      hapticSuccess()
+      setSavedToGallery(true)
+      window.setTimeout(() => setSavedToGallery(false), 2000)
+    } catch {
+      /* user dismissed the share sheet — no feedback, no error */
+    }
+  }
+
   async function publish() {
     if (!image) return
     setPubError(null)
     setLimitReached(false)
     try {
-      setPubStatus('Localisation…')
+      setPubStatus(t('newspot.statusLocating'))
       const pos = await getPosition()
 
       // Anti-fraude : photo prise sur le moment et au bon endroit.
       const takenAt = photoMeta?.takenAt ?? null
       if (takenAt && Date.now() - takenAt.getTime() > MAX_PHOTO_AGE_MS) {
-        rejectAndRestart('Photo trop ancienne - prends la photo sur le moment')
+        rejectAndRestart(t('newspot.rejectPhotoTooOld'))
         return
       }
       const photoLat = photoMeta?.lat ?? null
@@ -385,16 +446,16 @@ export default function NewSpot() {
           pos.coords.longitude,
         )
         if (drift > MAX_GPS_DRIFT_M) {
-          rejectAndRestart('Localisation incohérente')
+          rejectAndRestart(t('newspot.rejectGpsIncoherent'))
           return
         }
       }
 
-      setPubStatus('Authentification…')
+      setPubStatus(t('newspot.statusAuthenticating'))
       const {
         data: { user },
       } = await supabase.auth.getUser()
-      if (!user) throw new Error('Non authentifié')
+      if (!user) throw new Error(t('newspot.notAuthenticatedThrow'))
 
       // Limite quotidienne : 5 spots/jour pour les comptes gratuits.
       const { data: sub } = await supabase
@@ -414,24 +475,22 @@ export default function NewSpot() {
           .maybeSingle()
         if ((cnt?.count ?? 0) >= 5) {
           setLimitReached(true)
-          setPubError(
-            "Tu as atteint ta limite de 5 spots aujourd'hui. Passe Premium pour des spots illimités.",
-          )
+          setPubError(t('newspot.limitReached'))
           setPubStatus('')
           return
         }
       }
 
-      setPubStatus('Envoi de la photo…')
+      setPubStatus(t('newspot.statusUploading'))
       const path = `${user.id}/${Date.now()}.jpg`
       const { error: upErr } = await supabase.storage
         .from('spots')
         .upload(path, image.blob, { contentType: 'image/jpeg' })
-      if (upErr) throw supaError('Envoi de la photo', upErr)
+      if (upErr) throw supaError(t('newspot.uploadLabel'), upErr)
 
       const { data: pub } = supabase.storage.from('spots').getPublicUrl(path)
 
-      setPubStatus('Publication…')
+      setPubStatus(t('newspot.statusPublishing'))
       const yearNum = parseInt(year, 10)
 
       // If a live event is within 5km, opt-in to tag this spot to it.
@@ -469,10 +528,15 @@ export default function NewSpot() {
           lng: pos.coords.longitude,
           event_id: liveEventId,
         })
-        .select('id')
+        .select('*')
         .single()
-      if (insErr) throw supaError('Publication', insErr)
-      const newSpotId = (inserted as { id: string } | null)?.id ?? null
+      if (insErr) throw supaError(t('newspot.publishLabel'), insErr)
+      const insertedSpot = (inserted as Spot | null) ?? null
+      const newSpotId = insertedSpot?.id ?? null
+      // Instant feed re-render — hand the full row to the (kept-alive)
+      // Feed so the user's photo is already at the top of the Fil the
+      // moment they switch tabs, no manual refresh.
+      if (insertedSpot) emitNewSpot(insertedSpot)
 
       // After the first successful spot: ask for push permission, then
       // fire two parallel notifications:
@@ -485,8 +549,12 @@ export default function NewSpot() {
         const brandTrim = brand.trim()
         const modelTrim = model.trim()
         void notifyPush({
-          title: '🚗 Nouveau spot',
-          body: `${who} vient de spotter une ${brandTrim} ${modelTrim} près de toi`,
+          title: t('newspot.pushNearbyTitle'),
+          body: t('newspot.pushNearbyBody', {
+            who,
+            brand: brandTrim,
+            model: modelTrim,
+          }),
           url: '/map',
           type: 'nearby',
           nearby: {
@@ -500,8 +568,12 @@ export default function NewSpot() {
         const brandEntry = slug ? getBrand(slug) : undefined
         if (slug && brandEntry) {
           void notifyPush({
-            title: `🔔 Nouvelle ${brandEntry.name} spottée`,
-            body: `${who} vient de spotter une ${brandEntry.name} ${modelTrim} près de toi`,
+            title: t('newspot.pushBrandTitle', { brand: brandEntry.name }),
+            body: t('newspot.pushBrandBody', {
+              who,
+              brand: brandEntry.name,
+              model: modelTrim,
+            }),
             url: `/brand/${slug}`,
             // Gate on the existing "nearby" pref — brand follows are
             // proximity-based notifications by design.
@@ -527,31 +599,48 @@ export default function NewSpot() {
         }
       })()
 
-      // Fire the "+N XP" floater so the user sees their reward land.
-      // Same formula as the SQL trigger : basePrice × rarityMultiplier.
-      const { floatXp } = await import('../components/XpFloater')
-      const { xpForSpot } = await import('../lib/spots')
-      floatXp(
-        xpForSpot(
-          result.estimated_price,
-          (result.rarity ?? 'standard') as
-            | 'standard'
-            | 'premium'
-            | 'performance'
-            | 'exclusif'
-            | 'supercar'
-            | 'hypercar',
-        ),
-      )
-      navigate('/map', { state: { toast: 'Spot publié ! 🔥' } })
+      // Cosmetic "+N XP" floater — strictly best-effort. The spot is
+      // already saved at this point, so a failure here (e.g. a chunk that
+      // fails to resolve, or xpForSpot somehow undefined in a minified
+      // bundle — the original "oe is not a function" crash) must NEVER
+      // abort the publish or block navigation. Rarity falls back to
+      // 'standard' and the floater is simply skipped on any error.
+      try {
+        const { floatXp } = await import('../components/XpFloater')
+        if (typeof xpForSpot === 'function' && typeof floatXp === 'function') {
+          floatXp(
+            xpForSpot(
+              result.estimated_price ?? null,
+              (result.rarity ?? 'standard') as Rarity,
+            ),
+            result.rarity ?? 'standard',
+          )
+        }
+      } catch (floaterErr) {
+        console.warn('[spot] xp floater skipped:', floaterErr)
+      }
+
+      // Post-spot celebration (confetti burst + collector fly-away) and a
+      // level-up check — both best-effort, never block navigation.
+      try {
+        const [{ celebrateSpot }, { checkLevelUp }] = await Promise.all([
+          import('../components/SpotCelebration'),
+          import('../components/LevelUpOverlay'),
+        ])
+        celebrateSpot({ photoUrl: pub.publicUrl })
+        void checkLevelUp()
+      } catch (fxErr) {
+        console.warn('[spot] celebration skipped:', fxErr)
+      }
+      navigate('/map', { state: { toast: t('newspot.toastPublished') } })
     } catch (err) {
       console.error('[spot] publish aborted:', err)
       const msg =
         (err as { code?: number })?.code === 1
-          ? 'Position GPS refusée. Active la localisation pour publier.'
+          ? t('newspot.gpsDenied')
           : err instanceof Error
             ? err.message
-            : 'Échec de la publication'
+            : t('newspot.publishFailed')
       setPubError(msg)
       setPubStatus('')
     }
@@ -573,7 +662,7 @@ export default function NewSpot() {
   if (profileOk === null) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-bg text-sm text-fg2">
-        Chargement…
+        {t('newspot.loading')}
       </div>
     )
   }
@@ -584,7 +673,7 @@ export default function NewSpot() {
         <div className="flex items-center gap-4 py-4">
           <button
             onClick={() => navigate('/')}
-            aria-label="Retour"
+            aria-label={t('newspot.back')}
             className="tappable text-fg2 hover:text-fg"
           >
             <ArrowLeft className="h-6 w-6" />
@@ -593,31 +682,30 @@ export default function NewSpot() {
         <div className="mx-auto mt-6 max-w-sm space-y-5">
           <div>
             <h1 className="display-xl text-fg">
-              Crée ton pseudo avant de spotter
+              {t('newspot.gateTitle')}
             </h1>
             <p className="mt-2 text-sm text-fg2">
-              Ton pseudo apparaît sur tes spots dans le feed. Pas de spots
-              anonymes sur REVS.
+              {t('newspot.gateSubtitle')}
             </p>
           </div>
           <div className="space-y-2">
-            <label className="label-up text-[10px] text-fg2">Pseudo</label>
+            <label className="label-up text-[10px] text-fg2">{t('newspot.labelPseudo')}</label>
             <input
               value={gpPseudo}
               maxLength={24}
               onChange={(e) => setGpPseudo(e.target.value)}
-              placeholder="ex : speedhunter_74"
+              placeholder={t('newspot.placeholderPseudo')}
               className="w-full rounded-2xl bg-card px-4 py-3.5 text-fg outline-none placeholder:text-fg2/40 focus:border-accent"
               style={{ border: '1px solid var(--color-border)' }}
             />
           </div>
           <div className="space-y-2">
-            <label className="label-up text-[10px] text-fg2">Ville</label>
+            <label className="label-up text-[10px] text-fg2">{t('newspot.labelVille')}</label>
             <input
               value={gpVille}
               maxLength={48}
               onChange={(e) => setGpVille(e.target.value)}
-              placeholder="ex : Annecy"
+              placeholder={t('newspot.placeholderVille')}
               className="w-full rounded-2xl bg-card px-4 py-3.5 text-fg outline-none placeholder:text-fg2/40 focus:border-accent"
               style={{ border: '1px solid var(--color-border)' }}
             />
@@ -629,7 +717,7 @@ export default function NewSpot() {
             className="tappable w-full rounded-full bg-accent py-3.5 text-sm font-extrabold tracking-wider text-fg disabled:opacity-50"
             style={{ boxShadow: '0 8px 24px rgba(232,32,58,0.45)' }}
           >
-            {gpSaving ? '…' : 'SAUVEGARDER ET SPOTTER'}
+            {gpSaving ? t('newspot.gateSaving') : t('newspot.gateSave')}
           </button>
         </div>
       </div>
@@ -642,7 +730,7 @@ export default function NewSpot() {
       <div className="flex items-center gap-4 py-4">
         <button
           onClick={back}
-          aria-label="Retour"
+          aria-label={t('newspot.back')}
           className="tappable text-fg2 hover:text-fg"
         >
           <ArrowLeft className="h-6 w-6" />
@@ -652,7 +740,7 @@ export default function NewSpot() {
             <div
               key={n}
               className={`h-1 flex-1 rounded-full transition-colors ${
-                n <= step ? 'bg-accent' : 'bg-white/10'
+                n <= step ? 'bg-accent' : 'bg-fg/10'
               }`}
               style={
                 n <= step
@@ -667,7 +755,7 @@ export default function NewSpot() {
       {/* ÉTAPE 1 — PHOTO */}
       {step === 1 && (
         <div className="space-y-6 pb-8">
-          <h1 className="display-xl text-fg">Nouveau spot</h1>
+          <h1 className="display-xl text-fg">{t('newspot.newSpotTitle')}</h1>
 
           <input
             ref={cameraRef}
@@ -694,7 +782,7 @@ export default function NewSpot() {
             <div className="space-y-5">
               <img
                 src={previewUrl}
-                alt="Aperçu"
+                alt={t('newspot.previewAlt')}
                 // Hero of the publish flow — keep eager + high
                 // priority so the preview lands the moment the
                 // analyse step finishes.
@@ -709,7 +797,7 @@ export default function NewSpot() {
                   className="tappable flex-1 rounded-full py-3 text-sm font-bold tracking-wide text-fg2 hover:text-fg"
                   style={{ border: '1px solid var(--color-border)' }}
                 >
-                  Reprendre
+                  {t('newspot.retake')}
                 </button>
                 <button
                   onClick={analyze}
@@ -717,7 +805,7 @@ export default function NewSpot() {
                   className="tappable flex-[2] rounded-full bg-accent py-3 text-sm font-extrabold tracking-wider text-fg disabled:opacity-50"
                   style={{ boxShadow: '0 8px 24px rgba(232,32,58,0.45)' }}
                 >
-                  ANALYSER
+                  {t('newspot.analyze')}
                 </button>
               </div>
             </div>
@@ -729,7 +817,7 @@ export default function NewSpot() {
                 style={{ boxShadow: '0 12px 36px rgba(232,32,58,0.45)' }}
               >
                 <Camera className="h-6 w-6" />
-                PRENDRE UNE PHOTO
+                {t('newspot.takePhoto')}
               </button>
               {pubError && (
                 <p className="text-sm text-accent">{pubError}</p>
@@ -803,14 +891,13 @@ export default function NewSpot() {
                   className="font-display font-extrabold tracking-tight text-white"
                   style={{ fontSize: '16px', letterSpacing: '-0.01em' }}
                 >
-                  Analyse REVS IA en cours
+                  {t('newspot.analyzingTitle')}
                 </h3>
                 <p
-                  className="mt-1.5 leading-snug text-white/55"
+                  className="mt-1.5 leading-snug text-fg/55"
                   style={{ fontSize: '12px' }}
                 >
-                  Identification des courbes, de la rareté et des
-                  caractéristiques techniques…
+                  {t('newspot.analyzingSubtitle')}
                 </p>
               </div>
             </div>
@@ -826,7 +913,7 @@ export default function NewSpot() {
               className="rounded-3xl bg-card px-4 py-3 text-sm text-fg2"
               style={{ border: '1px solid var(--color-border)' }}
             >
-              Identification difficile — complète ou corrige les champs ci-dessous.
+              {t('newspot.identifyDifficult')}
             </div>
           ) : (
             // Hero reveal — full 2:3 CollectorCard preview built
@@ -853,15 +940,19 @@ export default function NewSpot() {
                 className="text-center font-medium uppercase text-fg2"
                 style={{ fontSize: '10px', letterSpacing: '0.18em' }}
               >
-                IA · {result.confidence}% de confiance
+                {t('newspot.confidenceLine', { confidence: result.confidence })}
               </p>
+              {/* Low-confidence warning — a far / obscured shot makes the
+                  model guess unreliable. Surfaced under the card so the
+                  user double-checks the brand/model before publishing. */}
+              {result.confidence < 50 && <LowConfidenceBadge />}
               <span aria-hidden className="card-reveal-flash" />
             </div>
           )}
 
           {result.alternatives.length > 0 && (
             <div className="space-y-2">
-              <p className="label-up text-[10px] text-fg2">Alternatives</p>
+              <p className="label-up text-[10px] text-fg2">{t('newspot.alternatives')}</p>
               <div className="flex flex-wrap gap-2">
                 {result.alternatives.slice(0, 2).map((alt, i) => (
                   <button
@@ -879,18 +970,28 @@ export default function NewSpot() {
           )}
 
           <div className="space-y-4">
-            <Field label="Marque" value={brand} onChange={setBrand} />
-            <Field label="Modèle" value={model} onChange={setModel} />
+            <BrandField
+              label={t('newspot.fieldBrand')}
+              brand={brand}
+              onBrand={setBrand}
+            />
+            <ModelField
+              label={t('newspot.fieldModel')}
+              brand={brand}
+              model={model}
+              onModel={setModel}
+              onBrand={setBrand}
+            />
             <Field
-              label="Année"
+              label={t('newspot.fieldYear')}
               value={year}
               onChange={setYear}
               inputMode="numeric"
             />
-            <Field label="Couleur" value={color} onChange={setColor} />
+            <Field label={t('newspot.fieldColor')} value={color} onChange={setColor} />
 
             <div className="space-y-2">
-              <label className="label-up text-[10px] text-fg2">Catégorie</label>
+              <label className="label-up text-[10px] text-fg2">{t('newspot.fieldCategory')}</label>
               <select
                 value={category}
                 onChange={(e) => setCategory(e.target.value as SpotCategory)}
@@ -906,22 +1007,54 @@ export default function NewSpot() {
             </div>
 
             <div className="space-y-2">
-              <label className="label-up text-[10px] text-fg2">
-                Description (optionnel)
+              <label
+                className="block"
+                style={{ fontSize: '12px', color: '#888' }}
+              >
+                {t('newspot.descriptionLabel')}
               </label>
-              <textarea
-                value={description}
-                maxLength={140}
-                onChange={(e) => setDescription(e.target.value)}
-                rows={3}
-                className="w-full resize-none rounded-2xl bg-card px-4 py-3.5 text-fg outline-none focus:border-accent"
-                style={{ border: '1px solid var(--color-border)' }}
-              />
-              <p className="text-right text-[11px] text-fg2/70">
-                {description.length}/140
-              </p>
+              <div className="relative">
+                <textarea
+                  value={description}
+                  maxLength={280}
+                  onChange={(e) => setDescription(e.target.value)}
+                  rows={3}
+                  placeholder={t('newspot.descriptionPlaceholder')}
+                  className="w-full resize-none outline-none placeholder:text-[#666]"
+                  style={{
+                    background: '#1a1a1a',
+                    borderRadius: '12px',
+                    border: '1px solid #333',
+                    // Extra bottom padding leaves room for the overlaid
+                    // counter so the last line never slides under it.
+                    padding: '12px 12px 26px',
+                    color: '#fff',
+                    fontSize: '14px',
+                  }}
+                />
+                <p
+                  className="absolute bottom-2 right-3 tabular-nums"
+                  style={{ fontSize: '11px', color: '#888' }}
+                >
+                  {description.length}/280
+                </p>
+              </div>
             </div>
           </div>
+
+          {/* Save to gallery — independent of publishing. The photo here
+              already has the plate blur applied. */}
+          <button
+            onClick={saveToGallery}
+            className="tappable flex w-full items-center justify-center gap-2 rounded-full py-3.5 text-sm font-bold tracking-wide transition-colors"
+            style={
+              savedToGallery
+                ? { background: 'rgba(52,211,153,0.12)', border: '1px solid rgba(52,211,153,0.5)', color: '#34D399' }
+                : { background: '#141414', border: '1px solid var(--color-border)', color: 'rgb(var(--color-fg))' }
+            }
+          >
+            {savedToGallery ? t('newspot.savedToGallery') : t('newspot.saveToGallery')}
+          </button>
 
           <button
             onClick={() => setStep(4)}
@@ -929,7 +1062,7 @@ export default function NewSpot() {
             className="tappable w-full rounded-full bg-accent py-4 text-sm font-extrabold tracking-wider text-fg disabled:opacity-50"
             style={{ boxShadow: '0 8px 24px rgba(232,32,58,0.45)' }}
           >
-            CONTINUER
+            {t('newspot.continue')}
           </button>
         </div>
       )}
@@ -948,7 +1081,7 @@ export default function NewSpot() {
             <MapPin className="h-7 w-7 text-accent" />
           </div>
           <p className="text-sm text-fg2">
-            Votre position GPS sera enregistrée.
+            {t('newspot.gpsWillBeSaved')}
           </p>
           {limitReached ? (
             <div className="w-full max-w-xs space-y-3">
@@ -958,14 +1091,14 @@ export default function NewSpot() {
                 className="tappable w-full rounded-full bg-accent px-6 py-3 text-sm font-extrabold tracking-wider text-fg"
                 style={{ boxShadow: '0 8px 24px rgba(232,32,58,0.45)' }}
               >
-                VOIR LES ABONNEMENTS
+                {t('newspot.viewSubscriptions')}
               </button>
               <button
                 onClick={() => navigate('/')}
                 className="tappable w-full rounded-full bg-card px-6 py-3 text-sm font-bold tracking-wide text-fg2"
                 style={{ border: '1px solid var(--color-border)' }}
               >
-                Plus tard
+                {t('newspot.later')}
               </button>
             </div>
           ) : pubError ? (
@@ -976,13 +1109,13 @@ export default function NewSpot() {
                 className="tappable rounded-full bg-accent px-6 py-3 text-sm font-extrabold tracking-wider text-fg"
                 style={{ boxShadow: '0 8px 24px rgba(232,32,58,0.45)' }}
               >
-                RÉESSAYER
+                {t('newspot.retry')}
               </button>
             </div>
           ) : (
             <div className="w-56 space-y-3 text-sm text-fg2">
               <p className="label-up text-[11px]">
-                {pubStatus || 'Publication…'}
+                {pubStatus || t('newspot.statusPublishing')}
               </p>
               <Skeleton className="h-2 w-full rounded-full" />
             </div>
@@ -1014,6 +1147,182 @@ function Field({
         className="w-full rounded-2xl bg-card px-4 py-3.5 text-fg outline-none focus:border-accent"
         style={{ border: '1px solid var(--color-border)' }}
       />
+    </div>
+  )
+}
+
+/** Brand field with live autocomplete over the 61-make catalogue. Empty +
+ *  focused → popular makes; typing filters. Tap → fills the brand. */
+function BrandField({
+  label,
+  brand,
+  onBrand,
+}: {
+  label: string
+  brand: string
+  onBrand: (v: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const suggestions = useMemo(() => searchMakes(brand, 6), [brand])
+  const showList =
+    open &&
+    suggestions.length > 0 &&
+    !(suggestions.length === 1 && suggestions[0] === brand)
+
+  return (
+    <div className="relative space-y-2">
+      <label className="label-up text-[10px] text-fg2">{label}</label>
+      <input
+        value={brand}
+        autoComplete="off"
+        onChange={(e) => {
+          onBrand(e.target.value)
+          setOpen(true)
+        }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => window.setTimeout(() => setOpen(false), 150)}
+        className="w-full rounded-2xl bg-card px-4 py-3.5 text-fg outline-none focus:border-accent"
+        style={{ border: '1px solid var(--color-border)' }}
+      />
+      {showList && (
+        <div
+          className="absolute left-0 right-0 top-full z-20 mt-1 max-h-56 overflow-y-auto rounded-2xl bg-card py-1 shadow-xl"
+          style={{ border: '1px solid var(--color-border)' }}
+        >
+          {suggestions.map((m) => (
+            <button
+              key={m}
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => {
+                onBrand(m)
+                setOpen(false)
+              }}
+              className="tappable block w-full px-4 py-2.5 text-left text-sm font-semibold text-fg transition-colors hover:bg-fg/5"
+            >
+              {m}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** Model field with live autocomplete over the car catalogue (src/lib/cars.ts).
+ *  If a brand is set, it suggests that make's models (tap → fills the model).
+ *  If not, it searches the whole DB as "Make Model" (tap → fills brand + model).
+ *  Typing "Maserati" in Brand then opening Model lists MC20, Ghibli, Levante… */
+function ModelField({
+  label,
+  brand,
+  model,
+  onModel,
+  onBrand,
+}: {
+  label: string
+  brand: string
+  model: string
+  onModel: (v: string) => void
+  onBrand: (v: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const hasMake = !!findMake(brand)
+  const suggestions = useMemo(() => {
+    if (hasMake) {
+      return modelsForMake(brand, model, 6).map((m) => ({
+        label: m,
+        make: '',
+        model: m,
+      }))
+    }
+    return searchCars(model, 6).map((s) => {
+      const i = s.indexOf(' ')
+      return {
+        label: s,
+        make: i > 0 ? s.slice(0, i) : s,
+        model: i > 0 ? s.slice(i + 1) : '',
+      }
+    })
+  }, [brand, model, hasMake])
+
+  // Don't show the list when the value already equals the only suggestion.
+  const showList =
+    open &&
+    suggestions.length > 0 &&
+    !(suggestions.length === 1 && suggestions[0].model === model)
+
+  return (
+    <div className="relative space-y-2">
+      <label className="label-up text-[10px] text-fg2">{label}</label>
+      <input
+        value={model}
+        autoComplete="off"
+        onChange={(e) => {
+          onModel(e.target.value)
+          setOpen(true)
+        }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => window.setTimeout(() => setOpen(false), 150)}
+        className="w-full rounded-2xl bg-card px-4 py-3.5 text-fg outline-none focus:border-accent"
+        style={{ border: '1px solid var(--color-border)' }}
+      />
+      {showList && (
+        <div
+          className="absolute left-0 right-0 top-full z-20 mt-1 max-h-56 overflow-y-auto rounded-2xl bg-card py-1 shadow-xl"
+          style={{ border: '1px solid var(--color-border)' }}
+        >
+          {suggestions.map((s) => (
+            <button
+              key={s.label}
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => {
+                if (s.make) onBrand(s.make)
+                onModel(s.model || s.label)
+                setOpen(false)
+              }}
+              className="tappable block w-full px-4 py-2.5 text-left text-sm text-fg transition-colors hover:bg-fg/5"
+            >
+              {s.make ? (
+                <>
+                  <span className="text-fg2">{s.make} </span>
+                  <span className="font-semibold">{s.model}</span>
+                </>
+              ) : (
+                <span className="font-semibold">{s.model}</span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** Shown under the AI preview card when the model's confidence is low
+ *  (< 50%) — a far or obscured shot. Amber alert, theme-aware: muted
+ *  glow on dark, deeper contrasted amber on the alabaster light surface. */
+function LowConfidenceBadge() {
+  const { t } = useTranslation()
+  const { theme } = useTheme()
+  const light = theme === 'light'
+  return (
+    <div className="flex justify-center">
+      <span
+        className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 font-bold"
+        style={{
+          fontSize: '11px',
+          letterSpacing: '0.01em',
+          background: light ? 'rgba(245,158,11,0.16)' : 'rgba(245,158,11,0.12)',
+          color: light ? '#B45309' : '#FBBF24',
+          border: light
+            ? '1px solid rgba(180,83,9,0.40)'
+            : '1px solid rgba(245,158,11,0.30)',
+        }}
+      >
+        {t('newspot.lowConfidenceBadge')}
+      </span>
     </div>
   )
 }

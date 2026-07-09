@@ -1,271 +1,668 @@
-import { useState, type ComponentType } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Camera, Sparkles, Users } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
+import { ArrowLeft, Bell, Check, MapPin, Search } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { searchCars } from '../lib/cars'
+import { currentLang, type Lang } from '../i18n'
 
-const STORAGE_KEY = 'revs_onboarded'
+// ─────────────────────────────────────────────────────────────────────
+// First-launch onboarding — a linear 8-step flow (no guided tour). The
+// SINGLE source of truth for whether to show it is
+// profiles.onboarding_completed in Supabase: false / null / missing row →
+// show; true → skip. No localStorage gate, so a server-side reset replays
+// it for everyone. The user's answers (language, dream car, interests,
+// discovery source) are persisted to profiles at the end.
+//
+// Design: full-screen #0a0a0a, accent #E8203A, glassmorphism cards, pure
+// Tailwind + a couple of CSS keyframes (onb-step-fwd / onb-step-back).
+// ─────────────────────────────────────────────────────────────────────
 
-// localStorage can throw (private mode, blocked storage, sandboxed
-// context). This runs during render, so it must never crash the app.
-function isOnboarded(): boolean {
-  try {
-    return localStorage.getItem(STORAGE_KEY) === '1'
-  } catch {
-    return true
-  }
+const RED = '#E8203A'
+// 7-step flow (the "community rules" step was removed). Last step = S_GEO,
+// which finishes the flow via advance().
+const TOTAL = 7
+
+// Step indices (kept named for readability).
+const S_LANG = 0
+const S_FLORIAN = 1
+const S_DREAM = 2
+const S_INTERESTS = 3
+const S_SOURCE = 4
+const S_NOTIF = 5
+const S_GEO = 6
+
+const INTERESTS = [
+  'supercars',
+  'hypercars',
+  'jdm',
+  'classics',
+  'f1',
+  'electric',
+  'tuning',
+  'suvs',
+  'american',
+  'german',
+  'italian',
+  'rally',
+] as const
+
+const SOURCES = [
+  'instagram',
+  'tiktok',
+  'youtube',
+  'friend',
+  'appstore',
+  'search',
+  'event',
+  'other',
+] as const
+
+// Reusable glassmorphism option button. `selected` flips it to the red
+// accent treatment.
+function OptionButton({
+  selected,
+  onClick,
+  children,
+  className = '',
+}: {
+  selected: boolean
+  onClick: () => void
+  children: React.ReactNode
+  className?: string
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`tappable relative rounded-2xl px-4 py-3.5 text-left text-sm font-semibold transition-all active:scale-[0.98] ${className}`}
+      style={{
+        background: selected ? 'rgba(232,32,58,0.14)' : 'rgba(255,255,255,0.04)',
+        border: `1.5px solid ${selected ? RED : 'rgba(255,255,255,0.1)'}`,
+        color: selected ? '#fff' : 'rgba(255,255,255,0.82)',
+        backdropFilter: 'blur(12px)',
+        WebkitBackdropFilter: 'blur(12px)',
+        boxShadow: selected ? '0 0 22px rgba(232,32,58,0.3)' : undefined,
+      }}
+    >
+      {children}
+    </button>
+  )
 }
-
-function markOnboarded() {
-  try {
-    localStorage.setItem(STORAGE_KEY, '1')
-  } catch {
-    /* no-op */
-  }
-}
-
-// Fire the permission prompts in order — geolocation first (needed to
-// spot), then notifications. Must run synchronously from the click
-// (no await before) so iOS Safari / iOS PWA surface the geo prompt.
-// Refusal is fine: the app keeps working, changeable later in Settings.
-function kickoffPermissions() {
-  try {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        () => {},
-        () => {},
-        { enableHighAccuracy: false, timeout: 10000, maximumAge: 30000 },
-      )
-    }
-  } catch {
-    /* ignore */
-  }
-  try {
-    if (
-      typeof Notification !== 'undefined' &&
-      Notification.permission === 'default'
-    ) {
-      Notification.requestPermission()
-        .then((p) => {
-          try {
-            localStorage.setItem(
-              'revs_notifications',
-              p === 'granted' ? '1' : '0',
-            )
-          } catch {
-            /* ignore */
-          }
-        })
-        .catch(() => {})
-    }
-  } catch {
-    /* ignore */
-  }
-}
-
-type IconProps = { className?: string; strokeWidth?: number }
-
-type Slide = {
-  icon: ComponentType<IconProps>
-  title: string
-  subtitle: string
-}
-
-const SLIDES: Slide[] = [
-  {
-    icon: Camera,
-    title: 'Spotte les supercars autour de toi',
-    subtitle: 'Chaque voiture exceptionnelle mérite d’être sur la carte',
-  },
-  {
-    icon: Sparkles,
-    title: "L'IA reconnaît la voiture automatiquement",
-    subtitle: 'Marque, modèle, année, couleur — en quelques secondes',
-  },
-  {
-    icon: Users,
-    title: 'Rejoins la communauté REVS',
-    subtitle: 'Des passionnés de supercars, F1 et culture auto',
-  },
-]
-
-// 3 info slides + a final profile form.
-const TOTAL = SLIDES.length + 1
-const FORM_INDEX = SLIDES.length
 
 export default function Onboarding() {
   const navigate = useNavigate()
-  const [visible, setVisible] = useState(() => !isOnboarded())
-  const [slide, setSlide] = useState(0)
-  const [pseudo, setPseudo] = useState('')
-  const [ville, setVille] = useState('')
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const { t, i18n } = useTranslation()
 
-  if (!visible) return null
+  // null = still deciding (no flash); false = hidden; true = show.
+  const [show, setShow] = useState<boolean | null>(null)
+  const [step, setStep] = useState(0)
+  const [dir, setDir] = useState<'fwd' | 'back'>('fwd')
 
-  const onForm = slide === FORM_INDEX
-  const canFinish = pseudo.trim().length > 0 && ville.trim().length > 0
+  // Answers.
+  const [lang, setLang] = useState<Lang>(() => currentLang())
+  const [dreamQuery, setDreamQuery] = useState('')
+  const [dreamCar, setDreamCar] = useState('')
+  const [interests, setInterests] = useState<string[]>([])
+  const [source, setSource] = useState<string | null>(null)
+  const [notifOn, setNotifOn] = useState(false)
+  const [geoOn, setGeoOn] = useState(false)
 
-  async function finish() {
-    // Request permissions within the user gesture, before any await.
-    kickoffPermissions()
-    setError(null)
-    setSaving(true)
+  // Florian photo — /florian.jpg if present, else a gradient "F" avatar.
+  const [photoOk, setPhotoOk] = useState(true)
+
+  // Single source of truth = the DB flag. Show whenever it isn't
+  // explicitly true (false / null / missing row → first launch).
+  useEffect(() => {
+    let active = true
+    ;(async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (!active) return
+      if (!user) {
+        setShow(false)
+        return
+      }
+      const { data } = await supabase
+        .from('profiles')
+        .select('onboarding_completed')
+        .eq('user_id', user.id)
+        .maybeSingle()
+      if (!active) return
+      const done =
+        (data as { onboarding_completed?: boolean } | null)
+          ?.onboarding_completed === true
+      setShow(!done)
+    })()
+    return () => {
+      active = false
+    }
+  }, [])
+
+  function goNext() {
+    setDir('fwd')
+    setStep((s) => Math.min(s + 1, TOTAL - 1))
+  }
+  function goBack() {
+    setDir('back')
+    setStep((s) => Math.max(s - 1, 0))
+  }
+  // Advance to the next step, or finish the onboarding on the last one — so
+  // whichever step is last (now S_GEO) closes the flow, no matter the count.
+  function advance() {
+    if (step >= TOTAL - 1) finish()
+    else goNext()
+  }
+
+  function pickLang(l: Lang) {
+    setLang(l)
+    // 1) flip the live UI language (the root re-renders the whole tree),
+    void i18n.changeLanguage(l)
+    // 2) persist the choice to localStorage (i18next's conventional key),
     try {
-      const { data: auth, error: authErr } = await supabase.auth.getUser()
-      if (authErr || !auth.user) {
-        console.error('onboarding: not authenticated', authErr)
-        setError('Tu n’es pas connecté. Reconnecte-toi puis réessaie.')
-        setSaving(false)
-        return
+      localStorage.setItem('i18nextLng', l)
+    } catch {
+      /* ignore */
+    }
+    // 3) mirror to profiles.language (best-effort) so it follows the user
+    //    across devices even if they drop off before finishing.
+    void (async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (user) {
+        await supabase
+          .from('profiles')
+          .update({ language: l })
+          .eq('user_id', user.id)
       }
+    })()
+  }
 
-      const { error: upErr } = await supabase.from('profiles').upsert(
-        {
-          user_id: auth.user.id,
-          pseudo: pseudo.trim(),
-          ville: ville.trim(),
-        },
-        { onConflict: 'user_id' },
-      )
+  function toggleInterest(id: string) {
+    setInterests((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    )
+  }
 
-      if (upErr) {
-        // Supabase returns a PostgrestError object (NOT an Error
-        // instance), so the message was being swallowed before.
-        console.error('profile upsert failed:', {
-          code: upErr.code,
-          message: upErr.message,
-          details: upErr.details,
-          hint: upErr.hint,
-        })
-        setError(
-          `Profil non enregistré (${upErr.code ?? 'erreur'}): ${upErr.message}`,
+  async function requestNotif() {
+    try {
+      if (
+        typeof Notification !== 'undefined' &&
+        Notification.permission === 'default'
+      ) {
+        const perm = await Notification.requestPermission()
+        setNotifOn(perm === 'granted')
+      } else if (
+        typeof Notification !== 'undefined' &&
+        Notification.permission === 'granted'
+      ) {
+        setNotifOn(true)
+      }
+    } catch {
+      /* ignore — unsupported */
+    }
+    advance()
+  }
+
+  function requestGeo() {
+    try {
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          () => {
+            // Remember the granted choice so no screen ever needs to re-ask.
+            try {
+              localStorage.setItem('revs_geo', '1')
+            } catch {
+              /* ignore */
+            }
+            setGeoOn(true)
+            advance()
+          },
+          () => {
+            try {
+              localStorage.setItem('revs_geo', '0')
+            } catch {
+              /* ignore */
+            }
+            advance()
+          },
+          { enableHighAccuracy: false, timeout: 10000, maximumAge: 30000 },
         )
-        setSaving(false)
         return
       }
+    } catch {
+      /* ignore */
+    }
+    advance()
+  }
 
-      markOnboarded()
-      setVisible(false)
-      navigate('/map')
-    } catch (e) {
-      console.error('onboarding finish crashed:', e)
-      setError(
-        e instanceof Error ? e.message : 'Impossible d’enregistrer le profil',
-      )
-      setSaving(false)
+  // Persist every answer + flip the completed flag, then close to the map.
+  function finish() {
+    void (async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (user) {
+        await supabase
+          .from('profiles')
+          .update({
+            onboarding_completed: true,
+            language: lang,
+            dream_car: dreamCar.trim() || null,
+            interests,
+            discovery_source: source,
+          })
+          .eq('user_id', user.id)
+      }
+    })()
+    setShow(false)
+    navigate('/map')
+  }
+
+  if (!show) return null
+
+  // Autocomplete over the full car database (src/lib/cars.ts) — so "Maserati"
+  // surfaces MC20/Ghibli/Levante…, etc.
+  const dreamSuggestions = searchCars(dreamQuery, 8)
+
+  // ── Footer (primary CTA + optional secondary skip), per step ──
+  function renderFooter() {
+    const primary = (label: string, onClick: () => void, disabled = false) => (
+      <button
+        onClick={onClick}
+        disabled={disabled}
+        className="tappable w-full rounded-full py-4 text-base font-bold text-white transition-transform active:scale-[0.98] disabled:opacity-40"
+        style={{ background: RED, boxShadow: '0 0 20px rgba(232,32,58,0.5)' }}
+      >
+        {label}
+      </button>
+    )
+    const secondary = (label: string, onClick: () => void) => (
+      <button
+        onClick={onClick}
+        className="tappable w-full py-3 text-center text-sm font-semibold text-white/45 transition-colors hover:text-white/80"
+      >
+        {label}
+      </button>
+    )
+
+    switch (step) {
+      case S_LANG:
+        return primary(t('onboarding.ui.continue'), advance)
+      case S_FLORIAN:
+        return primary(t('onboarding.florian.cta'), advance)
+      case S_DREAM:
+        return (
+          <>
+            {primary(t('onboarding.ui.continue'), advance)}
+            {!dreamCar && secondary(t('onboarding.dreamCar.skip'), advance)}
+          </>
+        )
+      case S_INTERESTS:
+        return primary(t('onboarding.ui.continue'), advance, interests.length === 0)
+      case S_SOURCE:
+        return primary(t('onboarding.ui.continue'), advance, source === null)
+      case S_NOTIF:
+        return (
+          <>
+            {primary(
+              notifOn
+                ? t('onboarding.notifications.enabled')
+                : t('onboarding.notifications.enable'),
+              notifOn ? advance : requestNotif,
+            )}
+            {!notifOn && secondary(t('onboarding.notifications.skip'), advance)}
+          </>
+        )
+      case S_GEO:
+        return (
+          <>
+            {primary(
+              geoOn
+                ? t('onboarding.location.enabled')
+                : t('onboarding.location.enable'),
+              geoOn ? advance : requestGeo,
+            )}
+            {!geoOn && secondary(t('onboarding.location.skip'), advance)}
+          </>
+        )
+      default:
+        return null
     }
   }
 
-  function next() {
-    if (onForm) {
-      finish()
-      return
+  // ── Step body ──
+  function renderStep() {
+    switch (step) {
+      case S_LANG:
+        return (
+          <StepShell
+            title={t('onboarding.lang.title')}
+            subtitle={t('onboarding.lang.subtitle')}
+          >
+            <div className="flex flex-col gap-3">
+              {(
+                [
+                  { code: 'fr' as Lang, flag: '🇫🇷', label: t('onboarding.lang.fr') },
+                  { code: 'en' as Lang, flag: '🇬🇧', label: t('onboarding.lang.en') },
+                ]
+              ).map((o) => (
+                <OptionButton
+                  key={o.code}
+                  selected={lang === o.code}
+                  onClick={() => pickLang(o.code)}
+                  className="flex items-center gap-4 !py-4"
+                >
+                  <span className="text-3xl leading-none">{o.flag}</span>
+                  <span className="flex-1 text-[16px]">{o.label}</span>
+                  {lang === o.code && (
+                    <Check className="h-5 w-5" style={{ color: RED }} />
+                  )}
+                </OptionButton>
+              ))}
+            </div>
+          </StepShell>
+        )
+
+      case S_FLORIAN:
+        return (
+          <StepShell title={t('onboarding.florian.title')}>
+            <div className="flex flex-col items-center text-center">
+              <div
+                className="mb-6 h-28 w-28 overflow-hidden rounded-full"
+                style={{
+                  border: '2px solid rgba(232,32,58,0.6)',
+                  boxShadow: '0 0 34px rgba(232,32,58,0.35)',
+                }}
+              >
+                {photoOk ? (
+                  <img
+                    src="/florian.jpg"
+                    alt="Florian"
+                    onError={() => setPhotoOk(false)}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <div
+                    className="flex h-full w-full items-center justify-center font-display text-4xl font-extrabold text-white"
+                    style={{
+                      background:
+                        'linear-gradient(135deg, #E8203A 0%, #7a0f1c 100%)',
+                    }}
+                  >
+                    F
+                  </div>
+                )}
+              </div>
+              <p
+                className="rounded-3xl px-5 py-4 text-[14.5px] leading-relaxed text-white/80"
+                style={{
+                  background: 'rgba(255,255,255,0.04)',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  backdropFilter: 'blur(12px)',
+                  WebkitBackdropFilter: 'blur(12px)',
+                }}
+              >
+                {t('onboarding.florian.body')}
+              </p>
+              <p className="mt-4 text-[13px] font-semibold" style={{ color: RED }}>
+                {t('onboarding.florian.signature')}
+              </p>
+            </div>
+          </StepShell>
+        )
+
+      case S_DREAM:
+        return (
+          <StepShell
+            title={t('onboarding.dreamCar.title')}
+            subtitle={t('onboarding.dreamCar.subtitle')}
+          >
+            <div className="relative">
+              <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-white/40" />
+              <input
+                value={dreamQuery}
+                onChange={(e) => {
+                  setDreamQuery(e.target.value)
+                  setDreamCar(e.target.value)
+                }}
+                placeholder={t('onboarding.dreamCar.placeholder')}
+                className="w-full rounded-2xl py-3.5 pl-11 pr-4 text-sm text-white placeholder-white/35 outline-none focus:ring-2 focus:ring-accent/45"
+                style={{
+                  background: 'rgba(255,255,255,0.04)',
+                  border: '1.5px solid rgba(255,255,255,0.1)',
+                  backdropFilter: 'blur(12px)',
+                  WebkitBackdropFilter: 'blur(12px)',
+                }}
+              />
+            </div>
+            {dreamSuggestions.length > 0 && (
+              <div className="mt-4">
+                <p className="label-up mb-2 px-1 text-[10px] text-white/40">
+                  {t('onboarding.dreamCar.suggestionsTitle')}
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {dreamSuggestions.map((c) => (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() => {
+                        setDreamCar(c)
+                        setDreamQuery(c)
+                      }}
+                      className="tappable rounded-full px-3.5 py-2 text-[13px] font-semibold transition-all active:scale-95"
+                      style={{
+                        background:
+                          dreamCar === c
+                            ? 'rgba(232,32,58,0.16)'
+                            : 'rgba(255,255,255,0.05)',
+                        border: `1px solid ${
+                          dreamCar === c ? RED : 'rgba(255,255,255,0.12)'
+                        }`,
+                        color: dreamCar === c ? '#fff' : 'rgba(255,255,255,0.8)',
+                      }}
+                    >
+                      {c}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </StepShell>
+        )
+
+      case S_INTERESTS:
+        return (
+          <StepShell
+            title={t('onboarding.interests.title')}
+            subtitle={t('onboarding.interests.subtitle')}
+          >
+            <div className="grid grid-cols-2 gap-2.5">
+              {INTERESTS.map((id) => (
+                <OptionButton
+                  key={id}
+                  selected={interests.includes(id)}
+                  onClick={() => toggleInterest(id)}
+                  className="flex items-center justify-between gap-2"
+                >
+                  <span className="truncate">
+                    {t(`onboarding.interests.options.${id}`)}
+                  </span>
+                  {interests.includes(id) && (
+                    <Check className="h-4 w-4 flex-none" style={{ color: RED }} />
+                  )}
+                </OptionButton>
+              ))}
+            </div>
+          </StepShell>
+        )
+
+      case S_SOURCE:
+        return (
+          <StepShell
+            title={t('onboarding.source.title')}
+            subtitle={t('onboarding.source.subtitle')}
+          >
+            <div className="flex flex-col gap-2.5">
+              {SOURCES.map((id) => (
+                <OptionButton
+                  key={id}
+                  selected={source === id}
+                  onClick={() => setSource(id)}
+                  className="flex items-center justify-between gap-2"
+                >
+                  <span>{t(`onboarding.source.options.${id}`)}</span>
+                  {source === id && (
+                    <Check className="h-4 w-4 flex-none" style={{ color: RED }} />
+                  )}
+                </OptionButton>
+              ))}
+            </div>
+          </StepShell>
+        )
+
+      case S_NOTIF:
+        return (
+          <StepShell
+            icon={<Bell className="h-8 w-8" style={{ color: RED }} />}
+            title={t('onboarding.notifications.title')}
+            subtitle={t('onboarding.notifications.subtitle')}
+            centered
+          />
+        )
+
+      case S_GEO:
+        return (
+          <StepShell
+            icon={<MapPin className="h-8 w-8" style={{ color: RED }} />}
+            title={t('onboarding.location.title')}
+            subtitle={t('onboarding.location.subtitle')}
+            centered
+          />
+        )
+
+      default:
+        return null
     }
-    setSlide((s) => s + 1)
   }
 
   return (
-    <div className="fixed inset-0 z-[100] flex flex-col bg-bg text-fg">
-      <div className="flex-1 overflow-hidden">
-        <div
-          className="flex h-full transition-transform duration-300 ease-out"
+    <div
+      className="fixed inset-0 z-[100] flex flex-col"
+      style={{
+        background: '#0a0a0a',
+        color: '#fff',
+        fontFamily: 'var(--font-display, Inter, system-ui, sans-serif)',
+      }}
+    >
+      {/* Backdrop red glow */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-0 h-[45vh]"
+        style={{
+          background:
+            'radial-gradient(ellipse 90% 100% at 50% 0%, rgba(232,32,58,0.28) 0%, rgba(232,32,58,0.05) 38%, transparent 66%)',
+        }}
+      />
+
+      {/* Header — back button + progress bar + step counter */}
+      <div
+        className="relative z-10 flex items-center gap-3 px-5"
+        style={{ paddingTop: 'max(1.25rem, env(safe-area-inset-top))' }}
+      >
+        <button
+          onClick={goBack}
+          aria-label={t('onboarding.ui.back')}
+          className="tappable flex h-9 w-9 flex-none items-center justify-center rounded-full transition-opacity"
           style={{
-            width: `${TOTAL * 100}%`,
-            transform: `translateX(-${slide * (100 / TOTAL)}%)`,
+            background: 'rgba(255,255,255,0.06)',
+            border: '1px solid rgba(255,255,255,0.12)',
+            opacity: step === 0 ? 0 : 1,
+            pointerEvents: step === 0 ? 'none' : 'auto',
           }}
         >
-          {SLIDES.map(({ icon: Icon, title, subtitle }) => (
-            <section
-              key={title}
-              style={{ width: `${100 / TOTAL}%` }}
-              className="flex h-full shrink-0 flex-col items-center justify-center gap-7 px-10 text-center"
-            >
-              <div
-                className="flex h-24 w-24 items-center justify-center rounded-full"
-                style={{
-                  background:
-                    'linear-gradient(155deg, rgba(232,32,58,0.22) 0%, rgba(232,32,58,0.06) 70%, rgba(20,20,20,0.95) 100%)',
-                  border: '1px solid rgba(232,32,58,0.40)',
-                  boxShadow: '0 12px 36px rgba(232,32,58,0.30)',
-                }}
-              >
-                <Icon className="h-11 w-11 text-accent" strokeWidth={1.6} />
-              </div>
-              <h1 className="font-display text-[34px] font-extrabold leading-[1.05] tracking-tighter text-fg">
-                {title}
-              </h1>
-              <p className="max-w-xs text-base leading-relaxed text-fg2">
-                {subtitle}
-              </p>
-            </section>
-          ))}
+          <ArrowLeft className="h-4 w-4 text-white" />
+        </button>
+        <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/10">
+          <div
+            className="h-full rounded-full"
+            style={{
+              width: `${((step + 1) / TOTAL) * 100}%`,
+              background: RED,
+              boxShadow: '0 0 10px rgba(232,32,58,0.6)',
+              transition: 'width 0.4s cubic-bezier(0.22,1,0.36,1)',
+            }}
+          />
+        </div>
+        <span className="flex-none text-[12px] font-bold tabular-nums text-white/45">
+          {step + 1}/{TOTAL}
+        </span>
+      </div>
 
-          <section
-            style={{ width: `${100 / TOTAL}%` }}
-            className="flex h-full shrink-0 flex-col justify-center gap-7 px-8"
-          >
-            <div className="space-y-2 text-center">
-              <h1 className="display-xl text-fg">Crée ton profil</h1>
-              <p className="text-sm text-fg2">
-                Ton pseudo et ta ville pour le classement des spotters
-              </p>
-            </div>
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <label className="label-up text-[10px] text-fg2">Pseudo</label>
-                <input
-                  value={pseudo}
-                  onChange={(e) => setPseudo(e.target.value)}
-                  maxLength={24}
-                  placeholder="ex: speedhunter_75"
-                  className="w-full rounded-2xl bg-card px-4 py-3.5 text-fg outline-none placeholder:text-fg2/40 focus:border-accent"
-                  style={{ border: '1px solid var(--color-border)' }}
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="label-up text-[10px] text-fg2">Ville</label>
-                <input
-                  value={ville}
-                  onChange={(e) => setVille(e.target.value)}
-                  maxLength={48}
-                  placeholder="ex: Annecy"
-                  className="w-full rounded-2xl bg-card px-4 py-3.5 text-fg outline-none placeholder:text-fg2/40 focus:border-accent"
-                  style={{ border: '1px solid var(--color-border)' }}
-                />
-              </div>
-              {error && <p className="text-sm text-accent">{error}</p>}
-            </div>
-          </section>
+      {/* Body — animated per step */}
+      <div className="relative z-10 flex-1 overflow-y-auto px-7 pt-8">
+        <div
+          key={step}
+          style={{
+            animation: `${
+              dir === 'back' ? 'onb-step-back' : 'onb-step-fwd'
+            } 0.35s cubic-bezier(0.22,1,0.36,1)`,
+          }}
+        >
+          {renderStep()}
         </div>
       </div>
 
-      <footer className="space-y-7 px-8 pb-[max(2rem,env(safe-area-inset-bottom))] pt-4">
-        <div className="flex justify-center gap-2">
-          {Array.from({ length: TOTAL }).map((_, i) => (
-            <span
-              key={i}
-              className={`h-2 rounded-full transition-all duration-300 ${
-                i === slide ? 'w-7 bg-accent' : 'w-2 bg-fg2/30'
-              }`}
-              style={
-                i === slide
-                  ? { boxShadow: '0 0 10px rgba(232,32,58,0.55)' }
-                  : undefined
-              }
-            />
-          ))}
-        </div>
+      {/* Footer */}
+      <div className="relative z-10 px-7 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-3">
+        {renderFooter()}
+      </div>
+    </div>
+  )
+}
 
-        <button
-          onClick={next}
-          disabled={onForm && (!canFinish || saving)}
-          className="tappable w-full rounded-full bg-accent py-4 text-sm font-extrabold tracking-wider text-fg disabled:opacity-50"
-          style={{ boxShadow: '0 12px 36px rgba(232,32,58,0.45)' }}
+// Shared step layout — optional centered icon, title, subtitle, body.
+function StepShell({
+  icon,
+  title,
+  subtitle,
+  children,
+  centered,
+}: {
+  icon?: React.ReactNode
+  title: string
+  subtitle?: string
+  children?: React.ReactNode
+  centered?: boolean
+}) {
+  return (
+    <div className={centered ? 'flex flex-col items-center text-center' : ''}>
+      {icon && (
+        <div
+          className="mb-6 flex h-16 w-16 items-center justify-center rounded-2xl"
+          style={{
+            background: 'rgba(232,32,58,0.12)',
+            border: '1px solid rgba(232,32,58,0.3)',
+          }}
         >
-          {onForm ? (saving ? '…' : 'COMMENCER') : 'CONTINUER'}
-        </button>
-      </footer>
+          {icon}
+        </div>
+      )}
+      <h1 className="font-display text-[26px] font-extrabold leading-tight tracking-tight">
+        {title}
+      </h1>
+      {subtitle && (
+        <p
+          className={`mt-2.5 text-[14.5px] leading-relaxed text-white/55 ${
+            centered ? 'max-w-[20rem]' : ''
+          }`}
+        >
+          {subtitle}
+        </p>
+      )}
+      {children && <div className="mt-7">{children}</div>}
     </div>
   )
 }

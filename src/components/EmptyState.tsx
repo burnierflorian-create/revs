@@ -22,7 +22,7 @@ export default function EmptyState({
         {title}
       </h2>
       {subtitle && (
-        <p className="mt-2 max-w-xs text-[14px] text-[#888888]">{subtitle}</p>
+        <p className="mt-2 max-w-xs text-[14px] text-fg2">{subtitle}</p>
       )}
       <button
         onClick={onButton}

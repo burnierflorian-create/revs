@@ -1,187 +1,519 @@
-import { useMemo } from 'react'
+import { useMemo, useState, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, Lock, Trophy } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
+import { ArrowLeft, Lock } from 'lucide-react'
 import {
   allBadges,
   computeUnlocks,
-  CATEGORY_LABEL,
   type Badge,
-  type BadgeCategory,
+  type BadgeContext,
 } from '../lib/badges'
+import { badgeIcon } from '../lib/customIcons'
 import { useBadgeContext } from '../hooks/useBadgeContext'
 import { Skeleton } from '../components/Skeleton'
 
-const CATEGORY_ORDER: BadgeCategory[] = [
-  'spots',
-  'streak',
-  'discovery',
-  'community',
-  'premium',
-  'brands',
-  'special',
-]
+// ───────────────────── progress / date helpers ─────────────────────
+
+/** Best-effort progress for the countable badges, used for the locked
+ *  progress bar (e.g. "3/10 spots"). Returns null for badges whose
+ *  progress can't be expressed as a simple current/target ratio. */
+function badgeProgress(
+  b: Badge,
+  ctx: BadgeContext,
+): { current: number; target: number; unit: string } | null {
+  const spots = ctx.spots
+  const total = spots.length
+  const brands = new Set(
+    spots.map((s) => (s.brand ?? '').toLowerCase().trim()).filter(Boolean),
+  ).size
+  const priced = (min: number) =>
+    spots.filter((s) => (s.estimated_price ?? 0) >= min).length
+  const streak = maxStreakDays(ctx.daysWithSpot)
+
+  switch (b.slug) {
+    case 'premier-spot':
+      return { current: Math.min(total, 1), target: 1, unit: 'spot' }
+    case 'serie-10':
+      return { current: Math.min(total, 10), target: 10, unit: 'spots' }
+    case 'centurion':
+      return { current: Math.min(total, 100), target: 100, unit: 'spots' }
+    case 'photographe':
+      return {
+        current: Math.min(ctx.likesReceived, 50),
+        target: 50,
+        unit: 'likes',
+      }
+    case 'social-10':
+      return { current: Math.min(ctx.followers, 10), target: 10, unit: 'abonnés' }
+    case 'influenceur':
+      return { current: Math.min(ctx.followers, 50), target: 50, unit: 'abonnés' }
+    case 'collectionneur':
+      return { current: Math.min(brands, 10), target: 10, unit: 'marques' }
+    case 'streak-7':
+      return { current: Math.min(streak, 7), target: 7, unit: 'jours' }
+    case 'streak-30':
+      return { current: Math.min(streak, 30), target: 30, unit: 'jours' }
+    case 'supercar-spotter':
+      return { current: Math.min(priced(80_000), 10), target: 10, unit: 'spots' }
+    case 'hypercar-hunter':
+      return { current: Math.min(priced(200_000), 5), target: 5, unit: 'spots' }
+    default:
+      return null
+  }
+}
+
+/** Longest consecutive-day streak — mirrors the lib's maxStreak. */
+function maxStreakDays(daysSet: Set<string>): number {
+  if (daysSet.size === 0) return 0
+  const list = [...daysSet].sort()
+  let best = 1
+  let cur = 1
+  for (let i = 1; i < list.length; i += 1) {
+    const prev = new Date(list[i - 1] + 'T00:00:00Z').getTime()
+    const here = new Date(list[i] + 'T00:00:00Z').getTime()
+    if (Math.round((here - prev) / 86_400_000) === 1) {
+      cur += 1
+      best = Math.max(best, cur)
+    } else {
+      cur = 1
+    }
+  }
+  return best
+}
+
+/** For the spot-count milestone badges we can derive the exact day the
+ *  badge was earned = the date the Nth oldest spot was posted. Returns a
+ *  formatted fr-FR date, or null when not derivable. */
+function badgeObtainedDate(b: Badge, ctx: BadgeContext): string | null {
+  const n =
+    b.slug === 'premier-spot'
+      ? 1
+      : b.slug === 'serie-10'
+        ? 10
+        : b.slug === 'centurion'
+          ? 100
+          : null
+  if (n === null) return null
+  // ctx.spots is newest-first; the Nth oldest is at length - n.
+  const idx = ctx.spots.length - n
+  if (idx < 0) return null
+  const at = ctx.spots[idx]?.created_at
+  if (!at) return null
+  return new Intl.DateTimeFormat('fr-FR', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  }).format(new Date(at))
+}
+
+// ─────────────────────────── page ───────────────────────────
 
 export default function Badges() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const ctx = useBadgeContext()
+  const [selected, setSelected] = useState<Badge | null>(null)
 
   const data = useMemo(() => {
     if (!ctx) return null
     const list = allBadges(ctx)
     const unlocks = computeUnlocks(ctx)
-    const byCat = new Map<BadgeCategory, Badge[]>()
-    for (const b of list) {
-      const arr = byCat.get(b.category) ?? []
-      arr.push(b)
-      byCat.set(b.category, arr)
-    }
-    for (const arr of byCat.values()) {
-      arr.sort((a, b) => {
-        const ua = unlocks.has(a.slug) ? 0 : 1
-        const ub = unlocks.has(b.slug) ? 0 : 1
-        if (ua !== ub) return ua - ub
-        return (a.order ?? 99) - (b.order ?? 99)
-      })
-    }
-    return {
-      byCat,
-      unlocks,
-      totalUnlocked: list.filter((b) => unlocks.has(b.slug)).length,
-      total: list.length,
-    }
+    const sortByOrder = (a: Badge, b: Badge) =>
+      (a.order ?? 99) - (b.order ?? 99)
+    const unlocked = list.filter((b) => unlocks.has(b.slug)).sort(sortByOrder)
+    const locked = list.filter((b) => !unlocks.has(b.slug)).sort(sortByOrder)
+    return { unlocks, unlocked, locked, total: list.length }
   }, [ctx])
 
-  const pct = data
-    ? Math.round((data.totalUnlocked / Math.max(1, data.total)) * 100)
-    : 0
-
   return (
-    <div className="min-h-screen bg-bg px-4 pt-[max(1rem,env(safe-area-inset-top))] text-fg">
+    <div
+      className="min-h-screen px-4 pt-[max(1rem,env(safe-area-inset-top))]"
+      style={{ background: '#0a0a0a', color: '#fff' }}
+    >
       <div className="flex items-center gap-4 py-4">
         <button
           onClick={() => navigate(-1)}
-          aria-label="Retour"
-          className="tappable text-fg2 hover:text-fg"
+          aria-label={t('gamif.back')}
+          className="tappable text-white/60 hover:text-white"
         >
           <ArrowLeft className="h-6 w-6" />
         </button>
-        <h1 className="flex items-center gap-2 display-xl text-fg">
-          <Trophy className="h-7 w-7 text-accent" />
-          Badges
+        <h1 className="font-display text-2xl font-extrabold tracking-tight">
+          {t('gamif.myBadges')}
         </h1>
+        {data && (
+          <span
+            className="ml-auto font-display text-sm font-extrabold"
+            style={{ color: '#E8203A' }}
+          >
+            {t('gamif.unlockedCount', {
+              count: data.total,
+              current: data.unlocked.length,
+              total: data.total,
+            })}
+          </span>
+        )}
       </div>
 
-      {/* Progression compteur — gros chiffre + barre */}
-      {data && (
-        <section
-          className="mb-6 rounded-3xl bg-card p-5"
-          style={{ border: '1px solid var(--color-border)' }}
-        >
-          <div className="flex items-baseline justify-between">
-            <span className="label-up text-[10px] text-fg2">Progression</span>
-            <span className="font-display text-3xl font-extrabold tracking-tighter text-fg">
-              {data.totalUnlocked}
-              <span className="ml-1 text-sm text-fg2">/{data.total}</span>
-            </span>
-          </div>
-          <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-white/[0.08]">
-            <div
-              className="h-full rounded-full bg-accent transition-[width] duration-700 ease-out"
-              style={{
-                width: `${pct}%`,
-                boxShadow: '0 0 12px rgba(232,32,58,0.45)',
-              }}
-            />
-          </div>
-          <p className="mt-2 text-xs text-fg2">
-            {pct < 25
-              ? 'Tu commences à peine — chaque spot rapproche du suivant.'
-              : pct < 60
-                ? 'Belle collection en construction.'
-                : pct < 90
-                  ? 'Tu touches presque la complétion.'
-                  : 'Collection quasi parfaite 👑'}
-          </p>
-        </section>
-      )}
-
       {data === null ? (
-        <div className="space-y-6">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <Skeleton key={i} className="h-40 rounded-3xl" />
+        <div className="grid grid-cols-3 gap-3 pt-2">
+          {Array.from({ length: 9 }).map((_, i) => (
+            <Skeleton key={i} className="aspect-square rounded-2xl" />
           ))}
         </div>
       ) : (
-        <div className="space-y-7 pb-12">
-          {CATEGORY_ORDER.map((cat) => {
-            const items = data.byCat.get(cat) ?? []
-            if (items.length === 0) return null
-            const unlockedInCat = items.filter((b) =>
-              data.unlocks.has(b.slug),
-            ).length
-            return (
-              <section key={cat}>
-                <h2 className="mb-3 flex items-baseline justify-between px-1">
-                  <span className="font-display text-lg font-extrabold tracking-tighter text-fg">
-                    {CATEGORY_LABEL[cat]}
-                  </span>
-                  <span className="label-up text-[10px] text-fg2">
-                    {unlockedInCat}/{items.length}
-                  </span>
-                </h2>
-                <div className="grid grid-cols-4 gap-1.5">
-                  {items.map((b) => {
-                    const isUnlocked = data.unlocks.has(b.slug)
-                    return (
-                      <button
-                        key={b.slug}
-                        onClick={() => navigate(`/badges/${b.slug}`)}
-                        className="tappable relative flex flex-col items-center gap-1.5 rounded-2xl px-1 py-3 text-center"
-                        style={{
-                          background: isUnlocked
-                            ? b.gold
-                              ? 'rgba(224,179,65,0.12)'
-                              : 'rgba(232,32,58,0.08)'
-                            : 'var(--color-card)',
-                          border: isUnlocked
-                            ? b.gold
-                              ? '1px solid rgba(224,179,65,0.4)'
-                              : '1px solid rgba(232,32,58,0.3)'
-                            : '1px solid var(--color-border)',
-                          boxShadow: isUnlocked
-                            ? b.gold
-                              ? '0 0 22px rgba(224,179,65,0.22)'
-                              : '0 0 20px rgba(232,32,58,0.18)'
-                            : undefined,
-                        }}
-                      >
-                        {isUnlocked ? (
-                          <span className="text-2xl">{b.emoji}</span>
-                        ) : (
-                          <span className="flex h-7 items-center justify-center">
-                            <Lock className="h-4 w-4 text-fg2/50" />
-                          </span>
-                        )}
-                        <span
-                          className={`text-[10px] font-semibold leading-tight ${
-                            isUnlocked
-                              ? b.gold
-                                ? 'text-[#E0B341]'
-                                : 'text-accent'
-                              : 'text-fg2/60'
-                          }`}
-                        >
-                          {b.name}
-                        </span>
-                      </button>
-                    )
-                  })}
-                </div>
-              </section>
-            )
-          })}
+        <div className="space-y-8 pb-16">
+          {data.unlocked.length > 0 && (
+            <BadgeSection
+              title={t('gamif.sectionUnlocked')}
+              badges={data.unlocked}
+              unlocked
+              onTap={setSelected}
+            />
+          )}
+          {data.locked.length > 0 && (
+            <BadgeSection
+              title={t('gamif.sectionToUnlock')}
+              badges={data.locked}
+              unlocked={false}
+              onTap={setSelected}
+            />
+          )}
         </div>
       )}
+
+      {selected && ctx && (
+        <BadgeSheet
+          badge={selected}
+          unlocked={!!data?.unlocks.has(selected.slug)}
+          ctx={ctx}
+          onClose={() => setSelected(null)}
+        />
+      )}
     </div>
+  )
+}
+
+// ─────────────────────────── section ───────────────────────────
+
+function BadgeSection({
+  title,
+  badges,
+  unlocked,
+  onTap,
+}: {
+  title: string
+  badges: Badge[]
+  unlocked: boolean
+  onTap: (b: Badge) => void
+}) {
+  // Staggered pop-in the first time the section scrolls into view.
+  const gridRef = useRef<HTMLDivElement>(null)
+  const [visible, setVisible] = useState(false)
+  useEffect(() => {
+    const el = gridRef.current
+    if (!el) return
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          setVisible(true)
+          io.disconnect()
+        }
+      },
+      { threshold: 0.12 },
+    )
+    io.observe(el)
+    return () => io.disconnect()
+  }, [])
+
+  return (
+    <section>
+      <div className="mb-3 flex items-baseline gap-2">
+        <h2 className="font-display text-lg font-extrabold tracking-tight">
+          {title}
+        </h2>
+        <span className="text-sm font-bold text-white/40">{badges.length}</span>
+      </div>
+      <div ref={gridRef} className="grid grid-cols-3 gap-3">
+        {badges.map((b, i) => {
+          const icon = badgeIcon(b.slug)
+          const gold = !!b.gold
+          // Rarity distinction: gold = legendary (gold ring/glow),
+          // unlocked = red accent, locked = neutral grey.
+          const ring = !unlocked
+            ? '#2a2a2a'
+            : gold
+              ? 'rgba(224,179,65,0.55)'
+              : 'rgba(232,32,58,0.42)'
+          const glow = !unlocked
+            ? 'none'
+            : gold
+              ? '0 0 22px rgba(224,179,65,0.26)'
+              : '0 0 18px rgba(232,32,58,0.20)'
+          const iconGlow = !unlocked
+            ? undefined
+            : gold
+              ? 'drop-shadow(0 0 6px rgba(224,179,65,0.55))'
+              : 'drop-shadow(0 0 6px rgba(232,32,58,0.45))'
+          return (
+            <button
+              key={b.slug}
+              onClick={() => onTap(b)}
+              className="tappable relative flex aspect-square flex-col items-center justify-center gap-2 overflow-hidden px-1 text-center transition-transform duration-150 active:scale-[0.92]"
+              style={{
+                borderRadius: '16px',
+                background: unlocked ? '#141414' : '#0d0d0d',
+                border: `1px solid ${ring}`,
+                boxShadow: glow,
+                opacity: visible ? undefined : 0,
+                animation: visible
+                  ? `badge-pop 0.45s cubic-bezier(0.22,1,0.36,1) ${Math.min(i, 14) * 0.035}s both`
+                  : undefined,
+              }}
+              onPointerDown={(e) => {
+                // Tap glow — a brief red flash on press.
+                e.currentTarget.style.boxShadow =
+                  '0 0 26px rgba(232,32,58,0.55)'
+              }}
+              onPointerUp={(e) => {
+                e.currentTarget.style.boxShadow = glow
+              }}
+              onPointerLeave={(e) => {
+                e.currentTarget.style.boxShadow = glow
+              }}
+              aria-label={b.name}
+            >
+              {/* Shine sweep — unlocked badges only. */}
+              {unlocked && (
+                <span
+                  aria-hidden
+                  className="pointer-events-none absolute inset-y-0 -left-1/3 w-1/3"
+                  style={{
+                    background:
+                      'linear-gradient(90deg, transparent, rgba(255,255,255,0.28), transparent)',
+                    animation: `badge-shine 5.5s ease-in-out ${(i % 6) * 0.7 + 1}s infinite`,
+                  }}
+                />
+              )}
+              {!unlocked && (
+                <Lock
+                  className="absolute right-2 top-2 h-3.5 w-3.5 text-white/30"
+                  strokeWidth={2.2}
+                />
+              )}
+              {icon ? (
+                <img
+                  src={icon}
+                  alt=""
+                  loading="lazy"
+                  decoding="async"
+                  className="relative h-10 w-10 rounded-xl object-cover"
+                  style={{
+                    opacity: unlocked ? 1 : 0.3,
+                    filter: unlocked ? iconGlow : 'grayscale(1)',
+                  }}
+                />
+              ) : (
+                <span
+                  className="relative"
+                  style={{
+                    fontSize: '34px',
+                    lineHeight: 1,
+                    opacity: unlocked ? 1 : 0.3,
+                    filter: unlocked ? undefined : 'grayscale(1)',
+                  }}
+                >
+                  {b.emoji}
+                </span>
+              )}
+              <span
+                className="relative line-clamp-2 leading-tight"
+                style={{
+                  fontSize: '10px',
+                  fontWeight: 600,
+                  color: unlocked ? '#fff' : 'rgba(255,255,255,0.4)',
+                }}
+              >
+                {b.name}
+              </span>
+            </button>
+          )
+        })}
+      </div>
+    </section>
+  )
+}
+
+// ─────────────────────────── bottom sheet ───────────────────────────
+
+function BadgeSheet({
+  badge,
+  unlocked,
+  ctx,
+  onClose,
+}: {
+  badge: Badge
+  unlocked: boolean
+  ctx: BadgeContext
+  onClose: () => void
+}) {
+  const { t } = useTranslation()
+  useEffect(() => {
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = prev
+    }
+  }, [])
+
+  const prog = !unlocked ? badgeProgress(badge, ctx) : null
+  const obtainedAt = unlocked ? badgeObtainedDate(badge, ctx) : null
+  const pct = prog ? Math.round((prog.current / prog.target) * 100) : 0
+
+  return createPortal(
+    <div className="fixed inset-0 z-50" role="dialog" aria-modal="true">
+      <button
+        aria-label={t('gamif.close')}
+        onClick={onClose}
+        className="absolute inset-0"
+        style={{
+          background: 'rgba(0,0,0,0.7)',
+          backdropFilter: 'blur(6px)',
+          WebkitBackdropFilter: 'blur(6px)',
+          animation: 'sheet-backdrop-in 200ms ease-out both',
+        }}
+      />
+      <div
+        className="absolute bottom-0 left-0 right-0 px-6 pt-3 text-center"
+        style={{
+          background: '#141414',
+          borderTopLeftRadius: '28px',
+          borderTopRightRadius: '28px',
+          borderTop: '1px solid #333',
+          paddingBottom: 'max(env(safe-area-inset-bottom), 24px)',
+          boxShadow: '0 -24px 60px rgba(0,0,0,0.65)',
+          animation: 'sheet-slide-up 280ms cubic-bezier(0.32,0.72,0,1) both',
+        }}
+      >
+        <div className="flex justify-center pt-1">
+          <span
+            aria-hidden
+            className="rounded-full"
+            style={{ width: 40, height: 4, background: 'rgba(255,255,255,0.18)' }}
+          />
+        </div>
+
+        <div
+          className="mx-auto mt-5 flex h-24 w-24 items-center justify-center rounded-full"
+          style={{
+            background: badge.gold
+              ? 'rgba(224,179,65,0.14)'
+              : unlocked
+                ? 'rgba(232,32,58,0.12)'
+                : 'rgba(255,255,255,0.04)',
+            border: badge.gold
+              ? '1px solid rgba(224,179,65,0.45)'
+              : unlocked
+                ? '1px solid rgba(232,32,58,0.35)'
+                : '1px solid #333',
+          }}
+        >
+          {badgeIcon(badge.slug) ? (
+            <img
+              src={badgeIcon(badge.slug)}
+              alt=""
+              className="h-20 w-20 rounded-2xl object-cover"
+              style={{
+                opacity: unlocked ? 1 : 0.35,
+                filter: unlocked ? undefined : 'grayscale(1)',
+              }}
+            />
+          ) : (
+            <span
+              style={{
+                fontSize: '64px',
+                lineHeight: 1,
+                opacity: unlocked ? 1 : 0.35,
+                filter: unlocked ? undefined : 'grayscale(1)',
+              }}
+            >
+              {badge.emoji}
+            </span>
+          )}
+        </div>
+
+        <h3
+          className="mt-4 font-display font-extrabold tracking-tight text-white"
+          style={{ fontSize: '20px' }}
+        >
+          {badge.name}
+        </h3>
+
+        <p
+          className="mx-auto mt-2 max-w-[20rem] leading-relaxed"
+          style={{ fontSize: '14px', color: '#999' }}
+        >
+          {badge.desc}
+        </p>
+
+        {unlocked ? (
+          <div className="mt-4">
+            {obtainedAt && (
+              <p
+                className="font-semibold"
+                style={{ fontSize: '13px', color: '#34D399' }}
+              >
+                {t('gamif.unlockedOn', { date: obtainedAt })}
+              </p>
+            )}
+            <p
+              className="mt-1 font-bold"
+              style={{ fontSize: '15px', color: '#34D399' }}
+            >
+              {t('gamif.unlockedCheck')}
+            </p>
+          </div>
+        ) : (
+          <div className="mt-4">
+            <p
+              className="font-semibold"
+              style={{ fontSize: '14px', color: '#E8203A' }}
+            >
+              {badge.condition}
+            </p>
+            {prog && (
+              <div className="mx-auto mt-3 max-w-[16rem]">
+                <div
+                  className="h-2 w-full overflow-hidden rounded-full"
+                  style={{ background: '#222' }}
+                >
+                  <div
+                    className="h-full rounded-full"
+                    style={{
+                      width: `${pct}%`,
+                      background:
+                        'linear-gradient(90deg, #E8203A 0%, #ff4d4d 100%)',
+                    }}
+                  />
+                </div>
+                <p className="mt-1.5 text-[12px] font-medium text-white/55">
+                  {prog.current}/{prog.target} {t(`gamif.unit_${prog.unit}`)}
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
+        <button
+          onClick={onClose}
+          className="tappable mt-6 w-full rounded-full py-3 font-semibold text-white"
+          style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid #333' }}
+        >
+          {t('gamif.close')}
+        </button>
+      </div>
+    </div>,
+    document.body,
   )
 }

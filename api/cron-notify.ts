@@ -1,6 +1,47 @@
 import webpush from 'web-push'
+import Anthropic from '@anthropic-ai/sdk'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import type { VercelRequest, VercelResponse } from '@vercel/node'
+
+// Monthly market-price refresh (action=refresh-prices). Same Haiku model +
+// rule as api/identify-car.js so quotes stay consistent across the app.
+const PRICE_MODEL = 'claude-haiku-4-5-20251001'
+const PRICE_SYSTEM = `Tu donnes le prix du MARCHÉ ACTUEL en euros — la cote réelle de revente aujourd'hui pour l'année indiquée, en bon état. PAS le prix neuf, PAS une estimation gonflée. Jamais le prix neuf si la voiture a plus de 2 ans.
+Réponds UNIQUEMENT par le nombre entier en euros, rien d'autre (pas de symbole, pas de texte).`
+
+async function marketPrice(
+  client: Anthropic,
+  brand: string,
+  model: string,
+  year: number | null,
+): Promise<number | null> {
+  const b = (brand ?? '').trim()
+  const m = (model ?? '').trim()
+  if (!b && !m) return null
+  const yearPart = year ? ` ${year}` : ''
+  try {
+    const r = await client.messages.create({
+      model: PRICE_MODEL,
+      max_tokens: 20,
+      system: PRICE_SYSTEM,
+      messages: [
+        {
+          role: 'user',
+          content: `Prix du marché actuel en euros pour une ${b} ${m}${yearPart} en bon état ?`,
+        },
+      ],
+    })
+    const textBlocks = r.content.filter(
+      (blk): blk is Anthropic.Messages.TextBlock => blk.type === 'text',
+    )
+    const raw = textBlocks[textBlocks.length - 1]?.text ?? ''
+    const n = parseInt(raw.replace(/[^0-9]/g, ''), 10)
+    if (Number.isFinite(n) && n >= 1000 && n <= 10_000_000) return n
+  } catch (e) {
+    console.error('[cron-notify:refresh-prices] price failed:', e)
+  }
+  return null
+}
 
 const SUPABASE_URL =
   process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
@@ -106,19 +147,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     auth: { persistSession: false },
   })
 
-  // ─── action=challenges → reseed the weekly pool. Runs Mon 00:00 UTC.
-  // Safe to call any time (idempotent within the same week).
-  if (req.query.action === 'challenges') {
-    try {
-      const { data, error } = await admin.rpc('activate_weekly_challenges')
-      if (error) throw new Error(error.message)
-      res.status(200).json({ activated: Array.isArray(data) ? data.length : 0 })
-    } catch (e) {
-      console.error('[cron-notify:challenges]', e)
-      res.status(500).json({ error: 'challenge rotation failed' })
-    }
-    return
-  }
+  // ─── action=challenges removed 2026-06-05: the global weekly rotation
+  // (activate_weekly_challenges) is retired. Challenges are now assigned
+  // per-user, adaptively, by get_my_weekly_challenges / the spots trigger
+  // (migrations 0042/0043) — there is no scheduled rotation anymore.
 
   // ─── action=stats → refresh the global stats materialized view.
   // Cheap (a few seconds). Runs hourly.
@@ -131,6 +163,50 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       console.error('[cron-notify:stats]', e)
       res.status(500).json({ error: 'stats refresh failed' })
     }
+    return
+  }
+
+  // ─── action=refresh-prices → monthly market-price refresh for EVERY
+  // spot (cron: 1st of each month). Re-runs the Haiku price lookup and
+  // updates only estimated_price. No vision cost — text-only.
+  if (req.query.action === 'refresh-prices') {
+    const key = process.env.ANTHROPIC_API_KEY
+    if (!key) {
+      res.status(500).json({ error: 'ANTHROPIC_API_KEY manquante.' })
+      return
+    }
+    const client = new Anthropic({ apiKey: key })
+    const { data, error } = await admin
+      .from('spots')
+      .select('id, brand, model, year')
+    if (error) {
+      res.status(500).json({ error: error.message })
+      return
+    }
+    const list = (data ?? []) as {
+      id: string
+      brand: string
+      model: string
+      year: number | null
+    }[]
+    let refreshed = 0
+    let failed = 0
+    const BATCH = 5
+    for (let i = 0; i < list.length; i += BATCH) {
+      await Promise.all(
+        list.slice(i, i + BATCH).map(async (s) => {
+          const p = await marketPrice(client, s.brand, s.model, s.year)
+          if (p == null) return
+          const { error: uErr } = await admin
+            .from('spots')
+            .update({ estimated_price: p })
+            .eq('id', s.id)
+          if (uErr) failed += 1
+          else refreshed += 1
+        }),
+      )
+    }
+    res.status(200).json({ action: 'refresh-prices', total: list.length, refreshed, failed })
     return
   }
 

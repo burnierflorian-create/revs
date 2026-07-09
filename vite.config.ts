@@ -8,22 +8,29 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       injectRegister: 'auto',
-      // Custom SW (src/sw.ts) via injectManifest. We do NOT precache
-      // app assets — the prior generateSW precache repeatedly bricked
-      // clients after deploys (stale index.html → deleted hashed chunks
-      // → blank screen). injectionPoint:undefined disables the precache
-      // manifest entirely; the SW only does Web Push + notifications and
-      // wipes any leftover caches on activate.
+      // Custom SW (src/sw.ts) via injectManifest. We do NOT precache or
+      // serve app assets — the prior generateSW precache repeatedly bricked
+      // clients after deploys (stale index.html → deleted hashed chunks →
+      // blank screen). src/sw.ts has NO precacheAndRoute and NO fetch
+      // handler, so nothing is ever served from cache.
+      // We DO inject a tiny manifest (index.html only) so the compiled SW
+      // bytes CHANGE on every deploy that changes the app. That is what lets
+      // the browser detect a new SW; combined with registerType:'autoUpdate'
+      // and the SW's skipWaiting/clients.claim, every client reloads onto
+      // the fresh build automatically — no manual cache-clear needed.
       strategies: 'injectManifest',
       srcDir: 'src',
       filename: 'sw.ts',
-      injectManifest: { injectionPoint: undefined },
+      injectManifest: {
+        injectionPoint: 'self.__WB_MANIFEST',
+        globPatterns: ['**/*.html'],
+      },
       includeAssets: ['favicon.svg'],
       manifest: {
         name: 'revs',
         short_name: 'revs',
         description: 'Spotte les supercars autour de toi',
-        theme_color: '#E63946',
+        theme_color: '#E8203A',
         background_color: '#0A0A0A',
         display: 'standalone',
         orientation: 'portrait',

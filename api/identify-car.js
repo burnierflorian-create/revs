@@ -1,6 +1,26 @@
 import Anthropic from '@anthropic-ai/sdk'
 
+// Sonnet does the VISUAL recognition (image). The market price is a
+// separate TEXT-ONLY call on Haiku (the cheapest model) — splitting the
+// two cuts the price-side cost ~80% vs. asking Sonnet for everything.
 const MODEL = 'claude-sonnet-4-6'
+const PRICE_MODEL = 'claude-haiku-4-5-20251001'
+
+// Market-price rule + real reference quotes (current resale value, NOT
+// catalogue-new) so Haiku anchors on realistic numbers for the year.
+const PRICE_SYSTEM = `Tu donnes le prix du MARCHÉ ACTUEL en euros — la cote réelle de revente aujourd'hui pour l'année indiquée, en bon état. PAS le prix neuf, PAS une estimation gonflée. Jamais le prix neuf si la voiture a plus de 2 ans.
+Références de cote marché réelles :
+- Ferrari 488 GTB 2019 → 165000
+- McLaren 570S 2018 → 125000
+- Lamborghini Huracán 2020 → 195000
+- Porsche 911 Carrera S 992 2021 → 115000
+- Mercedes-AMG GT 63 S 2024 → 195000
+- BMW M3 Competition 2022 → 75000
+- Audi RS6 Avant 2022 → 85000
+- Range Rover Sport SVR 2021 → 90000
+- Rolls-Royce Ghost 2012 → 95000
+- Bentley Continental GT 2020 → 155000
+Réponds UNIQUEMENT par le nombre entier en euros, rien d'autre (pas de symbole, pas de texte).`
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -15,12 +35,15 @@ const ALLOWED_MIME = new Set([
   'image/webp',
 ])
 
-// `valid` defaults to true so an infra/parse failure never hard-blocks
-// the publish flow. Brand and model never come back empty either —
-// even worst-case we emit "Voiture" / "Modèle indéterminé" so the form
-// auto-fills and the user just tweaks if needed.
-const NEVER_EMPTY_BRAND = 'Voiture'
-const NEVER_EMPTY_MODEL = 'Modèle indéterminé'
+// Last-resort labels. These are reached ONLY after the normal prompt
+// ladder AND the insistent brand re-analysis in the handler ALL fail to
+// name a real brand (should be extremely rare). We deliberately use
+// "Inconnue" — NEVER "Voiture" — so the value is honest and the reprocess
+// job can find these rows. The real "no empty brand" logic is the
+// re-analysis pass (reanalyzeBrand) triggered whenever finalize() yields a
+// generic brand, not this static string.
+const NEVER_EMPTY_BRAND = 'Inconnue'
+const NEVER_EMPTY_MODEL = 'Modèle inconnu'
 
 const BASE = {
   brand: '',
@@ -52,35 +75,107 @@ const FALLBACK = {
 
 // ─────────────────────── Prompts ───────────────────────
 
-// 2026-06-02 hybrid identify engine:
-// - Single static vision call with SYSTEM_STRICT — pure JSON, 6-tier
+// 2026-06-07 single-call identify engine (API-cost cleanup):
+// - ONE static vision call with SYSTEM_STRICT — pure JSON, 6-tier
 //   rarity, specs line, screen-detection guard. ~3-5 s latency.
-// - Web-search rarity refine RUNS ONLY when the static call returns
-//   rarity == "hypercar" (the only tier where a false positive
-//   actually hurts XP balance). Other tiers ship as-is.
+// - NO web_search refine anymore. Rarity ships straight from the
+//   prompt's static knowledge; the previous hypercar web check was the
+//   only "à la volée" AI cost left in a spot's lifecycle and is gone.
+//   Every later step (rarity, specs, history) is local or DB-cached.
 // - SYSTEM_SIMPLE / SYSTEM_MINIMAL remain as escalating fallbacks in
 //   case strict JSON parsing fails on the first attempt.
 const SYSTEM_STRICT = `Tu es le moteur de détection officiel de l'application REVS. Ton rôle est d'analyser la photo d'un véhicule.
 Tu réponds UNIQUEMENT par du JSON valide, sans markdown, sans texte avant ou après.
 
-GARDE-FOU ANTI-TRICHE (priorité maximale) :
-Si l'image montre un écran d'ordinateur, de télévision ou de téléphone (lignes de moirage, reflets de pixel, motifs RGB visibles), une miniature de jouet (jante carrée, proportions enfantines, échelle obvious), un dessin, ou n'est PAS une vraie voiture en environnement réel, renvoie strictement :
-{"error":"VIRTUAL_SCREEN_DETECTED"}
+VALIDATION AVANT IDENTIFICATION — DEUX vérifications obligatoires, dans l'ordre. Elles priment sur tout le reste : effectue-les AVANT d'identifier le modèle.
 
-ÉCHELLE DE RARETÉ (6 niveaux, segment + positionnement) :
-- "standard"    : voiture de tous les jours (Nissan Juke, Renault Clio, VW Golf).
-- "premium"    : haut de gamme quotidien (Mercedes CLA AMG Line, BMW Série 2, Audi A3).
-- "performance" : sportive pure dérivée d'un modèle civil (Audi TT RS, BMW M2, Porsche 718).
-- "exclusif"   : gros SUV de sport ou grosse berline lourde (Mercedes-AMG GLE 63 S Coupé, Cayenne Coupé, BMW X5 M, RS Q8).
-- "supercar"   : exotique de prestige biplace/2+2 à moteur central ou flagship spécialiste (McLaren 570S, Audi R8 V10, Porsche 911 GT3 RS, Ferrari 488).
-- "hypercar"   : sommet absolu (Bugatti Chiron, Pagani Huayra, Koenigsegg, McLaren P1, AMG GT 63 S E Performance flagship). Souvent < 500 exemplaires.
+① Y A-T-IL UNE VRAIE VOITURE COMME SUJET ?
+Si la photo ne contient AUCUNE voiture / automobile comme sujet principal — par exemple une personne, un animal, de la nourriture, un paysage, un bâtiment ou un intérieur sans voiture, un document, un objet quelconque, ou uniquement une moto/un vélo — renvoie STRICTEMENT et rien d'autre :
+{"error":"NO_CAR_DETECTED"}
+
+② EST-CE UNE VRAIE VOITURE PHOTOGRAPHIÉE EN VRAI, MAINTENANT ?
+Si une voiture est bien présente MAIS que ce n'est PAS une vraie voiture réelle prise en photo sur le moment, renvoie STRICTEMENT et rien d'autre :
+{"error":"INVALID_PHOTO"}
+Déclenche INVALID_PHOTO UNIQUEMENT sur des indices FIABLES de triche parmi ces cas :
+- PHOTO D'UN ÉCRAN (téléphone / ordinateur / télé / tablette) : moirage ou grille de pixels / sous-pixels RGB visibles, bord ou cadre d'écran, reflets d'écran, ET SURTOUT des éléments d'INTERFACE (barre d'état, heure/batterie/wifi, chrome de navigateur, logo/contrôles YouTube, curseur de souris, boutons de lecture, vignettes).
+- CAPTURE D'ÉCRAN (screenshot) : interface d'application ou de site web, texte en superposition, barre de statut, proportions exactes d'un écran de téléphone.
+- PHOTO D'UNE IMAGE IMPRIMÉE : affiche, magazine, brochure, poster, calendrier, livre → trame d'impression (points/halftone), reflets de papier glacé, bords ou pliures de page, texture de papier.
+- MINIATURE / JOUET / MAQUETTE : plastique brillant irréaliste, proportions de jouet, jantes moulées d'un bloc, joints de panneaux surdimensionnés, marques de moulage, vitres peintes (pas de vrai verre), contexte de bureau/table/main, macro à très faible profondeur de champ sur petit objet.
+- DESSIN / RENDU 3D / IMAGE GÉNÉRÉE (IA) / JEU VIDÉO : traits de croquis ou cel-shading, éclairage de studio trop parfait sans aucune imperfection réelle, reflets/ombres irréalistes, arrière-plan de studio artificiel, HUD de jeu, filigrane/watermark, aspect "render/artstation".
+
+TOLÉRANCE — NE JAMAIS rejeter une vraie voiture pour ces raisons (conditions NORMALES qui doivent PASSER et être identifiées) :
+- floue, de loin, mal cadrée, partielle, de dos ou de côté, angle inhabituel ;
+- nuit, sombre, contre-jour, flash, pluie, éblouissement, reflets de vitrine, de carrosserie ou de flaque ;
+- peinture noire/foncée/brillante, chrome, bruit de capteur, basse résolution, image compressée.
+Ces imperfections sont la SIGNATURE d'une vraie photo prise sur le vif → identifie la voiture normalement.
+
+RÈGLE DU DOUTE (essentielle) : le rejet doit rester RARE. Si tu hésites entre « vraie voiture de mauvaise qualité » et « triche », choisis TOUJOURS la vraie voiture et identifie-la. Ne déclenche INVALID_PHOTO ou NO_CAR_DETECTED que sur des indices FIABLES et clairement visibles — jamais sur un simple doute ni sur une mauvaise qualité de photo.
+
+ÉCHELLE DE RARETÉ — basée EXCLUSIVEMENT sur le VOLUME DE PRODUCTION MONDIAL réel du modèle. Le prix N'A AUCUNE influence sur la rareté, ne le prends JAMAIS en compte :
+- "standard"    : modèle premium classique de grande série, gros volume (Mercedes CLA, BMW Série 2, Audi A3, VW Golf).
+- "premium"    : haut de gamme quotidien à fort volume, finition supérieure.
+- "performance" : véhicule de grande série issu d'un département sportif officiel (Mercedes-AMG, BMW M, Audi RS, Porsche 718). Sportivité = ADN, mais produit en grande série.
+- "exclusif"   : série limitée mondiale stricte < 500 exemplaires (édition spéciale / collector qui n'est pas une hypercar).
+- "supercar"   : production mondiale TOTALE < 5 000 unités (ex: Ferrari 488 GTB, McLaren 570S, Audi R8 V10, Lamborghini Huracán).
+- "hypercar"   : série ultra-limitée < 500 exemplaires, sommet absolu (Bugatti Chiron, Pagani Huayra, Koenigsegg, McLaren P1).
+
+ANALYSE VISUELLE — observe la photo et croise ces indices AVANT de conclure :
+- BADGE / LOGO : si un badge, sigle ou logo est clairement visible, utilise-le comme indice PRIORITAIRE pour la marque ET la version (ex: "AMG", "M", "RS", "S-Line", "Carrera S", "Quadrifoglio").
+- Signature lumineuse des PHARES (LED, anneaux, flèches).
+- Dessin de la CALANDRE (mono-cadre Audi, haricots BMW, étoile Mercedes, écusson…).
+- JANTES (nombre de branches, design spécifique d'une finition sportive).
+- ÉCHAPPEMENTS (nombre, forme ronde/trapézoïdale, position).
+- PROPORTIONS (coupé, berline, SUV, break, cabriolet).
+- COULEUR CARROSSERIE : identifie la teinte exacte en te basant sur les teintes constructeur officielles. Ex: "jaune Giallo Orion" (Lamborghini), "bleu Santorini" (BMW), "vert Goodwood" (Bentley), "rouge Rosso Corsa" (Ferrari).
+- SPOILERS ET AÉRODYNAMISME : présence d'un aileron actif, diffuseur, prises d'air actives.
+- ROUES : taille estimée, style (multi-branches, monobloc, turbine), couleur des étriers de frein.
+
+SIGNATURES SUPERCARS — reconnais ces marques même de DERRIÈRE ou de CÔTÉ :
+
+LAMBORGHINI — indices infaillibles :
+- Lignes angulaires TRÈS prononcées, capot avant plat et extrêmement bas.
+- Silhouette ultra-basse et angulaire, lignes en Y caractéristiques.
+- Feux arrière LED en forme de Y ou hexagonaux (Huracán, Urus, Revuelto).
+- Badge taureau doré sur le capot ou les ailes.
+- Prises d'air latérales énormes sur les flancs.
+- Huracán : feux arrière en Y, diffuseur agressif, sorties d'échappement centrales.
+- Urus : SUV avec ligne de toit fuyante, feux en Y, calandre hexagonale massive.
+- Revuelto (ex-Aventador) : portes en ciseaux, nez pointu extrême, ligne de toit très basse.
+- Couleurs emblématiques : jaune Giallo Orion, vert Verde Mantis, orange Arancio Atlas, bleu Blu Cepheus.
+
+FERRARI — indices infaillibles :
+- Badge cheval cabré jaune sur fond rouge ou noir.
+- Feux ronds (308, F40) ou feux LED fins (488, SF90, Roma).
+- Sorties d'échappement centrales en haut du diffuseur (488, F8, SF90).
+- Roma/Portofino : 2+2 élégant, ligne fluide.
+- 296 GTB : feux en boomerang, prises d'air latérales.
+
+McLAREN — indices infaillibles :
+- Portes papillon (dièdre) caractéristiques.
+- Flancs profondément sculptés (écopes latérales creusées vers les prises d'air moteur).
+- Nez très pointu avec splitter intégré.
+- Prises d'air derrière les vitres latérales.
+- Feux arrière fins horizontaux.
+- GT : ligne plus douce, coffre arrière, moins extrême que la 720S.
+
+PORSCHE — indices infaillibles :
+- Capot arrière bombé (moteur en porte-à-faux arrière), silhouette 911 fuyante inimitable.
+- Bandeau de feux arrière horizontal continu (911 991/992) ; 4 phares ronds pour Cayenne/Macan/Taycan.
+- Écusson Porsche (armoiries de Stuttgart) au centre du capot avant.
+
+PORSCHE 911 GT3 — indices infaillibles :
+- Aileron arrière fixe très large et haut (swan neck).
+- Diffuseur arrière agressif avec sorties d'échappement basses.
+- Roues centre-lock (écrou central unique).
+- Jantes dorées ou noires spécifiques GT3.
+- Badge GT3 sur le capot arrière moteur.
 
 Si l'image est valide, renvoie strictement ce JSON :
 {
-  "brand": "Marque",
-  "model": "Modèle précis",
+  "brand": "Marque exacte",
+  "model": "Modèle exact avec génération/millésime ET version/finition si visible",
   "year": 2022,
-  "color": "couleur dominante",
+  "color": "couleur précise et nommée",
   "category": "supercar|hypercar|classic|youngtimer|JDM|other",
   "confidence": 85,
   "rarity": "standard|premium|performance|exclusif|supercar|hypercar",
@@ -89,17 +184,59 @@ Si l'image est valide, renvoie strictement ce JSON :
 }
 
 Règles :
-- "specs" : UNE ligne courte (max 50 caractères), format "Configuration / Transmission". Ex: "V8 BiTurbo / Transm. Intégrale", "Moteur Central Arrière / Propulsion", "L6 BiTurbo / Propulsion". PAS de chevaux.
+- "model" : le plus PRÉCIS possible — inclus la génération/millésime ET la version/finition quand elle est identifiable. Ex: "Mercedes-AMG C 63 S", "BMW M340i", "Audi RS 6 Avant", "Porsche 911 Carrera S (992)", "Golf GTI Mk8". N'invente pas une finition que rien n'indique.
+- "color" : nomme la teinte précise quand tu la reconnais ("gris nardo", "bleu Santorin", "vert British Racing", "rouge Rosso Corsa") plutôt qu'un simple "gris" ou "rouge".
+- "confidence" : entier 0-100, ta certitude réelle sur l'ensemble marque + modèle + version.
+- "specs" : moteur précis si identifiable visuellement (ex: "V12 NA / Propulsion", "Flat-6 Biturbo / 4RM"), sinon configuration générale.
+- NE renvoie PAS de prix : le prix du marché est calculé séparément (appel texte dédié, modèle moins cher).
+- RARETÉ = uniquement le volume de production mondial du modèle. JAMAIS le prix, jamais le lieu, jamais le standing perçu.
 - En cas de doute sur la rareté, descends d'un cran (douteux supercar = "performance").
-- Si tu n'identifies pas le modèle exact, donne ta meilleure estimation — JAMAIS "indéterminé" ni "inconnue".
-- Pas d'appel web : appuie-toi sur tes connaissances statiques pour une réponse instantanée.`
+- Si tu n'identifies pas le modèle exact, donne ta meilleure estimation ; si vraiment incertain, renvoie "Modèle inconnu". Mais la MARQUE reste TOUJOURS obligatoire et ne doit JAMAIS être vide.
+- Pas d'appel web : appuie-toi UNIQUEMENT sur la vision de cette photo et tes connaissances statiques pour une réponse instantanée.
 
-const SYSTEM_SIMPLE = `Tu es un expert automobile. Identifie la voiture sur la photo. Tu dois TOUJOURS répondre — au pire avec la marque seule + "Modèle indéterminé" + confidence: 20.
+INTERDICTIONS STRICTES (le champ JSON est "brand", pas "make") :
+INTERDIT de retourner "Voiture" ou "Modèle indéterminé" comme valeurs.
+Lamborghini : lignes angulaires extrêmes, feux en Y, badge taureau doré, capot ultra plat → brand: "Lamborghini"
+Ferrari : feux arrière ronds, sorties échappement centrales, badge cheval cabré → brand: "Ferrari"
+Porsche : capot bombé arrière, feux horizontaux fins → brand: "Porsche"
+McLaren : portes papillon, flancs très sculptés → brand: "McLaren"
+Même qualité photo médiocre : identifier la marque par la silhouette et les indices visuels.
+Si vraiment impossible → brand: "Inconnue" mais JAMAIS "Voiture".
+
+OBLIGATION DE MARQUE (NON NÉGOCIABLE — priorité maximale) :
+Si une voiture est visible sur la photo, tu DOIS TOUJOURS identifier sa marque (Lamborghini, Ferrari, Porsche, BMW, Audi, Mercedes, etc.). C'est NON NÉGOCIABLE.
+- Ne renvoie JAMAIS un champ "brand" vide, null, "Voiture", "Voiture inconnue" ou "Véhicule non identifié" dès qu'une voiture est clairement visible.
+- Croise systématiquement les indices pour trouver la marque, même de dos ou de côté :
+  • Lamborghini : lignes angulaires très prononcées, capot avant plat, feux arrière en Y, badge taureau.
+  • Ferrari : feux ronds arrière, sorties d'échappement centrales, badge cheval cabré.
+  • McLaren : portes papillon, flancs profondément sculptés.
+  • Porsche : capot arrière bombé, bandeau de feux horizontal, écusson de Stuttgart (911 GT3 : grand aileron fixe swan-neck).
+- Si tu reconnais la marque mais PAS le modèle exact, renvoie la marque + "Modèle inconnu" (jamais une marque vide).
+- Donne toujours ta meilleure estimation de marque, même à confidence basse (25). Le champ "brand" ne peut rester générique QUE s'il n'y a réellement AUCUNE voiture sur la photo.`
+
+const SYSTEM_SIMPLE = `Tu es un expert automobile. Identifie la voiture sur la photo. La MARQUE est OBLIGATOIRE (non négociable) dès qu'une voiture est visible : ne renvoie JAMAIS une marque vide, null ou "Voiture inconnue". Si le modèle exact est incertain, renvoie la marque + "Modèle inconnu" + confidence: 20.
+
+VALIDATION D'ABORD : s'il n'y a AUCUNE voiture (personne, animal, objet, paysage…), réponds {"error":"NO_CAR_DETECTED"}. Si c'est une triche évidente — photo d'un écran, capture d'écran, photo d'une image imprimée (affiche/magazine), jouet/miniature/maquette, dessin/rendu 3D/image générée — réponds {"error":"INVALID_PHOTO"}. Mais une VRAIE voiture, même floue, sombre, de loin ou mal cadrée, doit PASSER (ne la rejette pas).
 
 Réponds UNIQUEMENT par ce JSON, rien d'autre, pas de markdown :
 {"brand":"Marque","model":"Modèle","year":2022,"color":"couleur","category":"supercar|hypercar|classic|youngtimer|JDM|other","confidence":80,"price_estimate":100000,"details_used":["…"],"valid":true,"reason":""}`
 
-const SYSTEM_MINIMAL = `Identifie la voiture. Réponds UNIQUEMENT en JSON avec au minimum brand et model. Pas de markdown, pas de texte. Exemple : {"brand":"Ferrari","model":"488 GTB"}`
+const SYSTEM_MINIMAL = `Identifie la voiture. Réponds UNIQUEMENT en JSON avec au minimum brand et model. La MARQUE est obligatoire, jamais vide (si le modèle est incertain : marque + "Modèle inconnu"). Pas de markdown, pas de texte. Exemple : {"brand":"Ferrari","model":"488 GTB"}`
+
+// Fired ONLY when a first pass came back with a generic/empty brand. A
+// more forceful "look again" prompt that leans entirely on silhouette +
+// brand cues, tuned to never return "Voiture"/"Inconnue" if a body is
+// visible.
+const SYSTEM_INSIST = `Regarde ENCORE cette voiture. Ta première réponse était trop vague. Il est INTERDIT de répondre "Voiture" ou "Inconnue" dès qu'une carrosserie est visible.
+Concentre-toi sur la SILHOUETTE et les indices visuels, même sur une photo médiocre, floue, sombre ou partielle :
+- lignes angulaires extrêmes + feux en Y + capot ultra plat → Lamborghini
+- feux arrière ronds + sorties d'échappement centrales + cheval cabré → Ferrari
+- capot bombé arrière + feux horizontaux fins → Porsche
+- portes papillon + flancs très sculptés → McLaren
+- calandre en haricots → BMW ; calandre mono-cadre → Audi ; étoile → Mercedes ; anneaux → Audi.
+Donne ta MEILLEURE estimation de marque réelle (jamais générique). Le modèle peut être "Modèle inconnu", la marque JAMAIS.
+Réponds UNIQUEMENT en JSON valide, rien d'autre :
+{"brand":"Marque réelle","model":"Modèle ou Modèle inconnu","year":2022,"color":"couleur","category":"supercar|hypercar|classic|youngtimer|JDM|other","confidence":40,"rarity":"standard|premium|performance|exclusif|supercar|hypercar"}`
 
 // ─────────────────────── Helpers ───────────────────────
 
@@ -222,8 +359,9 @@ function normalizeStringArray(v) {
  *  shape returned to the client is always the legacy one. */
 function finalize(raw) {
   const o = raw ?? {}
-  // Field aliases — try the legacy name first, fall back to `car_*`.
-  const brandRaw = normalizeString(o.brand ?? o.car_brand)
+  // Field aliases — try the legacy name first, fall back to `car_*` or the
+  // `make` key some prompts emit.
+  const brandRaw = normalizeString(o.brand ?? o.car_brand ?? o.make)
   const modelRaw = cleanModelName(normalizeString(o.model ?? o.car_model))
   // "Inconnu" / "Véhicule non identifiable" from the prompt's fallback
   // path collapse into the same NEVER_EMPTY pair we used before, so
@@ -317,79 +455,6 @@ function cleanModelName(s) {
 }
 
 
-// Third-stage call: web-grounded rarity lookup. Returns
-// { production: int|null, rarity: <6-tier value> } — defaults to
-// 'standard' when the answer is missing or unparseable, which is the
-// conservative XP-floor choice. The 6-tier scale (standard → hypercar)
-// landed in migration 0040; the prompt mixes positioning and
-// production cues since strict count thresholds alone can't tell a
-// 1000-unit JDM youngtimer apart from a 1000-unit hypercar.
-
-async function refineRarityFromWeb(client, brand, model, year) {
-  if (!brand || !model) return { production: null, rarity: 'standard' }
-  const yearPart = year ? ` ${year}` : ''
-  const userMsg =
-    `Recherche combien d'exemplaires de la ${brand} ${model}${yearPart} ont été ` +
-    `produits au total. Cherche sur les sites officiels du constructeur, ` +
-    `Wikipedia, presse auto. Si la production est encore en cours, donne le total ` +
-    `cumulé connu (sinon une estimation crédible).\n\n` +
-    `Réponds UNIQUEMENT par ce JSON, sans markdown :\n` +
-    `{"production": 499, "rarity": "supercar"}\n\n` +
-    `Échelle de rareté à 6 niveaux (positionnement segment + volume) :\n` +
-    `- "standard" : voiture de tous les jours, segment de masse (ex: Nissan Juke, ` +
-    `Renault Clio, VW Golf de base). Volume élevé.\n` +
-    `- "premium" : modèle haut de gamme quotidien, finition supérieure (ex: ` +
-    `Mercedes CLA AMG Line, BMW Série 2, Audi A3). Volume élevé mais positionnement ` +
-    `premium.\n` +
-    `- "performance" : sportive pure, dérivée de la même plateforme qu'un modèle ` +
-    `civil (ex: Audi TT RS, BMW M2, Porsche 718 Cayman). Sportivité = ADN.\n` +
-    `- "exclusif" : SUV de sport ou grosse berline de performance à très ` +
-    `forte présence (ex: Mercedes-AMG GLE 63 S Coupé, Porsche Cayenne Coupé, ` +
-    `BMW X5 M, Audi RS Q8, Bentley Bentayga, Maserati Levante Trofeo). ` +
-    `Carrosserie SUV/grande berline + moteur de sport + 4 places utilisables.\n` +
-    `- "supercar" : voiture de sport exotique à moteur central ou flagship ` +
-    `d'une marque spécialiste, exclusivité radicale (ex: McLaren 570S Spider, ` +
-    `Audi R8 V10, Porsche 911 GT3 RS, Ferrari 488, Lamborghini Huracán). ` +
-    `Biplace ou 2+2, layout typiquement moteur central / propulsion, ` +
-    `moins de 5 000 / an.\n` +
-    `- "hypercar" : sommet absolu — top-flagship moteur central, série très limitée ` +
-    `ou édition one-off (ex: Mercedes-AMG GT 63 S E Performance flagship, Bugatti ` +
-    `Chiron, Pagani Huayra, Koenigsegg, McLaren P1). Souvent < 500 exemplaires.\n\n` +
-    `Si la production exacte est inconnue, mets production: null mais TOUJOURS un rarity ` +
-    `cohérent avec le positionnement du modèle. En cas de doute, descends d'un cran ` +
-    `(une supercar douteuse = "performance", pas "supercar"). Aucun texte avant ou ` +
-    `après le JSON.`
-  try {
-    const r = await client.messages.create({
-      model: MODEL,
-      max_tokens: 400,
-      messages: [{ role: 'user', content: userMsg }],
-      tools: [
-        { type: 'web_search_20250305', name: 'web_search', max_uses: 3 },
-      ],
-    })
-    const text = r.content
-      .filter((b) => b.type === 'text')
-      .map((b) => b.text)
-      .join(' ')
-    const parsed = extractJSON(text)
-    const rarity = VALID_RARITY.has(parsed?.rarity) ? parsed.rarity : 'standard'
-    const production = (() => {
-      const v = parsed?.production
-      if (typeof v === 'number' && Number.isFinite(v) && v > 0) return Math.floor(v)
-      if (typeof v === 'string') {
-        const n = parseInt(v.replace(/[^0-9]/g, ''), 10)
-        if (Number.isFinite(n) && n > 0) return n
-      }
-      return null
-    })()
-    return { production, rarity }
-  } catch (e) {
-    console.error('[identify-car] rarity refine failed:', e?.message ?? e)
-    return { production: null, rarity: 'standard' }
-  }
-}
-
 async function callClaude(client, mimeType, imageBase64, system, maxTokens) {
   return client.messages.create({
     model: MODEL,
@@ -419,6 +484,34 @@ async function callClaude(client, mimeType, imageBase64, system, maxTokens) {
   })
 }
 
+// Text-only market-price lookup on Haiku (cheap). Returns an integer in
+// [1000, 10_000_000] or null. Best-effort — never throws; on any failure
+// the spot just keeps a null price.
+async function lookupMarketPrice(client, brand, model, year) {
+  const b = (brand ?? '').trim()
+  const m = (model ?? '').trim()
+  if (!b && !m) return null
+  const yearPart = year ? ` ${year}` : ''
+  try {
+    const r = await client.messages.create({
+      model: PRICE_MODEL,
+      max_tokens: 20,
+      system: PRICE_SYSTEM,
+      messages: [
+        {
+          role: 'user',
+          content: `Prix du marché actuel en euros pour une ${b} ${m}${yearPart} en bon état ?`,
+        },
+      ],
+    })
+    const n = parseInt(String(lastText(r)).replace(/[^0-9]/g, ''), 10)
+    if (Number.isFinite(n) && n >= 1000 && n <= 10_000_000) return n
+  } catch (e) {
+    console.error('[identify-car] price lookup failed:', e?.message ?? e)
+  }
+  return null
+}
+
 function lastText(response) {
   if (!response?.content) return ''
   const blocks = response.content.filter((b) => b.type === 'text')
@@ -428,6 +521,34 @@ function lastText(response) {
 function sendJson(res, body, status = 200) {
   for (const [k, v] of Object.entries(CORS)) res.setHeader(k, v)
   res.status(status).json(body)
+}
+
+// True when a brand is empty or a generic placeholder ("Voiture",
+// "Inconnue", "Voiture Modèle indéterminé", …) — i.e. recognition failed
+// to name a real make and we should look again.
+function isGenericBrand(b) {
+  const s = (b ?? '').trim().toLowerCase()
+  return (
+    !s ||
+    s === 'voiture' ||
+    s === 'inconnu' ||
+    s === 'inconnue' ||
+    s.startsWith('voiture ') ||
+    s === 'véhicule non identifié'
+  )
+}
+
+// Second-chance vision call with the more forceful SYSTEM_INSIST prompt.
+// Best-effort — returns a parsed object or null, never throws.
+async function reanalyzeBrand(client, mimeType, imageBase64) {
+  try {
+    const r = await callClaude(client, mimeType, imageBase64, SYSTEM_INSIST, 400)
+    if (r.stop_reason === 'refusal') return null
+    return extractJSON(lastText(r))
+  } catch (e) {
+    console.error('[identify-car] reanalyze threw:', e?.message ?? e)
+    return null
+  }
 }
 
 // ─────────────────────── Handler ───────────────────────
@@ -502,42 +623,47 @@ export default async function handler(req, res) {
       // photos-of-photos. Surface that as a hard rejection so the
       // frontend bounces the publish flow.
       if (parsed && typeof parsed.error === 'string' && parsed.error) {
+        const code = parsed.error
+        const reason =
+          code === 'NO_CAR_DETECTED'
+            ? 'Aucune voiture détectée, réessaie avec une vraie voiture.'
+            : code === 'INVALID_PHOTO' || code === 'VIRTUAL_SCREEN_DETECTED'
+              ? 'Photo non valide, prends une vraie voiture en photo.'
+              : `Image refusée (${code}).`
         return sendJson(res, {
           ...FALLBACK,
           valid: false,
-          reason:
-            parsed.error === 'VIRTUAL_SCREEN_DETECTED'
-              ? 'Image suspecte détectée (écran, jouet ou photo de photo). Prends ta photo en conditions réelles.'
-              : `Image refusée (${parsed.error}).`,
+          reason,
+          error_code: code,
         })
       }
 
-      if (parsed && (parsed.brand || parsed.model)) {
-        const finalized = finalize(parsed)
-        // 2026-06-02 hybrid refinement: ONLY hypercar gets a web check,
-        // and only when the static identify produced a real brand+model.
-        // Everything else ships as-is for sub-5s latency.
-        if (
-          finalized.rarity === 'hypercar' &&
-          finalized.brand !== NEVER_EMPTY_BRAND &&
-          finalized.model !== NEVER_EMPTY_MODEL &&
-          finalized.valid !== false
-        ) {
-          const rarityRes = await refineRarityFromWeb(
-            client,
-            finalized.brand,
-            finalized.model,
-            finalized.year,
-          )
-          finalized.production = rarityRes.production
-          // Trust the web check: if it says anything other than
-          // hypercar (incl. supercar/exclusif/performance), downgrade
-          // — the static identify over-claimed prestige.
-          if (rarityRes.rarity && rarityRes.rarity !== 'hypercar') {
-            finalized.rarity = rarityRes.rarity
+      if (parsed && (parsed.brand || parsed.model || parsed.make)) {
+        // Vision recognition done (Sonnet).
+        let result = finalize(parsed)
+
+        // Point 3 — if the brand came back generic/empty ("Voiture",
+        // "Inconnue"…), don't accept it: fire ONE more insistent vision
+        // call (SYSTEM_INSIST) that leans on silhouette + brand cues. Keep
+        // it only if it actually names a real make.
+        if (isGenericBrand(result.brand)) {
+          const better = await reanalyzeBrand(client, mimeType, imageBase64)
+          if (better && !isGenericBrand(finalize(better).brand)) {
+            // Merge — the insistent pass overrides brand/model/etc, but any
+            // field it omitted keeps the first pass's value.
+            result = finalize({ ...parsed, ...better })
           }
         }
-        return sendJson(res, finalized)
+
+        // The market price is a separate cheap Haiku text call so the
+        // expensive vision model never spends tokens guessing prices.
+        result.estimated_price = await lookupMarketPrice(
+          client,
+          result.brand,
+          result.model,
+          result.year,
+        )
+        return sendJson(res, result)
       }
     } catch (e) {
       console.error(`[identify-car] attempt ${i + 1} threw:`, e?.message ?? e)
@@ -552,7 +678,7 @@ export default async function handler(req, res) {
     return sendJson(res, finalize(rescued))
   }
 
-  // Absolute last resort — the form still auto-fills with "Voiture /
-  // Modèle indéterminé" and the user just edits.
+  // Absolute last resort — the form still auto-fills with "Inconnue /
+  // Modèle inconnu" and the user just edits.
   return sendJson(res, FALLBACK)
 }

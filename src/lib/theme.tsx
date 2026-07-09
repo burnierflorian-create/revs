@@ -25,20 +25,35 @@ const ThemeCtx = createContext<ThemeCtxValue>({
   toggle: () => {},
 })
 
-/** Reads the persisted choice or falls back to dark. The system
- *  preference query is intentionally skipped — REVS' default identity
- *  is dark (motorsport / car culture), so we don't want a new user
- *  who has prefers-color-scheme:light to land on the half-finished
- *  light surfaces unless they explicitly opt in. */
-function readInitialTheme(): Theme {
-  if (typeof window === 'undefined') return 'dark'
+/** True when the user has explicitly picked a theme (persisted via the
+ *  Settings toggle). While false, the app follows the OS preference and
+ *  live-updates when the system flips light↔dark. */
+function hasManualChoice(): boolean {
   try {
     const stored = window.localStorage.getItem(STORAGE_KEY)
-    if (stored === 'light' || stored === 'dark') return stored
+    return stored === 'light' || stored === 'dark'
   } catch {
-    /* localStorage unavailable — fall through */
+    return false
   }
-  return 'dark'
+}
+
+/** The OS-level preference. Defaults to dark — REVS' core identity is
+ *  dark (motorsport / car culture) — so a device with no media-query
+ *  support still lands on the brand default. */
+function systemTheme(): Theme {
+  if (typeof window === 'undefined' || !window.matchMedia) return 'dark'
+  return window.matchMedia('(prefers-color-scheme: light)').matches
+    ? 'light'
+    : 'dark'
+}
+
+/** Persisted explicit choice wins; otherwise follow the OS preference. */
+function readInitialTheme(): Theme {
+  if (typeof window === 'undefined') return 'dark'
+  if (hasManualChoice()) {
+    return window.localStorage.getItem(STORAGE_KEY) as Theme
+  }
+  return systemTheme()
 }
 
 function applyToDocument(theme: Theme): void {
@@ -56,6 +71,20 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     applyToDocument(theme)
   }, [theme])
+
+  // Live-follow the OS preference — but only while the user hasn't made
+  // an explicit choice. Once they flip the Settings toggle, that choice
+  // is persisted and wins; this listener becomes a no-op for them.
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return
+    const mq = window.matchMedia('(prefers-color-scheme: light)')
+    const onChange = (e: MediaQueryListEvent) => {
+      if (hasManualChoice()) return
+      setThemeState(e.matches ? 'light' : 'dark')
+    }
+    mq.addEventListener('change', onChange)
+    return () => mq.removeEventListener('change', onChange)
+  }, [])
 
   function setTheme(next: Theme) {
     try {

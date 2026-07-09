@@ -1,11 +1,14 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Bell, BellOff, Check, Loader2 } from 'lucide-react'
+import { ArrowLeft, Bell, Check, Loader2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { brandTagline, getBrand } from '../lib/brands'
 import { timeAgo, type Spot } from '../lib/spots'
 import { Skeleton } from '../components/Skeleton'
 import BrandLogo from '../components/BrandLogo'
+import { rarityBadge } from '../lib/rarityStyle'
+import { rarityRank } from '../components/CollectorCard'
 import { translateError } from '../lib/errors'
 
 type TopSpotter = {
@@ -36,6 +39,7 @@ function ilikeOr(column: string, patterns: string[]): string {
 }
 
 export default function BrandDetail() {
+  const { t } = useTranslation()
   const { slug } = useParams<{ slug: string }>()
   const navigate = useNavigate()
   const brand = getBrand(slug)
@@ -53,6 +57,8 @@ export default function BrandDetail() {
   const [totalSpots, setTotalSpots] = useState<number | null>(null)
   const [topSpotter, setTopSpotter] = useState<TopSpotter | null>(null)
   const [news, setNews] = useState<NewsRow[]>([])
+  // user_id → pseudo for the spotter watermark on every community photo.
+  const [spotterNames, setSpotterNames] = useState<Record<string, string>>({})
 
   const matchPatterns = useMemo(() => brand?.match ?? [], [brand])
 
@@ -109,6 +115,26 @@ export default function BrandDetail() {
       const allSpots = (spotsRes.data ?? []) as Spot[]
       setSpots(allSpots)
       setTotalSpots(countRes.count ?? allSpots.length)
+
+      // Pseudos for every spotter in the grid (watermark + community credit).
+      const uids = [...new Set(allSpots.map((s) => s.user_id))]
+      if (uids.length) {
+        supabase
+          .from('profiles')
+          .select('user_id, pseudo')
+          .in('user_id', uids)
+          .then(({ data }) => {
+            if (!active) return
+            const m: Record<string, string> = {}
+            for (const p of (data ?? []) as {
+              user_id: string
+              pseudo: string | null
+            }[]) {
+              m[p.user_id] = (p.pseudo ?? '').trim() || 'Spotter'
+            }
+            setSpotterNames(m)
+          })
+      }
       setFollowerCount(
         typeof followCountRes.data === 'number' ? followCountRes.data : 0,
       )
@@ -225,16 +251,37 @@ export default function BrandDetail() {
     return set.size
   }, [spots])
 
+  // Community photos grouped by precise model. Groups are ordered by their
+  // best rarity (rarest model first), then by how many were spotted.
+  const modelGroups = useMemo(() => {
+    if (!spots) return null
+    const photos = spots.filter((s) => s.photo_url)
+    const byModel = new Map<string, Spot[]>()
+    for (const s of photos) {
+      const key = (s.model ?? '').trim() || '—'
+      const arr = byModel.get(key) ?? []
+      arr.push(s)
+      byModel.set(key, arr)
+    }
+    return [...byModel.entries()]
+      .map(([model, list]) => ({
+        model,
+        list,
+        rank: Math.max(...list.map((s) => rarityRank(s.rarity))),
+      }))
+      .sort((a, b) => b.rank - a.rank || b.list.length - a.list.length)
+  }, [spots])
+
   if (!brand) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-bg px-8 text-center text-fg">
-        <p className="text-sm text-fg2">Marque introuvable.</p>
+        <p className="text-sm text-fg2">{t('brandspage.brandNotFound')}</p>
         <button
           onClick={() => navigate('/brands')}
           className="tappable rounded-full bg-accent px-6 py-3 text-sm font-extrabold tracking-wider text-fg"
           style={{ boxShadow: '0 8px 24px rgba(232,32,58,0.45)' }}
         >
-          VOIR TOUTES LES MARQUES
+          {t('brandspage.seeAllBrands')}
         </button>
       </div>
     )
@@ -260,7 +307,7 @@ export default function BrandDetail() {
         />
         <button
           onClick={() => navigate(-1)}
-          aria-label="Retour"
+          aria-label={t('brandspage.back')}
           className="tappable absolute left-4 top-[max(1rem,env(safe-area-inset-top))] z-10 flex h-10 w-10 items-center justify-center rounded-full bg-black/30 backdrop-blur"
           style={{ border: '1px solid rgba(255,255,255,0.08)' }}
         >
@@ -276,7 +323,7 @@ export default function BrandDetail() {
           <h1 className="mt-6 font-display text-[34px] font-extrabold leading-none tracking-tighter text-white">
             {brand.name}
           </h1>
-          <span className="label-up mt-3 inline-block whitespace-nowrap rounded-full bg-black/35 px-4 py-1.5 text-[10px] text-white/90 backdrop-blur">
+          <span className="label-up mt-3 inline-block whitespace-nowrap rounded-full bg-black/35 px-4 py-1.5 text-[10px] text-fg/90 backdrop-blur">
             {brandTagline(brand)}
           </span>
           {/* Community vs official-account marker. Verified accounts get
@@ -287,16 +334,16 @@ export default function BrandDetail() {
             className={`label-up mt-2 inline-flex items-center gap-1 whitespace-nowrap rounded-full px-3 py-1 text-[10px] backdrop-blur ${
               brand.verified
                 ? 'bg-[#1D9BF0]/90 text-white'
-                : 'bg-white/10 text-white/55'
+                : 'bg-fg/10 text-fg/55'
             }`}
           >
             {brand.verified ? (
               <>
                 <Check className="h-3 w-3" strokeWidth={3} />
-                Compte officiel
+                {t('brandspage.officialAccount')}
               </>
             ) : (
-              'Page communautaire'
+              t('brandspage.communityPage')
             )}
           </span>
 
@@ -307,32 +354,33 @@ export default function BrandDetail() {
             <button
               onClick={toggleFollow}
               disabled={followBusy || !me}
-              className={`tappable inline-flex items-center gap-2 whitespace-nowrap rounded-full px-6 py-3 text-sm font-extrabold tracking-wider uppercase disabled:opacity-50 ${
-                following
-                  ? 'bg-white/15 text-white backdrop-blur'
-                  : 'bg-white text-black'
-              }`}
+              className="tappable inline-flex items-center gap-2 whitespace-nowrap rounded-full px-6 py-3 text-sm font-extrabold uppercase tracking-wider disabled:opacity-50"
               style={
                 following
-                  ? { border: '1px solid rgba(255,255,255,0.10)' }
-                  : { boxShadow: '0 8px 24px rgba(0,0,0,0.35)' }
+                  ? { background: '#E8203A', color: '#fff' }
+                  : {
+                      background: '#141414',
+                      border: '1px solid #E8203A',
+                      color: '#E8203A',
+                    }
               }
             >
               {following ? (
                 <>
-                  <BellOff className="h-4 w-4" />
-                  Alertes activées
+                  <Check className="h-4 w-4" strokeWidth={3} />
+                  {t('brandspage.alertsEnabled')}
                 </>
               ) : (
                 <>
                   <Bell className="h-4 w-4" />
-                  Activer les alertes
+                  {t('brandspage.enableAlerts')}
                 </>
               )}
             </button>
-            <p className="mt-2.5 text-[11px] text-white/55">
-              {followerCount ?? 0} passionné
-              {(followerCount ?? 0) > 1 ? 's ont' : ' a'} activé les alertes
+            <p className="mt-2.5 text-[11px] text-fg/55">
+              {t('brandspage.followersEnabledAlerts', {
+                count: followerCount ?? 0,
+              })}
             </p>
             {followErr && (
               <p className="mt-2 text-xs text-accent">{followErr}</p>
@@ -351,7 +399,7 @@ export default function BrandDetail() {
               style={{ border: '1px solid var(--color-border)' }}
             >
               <Loader2 className="h-4 w-4 animate-spin" />
-              Rédaction de la fiche…
+              {t('brandspage.writingProfile')}
             </div>
           ) : description ? (
             <article
@@ -367,74 +415,113 @@ export default function BrandDetail() {
               className="rounded-3xl bg-card p-6 text-sm text-fg2"
               style={{ border: '1px solid var(--color-border)' }}
             >
-              Description indisponible pour le moment.
+              {t('brandspage.descriptionUnavailable')}
             </p>
           )}
         </section>
 
         {/* ─────────────────── KEY FIGURES ─────────────────── */}
-        <section className="grid grid-cols-3 gap-2.5">
-          <KeyStat
-            value={totalSpots == null ? '—' : String(totalSpots)}
-            label="Spots REVS"
-          />
-          <KeyStat
-            value={modelsCount == null ? '—' : String(modelsCount)}
-            label="Modèles"
-          />
-          <KeyStat
-            value={topSpotter?.pseudo || (topSpotter ? 'Spotter' : '—')}
-            label="Meilleur spotter"
+        <section
+          className="flex items-stretch rounded-2xl"
+          style={{ background: '#141414', padding: '16px' }}
+        >
+          {/* Spots — red, count-up */}
+          <div className="flex flex-1 flex-col items-center justify-center text-center">
+            <span
+              className="font-display tabular-nums"
+              style={{ fontSize: '24px', fontWeight: 800, color: '#E8203A' }}
+            >
+              <CountUp value={totalSpots} />
+            </span>
+            <span className="label-up mt-1 text-[10px] text-fg2">{t('brandspage.spots')}</span>
+          </div>
+
+          <span className="w-px self-stretch bg-white/10" />
+
+          {/* Models — white, count-up */}
+          <div className="flex flex-1 flex-col items-center justify-center text-center">
+            <span
+              className="font-display tabular-nums text-white"
+              style={{ fontSize: '24px', fontWeight: 800 }}
+            >
+              <CountUp value={modelsCount} />
+            </span>
+            <span className="label-up mt-1 text-[10px] text-fg2">{t('brandspage.models')}</span>
+          </div>
+
+          <span className="w-px self-stretch bg-white/10" />
+
+          {/* Top spotter — mini avatar + pseudo */}
+          <button
             onClick={
-              topSpotter
-                ? () => navigate(`/u/${topSpotter.user_id}`)
-                : undefined
+              topSpotter ? () => navigate(`/u/${topSpotter.user_id}`) : undefined
             }
-            small
-          />
+            disabled={!topSpotter}
+            className="flex flex-1 flex-col items-center justify-center gap-1 text-center"
+          >
+            <span className="flex items-center gap-1.5">
+              <span
+                className="flex h-6 w-6 flex-none items-center justify-center overflow-hidden rounded-full text-[10px] font-bold text-white"
+                style={{ background: '#E8203A' }}
+              >
+                {topSpotter?.avatar ? (
+                  <img
+                    src={topSpotter.avatar}
+                    alt=""
+                    loading="lazy"
+                    className="h-full w-full object-cover object-top"
+                  />
+                ) : (
+                  (topSpotter?.pseudo || 'S').charAt(0).toUpperCase()
+                )}
+              </span>
+              <span className="max-w-[68px] truncate text-[13px] font-bold text-white">
+                {topSpotter?.pseudo || (topSpotter ? t('brandspage.spotter') : '—')}
+              </span>
+            </span>
+            <span className="label-up text-[10px] text-fg2">{t('brandspage.topSpotter')}</span>
+          </button>
         </section>
 
-        {/* ─────────────────── COMMUNITY SPOTS ─────────────────── */}
+        {/* ─────────────────── COMMUNITY SPOTS (par modèle) ─────────────────── */}
         <section>
-          <SectionTitle>Spots de la communauté</SectionTitle>
+          <SectionTitle>{t('brandspage.communitySpots')}</SectionTitle>
           {spots === null ? (
-            <div className="grid grid-cols-3 gap-1.5">
-              {Array.from({ length: 9 }).map((_, i) => (
-                <Skeleton key={i} className="aspect-square rounded-lg" />
+            <div className="grid grid-cols-2 gap-2">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <Skeleton key={i} className="aspect-[4/5] rounded-xl" />
               ))}
             </div>
-          ) : spots.length === 0 ? (
+          ) : !modelGroups || modelGroups.length === 0 ? (
             <p
               className="rounded-3xl bg-card p-8 text-center text-sm text-fg2"
               style={{ border: '1px solid var(--color-border)' }}
             >
-              Aucun spot {brand.name} pour le moment.
+              {t('brandspage.noSpotsYet', { brand: brand.name })}
               <br />
-              Sois le premier à en spotter une !
+              {t('brandspage.beTheFirst')}
             </p>
           ) : (
-            <div className="grid grid-cols-3 gap-1.5">
-              {spots.map((s) => (
-                <button
-                  key={s.id}
-                  onClick={() => navigate(`/spot/${s.id}`)}
-                  className="tappable group relative aspect-square overflow-hidden rounded-xl bg-card"
-                  style={{ border: '1px solid var(--color-border)' }}
-                >
-                  {s.photo_url ? (
-                    <img
-                      src={s.photo_url}
-                      alt={`${s.brand} ${s.model}`}
-                      loading="lazy"
-                      decoding="async"
-                      className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-                    />
-                  ) : (
-                    <div className="flex h-full w-full items-center justify-center text-xs text-fg2/50">
-                      —
-                    </div>
-                  )}
-                </button>
+            <div className="space-y-6">
+              {modelGroups.map((group) => (
+                <div key={group.model}>
+                  <p className="mb-2.5 px-0.5 text-[14px] font-bold text-white">
+                    {group.model}{' '}
+                    <span className="font-semibold text-fg2">
+                      ({group.list.length})
+                    </span>
+                  </p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {group.list.map((s) => (
+                      <CommunityCard
+                        key={s.id}
+                        spot={s}
+                        pseudo={spotterNames[s.user_id]}
+                        onTap={() => navigate(`/spot/${s.id}`)}
+                      />
+                    ))}
+                  </div>
+                </div>
               ))}
             </div>
           )}
@@ -443,7 +530,7 @@ export default function BrandDetail() {
         {/* ─────────────────── NEWS ─────────────────── */}
         {news.length > 0 && (
           <section>
-            <SectionTitle>Actus {brand.name}</SectionTitle>
+            <SectionTitle>{t('brandspage.news', { brand: brand.name })}</SectionTitle>
             <div className="space-y-3">
               {news.slice(0, 4).map((n) => (
                 <a
@@ -451,8 +538,12 @@ export default function BrandDetail() {
                   href={n.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="tappable flex gap-3 rounded-3xl bg-card p-3"
-                  style={{ border: '1px solid var(--color-border)' }}
+                  className="tappable flex items-center gap-3 p-3"
+                  style={{
+                    background: '#141414',
+                    borderRadius: '12px',
+                    border: '1px solid rgba(255,255,255,0.06)',
+                  }}
                 >
                   {n.image_url && (
                     <img
@@ -460,19 +551,15 @@ export default function BrandDetail() {
                       alt=""
                       loading="lazy"
                       decoding="async"
-                      className="h-20 w-20 flex-none rounded-2xl object-cover"
+                      className="flex-none object-cover"
+                      style={{ width: '80px', height: '80px', borderRadius: '10px' }}
                     />
                   )}
                   <div className="min-w-0 flex-1">
-                    <p className="line-clamp-2 font-display text-sm font-extrabold leading-snug tracking-tighter text-fg">
+                    <p className="line-clamp-2 text-[14px] font-bold leading-snug text-white">
                       {n.title}
                     </p>
-                    {n.summary && (
-                      <p className="mt-1 line-clamp-2 text-xs text-fg2">
-                        {n.summary}
-                      </p>
-                    )}
-                    <p className="label-up mt-1.5 text-[10px] text-fg2">
+                    <p className="mt-1.5 text-[11px] text-fg2">
                       {[n.source, timeAgo(n.published_at ?? n.created_at)]
                         .filter(Boolean)
                         .join(' · ')}
@@ -496,43 +583,69 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
   )
 }
 
-function KeyStat({
-  value,
-  label,
-  small,
-  onClick,
+// Count-up number for the stats band. Tweens 0 → value once on load
+// (ease-out). Renders an em-dash while the value is still loading (null).
+function CountUp({ value }: { value: number | null }) {
+  const [disp, setDisp] = useState(0)
+  const fromRef = useRef(0)
+  useEffect(() => {
+    if (value == null) return
+    const from = fromRef.current
+    const to = value
+    const start = performance.now()
+    const dur = 900
+    let raf = 0
+    const ease = (k: number) => 1 - Math.pow(1 - k, 3)
+    const tick = (now: number) => {
+      const k = Math.min(1, (now - start) / dur)
+      const v = Math.round(from + (to - from) * ease(k))
+      fromRef.current = v
+      setDisp(v)
+      if (k < 1) raf = requestAnimationFrame(tick)
+      else fromRef.current = to
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [value])
+  if (value == null) return <>—</>
+  return <>{disp}</>
+}
+
+// One community photo card: full-bleed image, rarity chip top-right,
+// spotter handle bottom-left on a translucent pill.
+function CommunityCard({
+  spot,
+  pseudo,
+  onTap,
 }: {
-  value: string
-  label: string
-  small?: boolean
-  onClick?: () => void
+  spot: Spot
+  pseudo?: string
+  onTap: () => void
 }) {
-  const inner = (
-    <>
-      <div
-        className={`font-display font-extrabold leading-tight tracking-tighter text-fg ${
-          small ? 'truncate text-base' : 'text-2xl'
-        }`}
-      >
-        {value}
-      </div>
-      <div className="label-up mt-1 text-[10px] text-fg2">{label}</div>
-    </>
-  )
-  const baseClassName =
-    'flex h-24 flex-col items-start justify-end rounded-3xl bg-card p-3 text-left'
-  const borderStyle = { border: '1px solid var(--color-border)' }
-  return onClick ? (
+  const { t } = useTranslation()
+  const rb = rarityBadge(spot.rarity)
+  return (
     <button
-      onClick={onClick}
-      className={`tappable ${baseClassName}`}
-      style={borderStyle}
+      onClick={onTap}
+      className="tappable group relative aspect-[4/5] overflow-hidden bg-card"
+      style={{ borderRadius: '12px', border: '1px solid var(--color-border)' }}
     >
-      {inner}
+      <img
+        src={spot.photo_url ?? ''}
+        alt={`${spot.brand} ${spot.model}`}
+        loading="lazy"
+        decoding="async"
+        className="h-full w-full object-cover transition-transform duration-300 group-active:scale-105"
+      />
+      <span
+        className="absolute right-1.5 top-1.5 rounded-full px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wide"
+        style={{ background: rb.bg, color: rb.fg, border: `1px solid ${rb.border}` }}
+      >
+        {rb.label}
+      </span>
+      <span className="absolute bottom-1.5 left-1.5 max-w-[80%] truncate rounded-full bg-black/55 px-2 py-0.5 text-[10px] font-semibold text-white backdrop-blur-sm">
+        @{pseudo ?? t('brandspage.spotter')}
+      </span>
     </button>
-  ) : (
-    <div className={baseClassName} style={borderStyle}>
-      {inner}
-    </div>
   )
 }

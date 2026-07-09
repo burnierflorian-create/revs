@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { MapPin, Search, LocateFixed } from 'lucide-react'
+import { Search, LocateFixed } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { formatEventDate, type CarEvent } from '../lib/events'
 import { distanceMeters } from '../lib/spots'
@@ -7,12 +7,6 @@ import { Skeleton } from './Skeleton'
 
 const ORANGE = '#F59E0B'
 const NEAR_RADIUS_M = 50_000
-
-// Static mini-map of the area (Europe view) for the empty state.
-const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN as string | undefined
-const MINI_MAP_URL = MAPBOX_TOKEN
-  ? `https://api.mapbox.com/styles/v1/mapbox/dark-v11/static/2.4,46.6,4/640x220@2x?access_token=${MAPBOX_TOKEN}&attribution=false&logo=false`
-  : null
 
 // Read-only list of community meets. Event creation lives in
 // Paramètres → Avancé (organizers/admins only).
@@ -23,6 +17,7 @@ export default function Meets() {
   const [pos, setPos] = useState<{ lat: number; lng: number } | null>(null)
   const [geoBusy, setGeoBusy] = useState(false)
   const [geoMsg, setGeoMsg] = useState<string | null>(null)
+  const [city, setCity] = useState<string | null>(null)
 
   function toggleNear() {
     if (near) {
@@ -64,6 +59,26 @@ export default function Meets() {
       .then(({ data }) => {
         if (active) setEvents((data ?? []) as CarEvent[])
       })
+    return () => {
+      active = false
+    }
+  }, [])
+
+  // The user's city — personalises the empty state ("Aucun événement à …").
+  useEffect(() => {
+    let active = true
+    ;(async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (!user) return
+      const { data } = await supabase
+        .from('profiles')
+        .select('ville')
+        .eq('user_id', user.id)
+        .maybeSingle()
+      if (active) setCity((data?.ville as string | undefined)?.trim() || null)
+    })()
     return () => {
       active = false
     }
@@ -133,7 +148,7 @@ export default function Meets() {
           Array.from({ length: 3 }).map((_, i) => (
             <div
               key={i}
-              className="space-y-3 rounded-2xl border border-white/5 bg-card p-4"
+              className="space-y-3 rounded-2xl border border-fg/5 bg-card p-4"
             >
               <Skeleton className="h-4 w-20 rounded-full" />
               <Skeleton className="h-5 w-2/3 rounded" />
@@ -141,41 +156,30 @@ export default function Meets() {
               <Skeleton className="h-3 w-1/2 rounded" />
             </div>
           ))
-        ) : events.length === 0 ? (
-          <div className="overflow-hidden rounded-2xl border border-white/5 bg-card">
-            <div className="relative h-36 w-full">
-              {MINI_MAP_URL ? (
-                <img
-                  src={MINI_MAP_URL}
-                  alt="Carte de la zone"
-                  loading="lazy"
-                  decoding="async"
-                  className="h-full w-full object-cover opacity-70"
-                />
-              ) : (
-                <div className="h-full w-full bg-gradient-to-br from-[#F59E0B]/15 to-transparent" />
-              )}
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div
-                  className="flex h-12 w-12 items-center justify-center rounded-full"
-                  style={{ backgroundColor: `${ORANGE}26` }}
-                >
-                  <MapPin className="h-6 w-6" style={{ color: ORANGE }} />
-                </div>
-              </div>
-            </div>
-            <div className="p-6 text-center">
-              <p className="font-medium text-fg">
-                Aucun événement dans ta région pour le moment
-              </p>
-            </div>
-          </div>
         ) : filtered && filtered.length === 0 ? (
-          <p className="px-1 py-12 text-center text-sm text-fg/40">
-            {near
-              ? 'Aucun événement dans un rayon de 50 km.'
-              : 'Aucun événement ne correspond à ta recherche.'}
-          </p>
+          <div className="flex flex-col items-center px-6 py-14 text-center">
+            <span aria-hidden style={{ fontSize: '52px', lineHeight: 1 }}>
+              🏎️
+            </span>
+            <p className="mt-5 text-[16px] font-semibold text-fg">
+              Aucun événement à {city ?? 'ta région'} pour l'instant
+            </p>
+            <p className="mt-2 max-w-[18rem] text-[13px] leading-relaxed text-fg/45">
+              Les organisateurs vérifiés publient bientôt des meets dans ta
+              région
+            </p>
+            {(near || term.length > 0) && (
+              <button
+                onClick={() => {
+                  setNear(false)
+                  setQ('')
+                }}
+                className="tappable mt-5 text-[13px] font-medium text-fg/55 hover:text-fg"
+              >
+                Voir tous les événements de France →
+              </button>
+            )}
+          </div>
         ) : (
           (filtered ?? []).map((ev) => (
             <article

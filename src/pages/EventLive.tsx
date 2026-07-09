@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { ArrowLeft, Camera, Users, Tag } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import {
@@ -22,6 +23,7 @@ type EventRow = {
 export default function EventLive() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const { t } = useTranslation()
   const [event, setEvent] = useState<EventRow | null>(null)
   const [spots, setSpots] = useState<Spot[] | null>(null)
   const [stats, setStats] = useState<EventLiveStats | null>(null)
@@ -54,7 +56,7 @@ export default function EventLive() {
       <div className="flex items-center gap-4 py-4">
         <button
           onClick={() => navigate(-1)}
-          aria-label="Retour"
+          aria-label={t('miscpages.eventLive.back')}
           className="tappable text-fg2 hover:text-fg"
         >
           <ArrowLeft className="h-6 w-6" />
@@ -65,10 +67,12 @@ export default function EventLive() {
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent opacity-75" />
               <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-accent" />
             </span>
-            <span className="label-up text-[10px] text-accent">LIVE</span>
+            <span className="label-up text-[10px] text-accent">
+              {t('miscpages.eventLive.live')}
+            </span>
           </div>
           <h1 className="truncate font-display text-2xl font-extrabold tracking-tighter text-fg">
-            {event?.title ?? 'Événement'}
+            {event?.title ?? t('miscpages.eventLive.eventFallback')}
           </h1>
           {event?.location && (
             <p className="mt-0.5 truncate text-xs text-fg2">{event.location}</p>
@@ -82,17 +86,17 @@ export default function EventLive() {
           <StatCard
             icon={<Camera className="h-4 w-4" />}
             value={stats.spot_count}
-            label="Spots"
+            label={t('miscpages.eventLive.statSpots')}
           />
           <StatCard
             icon={<Users className="h-4 w-4" />}
             value={stats.participant_count}
-            label="Spotters"
+            label={t('miscpages.eventLive.statParticipants')}
           />
           <StatCard
             icon={<Tag className="h-4 w-4" />}
             value={stats.brand_count}
-            label="Marques"
+            label={t('miscpages.eventLive.statBrands')}
           />
         </div>
       ) : (
@@ -106,7 +110,7 @@ export default function EventLive() {
       {/* Spots list */}
       <div className="mt-6 pb-12">
         <h2 className="label-up mb-3 text-[10px] text-fg2">
-          Spots de l'événement
+          {t('miscpages.eventLive.spotsHeading')}
         </h2>
         {spots === null ? (
           <div className="grid grid-cols-2 gap-3">
@@ -119,7 +123,7 @@ export default function EventLive() {
             className="rounded-3xl bg-card p-6 text-center text-sm text-fg2"
             style={{ border: '1px solid var(--color-border)' }}
           >
-            Aucun spot encore. Sois le premier à publier !
+            {t('miscpages.eventLive.noSpots')}
           </div>
         ) : (
           <div className="grid grid-cols-2 gap-3">
@@ -149,7 +153,7 @@ export default function EventLive() {
                   className="label-up absolute left-2 top-2 rounded-full bg-accent px-2 py-0.5 text-[9px] text-white"
                   style={{ boxShadow: '0 4px 12px rgba(232,32,58,0.45)' }}
                 >
-                  EVENT
+                  {t('miscpages.eventLive.badge')}
                 </div>
                 <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black via-black/70 to-transparent p-2.5 pt-7">
                   <p className="truncate font-display text-xs font-extrabold leading-tight tracking-tighter text-white">

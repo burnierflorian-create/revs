@@ -41,7 +41,7 @@ export default class ErrorBoundary extends Component<Props, State> {
     if (!this.state.hasError) return this.props.children
     return (
       <div
-        className="flex min-h-screen select-none flex-col items-center justify-center bg-black p-6 text-center"
+        className="flex min-h-screen select-none flex-col items-center justify-center bg-bg p-6 text-center"
         style={{
           paddingTop: 'max(2rem, env(safe-area-inset-top))',
           paddingBottom: 'max(2rem, env(safe-area-inset-bottom))',
@@ -58,13 +58,13 @@ export default class ErrorBoundary extends Component<Props, State> {
           ⚠️
         </div>
         <h1
-          className="font-display font-extrabold tracking-tight text-white"
+          className="font-display font-extrabold tracking-tight text-fg"
           style={{ fontSize: '22px', letterSpacing: '-0.02em' }}
         >
           Une petite mise au point est nécessaire
         </h1>
         <p
-          className="mx-auto mt-2.5 max-w-[18rem] leading-relaxed text-white/55"
+          className="mx-auto mt-2.5 max-w-[18rem] leading-relaxed text-fg/55"
           style={{ fontSize: '13px' }}
         >
           L'application a rencontré une anomalie technique mineure. Pas
@@ -72,12 +72,12 @@ export default class ErrorBoundary extends Component<Props, State> {
         </p>
         <button
           onClick={this.handleReload}
-          className="mt-7 rounded-xl font-bold text-white transition-transform active:scale-95"
+          className="mt-7 rounded-xl font-bold text-fg transition-transform active:scale-95"
           style={{
             padding: '12px 24px',
             fontSize: '13px',
-            background: 'rgba(20, 20, 20, 0.80)',
-            border: '1px solid rgba(255, 255, 255, 0.10)',
+            background: 'rgb(var(--color-card))',
+            border: '1px solid rgb(var(--color-fg) / 0.10)',
             backdropFilter: 'saturate(160%) blur(12px)',
           }}
         >

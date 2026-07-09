@@ -1,10 +1,17 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
+import { Eye, EyeOff } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { hasGeoPermission } from '../lib/geo'
 import { translateError } from '../lib/errors'
 import { stashPendingReferral } from '../lib/referrals'
 import { useAuth } from '../hooks/useAuth'
 import { storeVault } from '../lib/passwordVault'
+import { detectCountry, reverseGeocode, COUNTRY_NAMES } from '../lib/country'
+
+type PseudoStatus = 'idle' | 'invalid' | 'checking' | 'ok' | 'taken'
+const PSEUDO_RE = /^[a-zA-Z0-9_]{3,20}$/
 
 type Mode = 'login' | 'signup' | 'forgot' | 'recover'
 
@@ -29,6 +36,7 @@ function resetRedirectOrigin(): string {
 }
 
 export default function Auth() {
+  const { t } = useTranslation()
   const { passwordRecovery, setPasswordRecovery } = useAuth()
   const [searchParams] = useSearchParams()
   // Auto-switch into recover mode when either the URL hash carries the
@@ -47,6 +55,89 @@ export default function Auth() {
   const [error, setError] = useState<string | null>(null)
   const [info, setInfo] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  // Signup-only profile fields.
+  const [pseudo, setPseudo] = useState('')
+  const [pseudoStatus, setPseudoStatus] = useState<PseudoStatus>('idle')
+  const [ville, setVille] = useState('')
+  const [country, setCountry] = useState<string>(() => detectCountry())
+  const [geoTried, setGeoTried] = useState(false)
+  const pseudoTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // OAuth (Apple / Google) — redirects to the provider then back to the
+  // app origin, where detectSessionInUrl completes the PKCE exchange.
+  async function oauth(provider: 'apple' | 'google') {
+    setError(null)
+    setInfo(null)
+    setLoading(true)
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider,
+        options: { redirectTo: window.location.origin },
+      })
+      if (error) throw error
+      // On success the browser is already navigating away.
+    } catch (err) {
+      setError(translateError(err))
+      setLoading(false)
+    }
+  }
+
+  // Live pseudo uniqueness (format gate → 500 ms debounce → RPC).
+  useEffect(() => {
+    if (mode !== 'signup') return
+    if (pseudoTimer.current) clearTimeout(pseudoTimer.current)
+    const v = pseudo.trim()
+    if (v.length === 0) {
+      setPseudoStatus('idle')
+      return
+    }
+    if (!PSEUDO_RE.test(v)) {
+      setPseudoStatus('invalid')
+      return
+    }
+    setPseudoStatus('checking')
+    pseudoTimer.current = setTimeout(async () => {
+      const { data, error } = await supabase.rpc('pseudo_available', {
+        p_pseudo: v,
+      })
+      if (error) {
+        setPseudoStatus('idle')
+        return
+      }
+      setPseudoStatus(data === true ? 'ok' : 'taken')
+    }, 500)
+    return () => {
+      if (pseudoTimer.current) clearTimeout(pseudoTimer.current)
+    }
+  }, [pseudo, mode])
+
+  // On entering signup, auto-fill ville/pays from GPS — but ONLY if the user
+  // has already granted location (never auto-prompt here; the single ask is
+  // the onboarding step). If not yet granted, the fields stay manual.
+  useEffect(() => {
+    if (mode !== 'signup' || geoTried || !navigator.geolocation) return
+    setGeoTried(true)
+    let cancelled = false
+    void hasGeoPermission().then((granted) => {
+      if (cancelled || !granted) return
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          reverseGeocode(pos.coords.latitude, pos.coords.longitude).then((r) => {
+            if (!r) return
+            setVille((cur) => cur || r.city)
+            setCountry(r.country)
+          })
+        },
+        () => {
+          /* unavailable → leave the fields for manual entry */
+        },
+        { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 },
+      )
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [mode, geoTried])
 
   // Sync mode to the recovery flag — fires when Supabase event lands
   // AFTER the component already mounted (e.g. user opened the email
@@ -62,19 +153,25 @@ export default function Auth() {
     setLoading(true)
     try {
       if (mode === 'signup') {
+        const cleanPseudo = pseudo.trim()
+        if (!PSEUDO_RE.test(cleanPseudo))
+          throw new Error(t('auth.pseudoInvalid'))
+        if (pseudoStatus === 'taken')
+          throw new Error(t('auth.pseudoTaken'))
         const cleanedCode = referralCode.trim().toUpperCase().slice(0, 6)
-        // Persist the referral code in two places so the claim survives
-        // any email-confirm flow:
-        //  - localStorage on this browser (instant claim if user clicks
-        //    the confirmation link on the same device).
-        //  - user_metadata server-side (survives device switches).
+        // Profile fields (pseudo/ville/pays) + referral are stashed in
+        // user_metadata so they survive the email-confirm round-trip;
+        // MainLayout hydrates them into `profiles` on first login.
+        const meta: Record<string, string> = {
+          pseudo: cleanPseudo,
+          ville: ville.trim(),
+          country: country.trim(),
+        }
+        if (cleanedCode.length === 6) meta.referral_code = cleanedCode
         const { data: signupData, error } = await supabase.auth.signUp({
           email,
           password,
-          options:
-            cleanedCode.length === 6
-              ? { data: { referral_code: cleanedCode } }
-              : undefined,
+          options: { data: meta },
         })
         if (error) throw error
         if (cleanedCode.length === 6) stashPendingReferral(cleanedCode)
@@ -87,7 +184,7 @@ export default function Auth() {
         if (signupData?.user?.id) {
           await storeVault(signupData.user.id, password)
         }
-        setInfo('Compte créé. Vérifie ta boîte mail pour confirmer.')
+        setInfo(t('auth.signupCreated'))
       } else if (mode === 'forgot') {
         // Supabase sends a password-reset email pointing to redirectTo
         // with a `#access_token=…&type=recovery` hash. We route to
@@ -95,22 +192,20 @@ export default function Auth() {
         // even if the email client strips the hash. The redirect
         // origin is forced to the prod URL when the request fires
         // from localhost so dev testing produces working email links.
-        const redirectTo = `${resetRedirectOrigin()}/auth?reset=1`
+        const redirectTo = `${resetRedirectOrigin()}/reset-password`
         const { error } = await supabase.auth.resetPasswordForEmail(
           email,
           { redirectTo },
         )
         if (error) throw error
-        setInfo(
-          'Lien de réinitialisation envoyé sur votre adresse e-mail !',
-        )
+        setInfo(t('auth.resetSent'))
       } else if (mode === 'recover') {
         // User landed back from the email link. supabase-js already
         // captured the access token from the URL hash and elevated
         // them to a recovery session; updateUser changes the password
         // for that authenticated user.
-        if (password.length < 6) throw new Error('Mot de passe trop court (min. 6 caractères).')
-        if (password !== confirmPassword) throw new Error('Les deux mots de passe ne correspondent pas.')
+        if (password.length < 6) throw new Error(t('auth.passwordTooShort'))
+        if (password !== confirmPassword) throw new Error(t('auth.passwordsMismatch'))
         const { error } = await supabase.auth.updateUser({ password })
         if (error) throw error
         // Clear the recovery flag and route the user back to login —
@@ -123,7 +218,7 @@ export default function Auth() {
         setMode('login')
         setPassword('')
         setConfirmPassword('')
-        setInfo('Mot de passe mis à jour. Connecte-toi avec le nouveau.')
+        setInfo(t('auth.passwordUpdated'))
       } else {
         const { data, error } = await supabase.auth.signInWithPassword({
           email,
@@ -176,10 +271,47 @@ export default function Auth() {
             <span className="text-accent">R</span>
             <span className="text-fg">EVS</span>
           </h1>
-          <p className="mt-3 text-sm text-fg2">
-            Spotte les voitures iconiques.
-          </p>
+          <p className="mt-3 text-sm text-fg2">{t('auth.tagline')}</p>
         </div>
+
+        {/* Social login — Apple first (iOS requirement), then Google,
+            then an "ou" divider. Hidden during password-reset flows. */}
+        {mode !== 'forgot' && mode !== 'recover' && (
+          <div className="mb-6 space-y-2.5">
+            <button
+              type="button"
+              onClick={() => oauth('apple')}
+              disabled={loading}
+              className="tappable flex w-full items-center justify-center gap-2.5 rounded-full py-3.5 text-sm font-semibold disabled:opacity-50"
+              style={{ background: '#000', color: '#fff', border: '1px solid rgba(255,255,255,0.55)' }}
+            >
+              <svg width="15" height="18" viewBox="0 0 384 512" fill="#fff" aria-hidden>
+                <path d="M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7C60.5 141.6 0 184.4 0 271.6c0 25.7 4.7 52.3 14.1 79.7 12.6 36.2 57.9 124.9 105.3 123.5 24.8-.6 42.3-17.6 74.5-17.6 31.2 0 47.4 17.6 76.4 17.6 47.8-.7 88.8-81.4 100.7-117.7-64-30.2-60.6-88.5-60.6-90.4zm-39.6-238C309.3 -5.9 297.9 0 297.9 0s4.9 35.4-18.8 60.7c-25.4 27.1-58.6 22.5-58.6 22.5s-5.3-31.5 20.6-58.5z" />
+              </svg>
+              {t('auth.continueWithApple')}
+            </button>
+            <button
+              type="button"
+              onClick={() => oauth('google')}
+              disabled={loading}
+              className="tappable flex w-full items-center justify-center gap-2.5 rounded-full py-3.5 text-sm font-semibold disabled:opacity-50"
+              style={{ background: '#fff', color: '#1f1f1f' }}
+            >
+              <svg width="17" height="17" viewBox="0 0 48 48" aria-hidden>
+                <path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9 3.6l6.7-6.7C35.6 2.6 30.2 0 24 0 14.6 0 6.4 5.4 2.6 13.2l7.8 6.1C12.2 13.3 17.6 9.5 24 9.5z"/>
+                <path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-2.8-.4-4H24v7.6h12.7c-.3 2.1-1.7 5.2-4.9 7.3l7.6 5.9c4.5-4.2 7.1-10.3 7.1-16.8z"/>
+                <path fill="#FBBC05" d="M10.4 28.7c-.5-1.4-.8-2.9-.8-4.7s.3-3.3.7-4.7l-7.8-6.1C.9 16.2 0 19.9 0 24s.9 7.8 2.6 11.2l7.8-6.5z"/>
+                <path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.6-5.9c-2 1.4-4.8 2.4-8.3 2.4-6.4 0-11.8-3.8-13.7-9.3l-7.8 6.1C6.4 42.6 14.6 48 24 48z"/>
+              </svg>
+              {t('auth.continueWithGoogle')}
+            </button>
+            <div className="flex items-center gap-3 pt-1">
+              <span className="h-px flex-1 bg-fg/10" />
+              <span className="text-[11px] font-medium text-fg2/70">{t('auth.or')}</span>
+              <span className="h-px flex-1 bg-fg/10" />
+            </div>
+          </div>
+        )}
 
         {/* Segmented control — Connexion / Inscription. Hidden when
             mode is forgot or recover so the password-reset flows stay
@@ -199,7 +331,7 @@ export default function Auth() {
               mode === 'login' ? 'bg-fg text-bg' : 'text-fg2'
             }`}
           >
-            Connexion
+            {t('auth.login')}
           </button>
           <button
             type="button"
@@ -212,75 +344,68 @@ export default function Auth() {
               mode === 'signup' ? 'bg-fg text-bg' : 'text-fg2'
             }`}
           >
-            Inscription
+            {t('auth.signup')}
           </button>
         </div>}
 
         {mode === 'forgot' && (
           <p className="px-1 text-center text-sm text-fg2">
-            Saisis ton adresse e-mail. Nous t'enverrons un lien pour
-            réinitialiser ton mot de passe.
+            {t('auth.forgotIntro')}
           </p>
         )}
 
         {mode === 'recover' && (
           <p className="px-1 text-center text-sm text-fg2">
-            Choisis ton nouveau mot de passe. Une fois validé, tu seras
-            renvoyé sur l'écran de connexion.
+            {t('auth.recoverIntro')}
           </p>
         )}
 
         <form onSubmit={handleSubmit} className="mt-8 space-y-4">
           {mode !== 'recover' && (
             <Field
-              label="Email"
+              label={t('auth.email')}
               type="email"
               autoComplete="email"
               required
               value={email}
               onChange={setEmail}
-              placeholder="toi@exemple.com"
+              placeholder={t('auth.emailPlaceholder')}
             />
           )}
 
           {mode === 'recover' && (
             <>
-              <Field
-                label="Nouveau mot de passe"
-                type="password"
+              <PasswordField
+                label={t('auth.newPassword')}
                 autoComplete="new-password"
                 required
                 minLength={6}
                 value={password}
                 onChange={setPassword}
-                placeholder="••••••••"
               />
-              <Field
-                label="Confirme le nouveau mot de passe"
-                type="password"
+              <PasswordField
+                label={t('auth.confirmNewPassword')}
                 autoComplete="new-password"
                 required
                 minLength={6}
                 value={confirmPassword}
                 onChange={setConfirmPassword}
-                placeholder="••••••••"
               />
             </>
           )}
 
           {mode !== 'forgot' && (
             <div className="space-y-1.5">
-              <Field
-                label="Mot de passe"
-                type="password"
+              <PasswordField
+                label={t('auth.password')}
                 autoComplete={
                   mode === 'login' ? 'current-password' : 'new-password'
                 }
                 required
-                minLength={6}
+                minLength={mode === 'signup' ? 8 : 6}
                 value={password}
                 onChange={setPassword}
-                placeholder="••••••••"
+                hint={mode === 'signup' ? t('auth.passwordHintSignup') : undefined}
               />
               {mode === 'login' && (
                 <div className="flex justify-end px-1">
@@ -293,7 +418,7 @@ export default function Auth() {
                     }}
                     className="tappable text-xs font-semibold text-fg2 transition-colors hover:text-accent"
                   >
-                    Mot de passe oublié ?
+                    {t('auth.forgotPassword')}
                   </button>
                 </div>
               )}
@@ -301,9 +426,76 @@ export default function Auth() {
           )}
 
           {mode === 'signup' && (
+            <>
+              {/* Pseudo — real-time uniqueness check */}
+              <div className="space-y-1">
+                <Field
+                  label={t('auth.pseudo')}
+                  type="text"
+                  autoComplete="username"
+                  required
+                  maxLength={20}
+                  value={pseudo}
+                  onChange={(v) => setPseudo(v.replace(/\s/g, ''))}
+                  placeholder={t('auth.pseudoPlaceholder')}
+                  adornment={
+                    pseudoStatus === 'checking' ? (
+                      <span className="text-[12px] text-fg2/60">…</span>
+                    ) : pseudoStatus === 'ok' ? (
+                      <span className="text-[14px] font-bold text-emerald-400">✓</span>
+                    ) : pseudoStatus === 'taken' ||
+                      pseudoStatus === 'invalid' ? (
+                      <span className="text-[14px] font-bold text-accent">✗</span>
+                    ) : null
+                  }
+                />
+                {pseudoStatus === 'invalid' && (
+                  <p className="px-1 text-[11px] text-accent">
+                    {t('auth.pseudoInvalid')}
+                  </p>
+                )}
+                {pseudoStatus === 'taken' && (
+                  <p className="px-1 text-[11px] text-accent">
+                    {t('auth.pseudoTaken')}
+                  </p>
+                )}
+              </div>
+
+              {/* Ville — auto-détectée si géoloc accordée */}
+              <Field
+                label={t('auth.city')}
+                type="text"
+                autoComplete="address-level2"
+                value={ville}
+                onChange={setVille}
+                placeholder={t('auth.cityPlaceholder')}
+              />
+
+              {/* Pays — auto-détecté, modifiable */}
+              <label className="block space-y-1.5">
+                <span className="label-up block px-1 text-[10px] text-fg2">
+                  {t('auth.country')}
+                </span>
+                <select
+                  value={country}
+                  onChange={(e) => setCountry(e.target.value)}
+                  className="w-full appearance-none rounded-2xl bg-card px-4 py-3.5 text-sm text-fg outline-none focus:ring-2 focus:ring-accent/45"
+                  style={{ border: '1px solid var(--color-border)' }}
+                >
+                  {!COUNTRY_NAMES.includes(country) && country && (
+                    <option value={country}>{country}</option>
+                  )}
+                  {COUNTRY_NAMES.map((c) => (
+                    <option key={c} value={c} className="bg-bg">
+                      {c}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
             <div className="space-y-1.5">
               <Field
-                label="Code de parrainage"
+                label={t('auth.referralCode')}
                 type="text"
                 autoComplete="off"
                 maxLength={6}
@@ -311,10 +503,10 @@ export default function Auth() {
                 onChange={(v) =>
                   setReferralCode(v.toUpperCase().replace(/\s/g, ''))
                 }
-                placeholder="ABC123"
+                placeholder={t('auth.referralPlaceholder')}
                 hint={
                   referralCode.length === 0
-                    ? 'Optionnel — +50 XP pour toi et ton parrain.'
+                    ? t('auth.referralHint')
                     : undefined
                 }
                 valueClassName="tracking-[0.3em] font-bold"
@@ -322,25 +514,25 @@ export default function Auth() {
               {referralCode.length > 0 &&
                 referralCode.length < 6 && (
                   <p className="px-1 text-[11px] text-fg2/70">
-                    {referralCode.length}/6 caractères
+                    {t('auth.referralChars', { count: referralCode.length })}
                   </p>
                 )}
               {referralCode.length === 6 &&
                 REFERRAL_FORMAT.test(referralCode) && (
                   <p className="rounded-xl bg-emerald-500/10 px-3 py-2 text-[11px] font-semibold text-emerald-400"
                     style={{ border: '1px solid rgba(16, 185, 129, 0.25)' }}>
-                    ✓ Code parrain valide — +50 XP pour vous deux !
+                    {t('auth.referralValid')}
                   </p>
                 )}
               {referralCode.length === 6 &&
                 !REFERRAL_FORMAT.test(referralCode) && (
                   <p className="rounded-xl bg-accent/10 px-3 py-2 text-[11px] font-semibold text-accent"
                     style={{ border: '1px solid rgba(232, 32, 58, 0.25)' }}>
-                    Format invalide — 6 chiffres ou lettres
-                    majuscules.
+                    {t('auth.referralInvalid')}
                   </p>
                 )}
             </div>
+            </>
           )}
 
           {error && (
@@ -356,19 +548,26 @@ export default function Auth() {
 
           <button
             type="submit"
-            disabled={loading}
+            disabled={
+              loading ||
+              (mode === 'signup' &&
+                (pseudo.trim().length === 0 ||
+                  pseudoStatus === 'invalid' ||
+                  pseudoStatus === 'taken' ||
+                  pseudoStatus === 'checking'))
+            }
             className="tappable mt-2 w-full rounded-full bg-accent py-4 text-sm font-extrabold tracking-wider text-fg transition-opacity disabled:opacity-50"
             style={{ boxShadow: '0 10px 28px rgba(232,32,58,0.45)' }}
           >
             {loading
               ? '…'
               : mode === 'login'
-                ? 'SE CONNECTER'
+                ? t('auth.submitLogin')
                 : mode === 'signup'
-                  ? "S'INSCRIRE"
+                  ? t('auth.submitSignup')
                   : mode === 'recover'
-                    ? 'METTRE À JOUR LE MOT DE PASSE'
-                    : 'ENVOYER LE LIEN'}
+                    ? t('auth.submitRecover')
+                    : t('auth.submitForgot')}
           </button>
 
           {mode === 'forgot' && (
@@ -381,15 +580,13 @@ export default function Auth() {
               }}
               className="tappable -mt-1 w-full py-2 text-center text-xs font-semibold text-fg2 transition-colors hover:text-fg"
             >
-              ← Retour à la connexion
+              {t('auth.backToLogin')}
             </button>
           )}
         </form>
 
         <p className="mt-auto pt-8 text-center text-[11px] text-fg2/70">
-          {mode === 'login'
-            ? 'En continuant, tu acceptes les conditions et la politique de confidentialité.'
-            : 'En créant un compte, tu acceptes les conditions et la politique de confidentialité.'}
+          {mode === 'login' ? t('auth.legalLogin') : t('auth.legalSignup')}
         </p>
       </div>
     </div>
@@ -404,6 +601,7 @@ function Field({
   value,
   onChange,
   valueClassName = '',
+  adornment,
   ...inputProps
 }: {
   label: string
@@ -411,6 +609,7 @@ function Field({
   value: string
   onChange: (v: string) => void
   valueClassName?: string
+  adornment?: React.ReactNode
 } & Omit<
   React.InputHTMLAttributes<HTMLInputElement>,
   'onChange' | 'value' | 'className'
@@ -418,14 +617,72 @@ function Field({
   return (
     <label className="block space-y-1.5">
       <span className="label-up block px-1 text-[10px] text-fg2">{label}</span>
-      <input
-        {...inputProps}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className={`w-full rounded-2xl bg-card px-4 py-3.5 text-sm text-fg placeholder-fg2/60 outline-none transition-shadow focus:ring-2 focus:ring-accent/45 ${valueClassName}`}
-        style={{ border: '1px solid var(--color-border)' }}
-      />
+      <div className="relative">
+        <input
+          {...inputProps}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className={`w-full rounded-2xl bg-card px-4 py-3.5 text-sm text-fg placeholder-fg2/60 outline-none transition-shadow focus:ring-2 focus:ring-accent/45 ${
+            adornment ? 'pr-11' : ''
+          } ${valueClassName}`}
+          style={{ border: '1px solid var(--color-border)' }}
+        />
+        {adornment && (
+          <span className="absolute right-3 top-1/2 -translate-y-1/2">
+            {adornment}
+          </span>
+        )}
+      </div>
       {hint && <span className="block px-1 text-[11px] text-fg2/80">{hint}</span>}
     </label>
+  )
+}
+
+// Password field with a built-in show/hide eye. Used for EVERY password
+// input across the app (login, signup, recover, reset) so the toggle is
+// always available.
+export function PasswordField({
+  label,
+  value,
+  onChange,
+  autoComplete,
+  minLength,
+  required,
+  placeholder = '••••••••',
+  hint,
+}: {
+  label: string
+  value: string
+  onChange: (v: string) => void
+  autoComplete?: string
+  minLength?: number
+  required?: boolean
+  placeholder?: string
+  hint?: string
+}) {
+  const { t } = useTranslation()
+  const [show, setShow] = useState(false)
+  return (
+    <Field
+      label={label}
+      type={show ? 'text' : 'password'}
+      autoComplete={autoComplete}
+      minLength={minLength}
+      required={required}
+      value={value}
+      onChange={onChange}
+      placeholder={placeholder}
+      hint={hint}
+      adornment={
+        <button
+          type="button"
+          onClick={() => setShow((s) => !s)}
+          aria-label={show ? t('auth.hidePassword') : t('auth.showPassword')}
+          className="tappable flex h-6 w-6 items-center justify-center text-fg2 hover:text-fg"
+        >
+          {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+        </button>
+      }
+    />
   )
 }

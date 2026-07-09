@@ -5,9 +5,12 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 
     <!-- Viewport safe area (notch Android + home bar iOS) -->
+    <!-- maximum-scale=1 + user-scalable=no kill the iOS focus auto-zoom
+         on inputs (native-app feel). Inputs are also ≥16px as a belt-and-
+         suspenders so Safari never zooms in on focus. -->
     <meta
       name="viewport"
-      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
     />
 
     <!-- Preconnect to the runtime endpoints we hit on every paint so the
@@ -21,7 +24,7 @@
 
     <!-- Standard PWA -->
     <meta name="mobile-web-app-capable" content="yes" />
-    <meta name="theme-color" content="#E63946" />
+    <meta name="theme-color" content="#E8203A" />
 
     <!-- iOS -->
     <meta name="apple-mobile-web-app-capable" content="yes" />

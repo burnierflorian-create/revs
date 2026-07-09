@@ -1,17 +1,27 @@
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
+import { useTranslation } from 'react-i18next'
+import type { TFunction } from 'i18next'
 import { useLocation, useNavigate } from 'react-router-dom'
 import mapboxgl from 'mapbox-gl'
 import type { DataDrivenPropertyValueSpecification } from 'mapbox-gl'
 import 'mapbox-gl/dist/mapbox-gl.css'
 import {
-  Car,
+  Camera,
   LocateFixed,
   Loader2,
   Search as SearchIcon,
+  SlidersHorizontal,
   Sparkles,
+  Film,
+  Play,
+  Pause,
+  RotateCcw,
   X,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { hasGeoPermission } from '../lib/geo'
+import { setPendingPhoto } from '../lib/pendingPhoto'
 import { SkeletonMap } from '../components/Skeleton'
 import {
   distanceMeters,
@@ -20,6 +30,22 @@ import {
   type Rarity,
   type Spot,
 } from '../lib/spots'
+import MapFiltersModal, {
+  DEFAULT_MAP_FILTERS,
+  MAX_DISTANCE_KM,
+  loadMapFilters,
+  saveMapFilters,
+  mapFiltersActive,
+  type MapFilters,
+} from '../components/MapFiltersModal'
+import {
+  matchesBrandFilter,
+  matchesCategoryFilter,
+} from '../lib/filterCatalog'
+import { rarityRank } from '../components/CollectorCard'
+import { prefersReducedMotion } from '../lib/motion'
+import { onNewSpot } from '../lib/feedSync'
+import { rarityBadge } from '../lib/rarityStyle'
 import { useTheme } from '../lib/theme'
 import {
   fetchSpottingPrediction,
@@ -27,10 +53,7 @@ import {
   type SpotScore,
 } from '../lib/spotPredictions'
 import { xpLevel } from '../lib/xp'
-
-function fmtDist(m: number): string {
-  return m < 1000 ? `${Math.round(m)} m` : `${(m / 1000).toFixed(1)} km`
-}
+import { appConfig } from '../config/appConfig'
 
 const PARIS: [number, number] = [2.3522, 48.8566]
 const DEFAULT_ZOOM = 13
@@ -39,14 +62,6 @@ const RECENTER_ZOOM = 17
 const GEO_TIMEOUT_MS = 3000
 const SPOT_TTL_MS = 60 * 60 * 1000
 const POLL_MS = 60 * 1000
-
-const FILTERS = ['Tous', 'Supercars', 'Autre', 'JDM'] as const
-const FILTER_CATEGORY: Record<string, string | null> = {
-  Tous: null,
-  Supercars: 'supercar',
-  Autre: 'other',
-  JDM: 'JDM',
-}
 
 const CAR_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><path d="M9 17h6"/><circle cx="17" cy="17" r="2"/></svg>`
 
@@ -91,6 +106,7 @@ function spotMarkerEl(p: SpotProps, remainingMs: number): HTMLDivElement {
 
   const outer = document.createElement('div')
   outer.style.cursor = 'pointer'
+  outer.className = 'map-marker-pop'
 
   const wrap = document.createElement('div')
   wrap.style.position = 'relative'
@@ -192,33 +208,59 @@ function spotMarkerEl(p: SpotProps, remainingMs: number): HTMLDivElement {
   return outer
 }
 
-function clusterMarkerEl(count: number): HTMLDivElement {
+type ClusterLeaf = {
+  id: string
+  brand: string
+  model: string
+  photo_url: string | null
+  spotter: string
+  created_at: string
+  rarity: Rarity
+}
+
+const RARITY_BY_SCORE: Rarity[] = [
+  'standard',
+  'premium',
+  'performance',
+  'exclusif',
+  'supercar',
+  'hypercar',
+]
+
+function clusterMarkerEl(count: number, maxRarity: number): HTMLDivElement {
   const outer = document.createElement('div')
   outer.style.cursor = 'pointer'
-  const size = count < 10 ? 38 : count < 50 ? 46 : 56
+  outer.className = 'map-marker-pop'
+  // Spec radii 20/25/30 → diameters 40/50/60 at 2-4 / 5-9 / 10+ spots.
+  const size = count < 5 ? 40 : count < 10 ? 50 : 60
+  const tint =
+    MAP_RARITY_COLOR[
+      RARITY_BY_SCORE[Math.max(0, Math.min(5, Math.round(maxRarity) - 1))]
+    ] ?? MAP_RARITY_COLOR.standard
+  // A rarity-coloured halo ring only when the cluster holds a supercar+.
+  const rareRing = maxRarity >= 5 ? `0 0 0 2px ${tint.stroke}, ` : ''
   const inner = document.createElement('div')
   inner.style.width = `${size}px`
   inner.style.height = `${size}px`
   inner.style.borderRadius = '9999px'
-  inner.style.background =
-    'radial-gradient(circle at 35% 30%, #ff4d62 0%, #E8203A 70%)'
-  inner.style.border = '1.5px solid rgba(255,255,255,0.9)'
+  inner.style.background = '#E8203A'
+  inner.style.border = '3px solid rgba(255,255,255,0.3)'
   inner.style.boxShadow =
-    '0 4px 16px rgba(232,32,58,0.35), 0 2px 6px rgba(0,0,0,0.45)'
+    rareRing + '0 4px 16px rgba(232,32,58,0.4), 0 2px 6px rgba(0,0,0,0.45)'
   inner.style.display = 'flex'
   inner.style.alignItems = 'center'
   inner.style.justifyContent = 'center'
   inner.style.color = '#fff'
   inner.style.fontWeight = '800'
-  inner.style.fontSize = '14px'
+  inner.style.fontSize = size >= 50 ? '15px' : '14px'
   inner.style.letterSpacing = '-0.3px'
-  inner.textContent = String(count)
+  inner.textContent = count < 1000 ? String(count) : `${Math.floor(count / 1000)}k`
   outer.appendChild(inner)
   return outer
 }
 
-function popupInner(p: SpotProps): string {
-  const title = (p.model || p.brand || 'Spot').trim()
+function popupInner(p: SpotProps, t: TFunction): string {
+  const title = (p.model || p.brand || t('mappage.spotFallbackTitle')).trim()
   const sub = [p.brand, p.year ?? undefined].filter(Boolean).join(' · ')
   const photo = p.photo_url
     ? `<img src="${escapeHtml(p.photo_url)}" alt="" loading="lazy" decoding="async" style="width:72px;height:72px;border-radius:12px;object-fit:cover;flex:none" />`
@@ -230,7 +272,7 @@ function popupInner(p: SpotProps): string {
         <div style="font-weight:800;font-size:15px;color:#111111">${escapeHtml(title)}</div>
         <div style="font-size:12px;color:#555555;margin-top:3px">${escapeHtml(sub || p.spotter)}</div>
         <div style="font-size:11px;color:#777777;margin-top:3px">${escapeHtml(timeAgo(p.created_at))}</div>
-        <div style="font-size:11px;color:#E8203A;font-weight:700;margin-top:6px">Voir le détail →</div>
+        <div style="font-size:11px;color:#E8203A;font-weight:700;margin-top:6px">${escapeHtml(t('mappage.popupSeeDetail'))}</div>
       </div>
     </div>`
 }
@@ -250,7 +292,7 @@ const MODE_KEY = 'revs-map-mode'
  *  Sparkles entry button + the MapPredictionSheet render + the lazy
  *  fetch. Component, lib and bottom-sheet code all stay in place so
  *  reviving the feature is a one-line flip. */
-const SHOW_WEATHER_IA = false
+const SHOW_WEATHER_IA = true
 
 // Snapchat-soft palette + a REVS red accent on the big roads.
 const SNAP = {
@@ -455,18 +497,20 @@ function applySnapStyle(map: mapboxgl.Map, theme: 'dark' | 'light' = 'light') {
           type: 'fill-extrusion',
           source: buildingSource ?? 'composite',
           'source-layer': buildingSourceLayer ?? 'building',
-          minzoom: 14,
+          minzoom: 13,
           layout: { visibility: 'none' },
           paint: {
             'fill-extrusion-color': isDark ? BUILDING_3D_DARK : SNAP.building3d,
             'fill-extrusion-vertical-gradient': true,
+            // Grow height over a wider zoom range (13→16) so buildings rise
+            // gradually instead of snapping up in a narrow 14→15.5 band.
             'fill-extrusion-height': [
               'interpolate',
               ['linear'],
               ['zoom'],
-              14,
+              13,
               0,
-              15.5,
+              16,
               ['coalesce', ['get', 'render_height'], ['get', 'height'], 6],
             ],
             'fill-extrusion-base': [
@@ -475,7 +519,19 @@ function applySnapStyle(map: mapboxgl.Map, theme: 'dark' | 'light' = 'light') {
               ['get', 'min_height'],
               0,
             ],
-            'fill-extrusion-opacity': 0.95,
+            // Fade in across 13→14.5 (was a hard pop at minzoom 14) so the 3D
+            // buildings never appear/disappear abruptly on zoom.
+            'fill-extrusion-opacity': [
+              'interpolate',
+              ['linear'],
+              ['zoom'],
+              13,
+              0,
+              14.5,
+              0.92,
+            ],
+            'fill-extrusion-height-transition': { duration: 300 },
+            'fill-extrusion-opacity-transition': { duration: 300 },
           },
         } as unknown as AddLayer,
         firstRoadLineId ?? firstSymbolId,
@@ -486,16 +542,30 @@ function applySnapStyle(map: mapboxgl.Map, theme: 'dark' | 'light' = 'light') {
   }
 }
 
-// 2D = flat top-down. 3D = Snap-like tilt (50°) with a subtle terrain
-// relief + extruded buildings (great over Annecy / Genève / the Alps).
-// Pitch is eased 800ms for a smooth transition.
+// Tilt matched to zoom: a gentle tilt when zoomed out (avoids the low-zoom
+// terrain/horizon instability) ramping to the full Snap-style tilt when close
+// in — keeps 3D clean and stable at ALL zoom levels.
+function pitchForZoom(zoom: number): number {
+  const MIN_PITCH = 30
+  const MAX_PITCH = 50
+  const Z_LO = 11
+  const Z_HI = 14.5
+  const t = Math.max(0, Math.min(1, (zoom - Z_LO) / (Z_HI - Z_LO)))
+  return MIN_PITCH + (MAX_PITCH - MIN_PITCH) * t
+}
+
+// 2D = flat top-down. 3D = Snap-like tilt with a subtle terrain relief +
+// extruded buildings (great over Annecy / Genève / the Alps). Pitch is eased
+// 800ms for a smooth transition and stays matched to zoom afterwards.
 function applyMode(map: mapboxgl.Map, mode: MapMode) {
   try {
     if (mode === '3D') {
-      map.setTerrain({ source: 'mapbox-dem', exaggeration: 1.2 })
+      // Exaggeration 1.0 (was 1.2) — less dramatic relief = far more stable at
+      // low zoom, still clearly 3D over the Alps.
+      map.setTerrain({ source: 'mapbox-dem', exaggeration: 1.0 })
       if (map.getLayer('revs-3d-buildings'))
         map.setLayoutProperty('revs-3d-buildings', 'visibility', 'visible')
-      map.easeTo({ pitch: 50, duration: 800 })
+      map.easeTo({ pitch: pitchForZoom(map.getZoom()), duration: 800 })
     } else {
       map.setTerrain(null)
       if (map.getLayer('revs-3d-buildings'))
@@ -507,7 +577,162 @@ function applyMode(map: mapboxgl.Map, mode: MapMode) {
   }
 }
 
+// ─────────────────── User-location compass marker ───────────────────
+// Location marker: a 50×60 SVG with a clear directional arrow above a blue
+// dot at (25,44). The arrow is ALWAYS visible (points up until a compass
+// heading lands, then rotates to it). Rotation is GPU-composited and
+// interpolated along the shortest arc for buttery-smooth tracking. The
+// Mapbox marker is offset so the dot anchors near the GPS coordinate
+// (anchor { x:0.5, y:0.85 }), and the rotation pivot is the dot so the
+// arrow swings around it.
+const USER_MARKER_HTML = `
+<svg width="50" height="60" viewBox="0 0 50 60" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="revsBeamGrad" x1="0.5" y1="0" x2="0.5" y2="1">
+      <stop offset="0%" stop-color="#4DA6FF" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#4DA6FF" stop-opacity="0.6"/>
+    </linearGradient>
+  </defs>
+  <path d="M25 44 L13 20 Q25 13 37 20 Z" fill="url(#revsBeamGrad)"/>
+  <circle cx="25" cy="44" r="10" fill="#4DA6FF" stroke="white" stroke-width="2.5"/>
+  <circle cx="25" cy="44" r="3" fill="white"/>
+</svg>
+`
+
+type DOEStatic = typeof DeviceOrientationEvent & {
+  requestPermission?: () => Promise<'granted' | 'denied'>
+}
+
+class CompassMarker {
+  private currentAngle = 0
+  private targetAngle = 0
+  private animationId: number | null = null
+  private marker: mapboxgl.Marker | null = null
+  // Mapbox positions the OUTER element (it owns that element's transform);
+  // the inner rotEl carries our compass rotation so the two never fight.
+  private outerEl: HTMLElement | null = null
+  private rotEl: HTMLElement | null = null
+  private absHandler: ((e: Event) => void) | null = null
+  private relHandler: ((e: Event) => void) | null = null
+  private gestureCleanup: (() => void) | null = null
+
+  init(map: mapboxgl.Map, position: [number, number]) {
+    this.outerEl = document.createElement('div')
+    this.rotEl = document.createElement('div')
+    // 50×60 box; the dot is at (25,44) = 50% ~73.3%, so the rotation pivot
+    // is the dot and the arrow swings around it (not the SVG centre).
+    this.rotEl.style.cssText =
+      'width:50px;height:60px;line-height:0;will-change:transform;transform-origin:50% 73.3%;'
+    this.rotEl.innerHTML = USER_MARKER_HTML
+    this.outerEl.appendChild(this.rotEl)
+
+    this.marker = new mapboxgl.Marker({
+      element: this.outerEl,
+      anchor: 'center',
+      // Mapbox only takes keyword anchors, so the requested { x:0.5, y:0.85 }
+      // is realised via offset. Anchor 0.85 of a 60px-tall box = y=51; the
+      // element centre (y=30) must sit 21px above the GPS point so pixel 51
+      // lands on it → offset [0,-21].
+      offset: [0, -21],
+    })
+      .setLngLat(position)
+      .addTo(map)
+
+    this.startAnimation()
+    this.requestCompassPermission()
+  }
+
+  private requestCompassPermission() {
+    const DOE = window.DeviceOrientationEvent as DOEStatic | undefined
+    if (DOE && typeof DOE.requestPermission === 'function') {
+      // iOS — permission must be requested from a user gesture.
+      const onGesture = () => {
+        DOE.requestPermission?.()
+          .then((p) => {
+            if (p === 'granted') this.listenToCompass()
+          })
+          .catch(() => {})
+        this.gestureCleanup?.()
+      }
+      window.addEventListener('touchend', onGesture, { once: true })
+      window.addEventListener('click', onGesture, { once: true })
+      this.gestureCleanup = () => {
+        window.removeEventListener('touchend', onGesture)
+        window.removeEventListener('click', onGesture)
+        this.gestureCleanup = null
+      }
+    } else if (DOE) {
+      this.listenToCompass()
+    }
+  }
+
+  private listenToCompass() {
+    // No throttle — every sample updates the *target*; the rAF loop does
+    // the smoothing, so the more samples the smoother. deviceorientation-
+    // absolute (Android) accepts webkitCompassHeading or 360-alpha when
+    // absolute; deviceorientation (iOS) only trusts webkitCompassHeading.
+    const onAbsolute = (ev: Event) => {
+      const e = ev as DeviceOrientationEvent & {
+        webkitCompassHeading?: number
+      }
+      const h =
+        e.webkitCompassHeading ??
+        (e.absolute && e.alpha != null ? 360 - e.alpha : null)
+      if (h !== null && !Number.isNaN(h)) this.targetAngle = h
+    }
+    const onRelative = (ev: Event) => {
+      const e = ev as DeviceOrientationEvent & {
+        webkitCompassHeading?: number
+      }
+      const h = e.webkitCompassHeading ?? null
+      if (h !== null && !Number.isNaN(h)) this.targetAngle = h
+    }
+    this.absHandler = onAbsolute
+    this.relHandler = onRelative
+    window.addEventListener('deviceorientationabsolute', onAbsolute, true)
+    window.addEventListener('deviceorientation', onRelative, true)
+  }
+
+  // rAF loop runs permanently from init; smoothFactor 0.08 + shortest-arc
+  // interpolation give buttery rotation. The arrow stays visible (points up
+  // at angle 0) until the target starts updating from a real heading.
+  private startAnimation() {
+    const animate = () => {
+      let delta = this.targetAngle - this.currentAngle
+      while (delta > 180) delta -= 360
+      while (delta < -180) delta += 360
+      this.currentAngle += delta * 0.08
+      this.currentAngle = ((this.currentAngle % 360) + 360) % 360
+      if (this.rotEl) {
+        this.rotEl.style.transform = `rotate(${this.currentAngle}deg)`
+      }
+      this.animationId = requestAnimationFrame(animate)
+    }
+    this.animationId = requestAnimationFrame(animate)
+  }
+
+  updatePosition(lng: number, lat: number) {
+    this.marker?.setLngLat([lng, lat])
+  }
+
+  destroy() {
+    if (this.animationId) cancelAnimationFrame(this.animationId)
+    if (this.absHandler)
+      window.removeEventListener(
+        'deviceorientationabsolute',
+        this.absHandler,
+        true,
+      )
+    if (this.relHandler)
+      window.removeEventListener('deviceorientation', this.relHandler, true)
+    this.gestureCleanup?.()
+    this.marker?.remove()
+    this.marker = null
+  }
+}
+
 export default function MapPage() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const location = useLocation()
   const { theme } = useTheme()
@@ -518,8 +743,15 @@ export default function MapPage() {
   const namesRef = useRef<globalThis.Map<string, string>>(new globalThis.Map())
   const markersRef = useRef<Record<string, mapboxgl.Marker>>({})
   const onScreenRef = useRef<Record<string, mapboxgl.Marker>>({})
-  const filterRef = useRef<string>('Tous')
   const searchRef = useRef<string>('')
+  // Hidden camera input for the centered "Spotter" FAB — clicked
+  // synchronously inside the tap so iOS opens the native camera; the
+  // captured photo is stashed and NewSpot consumes it on mount.
+  const spotInputRef = useRef<HTMLInputElement>(null)
+  // All map filters (catégorie / marque / distance) live in the bottom
+  // sheet. Mirrored into a ref so the marker-building loop reads the
+  // latest without re-subscribing.
+  const advFiltersRef = useRef<MapFilters>(DEFAULT_MAP_FILTERS)
   const refreshRef = useRef<(() => void) | null>(null)
   const recomputeHotZonesRef = useRef<(() => void) | null>(null)
   // Called from the theme-change effect after setStyle() reloads the
@@ -532,18 +764,39 @@ export default function MapPage() {
   const navRef = useRef(navigate)
   navRef.current = navigate
   const posRef = useRef<{ lat: number; lng: number } | null>(null)
+  // Live user-location compass marker + its geolocation watch (below).
+  const userMarkerRef = useRef<CompassMarker | null>(null)
+  const watchIdRef = useRef<number | null>(null)
 
   const [error, setError] = useState<string | null>(null)
-  const [activeFilter, setActiveFilter] = useState<string>('Tous')
-  const [searchQuery, setSearchQuery] = useState<string>('')
+  // Map-only state — search + filters live entirely here and touch ONLY
+  // the geographic markers. Filters are persisted under their own
+  // localStorage key (revs_map_filters), so nothing here ever reaches
+  // the Fil. Restored from storage on mount.
+  const [mapSearchQuery, setMapSearchQuery] = useState<string>('')
+  const [mapFilters, setMapFilters] = useState<MapFilters>(() =>
+    loadMapFilters(),
+  )
+  const [filtersOpen, setFiltersOpen] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
   const [geoError, setGeoError] = useState<string | null>(null)
   const [visibleCount, setVisibleCount] = useState(0)
-  const [panelSpots, setPanelSpots] = useState<Spot[]>([])
-  const [userPos, setUserPos] = useState<{ lat: number; lng: number } | null>(
-    null,
-  )
   const [mapReady, setMapReady] = useState(false)
+  // Spots of a tapped same-place cluster, shown in a bottom sheet.
+  const [clusterSheet, setClusterSheet] = useState<ClusterLeaf[] | null>(null)
+
+  // ── Time-lapse replay: reveals every spot chronologically. Self-
+  // contained (its own DOM markers + a container CSS class that hides the
+  // normal markers), so it never touches the clustering/source engine.
+  const [replayOpen, setReplayOpen] = useState(false)
+  const [replayPlaying, setReplayPlaying] = useState(false)
+  const [replayPct, setReplayPct] = useState(0)
+  const [replayDate, setReplayDate] = useState('')
+  const replayMarkersRef = useRef<mapboxgl.Marker[]>([])
+  const replaySpotsRef = useRef<Spot[]>([])
+  const replayRafRef = useRef<number | null>(null)
+  const replayStartRef = useRef(0) // performance.now() of the current run
+  const replayElapsedRef = useRef(0) // accumulated ms across pauses
 
   const [mode, setMode] = useState<MapMode>(() => {
     try {
@@ -643,9 +896,43 @@ export default function MapPage() {
     }
   }, [infoSheetOpen, predictionTried, predictionLoading])
 
+  // Starts the user-location watch (blue dot + directional compass cone) if it
+  // isn't already running. Idempotent — safe to call from mount (when perm is
+  // already granted) AND from the locate FAB after a fresh grant. Self-heals
+  // the granted flag on the first fix so the marker returns automatically next
+  // launch (crucial on iOS, where the Permissions API can't report state).
+  function startLocationWatch() {
+    const map = mapRef.current
+    if (!map || watchIdRef.current != null || !navigator.geolocation) return
+    watchIdRef.current = navigator.geolocation.watchPosition(
+      (pos) => {
+        const lng = pos.coords.longitude
+        const lat = pos.coords.latitude
+        posRef.current = { lat, lng }
+        try {
+          localStorage.setItem('revs_geo', '1')
+        } catch {
+          /* ignore */
+        }
+        const cur = userMarkerRef.current
+        if (!cur) {
+          const c = new CompassMarker()
+          c.init(map, [lng, lat])
+          userMarkerRef.current = c
+        } else {
+          cur.updatePosition(lng, lat)
+        }
+      },
+      () => {
+        /* denied / unavailable → no dot, silent */
+      },
+      { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 },
+    )
+  }
+
   function locate() {
     if (!navigator.geolocation) {
-      setGeoError('Géolocalisation non disponible sur cet appareil.')
+      setGeoError(t('mappage.geoUnavailable'))
       return
     }
     navigator.geolocation.getCurrentPosition(
@@ -653,7 +940,14 @@ export default function MapPage() {
         setGeoError(null)
         const p = { lat: pos.coords.latitude, lng: pos.coords.longitude }
         posRef.current = p
-        setUserPos(p)
+        try {
+          localStorage.setItem('revs_geo', '1')
+        } catch {
+          /* ignore */
+        }
+        // Grant confirmed → make sure the live marker is running so the dot +
+        // cone appear immediately (not just on next launch).
+        startLocationWatch()
         mapRef.current?.flyTo({
           center: [pos.coords.longitude, pos.coords.latitude],
           zoom: RECENTER_ZOOM,
@@ -664,13 +958,24 @@ export default function MapPage() {
       (err) => {
         setGeoError(
           err.code === err.PERMISSION_DENIED
-            ? 'Autorise la localisation dans Réglages → Safari → Localisation'
-            : 'Position indisponible pour le moment, réessaie.',
+            ? t('mappage.geoPermissionDenied')
+            : t('mappage.geoPositionUnavailable'),
         )
         setTimeout(() => setGeoError(null), 6000)
       },
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
     )
+  }
+
+  // Centered camera FAB → native camera → stash photo → NewSpot.
+  // Same flow as Home's SpotterAction so spotting straight from the map
+  // lands in the identical publish pipeline.
+  function onSpotCapture(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return // user backed out of the camera
+    setPendingPhoto(file)
+    navigate('/new-spot')
   }
 
   function flyToUser() {
@@ -684,9 +989,7 @@ export default function MapPage() {
       .query({ name: 'geolocation' as PermissionName })
       .then((status) => {
         if (status.state === 'denied') {
-          setGeoError(
-            'Autorise la localisation dans Réglages → Safari → Localisation',
-          )
+          setGeoError(t('mappage.geoPermissionDenied'))
           setTimeout(() => setGeoError(null), 6000)
           return
         }
@@ -710,7 +1013,7 @@ export default function MapPage() {
 
     const tokenMb = import.meta.env.VITE_MAPBOX_TOKEN as string | undefined
     if (!tokenMb) {
-      setError('Token Mapbox manquant (VITE_MAPBOX_TOKEN).')
+      setError(t('mappage.errorTokenMissing'))
       return
     }
     mapboxgl.accessToken = tokenMb
@@ -722,15 +1025,18 @@ export default function MapPage() {
     // Resolve the freshest GPS fix BEFORE building the map so it opens
     // straight on the user — never a Paris flash. Paris only if the fix
     // is unavailable or takes longer than 3s.
-    function initialView(): Promise<{
+    async function initialView(): Promise<{
       center: [number, number]
       zoom: number
     }> {
+      // Only read GPS if permission is ALREADY granted — NEVER auto-prompt on
+      // map open. If not granted, open on the default view; the user grants +
+      // centres by tapping the locate-me FAB (user-initiated).
+      const granted = await hasGeoPermission()
+      if (!granted || !navigator.geolocation) {
+        return { center: PARIS, zoom: DEFAULT_ZOOM }
+      }
       return new Promise((resolve) => {
-        if (!navigator.geolocation) {
-          resolve({ center: PARIS, zoom: DEFAULT_ZOOM })
-          return
-        }
         let settled = false
         const fallback = setTimeout(() => {
           if (settled) return
@@ -744,7 +1050,11 @@ export default function MapPage() {
             clearTimeout(fallback)
             const p = { lat: pos.coords.latitude, lng: pos.coords.longitude }
             posRef.current = p
-            setUserPos(p)
+            try {
+              localStorage.setItem('revs_geo', '1')
+            } catch {
+              /* ignore */
+            }
             resolve({
               center: [pos.coords.longitude, pos.coords.latitude],
               zoom: USER_ZOOM,
@@ -785,13 +1095,16 @@ export default function MapPage() {
         center: initCenter,
         zoom: initZoom,
         pitch: 0,
-        attributionControl: true,
+        // Mapbox logo + attribution fully hidden (also forced off via the
+        // global .mapboxgl-ctrl-* CSS rules in index.css).
+        attributionControl: false,
+        logoPosition: 'bottom-left',
         fadeDuration: 0,
         refreshExpiredTiles: false,
         renderWorldCopies: false,
       })
     } catch {
-      setError('Impossible d’initialiser la carte.')
+      setError(t('mappage.errorInitMap'))
       return null
     }
     mapRef.current = map
@@ -801,25 +1114,41 @@ export default function MapPage() {
     // Signature of the on-screen marker set — lets us skip all DOM work
     // when a pan/zoom doesn't change which markers are visible.
     let lastSig = ''
+    // Spot ids that arrived via realtime (not the initial bounds fetch) —
+    // their marker gets a one-shot drop + ripple animation. Consumed once.
+    const newSpotIds = new Set<string>()
 
     function isAlive(sp: Spot): boolean {
       return new Date(sp.expires_at).getTime() > Date.now()
     }
 
     function featureCollection(): GeoJSON.FeatureCollection {
-      const cat = FILTER_CATEGORY[filterRef.current]
       const needle = searchRef.current.trim().toLowerCase()
+      const adv = advFiltersRef.current
+      // Distance filter is only meaningful below the max (50 km = illimité)
+      // and only when we have the viewer's position to measure from.
+      const distLimitM =
+        adv.distanceKm < MAX_DISTANCE_KM && posRef.current
+          ? adv.distanceKm * 1000
+          : null
+      const me = posRef.current
       const feats: GeoJSON.Feature[] = []
-      const panel: Spot[] = []
       for (const sp of allSpots.values()) {
         if (!isAlive(sp)) continue
-        if (cat != null && sp.category !== cat) continue
         if (needle) {
           const hay = `${sp.brand ?? ''} ${sp.model ?? ''} ${sp.category ?? ''}`
             .toLowerCase()
           if (!hay.includes(needle)) continue
         }
-        if (cat != null) panel.push(sp)
+        // Catégorie / Marque ('Tout' / null = no filter).
+        if (adv.category !== 'Tout' && !matchesCategoryFilter(sp, adv.category))
+          continue
+        if (adv.brand && !matchesBrandFilter(sp, adv.brand)) continue
+        // Distance from the viewer (when a sub-max radius is selected).
+        if (distLimitM != null && me) {
+          if (distanceMeters(me.lat, me.lng, sp.lat, sp.lng) > distLimitM)
+            continue
+        }
         feats.push({
           type: 'Feature',
           geometry: { type: 'Point', coordinates: [sp.lng, sp.lat] },
@@ -829,20 +1158,17 @@ export default function MapPage() {
             model: sp.model ?? '',
             year: sp.year ?? null,
             photo_url: sp.photo_url ?? null,
-            spotter: names.get(sp.user_id) ?? 'Anonyme',
+            spotter: names.get(sp.user_id) ?? t('mappage.anonymous'),
             created_at: sp.created_at,
             expires_at: sp.expires_at,
             rarity: sp.rarity ?? 'standard',
+            // 1 (standard) … 6 (hypercar) — reduced to max_rarity per
+            // cluster so the pill can flag a rare-bearing cluster.
+            rarity_score: rarityRank(sp.rarity) + 1,
           },
         })
       }
-      panel.sort(
-        (a, b) =>
-          new Date(b.created_at).getTime() -
-          new Date(a.created_at).getTime(),
-      )
       setVisibleCount(feats.length)
-      setPanelSpots(panel)
       return { type: 'FeatureCollection', features: feats }
     }
 
@@ -934,9 +1260,12 @@ export default function MapPage() {
         el.className = 'hot-zone-marker'
         el.style.setProperty('--hz-size', `${size}px`)
         el.style.setProperty('--hz-opacity', opacity)
+        // Three concentric waves on a continuous loop (delays 0 / 0.66 /
+        // 1.33s) — a permanent "radar ping" pulse on each hot zone.
         el.innerHTML =
           '<div class="hot-zone-ring"></div>' +
-          '<div class="hot-zone-ring hot-zone-ring-delay"></div>'
+          '<div class="hot-zone-ring hot-zone-ring-2"></div>' +
+          '<div class="hot-zone-ring hot-zone-ring-3"></div>'
         const marker = new mapboxgl.Marker({
           element: el,
           anchor: 'center',
@@ -1020,18 +1349,41 @@ export default function MapPage() {
           marker = markers[key]
           if (!marker) {
             const count = Number(props.point_count ?? 0)
-            const el = clusterMarkerEl(count)
+            const el = clusterMarkerEl(count, Number(props.max_rarity ?? 1))
             el.addEventListener('click', () => {
               const src = map.getSource(
                 'spots',
               ) as mapboxgl.GeoJSONSource | null
-              src?.getClusterExpansionZoom(
-                Number(props.cluster_id),
-                (err, zoom) => {
-                  if (err == null && zoom != null)
-                    map.easeTo({ center: coords, zoom })
-                },
-              )
+              if (!src) return
+              const cid = Number(props.cluster_id)
+              const cur = map.getZoom()
+              src.getClusterExpansionZoom(cid, (err, zoom) => {
+                if (err == null && zoom != null && zoom > cur) {
+                  // Zooming in WILL break the cluster apart → do it.
+                  map.easeTo({ center: coords, zoom })
+                } else {
+                  // Same place / can't expand → list the spots in a sheet.
+                  src.getClusterLeaves(cid, 100, 0, (lerr, leaves) => {
+                    if (lerr || !leaves) return
+                    const items = leaves.map((f) => {
+                      const pr = (f.properties ?? {}) as Record<string, unknown>
+                      return {
+                        id: String(pr.id ?? ''),
+                        brand: String(pr.brand ?? ''),
+                        model: String(pr.model ?? ''),
+                        photo_url:
+                          typeof pr.photo_url === 'string' ? pr.photo_url : null,
+                        spotter: String(pr.spotter ?? t('mappage.anonymous')),
+                        created_at: String(pr.created_at ?? ''),
+                        rarity: (typeof pr.rarity === 'string'
+                          ? pr.rarity
+                          : 'standard') as Rarity,
+                      }
+                    })
+                    setClusterSheet(items)
+                  })
+                }
+              })
             })
             marker = new mapboxgl.Marker({ element: el }).setLngLat(coords)
             markers[key] = marker
@@ -1045,7 +1397,7 @@ export default function MapPage() {
               typeof props.year === 'number' ? props.year : null,
             photo_url:
               typeof props.photo_url === 'string' ? props.photo_url : null,
-            spotter: String(props.spotter ?? 'Anonyme'),
+            spotter: String(props.spotter ?? t('mappage.anonymous')),
             created_at: String(props.created_at ?? ''),
             // Coerce to a known rarity bucket; an unknown/legacy value
             // falls back to standard so the pin still renders with the
@@ -1064,6 +1416,25 @@ export default function MapPage() {
               ? new Date(expiresAt).getTime() - Date.now()
               : 0
             const el = spotMarkerEl(sp, remainingMs)
+            // Realtime arrivals drop in with a bounce + red ripple. The
+            // drop is applied to the INNER wrapper (not the Mapbox-
+            // positioned outer element) so it never fights the marker's
+            // own positioning transform. One-shot, and skipped under
+            // reduced motion.
+            if (newSpotIds.has(sp.id)) {
+              newSpotIds.delete(sp.id)
+              if (!prefersReducedMotion()) {
+                el.classList.remove('map-marker-pop')
+                const inner = el.firstElementChild as HTMLElement | null
+                if (inner) {
+                  inner.classList.add('map-marker-drop')
+                  const ripple = document.createElement('div')
+                  ripple.className = 'map-marker-ripple'
+                  inner.appendChild(ripple)
+                  window.setTimeout(() => ripple.remove(), 1300)
+                }
+              }
+            }
             const photoEl = el.querySelector(
               '[data-photo]',
             ) as HTMLElement | null
@@ -1076,7 +1447,7 @@ export default function MapPage() {
               })
               const node = document.createElement('div')
               node.style.cursor = 'pointer'
-              node.innerHTML = popupInner(sp)
+              node.innerHTML = popupInner(sp, t)
               node.addEventListener('click', () => {
                 popup.remove()
                 navRef.current(`/spot/${sp.id}`)
@@ -1126,7 +1497,7 @@ export default function MapPage() {
       if (
         /401|403|unauthorized|forbidden|access token|not authorized/i.test(msg)
       ) {
-        setError('Carte indisponible : token Mapbox invalide ou non autorisé.')
+        setError(t('mappage.errorTokenInvalid'))
       }
     })
 
@@ -1147,8 +1518,12 @@ export default function MapPage() {
             type: 'geojson',
             data: featureCollection(),
             cluster: true,
-            clusterMaxZoom: 14,
-            clusterRadius: 50,
+            clusterMaxZoom: 16,
+            clusterRadius: 60,
+            clusterProperties: {
+              // Highest rarity tier present in the cluster (1…6).
+              max_rarity: ['max', ['get', 'rarity_score']],
+            },
           })
         }
         if (!map.getLayer('spot-src')) {
@@ -1175,15 +1550,24 @@ export default function MapPage() {
           updateMarkers()
         })
       }
-      map.on('move', scheduleSync)
+      // Sync markers ONLY when the camera settles — NEVER per-frame during a
+      // pan/zoom gesture. Mapbox already GPU-transforms the existing markers
+      // while moving; re-querying features + diffing the DOM on every frame
+      // (the old 'move'/'zoom' listeners) was the main pan/zoom jank. 'moveend'
+      // covers the end of pan AND zoom; 'idle' covers programmatic settles.
       map.on('moveend', scheduleSync)
-      map.on('zoom', scheduleSync)
       map.on('idle', scheduleSync)
       map.on('sourcedata', (e) => {
         if (e.sourceId === 'spots' && map.isSourceLoaded('spots'))
           scheduleSync()
       })
       scheduleSync()
+
+      // Pause the decorative hot-zone "radar" animations while the map moves —
+      // they're DOM markers repositioned + composited every frame otherwise.
+      // A single cheap class toggle (CSS pauses animation-play-state).
+      map.on('movestart', () => containerEl.classList.add('map-moving'))
+      map.on('moveend', () => containerEl.classList.remove('map-moving'))
 
       // Fetch new spots when the viewport changes (debounced).
       let fetchTimer: ReturnType<typeof setTimeout> | null = null
@@ -1210,6 +1594,9 @@ export default function MapPage() {
           const sp = payload.new as Spot
           if (!sp?.id) return
           allSpots.set(sp.id, sp)
+          // Flag it so its marker drops in (vs. just appearing) on the
+          // next marker sync. Only realtime inserts get the animation.
+          newSpotIds.add(sp.id)
           refreshSource()
           recomputeHotZones()
         },
@@ -1227,10 +1614,25 @@ export default function MapPage() {
       )
       .subscribe()
 
+    // In-app bridge — the publisher's OWN spot appears instantly without
+    // waiting on (or depending on) Supabase realtime. NewSpot emits the
+    // freshly-inserted row (full `.select('*')`, expires_at included) the
+    // moment the insert is confirmed; we inject it straight into the map.
+    // Realtime still covers OTHER users' spots. Deduped by id, so if the
+    // realtime echo arrives too it's a harmless overwrite.
+    const offNewSpot = onNewSpot((sp) => {
+      if (!sp?.id) return
+      allSpots.set(sp.id, sp)
+      newSpotIds.add(sp.id)
+      refreshSource()
+      recomputeHotZones()
+    })
+
     return () => {
       if (pollId) clearInterval(pollId)
       window.clearInterval(hotZonesInterval)
       clearHotZones()
+      offNewSpot()
       supabase.removeChannel(channel)
       for (const k in onScreenRef.current) onScreenRef.current[k].remove()
       onScreenRef.current = {}
@@ -1254,14 +1656,14 @@ export default function MapPage() {
   }, [])
 
   useEffect(() => {
-    filterRef.current = activeFilter
+    searchRef.current = mapSearchQuery
     refreshRef.current?.()
-  }, [activeFilter])
+  }, [mapSearchQuery])
 
   useEffect(() => {
-    searchRef.current = searchQuery
+    advFiltersRef.current = mapFilters
     refreshRef.current?.()
-  }, [searchQuery])
+  }, [mapFilters])
 
   // Theme swap — when the user flips dark/light from Settings while
   // /map is already mounted, hot-swap the Mapbox base style instead
@@ -1316,7 +1718,7 @@ export default function MapPage() {
   // spotted there yet. Brand-name queries still hit zero results
   // and just stay zoomed where the user was — no harm.
   useEffect(() => {
-    const q = searchQuery.trim()
+    const q = mapSearchQuery.trim()
     if (q.length < 3) return
     // Skip if the query already matches at least one local spot —
     // the user is filtering, not searching.
@@ -1329,7 +1731,7 @@ export default function MapPage() {
     if (!map || !token) return
 
     const ctl = new AbortController()
-    const t = window.setTimeout(async () => {
+    const searchTimer = window.setTimeout(async () => {
       try {
         const center = map.getCenter()
         const proximity = `${center.lng.toFixed(4)},${center.lat.toFixed(4)}`
@@ -1354,17 +1756,17 @@ export default function MapPage() {
           essential: true,
         })
         const placeLabel = (hit.place_name ?? q).split(',')[0]
-        setToast(`Vol vers ${placeLabel}`)
+        setToast(t('mappage.flyingTo', { place: placeLabel }))
         window.setTimeout(() => setToast(null), 2400)
       } catch {
         /* aborted or network — silent */
       }
     }, 700)
     return () => {
-      window.clearTimeout(t)
+      window.clearTimeout(searchTimer)
       ctl.abort()
     }
-  }, [searchQuery, visibleCount])
+  }, [mapSearchQuery, visibleCount])
 
   useEffect(() => {
     try {
@@ -1374,6 +1776,167 @@ export default function MapPage() {
     }
     if (mapReady && mapRef.current) applyMode(mapRef.current, mode)
   }, [mode, mapReady])
+
+  // In 3D, match the tilt to the zoom — but ONLY once the zoom gesture ENDS,
+  // eased smoothly. Never per-frame: setPitch on every zoom event recomputes
+  // the camera each frame and was a major source of zoom jank. No-op in 2D.
+  useEffect(() => {
+    if (!mapReady || mode !== '3D') return
+    const map = mapRef.current
+    if (!map) return
+    const onZoomEnd = (e: mapboxgl.MapboxEvent) => {
+      // User gestures only (a programmatic flyTo/easeTo has no originalEvent
+      // and sets its own pitch — don't fight it).
+      if (!(e as { originalEvent?: unknown }).originalEvent) return
+      const target = pitchForZoom(map.getZoom())
+      if (Math.abs(map.getPitch() - target) < 1) return
+      map.easeTo({ pitch: target, duration: 240 })
+    }
+    map.on('zoomend', onZoomEnd)
+    return () => {
+      map.off('zoomend', onZoomEnd)
+    }
+  }, [mode, mapReady])
+
+  // ── Live user-location compass marker (Apple Plans style) ──
+  // A CompassMarker instance owns the SVG marker, its rAF rotation loop
+  // and the DeviceOrientation listeners. We just feed it GPS fixes from
+  // watchPosition: the first fix builds + adds the marker, later fixes
+  // only move it. It stays a blue dot (no cone) until a real heading lands.
+  useEffect(() => {
+    if (!mapReady) return
+    const map = mapRef.current
+    if (!map || !navigator.geolocation) return
+
+    let cancelled = false
+
+    // Start the marker watch automatically when permission is already granted
+    // (no auto-prompt on mount). If not yet granted, the locate FAB starts it
+    // after the user grants. `startLocationWatch` is idempotent.
+    void hasGeoPermission().then((granted) => {
+      if (!cancelled && granted) startLocationWatch()
+    })
+
+    return () => {
+      cancelled = true
+      if (watchIdRef.current != null) {
+        navigator.geolocation.clearWatch(watchIdRef.current)
+        watchIdRef.current = null
+      }
+      userMarkerRef.current?.destroy()
+      userMarkerRef.current = null
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mapReady])
+
+  // ─────────────────────── Time-lapse replay ───────────────────────
+  const REPLAY_MAX_MARKERS = 600 // perf guard for very large histories
+  function clearReplayMarkers() {
+    for (const m of replayMarkersRef.current) m.remove()
+    replayMarkersRef.current = []
+  }
+  function addReplayMarker(s: Spot) {
+    const map = mapRef.current
+    if (!map) return
+    // Root el is positioned by mapbox (transform: translate). The scale
+    // pop animation MUST live on an inner dot, else it overrides the
+    // translate and the marker jumps to (0,0).
+    const el = document.createElement('div')
+    el.className = 'revs-replay'
+    const dot = document.createElement('div')
+    dot.className = 'revs-replay-dot replay-pop'
+    el.appendChild(dot)
+    const m = new mapboxgl.Marker({ element: el })
+      .setLngLat([s.lng, s.lat])
+      .addTo(map)
+    replayMarkersRef.current.push(m)
+  }
+  const replayDuration = () =>
+    Math.min(20000, Math.max(8000, replaySpotsRef.current.length * 350))
+  function replayTick(now: number) {
+    const spots = replaySpotsRef.current
+    if (spots.length === 0) return
+    const elapsed = replayElapsedRef.current + (now - replayStartRef.current)
+    const pct = Math.min(1, elapsed / replayDuration())
+    const target = Math.floor(pct * spots.length)
+    while (replayMarkersRef.current.length < target) {
+      addReplayMarker(spots[replayMarkersRef.current.length])
+    }
+    setReplayPct(Math.round(pct * 100))
+    const idx = Math.max(0, Math.min(spots.length - 1, target - 1))
+    if (spots[idx]?.created_at) {
+      setReplayDate(
+        new Intl.DateTimeFormat('fr-FR', {
+          day: 'numeric',
+          month: 'short',
+          year: 'numeric',
+        }).format(new Date(spots[idx].created_at)),
+      )
+    }
+    if (pct >= 1) {
+      setReplayPlaying(false)
+      return
+    }
+    replayRafRef.current = requestAnimationFrame(replayTick)
+  }
+  function openReplay() {
+    const map = mapRef.current
+    if (!map) return
+    const spots = [...allSpotsRef.current.values()]
+      .filter((s) => s.created_at && Number.isFinite(s.lat) && Number.isFinite(s.lng))
+      .sort(
+        (a, b) =>
+          new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+      )
+      .slice(-REPLAY_MAX_MARKERS)
+    if (spots.length === 0) return
+    replaySpotsRef.current = spots
+    // Fit the whole history in view.
+    const b = new mapboxgl.LngLatBounds()
+    for (const s of spots) b.extend([s.lng, s.lat])
+    map.fitBounds(b, { padding: 64, duration: 700, maxZoom: 12 })
+    map.getContainer().classList.add('replay-active')
+    clearReplayMarkers()
+    replayElapsedRef.current = 0
+    setReplayPct(0)
+    setReplayDate('')
+    setReplayOpen(true)
+    setReplayPlaying(true)
+    replayStartRef.current = performance.now()
+    replayRafRef.current = requestAnimationFrame(replayTick)
+  }
+  function toggleReplayPlay() {
+    if (replayRafRef.current != null) {
+      cancelAnimationFrame(replayRafRef.current)
+      replayRafRef.current = null
+    }
+    if (replayPlaying) {
+      // pause
+      replayElapsedRef.current += performance.now() - replayStartRef.current
+      setReplayPlaying(false)
+      return
+    }
+    // resume — or restart from scratch if we're at the end
+    if (replayPct >= 100) {
+      clearReplayMarkers()
+      replayElapsedRef.current = 0
+      setReplayPct(0)
+    }
+    setReplayPlaying(true)
+    replayStartRef.current = performance.now()
+    replayRafRef.current = requestAnimationFrame(replayTick)
+  }
+  function closeReplay() {
+    if (replayRafRef.current != null) {
+      cancelAnimationFrame(replayRafRef.current)
+      replayRafRef.current = null
+    }
+    clearReplayMarkers()
+    mapRef.current?.getContainer().classList.remove('replay-active')
+    setReplayOpen(false)
+    setReplayPlaying(false)
+    setReplayPct(0)
+  }
 
   return (
     <div className="fixed inset-0">
@@ -1396,50 +1959,56 @@ export default function MapPage() {
         </div>
       )}
 
-      {activeFilter !== 'Tous' && visibleCount === 0 && !error && (
-        <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center px-8 text-center">
-          <Car size={48} color="#444444" strokeWidth={1.5} />
-          <p className="mt-4 text-base font-medium text-fg">
-            Aucun spot en {activeFilter}
-          </p>
-          <p className="mt-1 text-sm text-[#888888]">
-            Soyez le premier à spotter !
-          </p>
-        </div>
-      )}
-
-      <div className="absolute left-0 right-0 top-0 z-10 space-y-2 px-4 pt-[max(3rem,calc(env(safe-area-inset-top)+2rem))]">
-        <div
-          className="mx-auto flex max-w-md items-center gap-2 rounded-2xl px-4 py-3"
-          style={{
-            // Theme-aware iOS Maps glass — flips from translucent
-            // dark glass (dark mode, sits on dark-v11 map) to
-            // translucent white glass (light mode, sits on Snap
-            // beige map) via the CSS var ladder.
-            background: 'var(--color-glass-mid)',
-            backdropFilter: 'saturate(170%) blur(12px)',
-            WebkitBackdropFilter: 'saturate(170%) blur(12px)',
-            border: '1px solid var(--color-border)',
-            boxShadow: '0 12px 28px rgba(0, 0, 0, 0.18)',
-          }}
-        >
-          <SearchIcon className="h-4 w-4 flex-none text-fg2" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Rechercher une voiture, une marque…"
-            className="flex-1 bg-transparent text-sm font-medium text-fg outline-none placeholder:text-fg2"
-          />
-          {searchQuery && (
-            <button
-              onClick={() => setSearchQuery('')}
-              aria-label="Effacer"
-              className="tappable text-fg2 hover:text-fg"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          )}
+      <div className="absolute left-0 right-0 top-0 z-10 px-4 pt-[max(3rem,calc(env(safe-area-inset-top)+2rem))]">
+        {/* Search + advanced-filters icon on one line — mirrors the Fil.
+            The search bar flexes; the filter icon sits to its right as a
+            light, fond-less glyph (a tiny active dot when filters are on). */}
+        <div className="mx-auto flex max-w-md items-center gap-2">
+          <div
+            className="flex flex-1 items-center gap-2 rounded-2xl px-4 py-3"
+            style={{
+              // Theme-aware iOS Maps glass — flips from translucent
+              // dark glass (dark mode, sits on dark-v11 map) to
+              // translucent white glass (light mode, sits on Snap
+              // beige map) via the CSS var ladder.
+              background: 'var(--color-glass-mid)',
+              backdropFilter: 'saturate(170%) blur(12px)',
+              WebkitBackdropFilter: 'saturate(170%) blur(12px)',
+              border: '1px solid var(--color-border)',
+              boxShadow: '0 12px 28px rgba(0, 0, 0, 0.18)',
+            }}
+          >
+            <SearchIcon className="h-4 w-4 flex-none text-fg2" />
+            <input
+              type="text"
+              value={mapSearchQuery}
+              onChange={(e) => setMapSearchQuery(e.target.value)}
+              placeholder={t('mappage.searchPlaceholder')}
+              className="min-w-0 flex-1 bg-transparent text-sm font-medium text-fg outline-none placeholder:text-fg2"
+            />
+            {mapSearchQuery && (
+              <button
+                onClick={() => setMapSearchQuery('')}
+                aria-label={t('mappage.clear')}
+                className="tappable text-fg2 hover:text-fg"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+          <button
+            onClick={() => setFiltersOpen(true)}
+            aria-label={t('mappage.filters')}
+            className="tappable relative flex-none p-2 text-fg2 hover:text-fg"
+          >
+            <SlidersHorizontal className="h-5 w-5" />
+            {mapFiltersActive(mapFilters) && (
+              <span
+                className="absolute right-1 top-1 h-2 w-2 rounded-full bg-accent"
+                aria-hidden
+              />
+            )}
+          </button>
         </div>
 
         {/* "REPLAY AUJOURD'HUI" pill removed per 2026-05-28 cleanup.
@@ -1447,62 +2016,26 @@ export default function MapPage() {
             stopReplay + the replay state) stays in the module so it
             can be reattached to a future UI surface without rewiring
             the marker animation. */}
-        {/* Filter pills — per-pill glassmorphism. The bar itself is
-            transparent; each inactive pill carries its own white/60 +
-            black/05 border + 12px blur + shadow-sm so the row reads as
-            distinct iOS Maps chips rather than a single segmented
-            control. The active pill keeps the brand-red fill to
-            anchor the selection. */}
-        <div className="mx-auto flex max-w-md gap-2 px-1">
-          {FILTERS.map((f) => {
-            const isActive = activeFilter === f
-            return (
-              <button
-                key={f}
-                onClick={() => setActiveFilter(f)}
-                className={`tappable flex-1 rounded-full py-2 text-xs font-semibold tracking-wide transition-colors ${
-                  isActive ? 'text-white' : 'text-fg2 hover:text-fg'
-                }`}
-                style={
-                  isActive
-                    ? {
-                        background: 'var(--color-accent)',
-                        border: '1px solid rgba(0, 0, 0, 0.08)',
-                        boxShadow: '0 6px 18px rgba(232, 32, 58, 0.40)',
-                      }
-                    : {
-                        // Theme-aware filter pill — flips to dark
-                        // glass over Mapbox dark-v11 in night mode.
-                        background: 'var(--color-glass)',
-                        backdropFilter: 'saturate(170%) blur(12px)',
-                        WebkitBackdropFilter: 'saturate(170%) blur(12px)',
-                        border: '1px solid var(--color-border)',
-                        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.10)',
-                      }
-                }
-              >
-                {f}
-              </button>
-            )
-          })}
-        </div>
+        {/* Category / brand / distance pills moved INTO the filter sheet
+            (the sliders icon next to the search) per 2026-06-23 — the map
+            header is now just the search row so the map owns the screen. */}
       </div>
 
       {/* AI prediction Sparkles entry button — archived behind
           SHOW_WEATHER_IA. Both the button and the bottom sheet stay
           wired so flipping the constant back to true revives the
           feature without rewiring fetch / state / sheet code. */}
-      {SHOW_WEATHER_IA && (
+      {appConfig.SHOW_MAP_INFO && SHOW_WEATHER_IA && (
         <button
           onClick={() => setInfoSheetOpen(true)}
-          aria-label="Conseil de spot du jour"
+          aria-label={t('mappage.spotTipOfDay')}
           className="tappable absolute right-4 z-10 flex h-10 w-10 items-center justify-center rounded-full"
           style={{
             top: 'calc(max(3rem, env(safe-area-inset-top) + 2rem) + 3.25rem)',
-            background: '#141414',
-            border: '1px solid rgba(255,255,255,0.10)',
+            background: 'rgb(var(--color-card))',
+            border: '1px solid rgb(var(--color-fg) / 0.10)',
             boxShadow: '0 8px 22px rgba(0,0,0,0.45)',
-            color: 'var(--color-accent)',
+            color: 'rgb(var(--color-accent))',
           }}
         >
           <Sparkles className="h-4 w-4" />
@@ -1517,63 +2050,88 @@ export default function MapPage() {
         />
       )}
 
-      {activeFilter !== 'Tous' && panelSpots.length > 0 && (
-        <div
-          className="animate-slide-up absolute left-0 right-0 z-10"
-          style={{ bottom: 'calc(env(safe-area-inset-bottom) + 5rem)' }}
+      {/* Time-lapse replay — launch pill (left) + playback bar (bottom). */}
+      {appConfig.SHOW_REPLAY && mapReady && !replayOpen && (
+        <button
+          onClick={openReplay}
+          aria-label="Replay time-lapse"
+          className="tappable absolute left-4 z-10 flex h-10 items-center gap-1.5 rounded-full px-3.5"
+          style={{
+            top: 'calc(max(3rem, env(safe-area-inset-top) + 2rem) + 3.25rem)',
+            background: 'rgb(var(--color-card))',
+            border: '1px solid rgb(var(--color-fg) / 0.10)',
+            boxShadow: '0 8px 22px rgba(0,0,0,0.45)',
+            color: 'rgb(var(--color-accent))',
+          }}
         >
-          <div className="mx-2 rounded-2xl bg-black/70 p-3 backdrop-blur">
-            <p className="mb-2 px-1 text-xs font-semibold text-fg/70">
-              {panelSpots.length} {activeFilter} sur la carte
-            </p>
-            <div className="no-scrollbar flex gap-3 overflow-x-auto">
-              {panelSpots.map((s) => {
-                const dist =
-                  userPos &&
-                  Number.isFinite(s.lat) &&
-                  Number.isFinite(s.lng)
-                    ? fmtDist(
-                        distanceMeters(
-                          userPos.lat,
-                          userPos.lng,
-                          s.lat,
-                          s.lng,
-                        ),
-                      )
-                    : null
-                return (
-                  <button
-                    key={s.id}
-                    onClick={() => navigate(`/spot/${s.id}`)}
-                    className="w-32 flex-none text-left"
-                  >
-                    <div className="h-20 w-32 overflow-hidden rounded-xl bg-card">
-                      {s.photo_url ? (
-                        <img
-                          src={s.photo_url}
-                          alt=""
-                          loading="lazy"
-                          decoding="async"
-                          className="h-full w-full object-cover"
-                        />
-                      ) : (
-                        <div className="flex h-full w-full items-center justify-center">
-                          <Car className="h-6 w-6 text-fg/20" />
-                        </div>
-                      )}
-                    </div>
-                    <p className="mt-1 truncate text-xs font-semibold text-fg">
-                      {s.brand} {s.model}
-                    </p>
-                    <p className="truncate text-[10px] text-fg/50">
-                      {[dist, timeAgo(s.created_at)]
-                        .filter(Boolean)
-                        .join(' · ')}
-                    </p>
-                  </button>
-                )
-              })}
+          <Film className="h-4 w-4" />
+          <span className="text-[12px] font-extrabold tracking-wide">REPLAY</span>
+        </button>
+      )}
+
+      {replayOpen && (
+        <div
+          className="absolute inset-x-0 z-20 px-4"
+          style={{
+            bottom: 'calc(max(5.5rem, env(safe-area-inset-bottom) + 5rem))',
+          }}
+        >
+          <div
+            className="mx-auto flex max-w-sm items-center gap-3 rounded-2xl px-4 py-3"
+            style={{
+              background: '#141414',
+              border: '1px solid #E8203A',
+              boxShadow: '0 12px 40px rgba(0,0,0,0.6)',
+            }}
+          >
+            <button
+              onClick={toggleReplayPlay}
+              aria-label={
+                replayPct >= 100
+                  ? 'Rejouer'
+                  : replayPlaying
+                    ? 'Pause'
+                    : 'Lecture'
+              }
+              className="tappable flex h-9 w-9 flex-none items-center justify-center rounded-full text-white"
+              style={{ background: '#E8203A' }}
+            >
+              {replayPct >= 100 ? (
+                <RotateCcw className="h-4 w-4" />
+              ) : replayPlaying ? (
+                <Pause className="h-4 w-4" />
+              ) : (
+                <Play className="h-4 w-4" />
+              )}
+            </button>
+            <div className="min-w-0 flex-1">
+              <div className="mb-1 flex items-center justify-between gap-2">
+                <span className="text-[11px] font-bold text-white/80">
+                  Time-lapse · {replaySpotsRef.current.length} spots
+                </span>
+                <span className="text-[11px] tabular-nums text-white/50">
+                  {replayDate}
+                </span>
+              </div>
+              <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/[0.12]">
+                <div
+                  className="h-full rounded-full"
+                  style={{
+                    width: `${replayPct}%`,
+                    background: '#E8203A',
+                    transition: 'width 0.1s linear',
+                  }}
+                />
+              </div>
             </div>
+            <button
+              onClick={closeReplay}
+              aria-label="Fermer"
+              className="tappable flex h-9 w-9 flex-none items-center justify-center rounded-full text-white/70"
+              style={{ background: 'rgba(255,255,255,0.08)' }}
+            >
+              <X className="h-4 w-4" />
+            </button>
           </div>
         </div>
       )}
@@ -1590,10 +2148,10 @@ export default function MapPage() {
         <div
           className="flex gap-0.5 rounded-xl p-0.5"
           style={{
-            background: 'rgba(20, 20, 20, 0.80)',
+            background: 'rgb(var(--color-card) / 0.80)',
             backdropFilter: 'saturate(160%) blur(14px)',
             WebkitBackdropFilter: 'saturate(160%) blur(14px)',
-            border: '1px solid rgba(255, 255, 255, 0.06)',
+            border: '1px solid rgb(var(--color-fg) / 0.06)',
             boxShadow: '0 10px 24px rgba(0, 0, 0, 0.45)',
           }}
         >
@@ -1615,7 +2173,7 @@ export default function MapPage() {
 
         <button
           onClick={flyToUser}
-          aria-label="Me localiser"
+          aria-label={t('mappage.locateMe')}
           className="tappable flex h-12 w-12 items-center justify-center rounded-full bg-accent transition-transform active:scale-90"
           style={{
             // shadow-2xl level — bigger ambient + brand-tinted glow +
@@ -1629,17 +2187,219 @@ export default function MapPage() {
         </button>
       </div>
 
+      {/* Centered "Spotter" camera FAB — clean 60px brand-red circle:
+          flat #E8203A fill, ONE soft shadow, white 26px camera glyph. No
+          blur / glow / secondary backdrop. Tap springs to scale(0.92).
+          Sits above the global tab bar; tapping fires the hidden capture
+          input synchronously (iOS camera requirement). */}
+      <input
+        ref={spotInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        onChange={onSpotCapture}
+        className="hidden"
+      />
+      <button
+        onClick={() => spotInputRef.current?.click()}
+        aria-label={t('mappage.spotACar')}
+        data-tour="spot-fab"
+        className="fixed left-1/2 z-40 flex -translate-x-1/2 items-center justify-center active:scale-[0.92]"
+        style={{
+          // 80px above the safe-area inset → clears the navbar (which sits
+          // at safe + 8px, ~60px tall) with a comfortable gap, never overlaps.
+          bottom: 'calc(env(safe-area-inset-bottom) + 80px)',
+          height: 60,
+          width: 60,
+          borderRadius: '50%',
+          overflow: 'hidden',
+          background: '#E8203A',
+          boxShadow: '0 4px 16px rgba(232, 32, 58, 0.4)',
+          transition: 'transform 150ms cubic-bezier(0.34, 1.56, 0.64, 1)',
+        }}
+      >
+        <Camera className="h-[26px] w-[26px] text-white" strokeWidth={2.2} />
+      </button>
+
       {error && (
         <div className="absolute inset-0 z-20 flex items-center justify-center bg-bg px-8">
           <div className="max-w-xs text-center">
             <p className="text-sm text-fg/80">{error}</p>
             <p className="mt-2 text-xs text-fg/40">
-              Vérifie la variable VITE_MAPBOX_TOKEN dans .env.local.
+              {t('mappage.errorTokenHint')}
             </p>
           </div>
         </div>
       )}
+
+      <MapFiltersModal
+        open={filtersOpen}
+        initial={mapFilters}
+        onClose={() => setFiltersOpen(false)}
+        onApply={(next) => {
+          // Apply + persist to the map's own key. onClose (fired by the
+          // modal right after onApply) closes the sheet.
+          setMapFilters(next)
+          saveMapFilters(next)
+        }}
+      />
+
+      {clusterSheet && (
+        <ClusterSheet
+          items={clusterSheet}
+          onClose={() => setClusterSheet(null)}
+          onOpenSpot={(id) => {
+            setClusterSheet(null)
+            navigate(`/spot/${id}`)
+          }}
+        />
+      )}
     </div>
+  )
+}
+
+// ───────────────────── Cluster contents bottom sheet ─────────────────────
+// Opened when a cluster can't be zoomed apart (multiple spots at the same
+// place). Lists every spot of the cluster, sorted by likes desc then
+// recency; tapping one opens its detail page.
+function ClusterSheet({
+  items,
+  onClose,
+  onOpenSpot,
+}: {
+  items: ClusterLeaf[]
+  onClose: () => void
+  onOpenSpot: (id: string) => void
+}) {
+  const { t } = useTranslation()
+  const [likes, setLikes] = useState<Record<string, number>>({})
+  useEffect(() => {
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    let active = true
+    const ids = items.map((i) => i.id)
+    if (ids.length) {
+      supabase
+        .from('spot_likes')
+        .select('spot_id')
+        .in('spot_id', ids)
+        .then(({ data }) => {
+          if (!active) return
+          const m: Record<string, number> = {}
+          for (const r of (data ?? []) as { spot_id: string }[])
+            m[r.spot_id] = (m[r.spot_id] ?? 0) + 1
+          setLikes(m)
+        })
+    }
+    return () => {
+      active = false
+      document.body.style.overflow = prev
+    }
+  }, [items])
+
+  const sorted = [...items].sort((a, b) => {
+    const diff = (likes[b.id] ?? 0) - (likes[a.id] ?? 0)
+    if (diff !== 0) return diff
+    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  })
+
+  return createPortal(
+    <div className="fixed inset-0 z-50" role="dialog" aria-modal="true">
+      <button
+        aria-label={t('mappage.close')}
+        onClick={onClose}
+        className="absolute inset-0"
+        style={{
+          background: 'rgba(0,0,0,0.7)',
+          backdropFilter: 'blur(6px)',
+          WebkitBackdropFilter: 'blur(6px)',
+          animation: 'sheet-backdrop-in 200ms ease-out both',
+        }}
+      />
+      <div
+        className="absolute bottom-0 left-0 right-0 px-4 pt-3"
+        style={{
+          background: '#141414',
+          borderTopLeftRadius: '24px',
+          borderTopRightRadius: '24px',
+          borderTop: '1px solid rgba(255,255,255,0.08)',
+          paddingBottom: 'max(env(safe-area-inset-bottom), 20px)',
+          maxHeight: '75vh',
+          overflowY: 'auto',
+          boxShadow: '0 -24px 60px rgba(0,0,0,0.65)',
+          animation: 'sheet-slide-up 280ms cubic-bezier(0.32,0.72,0,1) both',
+        }}
+      >
+        <div className="flex justify-center pt-1">
+          <span
+            aria-hidden
+            className="rounded-full"
+            style={{ width: 40, height: 4, background: 'rgba(255,255,255,0.18)' }}
+          />
+        </div>
+        <h3 className="mb-0.5 mt-3 font-display text-[17px] font-extrabold text-white">
+          {t('mappage.spotsHere', { count: items.length })}
+        </h3>
+        <p className="mb-3 text-[12px] text-white/45">{t('mappage.sortedByLikes')}</p>
+        <div className="space-y-2">
+          {sorted.map((s) => {
+            const rb = rarityBadge(s.rarity)
+            const lk = likes[s.id] ?? 0
+            return (
+              <button
+                key={s.id}
+                onClick={() => onOpenSpot(s.id)}
+                className="tappable flex w-full items-center gap-3 rounded-2xl p-2 text-left"
+                style={{
+                  background: '#0d0d0d',
+                  border: '1px solid rgba(255,255,255,0.06)',
+                }}
+              >
+                {s.photo_url ? (
+                  <img
+                    src={s.photo_url}
+                    alt=""
+                    loading="lazy"
+                    className="h-14 w-14 flex-none rounded-xl object-cover"
+                  />
+                ) : (
+                  <div className="flex h-14 w-14 flex-none items-center justify-center rounded-xl bg-white/5 text-white/30">
+                    —
+                  </div>
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[14px] font-bold text-white">
+                    {s.model || s.brand || t('mappage.spotFallbackTitle')}
+                  </p>
+                  <p className="truncate text-[12px] text-white/50">
+                    @{s.spotter} · {timeAgo(s.created_at)}
+                  </p>
+                </div>
+                {lk > 0 && (
+                  <span className="flex-none text-[11px] font-bold text-white/40">
+                    ♥ {lk}
+                  </span>
+                )}
+                <span
+                  className="flex-none rounded-full px-2 py-0.5 text-[9px] font-black uppercase"
+                  style={{ background: rb.bg, color: rb.fg, border: `1px solid ${rb.border}` }}
+                >
+                  {rb.label}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+        <button
+          onClick={onClose}
+          className="tappable mb-1 mt-4 w-full rounded-full py-3 text-[14px] font-semibold text-white"
+          style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.1)' }}
+        >
+          {t('mappage.close')}
+        </button>
+      </div>
+    </div>,
+    document.body,
   )
 }
 
@@ -1650,21 +2410,21 @@ export default function MapPage() {
 // presentational — fetching is owned by the Map page so the same
 // PredictionResult drives both states.
 
-const PREDICTION_THEME: Record<SpotScore, { background: string; label: string }> = {
+const PREDICTION_THEME: Record<SpotScore, { background: string; labelKey: string }> = {
   bon: {
     background:
       'linear-gradient(155deg, #5a1018 0%, #2e0a0d 55%, #150708 100%)',
-    label: 'CONDITIONS FAVORABLES',
+    labelKey: 'mappage.conditionsGood',
   },
   moyen: {
     background:
       'linear-gradient(155deg, #4a2a08 0%, #2e1804 55%, #150b02 100%)',
-    label: 'CONDITIONS MOYENNES',
+    labelKey: 'mappage.conditionsMedium',
   },
   mauvais: {
     background:
       'linear-gradient(155deg, #1e2024 0%, #14161a 55%, #0d0e10 100%)',
-    label: 'PEU FAVORABLE',
+    labelKey: 'mappage.conditionsBad',
   },
 }
 
@@ -1677,6 +2437,7 @@ function MapPredictionSheet({
   loading: boolean
   onClose: () => void
 }) {
+  const { t } = useTranslation()
   const [drag, setDrag] = useState(0)
   const [dragging, setDragging] = useState(false)
   const startY = useRef(0)
@@ -1724,7 +2485,7 @@ function MapPredictionSheet({
       className="fixed inset-0 z-[80]"
       role="dialog"
       aria-modal="true"
-      aria-label="Conseil de spot"
+      aria-label={t('mappage.spotTip')}
     >
       <div
         className="absolute inset-0 bg-black/55"
@@ -1738,8 +2499,8 @@ function MapPredictionSheet({
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
         style={{
-          background: 'var(--color-card)',
-          border: '1px solid rgba(255,255,255,0.08)',
+          background: 'rgb(var(--color-card))',
+          border: '1px solid rgb(var(--color-fg) / 0.08)',
           borderBottom: 'none',
           paddingBottom: 'max(1.25rem, env(safe-area-inset-bottom))',
           maxHeight: '70vh',
@@ -1754,7 +2515,7 @@ function MapPredictionSheet({
         <div className="flex justify-center pb-1 pt-2.5">
           <div
             className="h-1 w-12 rounded-full"
-            style={{ background: 'rgba(255,255,255,0.22)' }}
+            style={{ background: 'rgb(var(--color-fg) / 0.22)' }}
           />
         </div>
 
@@ -1766,22 +2527,22 @@ function MapPredictionSheet({
           >
             <div className="flex items-center justify-between gap-2">
               <p
-                className="label-up text-[9.5px] text-white/75"
+                className="label-up text-[9.5px] text-fg/75"
                 style={{ letterSpacing: '0.18em' }}
               >
-                {prediction ? theme.label : 'CONSEIL DU JOUR'}
+                {prediction ? t(theme.labelKey) : t('mappage.tipOfDay')}
               </p>
               <span
-                className="inline-flex items-center gap-1 rounded-full bg-black/45 px-2 py-1 text-[9px] font-bold tracking-wider text-white/85 backdrop-blur"
+                className="inline-flex items-center gap-1 rounded-full bg-black/45 px-2 py-1 text-[9px] font-bold tracking-wider text-fg/85 backdrop-blur"
                 style={{ border: '1px solid rgba(255,255,255,0.12)' }}
               >
-                IA 🎯
+                {t('mappage.aiBadge')}
               </span>
             </div>
             {loading && !prediction ? (
-              <div className="mt-3 flex items-center gap-2 text-[14px] text-white/80">
+              <div className="mt-3 flex items-center gap-2 text-[14px] text-fg/80">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Analyse en cours…
+                {t('mappage.analyzing')}
               </div>
             ) : prediction ? (
               <p
@@ -1792,11 +2553,10 @@ function MapPredictionSheet({
               </p>
             ) : (
               <p
-                className="mt-3 leading-snug text-white/75"
+                className="mt-3 leading-snug text-fg/75"
                 style={{ fontSize: '14px' }}
               >
-                Ajoute ta ville dans Réglages pour recevoir un conseil
-                personnalisé chaque jour (météo + tendance de spotting).
+                {t('mappage.addCityPrompt')}
               </p>
             )}
           </div>
@@ -1804,9 +2564,7 @@ function MapPredictionSheet({
           <p
             className="mt-3 px-1 text-[11px] leading-snug text-fg2"
           >
-            Mise à jour une fois par jour. Le conseil tient compte de
-            ta ville, des marques que tu spottes le plus et de la
-            météo locale.
+            {t('mappage.dailyUpdateNote')}
           </p>
         </div>
       </div>

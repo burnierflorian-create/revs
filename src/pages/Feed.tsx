@@ -1,64 +1,53 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
-import { Car, Filter as FilterIcon, Heart, Layers, Loader2, Search as SearchIcon, X, Zap } from 'lucide-react'
+import { Car, Heart, Layers, Loader2, MessageCircle, Search as SearchIcon, SlidersHorizontal, X, Zap } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { hasGeoPermission } from '../lib/geo'
 import {
-  categoryLabel,
   distanceMeters,
   timeAgo,
   xpForSpot,
   type Spot,
 } from '../lib/spots'
+import { categoryBadge } from '../lib/categoryStyle'
+import { rarityBadge } from '../lib/rarityStyle'
 import { SkeletonCard } from '../components/Skeleton'
-import LikeButton from '../components/LikeButton'
+import CommentsSheet from '../components/CommentsSheet'
+import { hapticTap } from '../lib/haptic'
+import { myPseudo, notifyPush } from '../lib/push'
+import { onNewSpot } from '../lib/feedSync'
 import FeedFiltersModal, {
-  DEFAULT_FILTERS,
   filtersActive,
+  loadFeedFilters,
+  saveFeedFilters,
   type FeedFilters,
 } from '../components/FeedFiltersModal'
 import PullIndicator from '../components/PullIndicator'
 import { usePullToRefresh } from '../hooks/usePullToRefresh'
-import { BRANDS } from '../lib/brands'
-import { bodyTypeFor } from '../lib/car-body-type'
+import {
+  matchesBrandFilter,
+  matchesCategoryFilter,
+} from '../lib/filterCatalog'
+import { matchesRarityBucket } from '../components/FilterSections'
 import { isFounder } from '../lib/founders'
+import { prefersReducedMotion } from '../lib/motion'
 
 const PAGE = 10
 const POOL_SIZE = 200
 
-// Distinct badge colour per category. `other` is omitted on purpose:
-// when the spot is genuinely uncategorised we don't render any chip at
-// all so the photo stays clean (instead of a meaningless grey "AUTRE").
-const CAT_COLOR: Record<string, string> = {
-  supercar: '#F59E0B',
-  hypercar: '#8B5CF6',
-  JDM: '#3B82F6',
-  classic: '#A0522D',
-  youngtimer: '#14B8A6',
-}
-// Twin-stop linear gradient per category — replaces the flat tint on
-// the photo top-left badge. The lighter stop sits on the LEFT of the
-// pill so the badge reads as a small highlighted jewel rather than a
-// flat colour block (2026-06-02 Apple-style refinement).
-const CAT_GRADIENT: Record<string, string> = {
-  supercar: 'linear-gradient(90deg, #FBBF24 0%, #F59E0B 100%)',
-  hypercar: 'linear-gradient(90deg, #A78BFA 0%, #8B5CF6 100%)',
-  JDM: 'linear-gradient(90deg, #60A5FA 0%, #3B82F6 100%)',
-  classic: 'linear-gradient(90deg, #C68642 0%, #A0522D 100%)',
-  youngtimer: 'linear-gradient(90deg, #2DD4BF 0%, #14B8A6 100%)',
-}
-
 const SLIDES = [
   {
     img: 'https://images.unsplash.com/photo-1541348263662-e068662d82af?w=1200&q=80',
-    title: 'Les supercars spottées près de toi en temps réel',
+    titleKey: 'feedpage.slides.realtime',
   },
   {
     img: 'https://images.unsplash.com/photo-1567808291548-fc3ee04dbcf0?w=1200&q=80',
-    title: 'Like et commente les spots de la communauté',
+    titleKey: 'feedpage.slides.community',
   },
   {
     img: 'https://images.unsplash.com/photo-1617060219602-8cbf8f1eff8d?w=1200&q=80',
-    title: 'Grimpe dans le classement',
+    titleKey: 'feedpage.slides.ranking',
   },
 ]
 
@@ -80,42 +69,6 @@ function carKey(s: Spot): string {
   return [s.brand, s.model, s.color]
     .map((x) => (x ?? '').trim().toLowerCase())
     .join('|')
-}
-
-// Maps a spot to one of the modal's category buckets. Combines the
-// stored spot.category enum with the body-type silhouette mapping plus
-// model-name keyword detection for Coupés / Cabriolets.
-function matchesCategory(s: Spot, cat: string): boolean {
-  if (cat === 'Tout') return true
-  if (cat === 'Supercars') {
-    return s.category === 'supercar' || bodyTypeFor(s.brand, s.model, s.category) === 'supercar'
-  }
-  if (cat === 'Hypercars') {
-    return s.category === 'hypercar' || bodyTypeFor(s.brand, s.model, s.category) === 'hypercar'
-  }
-  if (cat === 'JDM') {
-    return s.category === 'JDM' || bodyTypeFor(s.brand, s.model, s.category) === 'jdm-sport'
-  }
-  if (cat === 'Berlines') {
-    const bt = bodyTypeFor(s.brand, s.model, s.category)
-    return bt === 'sedan' || bt === 'sport-sedan'
-  }
-  if (cat === 'SUV') {
-    const bt = bodyTypeFor(s.brand, s.model, s.category)
-    return bt === 'suv' || bt === 'suv-coupe' || bt === 'mini-suv'
-  }
-  if (cat === 'Coupés') {
-    return /\bcoupe\b|\bcoupé\b/i.test(`${s.brand} ${s.model}`)
-  }
-  if (cat === 'Cabriolets') {
-    return /\bcabriolet\b|\bconvertible\b|\bspider\b|\bspyder\b|\broadster\b|\btarga\b/i.test(
-      `${s.brand} ${s.model}`,
-    )
-  }
-  if (cat === 'Autre') {
-    return s.category === 'other' || s.category === 'classic' || s.category === 'youngtimer'
-  }
-  return true
 }
 
 function groupSpots(list: Spot[]): { primary: Spot; count: number }[] {
@@ -148,6 +101,7 @@ function groupSpots(list: Spot[]): { primary: Spot; count: number }[] {
 }
 
 function EmptyCarousel({ onSpot }: { onSpot: () => void }) {
+  const { t } = useTranslation()
   const [i, setI] = useState(0)
   useEffect(() => {
     const t = setInterval(() => setI((v) => (v + 1) % SLIDES.length), 4000)
@@ -155,7 +109,6 @@ function EmptyCarousel({ onSpot }: { onSpot: () => void }) {
   }, [])
   return (
     <div className="flex min-h-screen flex-col bg-bg px-4 pb-10 pt-[max(1rem,env(safe-area-inset-top))]">
-      <h1 className="py-4 font-display text-2xl font-bold text-fg">Fil</h1>
       <div className="relative flex-1 overflow-hidden rounded-3xl">
         {SLIDES.map((s, idx) => (
           <div
@@ -167,7 +120,7 @@ function EmptyCarousel({ onSpot }: { onSpot: () => void }) {
             <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-black/30" />
             <div className="absolute inset-x-0 bottom-0 p-7">
               <p className="font-display text-2xl font-bold leading-tight text-white">
-                {s.title}
+                {t(s.titleKey)}
               </p>
             </div>
           </div>
@@ -178,9 +131,9 @@ function EmptyCarousel({ onSpot }: { onSpot: () => void }) {
               key={idx}
               onClick={() => setI(idx)}
               className={`h-1.5 rounded-full transition-all ${
-                idx === i ? 'w-6 bg-accent' : 'w-2 bg-white/40'
+                idx === i ? 'w-6 bg-accent' : 'w-2 bg-fg/40'
               }`}
-              aria-label={`Slide ${idx + 1}`}
+              aria-label={t('feedpage.slideAria', { number: idx + 1 })}
             />
           ))}
         </div>
@@ -189,19 +142,28 @@ function EmptyCarousel({ onSpot }: { onSpot: () => void }) {
         onClick={onSpot}
         className="mt-6 w-full rounded-full bg-accent py-4 text-sm font-semibold text-fg shadow-lg shadow-accent/40"
       >
-        Sois le premier à spotter
+        {t('feedpage.beFirstToSpot')}
       </button>
     </div>
   )
 }
 
 export default function Feed() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const [spots, setSpots] = useState<Spot[] | null>(null)
   const [profiles, setProfiles] = useState<Record<string, Prof>>({})
-  const [filters, setFilters] = useState<FeedFilters>(DEFAULT_FILTERS)
+  // Dedupe/group once per spots change — not on every keystroke/re-render.
+  const grouped = useMemo(() => groupSpots(spots ?? []), [spots])
+  // Feed-only state — search + filters live entirely here and sort ONLY
+  // the community post list. Filters persisted under their own key
+  // (revs_feed_filters, distinct from the map's), restored on mount, so
+  // nothing here ever touches the Carte.
+  const [feedFilters, setFeedFilters] = useState<FeedFilters>(() =>
+    loadFeedFilters(),
+  )
   const [filtersOpen, setFiltersOpen] = useState(false)
-  const [searchQuery, setSearchQuery] = useState('')
+  const [feedSearchQuery, setFeedSearchQuery] = useState('')
   const [loadingMore, setLoadingMore] = useState(false)
   const [hasMore, setHasMore] = useState(true)
   const [geoMsg, setGeoMsg] = useState<string | null>(null)
@@ -224,66 +186,9 @@ export default function Feed() {
   const profilesRef = useRef<Record<string, Prof>>({})
   const sentinelRef = useRef<HTMLDivElement | null>(null)
 
-  // Double-tap-to-like state. tapStateRef tracks the last click time
-  // and the navigation timer per spot so we can cancel navigation
-  // when a second tap lands within the threshold. heartSpotId drives
-  // the giant heart pop overlay (one at a time across the feed).
-  const tapStateRef = useRef<
-    Map<string, { lastTap: number; navTimer: number | null }>
-  >(new Map())
-  const [heartSpotId, setHeartSpotId] = useState<string | null>(null)
+  // Per-card interaction (like, double-tap, comments) now lives inside
+  // <FeedCard /> — the feed no longer tracks a shared heart/nav timer.
 
-  /** Insert a spot_like row silently. Idempotent because the table's
-   *  (spot_id, user_id) primary key turns a duplicate into a no-op.
-   *  The card's LikeButton picks up the change via its realtime
-   *  subscription, so the chip count + filled heart update on their
-   *  own. */
-  async function likeSilently(spotId: string) {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-    if (!user) return
-    try {
-      await supabase
-        .from('spot_likes')
-        .insert({ spot_id: spotId, user_id: user.id })
-    } catch {
-      /* duplicate or transient — ignore */
-    }
-  }
-
-  /** Photo-area onClick handler: navigates on a single tap (after a
-   *  250 ms debounce), but a second tap within the same window cancels
-   *  the navigation and triggers a like + heart-pop overlay instead.
-   *  iOS Instagram pattern. */
-  function onPhotoTap(spotId: string) {
-    const map = tapStateRef.current
-    const entry = map.get(spotId) ?? { lastTap: 0, navTimer: null }
-    const now = Date.now()
-    if (now - entry.lastTap < 300) {
-      // Double-tap: cancel pending navigation, fire like + heart.
-      if (entry.navTimer != null) {
-        clearTimeout(entry.navTimer)
-      }
-      map.set(spotId, { lastTap: 0, navTimer: null })
-      setHeartSpotId(spotId)
-      // Cleanup synced to the new 350 ms keyframe + 50 ms safety
-      // buffer so the heart unmounts the moment the fade ends.
-      window.setTimeout(() => {
-        setHeartSpotId((cur) => (cur === spotId ? null : cur))
-      }, 400)
-      void likeSilently(spotId)
-      return
-    }
-    // First tap: schedule navigation; the second tap (if any) will
-    // cancel before this fires.
-    if (entry.navTimer != null) clearTimeout(entry.navTimer)
-    const navTimer = window.setTimeout(() => {
-      navigate(`/spot/${spotId}`)
-      map.set(spotId, { lastTap: 0, navTimer: null })
-    }, 250)
-    map.set(spotId, { lastTap: now, navTimer })
-  }
 
   const mergeProfiles = useCallback(async (list: Spot[]) => {
     const ids = [
@@ -333,6 +238,25 @@ export default function Feed() {
     setProfiles(next)
   }, [])
 
+  // Instant re-render — when a spot is published (NewSpot emits it the
+  // moment the insert is confirmed), unshift it to the very top of the
+  // feed so it's already there when the user switches back to the Fil.
+  // Deduped by id; a later server fetch replaces the optimistic row.
+  useEffect(() => {
+    return onNewSpot((spot) => {
+      poolRef.current = [
+        spot,
+        ...poolRef.current.filter((s) => s.id !== spot.id),
+      ]
+      setSpots((prev) => {
+        const list = prev ?? []
+        if (list.some((s) => s.id === spot.id)) return list
+        return [spot, ...list]
+      })
+      void mergeProfiles([spot])
+    })
+  }, [mergeProfiles])
+
   const getPosition = useCallback(
     () =>
       new Promise<{ lat: number; lng: number } | null>((resolve) => {
@@ -350,26 +274,22 @@ export default function Feed() {
   // Resolve the final filtered+sorted list from the in-memory pool.
   // The pool itself is always "the last 200 spots ordered by created_at
   // desc" — every filter operation works on top of that snapshot to
-  // avoid round-trips when toggling filters.
+  // avoid round-trips when toggling feedFilters.
   const applyFilters = useCallback(
     (pool: Spot[], f: FeedFilters): Spot[] => {
       let out = pool
-      // Category filter — combines spot.category enum with the body-
-      // type silhouette mapping, so "SUV" / "Coupés" / "Cabriolets" /
-      // "Berlines" all work even though those aren't stored categories.
-      if (f.category !== 'Tout') {
-        out = out.filter((s) => matchesCategory(s, f.category))
+      // Category filter — shared matcher (spot.category enum + body-type
+      // silhouette mapping + name keywords) so every bucket works.
+      if (f.category && f.category !== 'Tout') {
+        out = out.filter((s) => matchesCategoryFilter(s, f.category))
       }
-      // Brand filter — fuzzy match against the brand's catalogue
-      // patterns (case-insensitive substring of the brand's `match[]`).
+      // Brand filter — shared matcher (catalogue `match[]` substrings).
       if (f.brand) {
-        const brand = BRANDS.find((b) => b.slug === f.brand)
-        if (brand) {
-          out = out.filter((s) => {
-            const needle = (s.brand ?? '').toLowerCase()
-            return brand.match.some((m) => needle.includes(m))
-          })
-        }
+        out = out.filter((s) => matchesBrandFilter(s, f.brand))
+      }
+      // Rarity bucket filter (Commun / Rare / Ultra Rare / Légendaire).
+      if (f.rarity && f.rarity !== 'all') {
+        out = out.filter((s) => matchesRarityBucket(s.rarity, f.rarity))
       }
       // City filter — needs the resolved profile (ville). Falls back to
       // including spots where the profile hasn't loaded yet so the
@@ -433,7 +353,7 @@ export default function Feed() {
 
       // 2. Sort-specific side fetches in parallel.
       const sideFetches: Promise<unknown>[] = []
-      if (filters.sort === 'liked') {
+      if (feedFilters.sort === 'liked') {
         sideFetches.push(
           (async () => {
             const ids = pool.map((s) => s.id)
@@ -450,27 +370,30 @@ export default function Feed() {
           })(),
         )
       }
-      if (filters.sort === 'nearby') {
+      if (feedFilters.sort === 'nearby') {
         sideFetches.push(
-          getPosition().then((p) => {
-            userPosRef.current = p
-            if (!p) {
-              setGeoMsg(
-                'Active la localisation pour trier par distance — tri par récence en attendant.',
-              )
+          (async () => {
+            // Never auto-prompt on load — only use GPS if already granted
+            // (the 'nearby' sort is persisted, so this runs on every open).
+            if (!(await hasGeoPermission())) {
+              setGeoMsg(t('feedpage.geoDisabled'))
+              return
             }
-          }),
+            const p = await getPosition()
+            userPosRef.current = p
+            if (!p) setGeoMsg(t('feedpage.geoDisabled'))
+          })(),
         )
       }
       // City filter needs profiles to resolve villes — resolve them eagerly
       // so the initial filter pass doesn't miss matches.
-      if (filters.city.trim()) {
+      if (feedFilters.city.trim()) {
         sideFetches.push(mergeProfiles(pool))
       }
       if (sideFetches.length) await Promise.all(sideFetches)
       if (!active) return
 
-      const filtered = applyFilters(pool, filters)
+      const filtered = applyFilters(pool, feedFilters)
       const slice = filtered.slice(0, PAGE)
       await mergeProfiles(slice)
       if (!active) return
@@ -481,13 +404,13 @@ export default function Feed() {
     return () => {
       active = false
     }
-  }, [filters, refreshKey, applyFilters, getPosition, mergeProfiles])
+  }, [feedFilters, refreshKey, applyFilters, getPosition, mergeProfiles, t])
 
   const loadMore = useCallback(async () => {
     if (loadingMore || !hasMore || spots === null) return
     setLoadingMore(true)
     try {
-      const filtered = applyFilters(poolRef.current, filters)
+      const filtered = applyFilters(poolRef.current, feedFilters)
       const shown = spots.length
       const next = filtered.slice(shown, shown + PAGE)
       await mergeProfiles(next)
@@ -496,7 +419,7 @@ export default function Feed() {
     } finally {
       setLoadingMore(false)
     }
-  }, [loadingMore, hasMore, spots, filters, applyFilters, mergeProfiles])
+  }, [loadingMore, hasMore, spots, feedFilters, applyFilters, mergeProfiles])
 
   const loadMoreRef = useRef(loadMore)
   loadMoreRef.current = loadMore
@@ -516,8 +439,7 @@ export default function Feed() {
   if (spots === null) {
     return (
       <div className="min-h-screen bg-bg px-4 pt-[max(1rem,env(safe-area-inset-top))]">
-        <h1 className="py-4 font-display text-2xl font-bold text-fg">Fil</h1>
-        <div className="space-y-5">
+        <div className="space-y-5 pt-4">
           {Array.from({ length: 3 }).map((_, i) => (
             <SkeletonCard key={i} />
           ))}
@@ -526,109 +448,102 @@ export default function Feed() {
     )
   }
 
-  const allDefaults = !filtersActive(filters)
+  const allDefaults = !filtersActive(feedFilters)
   if (spots.length === 0 && allDefaults) {
     return <EmptyCarousel onSpot={() => navigate('/new-spot')} />
   }
 
+  // The filter icon dot lights up whenever ANY filter is non-default —
+  // everything (catégorie / marque / rareté) now lives in the sheet.
+  const advancedActive = filtersActive(feedFilters)
 
   return (
     <div
       ref={containerRef}
-      className="relative min-h-screen bg-bg px-4 pt-[max(1rem,env(safe-area-inset-top))]"
+      className="relative min-h-screen bg-bg pt-[max(1rem,env(safe-area-inset-top))]"
     >
+      {/* Root is edge-to-edge (px-0) so feed photos touch the screen
+          edges with NO overflow trick — the old -mx-4 was being clipped by
+          the feed-card's content-visibility paint-containment. Horizontal
+          breathing room is re-applied selectively (px-4) on text/icon rows
+          only. */}
       <PullIndicator pull={pull} refreshing={refreshing} />
-      <h1 className="display-xl py-5 text-fg">Fil</h1>
 
-      {/* Search + filtres — glass premium. Background + border now
-          resolve through CSS vars (--color-glass + --color-border)
-          so the bar auto-flips when the user toggles dark / light
-          from Settings. */}
-      <div
-        className="mb-3 flex items-center gap-2 rounded-full px-4 py-2.5"
-        style={{
-          background: 'var(--color-glass)',
-          border: '1px solid var(--color-border)',
-          backdropFilter: 'saturate(160%) blur(22px)',
-          WebkitBackdropFilter: 'saturate(160%) blur(22px)',
-          boxShadow: '0 4px 30px rgba(0, 0, 0, 0.40)',
-        }}
-      >
-        <SearchIcon className="h-4 w-4 flex-none text-neutral-500" />
-        <input
-          type="text"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="Rechercher dans le fil…"
-          className="flex-1 bg-transparent text-xs font-medium tracking-tight text-neutral-200 placeholder:text-neutral-500 outline-none"
-        />
-        {searchQuery && (
-          <button
-            onClick={() => setSearchQuery('')}
-            aria-label="Effacer"
-            className="tappable text-neutral-500 hover:text-neutral-300"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        )}
-      </div>
-
-      <div className="mb-5 flex items-center gap-2">
-        <button
-          onClick={() => setFilters(DEFAULT_FILTERS)}
-          className={`tappable flex-1 rounded-full px-4 py-2.5 text-xs font-bold transition-colors ${
-            allDefaults
-              ? 'bg-accent text-fg'
-              : 'text-neutral-300 hover:text-white'
-          }`}
-          style={
-            allDefaults
-              ? undefined
-              : {
-                  background: 'var(--color-glass)',
-                  border: '1px solid var(--color-border)',
-                  backdropFilter: 'saturate(160%) blur(22px)',
-                  WebkitBackdropFilter: 'saturate(160%) blur(22px)',
-                }
-          }
+      {/* Search (~85%) + a single minimal slider icon that opens the
+          filters sheet. The "Fil" title was removed 2026-06-23; the
+          category / brand / rarity pills moved INTO the sheet 2026-06-23
+          so the header is just the search row and the photos below own
+          the screen. Glass + border resolve through CSS vars so the
+          whole row auto-flips dark / light. */}
+      <div className="mb-4 flex items-center gap-2 px-4 pt-3">
+        <div
+          className="flex flex-1 items-center gap-2 rounded-full px-4 py-2.5"
+          style={{
+            background: 'var(--color-glass)',
+            border: '1px solid var(--color-border)',
+            backdropFilter: 'saturate(160%) blur(22px)',
+            WebkitBackdropFilter: 'saturate(160%) blur(22px)',
+          }}
         >
-          Tout
-        </button>
+          <SearchIcon className="h-4 w-4 flex-none text-fg2" />
+          <input
+            type="text"
+            value={feedSearchQuery}
+            onChange={(e) => setFeedSearchQuery(e.target.value)}
+            placeholder={t('feedpage.searchPlaceholder')}
+            style={{ fontSize: '16px' }}
+            className="flex-1 bg-transparent font-medium tracking-tight text-fg/80 placeholder:text-fg2 outline-none"
+          />
+          {feedSearchQuery && (
+            <button
+              onClick={() => setFeedSearchQuery('')}
+              aria-label={t('feedpage.clear')}
+              className="tappable text-fg2 hover:text-fg"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
         <button
           onClick={() => setFiltersOpen(true)}
-          className={`tappable relative flex flex-1 items-center justify-center gap-1.5 rounded-full px-4 py-2.5 text-xs font-bold transition-colors ${
-            !allDefaults
-              ? 'bg-accent/15 text-accent'
-              : 'text-neutral-300 hover:text-white'
-          }`}
-          style={
-            !allDefaults
-              ? { border: '1px solid rgba(232,32,58,0.4)' }
-              : {
-                  background: 'var(--color-glass)',
-                  border: '1px solid var(--color-border)',
-                  backdropFilter: 'saturate(160%) blur(22px)',
-                  WebkitBackdropFilter: 'saturate(160%) blur(22px)',
-                }
-          }
+          aria-label={t('feedpage.advancedFilters')}
+          className="tappable relative flex flex-none items-center justify-center"
+          style={{
+            height: 36,
+            width: 36,
+            borderRadius: 10,
+            background: advancedActive ? 'rgba(232,32,58,0.15)' : '#1a1a1a',
+            border: advancedActive
+              ? '1px solid rgba(232,32,58,0.40)'
+              : '1px solid #333',
+          }}
         >
-          <FilterIcon className="h-3.5 w-3.5" />
-          Filtres
-          {!allDefaults && (
-            <span className="ml-0.5 flex h-2 w-2 rounded-full bg-accent" />
+          <SlidersHorizontal
+            className={`h-[18px] w-[18px] ${advancedActive ? 'text-accent' : 'text-fg2'}`}
+          />
+          {advancedActive && (
+            <span
+              className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-accent"
+              style={{ border: '2px solid rgb(var(--color-bg))' }}
+            />
           )}
         </button>
       </div>
 
       <FeedFiltersModal
         open={filtersOpen}
-        initial={filters}
+        initial={feedFilters}
         onClose={() => setFiltersOpen(false)}
-        onApply={setFilters}
+        onApply={(next) => {
+          // Apply + persist to the feed's own key. onClose (fired by the
+          // modal right after onApply) closes the sheet.
+          setFeedFilters(next)
+          saveFeedFilters(next)
+        }}
       />
 
       {geoMsg && (
-        <p className="mb-4 rounded-xl bg-card px-4 py-3 text-xs text-fg/50">
+        <p className="mb-4 mx-4 rounded-xl bg-card px-4 py-3 text-xs text-fg/50">
           {geoMsg}
         </p>
       )}
@@ -646,21 +561,21 @@ export default function Feed() {
           </div>
           <p className="mt-4 font-display text-lg font-extrabold tracking-tighter text-fg">
             {allDefaults
-              ? 'Aucun spot pour l’instant'
-              : 'Rien ne correspond'}
+              ? t('feedpage.empty.noSpotsTitle')
+              : t('feedpage.empty.noMatchTitle')}
           </p>
           <p className="mt-1 text-sm text-fg2">
             {allDefaults
-              ? 'Sois le premier à spotter une voiture iconique !'
-              : 'Aucun spot ne correspond à ces filtres.'}
+              ? t('feedpage.empty.noSpotsBody')
+              : t('feedpage.empty.noMatchBody')}
           </p>
         </div>
       ) : (
-        <div className="space-y-5">
+        <div>
           {(() => {
-            const needle = searchQuery.trim().toLowerCase()
+            const needle = feedSearchQuery.trim().toLowerCase()
             const filtered = needle
-              ? groupSpots(spots).filter(({ primary: s }) => {
+              ? grouped.filter(({ primary: s }) => {
                   const p = profiles[s.user_id]
                   const hay = [
                     s.brand,
@@ -673,219 +588,23 @@ export default function Feed() {
                     .toLowerCase()
                   return hay.includes(needle)
                 })
-              : groupSpots(spots)
+              : grouped
             if (filtered.length === 0) {
               return (
                 <p className="px-8 py-12 text-center text-sm text-fg2">
-                  Aucune voiture trouvée pour
-                  <span className="text-fg"> « {searchQuery} »</span>.
+                  {t('feedpage.searchNoResults')}
+                  <span className="text-fg"> « {feedSearchQuery} »</span>.
                 </p>
               )
             }
-            return filtered.map(({ primary: spot, count }) => {
-            const prof = profiles[spot.user_id]
-            const pseudo = prof?.pseudo || 'Spotter'
-            const catColor = CAT_COLOR[spot.category]
-            const name = spot.model || spot.brand || 'Voiture'
-            const sub = [spot.brand, spot.year].filter(Boolean).join(' · ')
-            const founder = isFounder(spot.user_id)
-            return (
-              <article
+            return filtered.map(({ primary: spot, count }) => (
+              <FeedCard
                 key={spot.id}
-                className="overflow-hidden rounded-[38px] bg-card shadow-soft"
-                style={{ border: '1px solid var(--color-border)' }}
-              >
-                {/* Photo card is a div+role=button so nested interactive
-                    children (profile nav, LikeButton) remain valid HTML.
-                    Keyboard activation mirrors a native <button>. */}
-                <div
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => onPhotoTap(spot.id)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault()
-                      onPhotoTap(spot.id)
-                    }
-                  }}
-                  className="tappable relative block w-full cursor-pointer select-none"
-                >
-                  {spot.photo_url ? (
-                    <img
-                      src={spot.photo_url}
-                      alt={`${spot.brand} ${spot.model}`}
-                      loading="lazy"
-                      className="aspect-[4/3] w-full object-cover"
-                    />
-                  ) : (
-                    <div className="flex aspect-[4/3] w-full items-center justify-center bg-white/5">
-                      <Car className="h-12 w-12 text-fg2/40" />
-                    </div>
-                  )}
-
-                  {/* Giant heart pop on double-tap. Overlay sits above
-                      the gradient + chips, pointer-events: none so it
-                      doesn't intercept further taps. */}
-                  {heartSpotId === spot.id && (
-                    <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center">
-                      <Heart
-                        className="feed-double-heart h-28 w-28"
-                        style={{ color: '#E8203A', fill: '#E8203A' }}
-                      />
-                    </div>
-                  )}
-                  {/* No badge for `other` — keeps the photo clean when
-                      the category is genuinely undefined. */}
-                  {catColor && (
-                    <span
-                      className="absolute left-4 top-4 z-20 rounded-full px-3 py-0.5 text-[9px] font-black uppercase tracking-widest text-black"
-                      style={{
-                        background:
-                          CAT_GRADIENT[spot.category] ?? catColor,
-                        boxShadow: `0 6px 16px ${catColor}40`,
-                        letterSpacing: '0.14em',
-                      }}
-                    >
-                      {categoryLabel(spot.category).toUpperCase()}
-                    </span>
-                  )}
-                  {count > 1 && (
-                    <span
-                      className="absolute right-4 top-4 flex items-center gap-1 rounded-full px-2.5 py-1 text-[9px] font-bold text-white"
-                      style={{
-                        // Spec 2026-06-02 (later refinement): back to .50
-                        // alpha for a slightly more transparent smoky
-                        // glass per the latest UI directive.
-                        background: 'rgba(0, 0, 0, 0.50)',
-                        border: '1px solid rgba(255, 255, 255, 0.10)',
-                        backdropFilter: 'saturate(160%) blur(12px)',
-                        WebkitBackdropFilter: 'saturate(160%) blur(12px)',
-                        boxShadow: '0 4px 14px rgba(0, 0, 0, 0.35)',
-                      }}
-                    >
-                      <Layers className="h-3 w-3" />
-                      {count}
-                    </span>
-                  )}
-                  {/* Photo gradient — explicit h-44 (176px) per the
-                      2026-06-02 satin spec so the fade hits a fixed
-                      ramp regardless of brand/model text length and
-                      keeps the identity row below it readable. */}
-                  <div className="absolute inset-x-0 bottom-0 h-44 bg-gradient-to-t from-black/95 via-black/40 to-transparent z-10 pointer-events-none" />
-                  {/* Brand + model + XP overlay — sits above the identity
-                      glass plate, riding the photo's bottom gradient. */}
-                  <div className="absolute inset-x-0 bottom-16 z-20 px-4 text-left">
-                    <div className="flex items-end justify-between gap-3">
-                      <div className="min-w-0">
-                        <h2
-                          className="line-clamp-2 font-display font-extrabold leading-[1.05] tracking-tighter text-white"
-                          style={{ fontSize: '22px', fontWeight: 800 }}
-                        >
-                          {name}
-                        </h2>
-                        {sub && (
-                          <p className="mt-1 truncate text-[13px] text-white/55">
-                            {sub}
-                          </p>
-                        )}
-                      </div>
-                      <span
-                        className="flex flex-none items-center gap-1 rounded-full bg-black/55 px-2.5 py-1.5 text-[11px] font-extrabold tracking-wider text-white backdrop-blur"
-                        style={{
-                          border: '1px solid rgba(255,255,255,0.18)',
-                          boxShadow:
-                            '0 6px 18px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.08)',
-                        }}
-                      >
-                        <Zap className="h-3 w-3 text-accent" />+
-                        {xpForSpot(spot.estimated_price, spot.rarity)}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Identity glass plate — own translucent strip at the
-                      very bottom of the photo per the 2026-06-02 spec.
-                      bg-black/40 + border-top white/5 + 12px blur so
-                      the avatar/pseudo/Fondateur/time row reads on a
-                      proper smoked-glass slate. Nested interactive
-                      children use stopPropagation. */}
-                  <div
-                    className="absolute inset-x-0 bottom-0 z-20 flex items-center justify-between gap-2 px-4 py-3"
-                    style={{
-                      background: 'rgba(0, 0, 0, 0.40)',
-                      borderTop: '1px solid rgba(255, 255, 255, 0.05)',
-                      backdropFilter: 'saturate(160%) blur(12px)',
-                      WebkitBackdropFilter: 'saturate(160%) blur(12px)',
-                    }}
-                  >
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          navigate(`/u/${spot.user_id}`)
-                        }}
-                        className="tappable flex min-w-0 flex-1 items-center gap-2.5 text-left"
-                        aria-label={`Profil de ${pseudo}`}
-                      >
-                        <div
-                          className="flex h-9 w-9 flex-none items-center justify-center overflow-hidden rounded-full bg-neutral-900 text-sm font-extrabold text-white"
-                          style={{
-                            border: '1px solid rgba(255,255,255,0.10)',
-                            boxShadow:
-                              '0 4px 12px rgba(0,0,0,0.45)',
-                          }}
-                        >
-                          {prof?.avatar ? (
-                            <img
-                              src={prof.avatar}
-                              alt=""
-                              loading="lazy"
-                              decoding="async"
-                              className="h-full w-full object-cover"
-                            />
-                          ) : (
-                            pseudo.charAt(0).toUpperCase()
-                          )}
-                        </div>
-                        <div className="min-w-0 space-y-0.5">
-                          <div className="flex items-center gap-1.5">
-                            <span
-                              className="truncate font-black tracking-tight text-white"
-                              style={{ fontSize: '12px' }}
-                            >
-                              {pseudo}
-                            </span>
-                            {founder && (
-                              <span
-                                className="flex-none rounded font-black uppercase tracking-widest text-red-400"
-                                style={{
-                                  background: 'rgba(239, 68, 68, 0.10)',
-                                  border:
-                                    '1px solid rgba(239, 68, 68, 0.20)',
-                                  padding: '2px 6px',
-                                  fontSize: '8px',
-                                  letterSpacing: '0.16em',
-                                }}
-                              >
-                                Fondateur
-                              </span>
-                            )}
-                          </div>
-                          <p
-                            className="truncate font-medium tracking-tight text-neutral-400"
-                            style={{ fontSize: '10px' }}
-                          >
-                            {[prof?.ville, timeAgo(spot.created_at)]
-                              .filter(Boolean)
-                              .join(' · ')}
-                          </p>
-                        </div>
-                      </button>
-                      <LikeButton spotId={spot.id} className="flex-none" />
-                  </div>
-                </div>
-              </article>
-            )
-          })
+                spot={spot}
+                prof={profiles[spot.user_id]}
+                burstCount={count}
+              />
+            ))
           })()}
 
           <div ref={sentinelRef} className="h-1" />
@@ -896,7 +615,7 @@ export default function Feed() {
           )}
           {!hasMore && spots.length > PAGE && (
             <p className="py-4 text-center text-xs text-fg/25">
-              Tu as tout vu pour le moment.
+              {t('feedpage.allCaughtUp')}
             </p>
           )}
         </div>
@@ -904,3 +623,450 @@ export default function Feed() {
     </div>
   )
 }
+
+// ─────────────────────────────── FEED CARD ───────────────────────────────
+
+// Double-tap heart burst — 8 fixed directions, slightly varied distance
+// (60–80px) and size (8–16px) for a natural pop. Deterministic so the
+// render stays pure.
+const HEART_DIRS = [0, 45, 90, 135, 180, 225, 270, 315].map((deg, i) => {
+  const a = (deg * Math.PI) / 180
+  const dist = 60 + (i % 3) * 10
+  const size = 8 + (i % 5) * 2
+  return {
+    hx: Math.cos(a) * dist,
+    hy: Math.sin(a) * dist,
+    size,
+  }
+})
+
+/** One spot in the feed — Instagram-grade. Layers: spotter row, 4:5
+ *  edge-to-edge photo (double-tap to like, never navigates), tools row
+ *  (like + count, comment + count, XP badge), tappable title block (the
+ *  only path to the detail page), and a quick-comment row that opens the
+ *  comments sheet. All theme-aware. */
+const FeedCard = memo(function FeedCard({
+  spot,
+  prof,
+  burstCount,
+}: {
+  spot: Spot
+  prof?: Prof
+  burstCount: number
+}) {
+  const { t } = useTranslation()
+  const navigate = useNavigate()
+  const meRef = useRef<string | null>(null)
+  const busyRef = useRef(false)
+  const lastTapRef = useRef(0)
+  // Pending single-tap → open detail. Cancelled if a 2nd tap (double-tap
+  // like) lands within the 300 ms window.
+  const tapNavRef = useRef<number | null>(null)
+  // Parallax: the photo is 120% tall inside an overflow-hidden frame; we
+  // translate it at ~0.1× the card's distance from the viewport centre so
+  // it drifts slower than the scroll. Capturing scroll listener catches
+  // the tab-pane's scroll (events don't bubble, but capture does).
+  const photoRef = useRef<HTMLDivElement>(null)
+  const imgRef = useRef<HTMLImageElement>(null)
+  useEffect(() => {
+    if (prefersReducedMotion()) return
+    const photo = photoRef.current
+    const img = imgRef.current
+    if (!photo || !img) return
+    let visible = false
+    let raf = 0
+    const apply = () => {
+      raf = 0
+      const rect = photo.getBoundingClientRect()
+      const vh = window.innerHeight || 1
+      const offset = rect.top + rect.height / 2 - vh / 2
+      const margin = rect.height * 0.1
+      const ty = Math.max(-margin, Math.min(margin, offset * 0.1)) - margin
+      img.style.transform = `translate3d(0, ${ty}px, 0)`
+    }
+    const onScroll = () => {
+      if (visible && !raf) raf = requestAnimationFrame(apply)
+    }
+    const io = new IntersectionObserver(
+      (entries) => {
+        visible = entries[0]?.isIntersecting ?? false
+        if (visible) onScroll()
+      },
+      { threshold: 0 },
+    )
+    io.observe(photo)
+    window.addEventListener('scroll', onScroll, true)
+    apply()
+    return () => {
+      io.disconnect()
+      window.removeEventListener('scroll', onScroll, true)
+      if (raf) cancelAnimationFrame(raf)
+    }
+  }, [])
+  const [liked, setLiked] = useState(false)
+  const [likeCount, setLikeCount] = useState(0)
+  const [commentCount, setCommentCount] = useState(0)
+  const [heartPop, setHeartPop] = useState(false)
+  const [sheetOpen, setSheetOpen] = useState(false)
+  const [myAvatar, setMyAvatar] = useState<string | null>(null)
+  const [myInitial, setMyInitial] = useState('?')
+
+  const pseudo = prof?.pseudo || t('feedpage.defaultPseudo')
+  const ville = prof?.ville?.trim() || ''
+  const founder = isFounder(spot.user_id)
+  const cat = categoryBadge(spot.category)
+  const rb = rarityBadge(spot.rarity)
+  const title = [spot.brand, spot.model].filter(Boolean).join(' ') || t('feedpage.defaultCar')
+
+  useEffect(() => {
+    let active = true
+    ;(async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (!active) return
+      meRef.current = user?.id ?? null
+      if (user) {
+        supabase
+          .from('profiles')
+          .select('avatar, pseudo')
+          .eq('user_id', user.id)
+          .maybeSingle()
+          .then(({ data }) => {
+            if (!active) return
+            const m = data as { avatar: string | null; pseudo: string | null } | null
+            setMyAvatar(m?.avatar ?? null)
+            setMyInitial(
+              (m?.pseudo ?? user.email ?? '?').charAt(0).toUpperCase(),
+            )
+          })
+      }
+      const [likeC, likedRes, comC] = await Promise.all([
+        supabase
+          .from('spot_likes')
+          .select('*', { count: 'exact', head: true })
+          .eq('spot_id', spot.id),
+        user
+          ? supabase
+              .from('spot_likes')
+              .select('spot_id')
+              .eq('spot_id', spot.id)
+              .eq('user_id', user.id)
+              .maybeSingle()
+          : Promise.resolve({ data: null }),
+        supabase
+          .from('comments')
+          .select('*', { count: 'exact', head: true })
+          .eq('spot_id', spot.id),
+      ])
+      if (!active) return
+      setLikeCount(likeC.count ?? 0)
+      setLiked(!!likedRes.data)
+      setCommentCount(comC.count ?? 0)
+    })()
+    return () => {
+      active = false
+    }
+  }, [spot.id])
+
+  async function setLikeState(next: boolean) {
+    const uid = meRef.current
+    if (!uid || busyRef.current || next === liked) return
+    busyRef.current = true
+    setLiked(next)
+    setLikeCount((n) => Math.max(0, n + (next ? 1 : -1)))
+    const op = next
+      ? supabase.from('spot_likes').insert({ spot_id: spot.id, user_id: uid })
+      : supabase
+          .from('spot_likes')
+          .delete()
+          .eq('spot_id', spot.id)
+          .eq('user_id', uid)
+    const { error } = await op
+    if (error) {
+      setLiked(!next)
+      setLikeCount((n) => Math.max(0, n + (next ? -1 : 1)))
+    } else if (next && spot.user_id !== uid) {
+      const who = await myPseudo()
+      void notifyPush({
+        user_id: spot.user_id,
+        title: t('feedpage.push.likeTitle'),
+        body: t('feedpage.push.likeBody', {
+          who,
+          brand: spot.brand,
+          model: spot.model,
+        }),
+        url: `/spot/${spot.id}`,
+        type: 'likes',
+      })
+    }
+    busyRef.current = false
+  }
+
+  // Single tap → open the spot detail (after a 300 ms wait to rule out a
+  // double-tap). A second tap within 300 ms is a double-tap → like + spring
+  // heart pop, and cancels the pending navigation.
+  function onPhotoTap() {
+    const now = Date.now()
+    if (now - lastTapRef.current < 300) {
+      lastTapRef.current = 0
+      if (tapNavRef.current) {
+        clearTimeout(tapNavRef.current)
+        tapNavRef.current = null
+      }
+      setHeartPop(true)
+      hapticTap()
+      // 650ms so the 600ms mini-heart burst finishes before unmount.
+      window.setTimeout(() => setHeartPop(false), 650)
+      void setLikeState(true) // double-tap always likes, never unlikes
+    } else {
+      lastTapRef.current = now
+      if (tapNavRef.current) clearTimeout(tapNavRef.current)
+      tapNavRef.current = window.setTimeout(() => {
+        tapNavRef.current = null
+        navigate(`/spot/${spot.id}`)
+      }, 300)
+    }
+  }
+
+  return (
+    // 8px gap between posts on the #0a0a0a page; each post's interactions
+    // live on a clean #141414 block so they never bleed into the next one.
+    <article className="feed-card" style={{ marginBottom: '8px' }}>
+      {/* PHOTO 4:5 — full-bleed. Rarity badge top-right, 44px floating
+          header, and the car identity over a bottom gradient that keeps
+          the text legible on any photo. Double-tap likes; never navigates. */}
+      <div
+        ref={photoRef}
+        onClick={onPhotoTap}
+        className="relative aspect-[4/5] cursor-pointer select-none overflow-hidden"
+      >
+        {spot.photo_url ? (
+          <img
+            ref={imgRef}
+            src={spot.photo_url}
+            alt={title}
+            loading="lazy"
+            decoding="async"
+            className="absolute left-0 top-0 w-full object-cover contrast-[1.03] brightness-[0.98]"
+            style={{ height: '120%', willChange: 'transform' }}
+          />
+        ) : (
+          <div className="absolute inset-0 flex items-center justify-center bg-fg/5">
+            <Car className="h-12 w-12 text-fg2/40" />
+          </div>
+        )}
+
+        {/* Rarity badge — same identity as the Collection (gold + animated
+            for the top tier). Top-right. */}
+        <span
+          className={`absolute right-3 top-3 z-20 overflow-hidden rounded-md px-2 py-1 text-[10px] font-extrabold ${
+            rb.animated ? 'gold-shimmer' : ''
+          }`}
+          style={{
+            background: rb.bg,
+            color: rb.fg,
+            border: `1px solid ${rb.border}`,
+            letterSpacing: '0.06em',
+          }}
+        >
+          {rb.label}
+        </span>
+
+        {/* Floating header — 44px avatar + pseudo on a semi-transparent
+            pill so it reads on any photo. */}
+        <button
+          onClick={(e) => {
+            e.stopPropagation()
+            navigate(`/u/${spot.user_id}`)
+          }}
+          className="absolute inset-x-0 top-0 z-20 flex min-w-0 items-center gap-2.5 px-3 pt-3 text-left"
+          aria-label={t('feedpage.profileOf', { pseudo })}
+        >
+          <div
+            className="flex h-11 w-11 flex-none items-center justify-center overflow-hidden rounded-full bg-black/35 text-[15px] font-extrabold text-white"
+            style={{ border: '2px solid #E8203A' }}
+          >
+            {prof?.avatar ? (
+              <img
+                src={prof.avatar}
+                alt=""
+                loading="lazy"
+                decoding="async"
+                className="h-full w-full rounded-full object-cover"
+                style={{ objectPosition: 'top' }}
+              />
+            ) : (
+              pseudo.charAt(0).toUpperCase()
+            )}
+          </div>
+          <span
+            className="inline-flex min-w-0 items-center gap-1.5 rounded-full px-2.5 py-1"
+            style={{
+              background: 'rgba(0,0,0,0.38)',
+              backdropFilter: 'blur(4px)',
+              WebkitBackdropFilter: 'blur(4px)',
+            }}
+          >
+            <span className="truncate text-[13px] font-semibold tracking-tight text-white">
+              {pseudo}
+            </span>
+            {founder && (
+              <span
+                className="flex-none rounded uppercase tracking-wider text-white"
+                style={{
+                  background: 'rgba(239,68,68,0.6)',
+                  padding: '1px 4px',
+                  fontSize: '7px',
+                  letterSpacing: '0.12em',
+                }}
+              >
+                {t('feedpage.founder')}
+              </span>
+            )}
+          </span>
+        </button>
+
+        {/* Bottom legibility gradient — transparent → #0a0a0a over 120px. */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 bottom-0"
+          style={{
+            height: '120px',
+            background:
+              'linear-gradient(to top, #0a0a0a 0%, rgba(10,10,10,0.55) 45%, rgba(10,10,10,0) 100%)',
+          }}
+        />
+
+        {/* Car identity — name + year · category · ville · time. Tapping
+            this block opens the detail (the photo itself never navigates). */}
+        <button
+          onClick={(e) => {
+            e.stopPropagation()
+            navigate(`/spot/${spot.id}`)
+          }}
+          className="absolute inset-x-0 bottom-0 z-10 px-4 pb-3 text-left"
+          aria-label={t('feedpage.view', { title })}
+        >
+          <p className="truncate text-[16px] font-bold text-white">{title}</p>
+          {spot.description?.trim() ? (
+            <p className="clamp-2 mt-0.5 text-[13px] leading-snug text-white/85">
+              {spot.description.trim()}
+            </p>
+          ) : null}
+          <p className="mt-0.5 truncate text-[13px] text-white/70">
+            {spot.year ? <>{spot.year} · </> : null}
+            {cat ? (
+              <>
+                <span className="font-semibold" style={{ color: cat.color }}>
+                  {cat.label}
+                </span>
+                {' · '}
+              </>
+            ) : null}
+            {ville ? <>{ville} · </> : null}
+            {timeAgo(spot.created_at)}
+          </p>
+        </button>
+
+        {heartPop && (
+          <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center">
+            <Heart
+              className="feed-double-heart h-28 w-28"
+              style={{ color: '#FF2D46', fill: '#FF2D46' }}
+            />
+            {HEART_DIRS.map((d, i) => (
+              <Heart
+                key={i}
+                className="feed-mini-heart"
+                style={
+                  {
+                    width: d.size,
+                    height: d.size,
+                    '--hx': `${d.hx}px`,
+                    '--hy': `${d.hy}px`,
+                  } as React.CSSProperties
+                }
+              />
+            ))}
+          </div>
+        )}
+
+        {burstCount > 1 && (
+          <span
+            className="absolute z-20 flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-bold text-white"
+            style={{
+              right: 12,
+              top: 52,
+              background: 'rgba(0, 0, 0, 0.45)',
+              border: '1px solid rgba(255, 255, 255, 0.12)',
+              backdropFilter: 'saturate(160%) blur(12px)',
+              WebkitBackdropFilter: 'saturate(160%) blur(12px)',
+            }}
+          >
+            <Layers className="h-3 w-3" />
+            {burstCount}
+          </span>
+        )}
+      </div>
+
+      {/* Interactions block — own #141414 surface so likes / comments / XP
+          + the comment bar clearly belong to THIS post. */}
+      <div style={{ background: '#141414' }}>
+        <div className="flex items-center gap-5 px-4 pt-3">
+          <button
+            onClick={() => setLikeState(!liked)}
+            aria-label={liked ? t('feedpage.unlike') : t('feedpage.like')}
+            aria-pressed={liked}
+            className="tappable flex items-center gap-1.5"
+          >
+            <Heart
+              strokeWidth={1.2}
+              className={`h-6 w-6 transition-colors ${liked ? 'fill-accent text-accent' : 'text-white'}`}
+            />
+            <span className="text-sm font-medium text-white">{likeCount}</span>
+          </button>
+          <button
+            onClick={() => setSheetOpen(true)}
+            aria-label={t('feedpage.comments')}
+            className="tappable flex items-center gap-1.5"
+          >
+            <MessageCircle strokeWidth={1.2} className="h-6 w-6 text-white" />
+            <span className="text-sm font-medium text-white">{commentCount}</span>
+          </button>
+          <span className="ml-auto flex items-center gap-1 text-white/50">
+            <Zap strokeWidth={1.2} className="h-[18px] w-[18px] text-accent" />
+            <span className="text-xs font-medium tabular-nums">
+              +{xpForSpot(spot.estimated_price, spot.rarity)} XP
+            </span>
+          </span>
+        </div>
+
+        {/* Comment bar — directly under the actions, inside the same block. */}
+        <button
+          onClick={() => setSheetOpen(true)}
+          className="tappable mt-2 flex w-full items-center gap-2.5 px-4 pb-3.5 text-left"
+          aria-label={t('feedpage.addComment')}
+        >
+          <div className="flex h-7 w-7 flex-none items-center justify-center overflow-hidden rounded-full bg-white/10 text-[11px] font-extrabold text-white/70">
+            {myAvatar ? (
+              <img src={myAvatar} alt="" className="h-full w-full object-cover object-top" />
+            ) : (
+              myInitial
+            )}
+          </div>
+          <span className="text-[13px] text-white/45">{t('feedpage.addCommentPlaceholder')}</span>
+        </button>
+      </div>
+
+      <CommentsSheet
+        spotId={spot.id}
+        ownerId={spot.user_id}
+        spotLabel={`${spot.brand} ${spot.model}`}
+        open={sheetOpen}
+        onClose={() => setSheetOpen(false)}
+        onCountChange={setCommentCount}
+      />
+    </article>
+  )
+})

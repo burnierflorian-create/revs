@@ -7,99 +7,44 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 // 2026-06-15); using its current drop-in replacement.
 const MODEL = 'claude-sonnet-4-6'
 
-// `category` is only a fallback hint — Claude reclassifies every
-// article into exactly F1 | Supercar | Hypercar (strict separation),
-// so an F1 story from a generalist car feed still lands in F1.
-// Feeds with no RSS (Bugatti, Rimac, McLaren auto) are intentionally
-// omitted: they 404 reliably and burn timeout budget on every run.
+// `category` is only a fallback hint. The real category is decided later
+// by categorize(): Claude separates motorsport from road cars, then a
+// keyword pass picks the finest bucket (Hypercar / Supercar / Électrique
+// / JDM / Classique / SUV). 20+ specialist auto/motorsport feeds — broad
+// coverage so the Explorer never runs dry between hourly refreshes.
+// NOTE: every URL below was reachability-tested. Where a requested
+// publisher had killed/moved its RSS (Top Gear, MotorTrend, Autoblog,
+// PistonHeads, and all four French sources — confirmed 404/410), it was
+// swapped for a confirmed-live equivalent of the same kind so the feed
+// actually delivers content rather than silently failing.
 const FEEDS: { url: string; source: string; category: string }[] = [
-  // — F1 / Motorsport —
-  {
-    url: 'https://www.formula1.com/content/fom-website/en/latest/all.xml',
-    source: 'Formula 1',
-    category: 'F1',
-  },
-  {
-    url: 'https://www.autosport.com/rss/feed/f1',
-    source: 'Autosport',
-    category: 'F1',
-  },
-  {
-    url: 'https://www.racefans.net/feed/',
-    source: 'RaceFans',
-    category: 'F1',
-  },
-  {
-    url: 'https://the-race.com/feed/',
-    source: 'The Race',
-    category: 'F1',
-  },
-  {
-    url: 'https://www.planetf1.com/feed',
-    source: 'PlanetF1',
-    category: 'F1',
-  },
-  {
-    url: 'https://www.motorsport.com/rss/f1/news/',
-    source: 'Motorsport',
-    category: 'F1',
-  },
-  // — Road cars: marques & magazines —
-  {
-    url: 'https://www.ferrari.com/en-EN/rss/news',
-    source: 'Ferrari',
-    category: 'Hypercar',
-  },
-  {
-    url: 'https://www.lamborghini.com/rss',
-    source: 'Lamborghini',
-    category: 'Hypercar',
-  },
-  {
-    url: 'https://newsroom.porsche.com/en.rss',
-    source: 'Porsche Newsroom',
-    category: 'Supercar',
-  },
-  {
-    url: 'https://www.autocar.co.uk/rss/cars',
-    source: 'Autocar',
-    category: 'Supercar',
-  },
-  {
-    url: 'https://www.autocar.co.uk/rss/cars/supercar',
-    source: 'Autocar Supercar',
-    category: 'Supercar',
-  },
-  {
-    url: 'https://www.evo.co.uk/rss',
-    source: 'Evo',
-    category: 'Supercar',
-  },
-  {
-    url: 'https://www.topgear.com/car-news/feed',
-    source: 'Top Gear',
-    category: 'Supercar',
-  },
-  {
-    url: 'https://www.caranddriver.com/rss/all.xml',
-    source: 'Car and Driver',
-    category: 'Supercar',
-  },
-  {
-    url: 'https://www.motortrend.com/feeds/all/',
-    source: 'MotorTrend',
-    category: 'Supercar',
-  },
-  {
-    url: 'https://www.supercars.net/blog/feed/',
-    source: 'Supercars.net',
-    category: 'Hypercar',
-  },
-  {
-    url: 'https://jalopnik.com/rss',
-    source: 'Jalopnik',
-    category: 'Supercar',
-  },
+  // — Generalist & supercar magazines —
+  { url: 'https://www.autocar.co.uk/rss', source: 'Autocar', category: 'Supercar' },
+  { url: 'https://www.evo.co.uk/feed', source: 'Evo', category: 'Supercar' },
+  { url: 'https://www.caranddriver.com/rss/all.xml', source: 'Car and Driver', category: 'Supercar' },
+  { url: 'https://www.roadandtrack.com/rss/all.xml', source: 'Road & Track', category: 'Supercar' },
+  { url: 'https://jalopnik.com/rss', source: 'Jalopnik', category: 'Supercar' },
+  { url: 'https://www.carscoops.com/feed', source: 'Carscoops', category: 'Supercar' },
+  { url: 'https://www.motor1.com/rss/news/all/', source: 'Motor1', category: 'Supercar' },
+  { url: 'https://www.autoevolution.com/rss/news.xml', source: 'autoevolution', category: 'Supercar' },
+  { url: 'https://www.gtspirit.com/feed', source: 'GTspirit', category: 'Hypercar' },
+  { url: 'https://www.supercars.net/blog/feed', source: 'Supercars.net', category: 'Hypercar' },
+  { url: 'https://www.speedhunters.com/feed', source: 'Speedhunters', category: 'JDM' },
+  { url: 'https://www.carbuzz.com/feed', source: 'CarBuzz', category: 'Supercar' }, // ↔ Top Gear (RSS gone)
+  { url: 'https://www.thedrive.com/feed', source: 'The Drive', category: 'Supercar' }, // ↔ MotorTrend (RSS gone)
+  { url: 'https://insideevs.com/rss/news/all/', source: 'InsideEVs', category: 'Électrique' }, // ↔ Autoblog (403)
+  { url: 'https://robbreport.com/motors/feed/', source: 'Robb Report', category: 'Hypercar' }, // ↔ PistonHeads (RSS gone)
+  // — Motorsport / F1 —
+  { url: 'https://www.autosport.com/rss/feed/all', source: 'Autosport', category: 'F1' },
+  { url: 'https://www.motorsport.com/rss/all/', source: 'Motorsport', category: 'F1' },
+  { url: 'https://the-race.com/feed', source: 'The Race', category: 'F1' },
+  { url: 'https://racer.com/feed', source: 'Racer', category: 'F1' },
+  { url: 'https://www.crash.net/rss/f1', source: 'Crash.net', category: 'F1' },
+  // — Sources françaises (originaux HS → équivalents FR live) —
+  { url: 'https://www.auto-moto.com/feed', source: 'Auto Moto', category: 'Supercar' },
+  { url: 'https://www.lesvoitures.fr/feed/', source: 'Les Voitures', category: 'Supercar' },
+  { url: 'https://www.leblogauto.com/feed/', source: 'Le Blog Auto', category: 'Supercar' },
+  { url: 'https://www.numerama.com/vroom/feed/', source: 'Numerama Vroom', category: 'Électrique' },
 ]
 
 // Several publishers block non-browser User-Agents (403/Access Denied).
@@ -125,16 +70,21 @@ async function fetchWithTimeout(url: string): Promise<Response | null> {
   }
 }
 
-const PER_FEED = 5
-const MAX_TOTAL = 50
-// Articles older than 48h are dropped before they ever reach Claude.
-const MAX_AGE_MS = 48 * 60 * 60 * 1000
-// Article time-to-live in DB (matches the 48h DB default — keeps the
-// feed populated between the 4 daily cron runs).
-const TTL_MS = 48 * 60 * 60 * 1000
-// Public (non-cron) callers can only trigger a real run if the freshest
-// article is older than this — bounds Claude/API cost under load.
-const MIN_REFRESH_MS = 20 * 60 * 1000
+const PER_FEED = 6
+// Daily cron only. Translate up to 14 candidates (one Claude call each) so
+// that after quality/dedup filtering we reliably land 8–12 NEW inserts.
+const MAX_TRANSLATE = 14
+// Hard cap on NEW articles inserted per run (8–12 target). Surplus
+// candidates wait for tomorrow's run.
+const MAX_NEW_PER_RUN = 12
+// Older candidates are dropped before reaching Claude. Widened to 7 days
+// (was 48h) since the cron now runs once/day — a 48h window starved the
+// daily run of fresh candidates.
+const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
+// Article time-to-live in DB. Long (60d) so old articles are KEPT, not
+// expired out — retention is now handled by the 50-article cap below, not
+// by TTL deletion.
+const TTL_MS = 60 * 24 * 60 * 60 * 1000
 // Quality filter: drop summaries shorter than this once Claude returns.
 const MIN_SUMMARY_LEN = 100
 
@@ -305,7 +255,15 @@ function stripMarkdown(s: string): string {
     .trim()
 }
 
-const CATEGORIES = ['F1', 'Supercar', 'Hypercar'] as const
+const CATEGORIES = [
+  'F1',
+  'Supercar',
+  'Hypercar',
+  'Électrique',
+  'JDM',
+  'Classique',
+  'SUV',
+] as const
 type NewsCategory = (typeof CATEGORIES)[number]
 
 function normCategory(v: unknown, fallback: string): NewsCategory {
@@ -315,6 +273,36 @@ function normCategory(v: unknown, fallback: string): NewsCategory {
     return fallback as NewsCategory
   return 'Supercar'
 }
+
+// Keyword categoriser. Claude already makes the critical motorsport↔road
+// split (its strict F1 vs road-car call), so F1 wins when Claude says F1
+// or the text carries explicit race signals; otherwise the finest road-car
+// bucket is chosen by keyword. Order = priority (first match wins).
+const KW_RULES: { cat: NewsCategory; words: string[] }[] = [
+  { cat: 'Hypercar', words: ['bugatti', 'koenigsegg', 'pagani', 'rimac', 'chiron', 'veyron', 'tourbillon', 'nevera', 'hypercar'] },
+  { cat: 'Électrique', words: ['électrique', 'electrique', 'electric', ' ev ', 'tesla', 'rivian', 'batterie', 'battery', 'autonomie', 'kwh', 'bev', 'lucid'] },
+  { cat: 'JDM', words: ['toyota', 'nissan', 'honda', 'mazda', 'subaru', 'mitsubishi', 'lexus', 'jdm', 'japonais', 'japanese', 'supra', 'skyline', 'gt-r', ' gtr', 'civic'] },
+  { cat: 'Classique', words: ['vintage', 'classique', 'classic', 'youngtimer', 'oldtimer', 'restauration', 'restoration', 'collection', 'concours', 'barn find', 'heritage'] },
+  { cat: 'SUV', words: ['suv', ' crossover', 'cayenne', 'urus', 'cullinan', ' dbx', 'bentayga', 'purosangue', 'macan'] },
+  { cat: 'Supercar', words: ['ferrari', 'lamborghini', 'mclaren', 'porsche', 'aston martin', 'maserati', 'supercar', 'sportcar', 'sports car', '911', 'huracan', 'gt3'] },
+]
+const F1_WORDS = ['formula 1', 'formula one', 'formule 1', 'grand prix', ' f1 ', 'fia ', ' drs ', ' pit stop', 'qualifying', 'pole position', 'verstappen', 'leclerc', 'piastri', ' norris', ' hamilton', 'championnat du monde']
+
+function categorize(
+  aiCat: NewsCategory,
+  title: string,
+  description: string,
+): NewsCategory {
+  const hay = ` ${(title + ' ' + description).toLowerCase()} `
+  const hit = (w: string) => hay.includes(w)
+  if (aiCat === 'F1' || F1_WORDS.some(hit)) return 'F1'
+  for (const { cat, words } of KW_RULES) if (words.some(hit)) return cat
+  return 'Supercar'
+}
+
+// Commercial / classifieds filter — drop pricing & sales pieces (applied
+// to road-car articles only; "Grand Prix" legitimately contains "prix").
+const COMMERCIAL_RE = /\b(prix|occasion|vente|acheter|achat|cote|argus)\b/i
 
 const SUMMARY_SCHEMA = {
   type: 'object',
@@ -552,42 +540,37 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     attributeNamePrefix: '@_',
   })
 
-  // Housekeeping: drop articles past their 24h TTL on every call
-  // (cron + client), so the table never accumulates stale news.
-  const nowIso = new Date().toISOString()
-  let expired: number | null = null
-  {
-    const { error, count } = await admin
-      .from('news')
-      .delete({ count: 'exact' })
-      .lt('expires_at', nowIso)
-    expired = error ? -1 : (count ?? 0)
-    if (error) console.error('news ttl cleanup failed:', error)
+  // NO TTL deletion: old articles are KEPT. Retention is handled solely by
+  // the 50-article cap after insert (below). `expired` stays 0 for response
+  // shape compatibility.
+  const expired = 0
+
+  // Cron-only. News is fetched exclusively by the daily server cron
+  // (vercel.json → 06:00 UTC). Any non-cron caller is rejected so the
+  // client can never trigger a fetch. `force`/`purge` stay open for manual
+  // admin maintenance (authenticated out-of-band).
+  if (!isCron && !force && req.query.purge !== '1' && req.query.purge_en !== '1') {
+    res.status(200).json({ skipped: true, reason: 'cron_only' })
+    return
   }
 
-  // Public client trigger: skip cheaply if the feed is already fresh.
-  if (
-    !isCron &&
-    !force &&
-    req.query.purge !== '1' &&
-    req.query.purge_en !== '1'
-  ) {
-    const { data: latest } = await admin
-      .from('news')
-      .select('created_at')
-      .order('created_at', { ascending: false })
-      .limit(1)
-    const newest = latest?.[0]?.created_at as string | undefined
-    if (newest) {
-      const ageMs = Date.now() - new Date(newest).getTime()
-      if (ageMs < MIN_REFRESH_MS) {
-        res.status(200).json({
-          skipped: true,
-          reason: 'fresh',
-          ageMinutes: Math.round(ageMs / 60000),
-        })
-        return
-      }
+  // Exactly once a day at 06:00 Europe/Paris. Vercel crons are UTC-only and
+  // can't express a DST-shifting local time, so vercel.json fires this at BOTH
+  // 04:00 and 05:00 UTC; only the fire that is 06:00 in Paris does real work
+  // (04:00 UTC in summer / CEST, 05:00 UTC in winter / CET). The other fire
+  // no-ops here. `force`/`purge` bypass the gate for manual maintenance.
+  if (isCron && !force && req.query.purge !== '1' && req.query.purge_en !== '1') {
+    const parisHour =
+      Number(
+        new Intl.DateTimeFormat('en-GB', {
+          timeZone: 'Europe/Paris',
+          hour: '2-digit',
+          hour12: false,
+        }).format(new Date()),
+      ) % 24
+    if (parisHour !== 6) {
+      res.status(200).json({ skipped: true, reason: 'not_0600_paris', parisHour })
+      return
     }
   }
 
@@ -710,7 +693,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   )
 
   // Hard 48h cap: drop anything we can date that's older than 48h
-  // before spending Claude calls on it.
+  // before spending Claude calls on it. Then keep only the MAX_TRANSLATE
+  // MOST RECENT new articles for this run — every kept candidate costs one
+  // Claude summarize+translate call, so capping at 10 (was 50) cuts the
+  // per-run cost ~5×. The url-dedup above means each article is only ever
+  // translated once across runs; the hourly cadence drains the backlog.
   const cutoff = Date.now() - MAX_AGE_MS
   const candidates = candidateLists
     .flat()
@@ -718,7 +705,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       (c) =>
         !c.published_at || new Date(c.published_at).getTime() >= cutoff,
     )
-    .slice(0, MAX_TOTAL)
+    .sort(
+      (a, b) =>
+        new Date(b.published_at ?? 0).getTime() -
+        new Date(a.published_at ?? 0).getTime(),
+    )
+    .slice(0, MAX_TRANSLATE)
 
   const summarized = await Promise.all(
     candidates.map(async (c) => ({
@@ -750,6 +742,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     url: string
     image_url: string | null
     published_at: string | null
+    translated: boolean
     expires_at: string
   }
   const accepted: ReadyRow[] = []
@@ -814,6 +807,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       continue
     }
 
+    // Final category (keyword pass over title + description) and the
+    // commercial/classifieds filter — sales pieces never reach the feed.
+    const finalCat = categorize(category, `${title} ${c.title}`, c.description)
+    if (finalCat !== 'F1' && COMMERCIAL_RE.test(`${title} ${c.title}`)) {
+      qualitySkipped += 1
+      continue
+    }
+
     const frTitle = title
     const frSummary = summary
 
@@ -848,16 +849,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       title: frTitle,
       summary: frSummary,
       source: c.source,
-      // Claude's strict classification, not the feed hint.
-      category,
+      // Keyword category (F1 stays F1 via Claude's motorsport call).
+      category: finalCat,
       url: c.url,
       image_url: c.image_url,
       published_at: c.published_at,
+      // Inserted already French (summarize translated it), so flag it so
+      // any future re-translation pass skips rows where translated = true.
+      translated: true,
       expires_at: new Date(base.getTime() + TTL_MS).toISOString(),
     })
   }
 
-  const rows = accepted
+  // Cap NEW inserts at 8–12/day: keep at most MAX_NEW_PER_RUN, freshest
+  // first (accepted was ordered longest-summary-first for dedup, so re-sort
+  // by recency before the cap so the newest stories win the slots).
+  const rows = [...accepted]
+    .sort(
+      (a, b) =>
+        new Date(b.published_at ?? 0).getTime() -
+        new Date(a.published_at ?? 0).getTime(),
+    )
+    .slice(0, MAX_NEW_PER_RUN)
 
   // Delete the inferior duplicates before inserting their replacements
   // so the unique (url) constraint never trips on the dedup transition.
@@ -882,11 +895,48 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
   }
 
+  // Cap the table at 50 freshest articles, but PER UNIVERSE so the
+  // high-volume motorsport feeds can't starve the CarSpotting tab: keep
+  // the 25 newest F1 + the 25 newest road-car articles (= 50 total). Each
+  // universe is trimmed independently (newest by published_at, then
+  // created_at). This is the ONLY retention mechanism now (no TTL delete).
+  let trimmed = 0
+  {
+    const KEEP_PER_BUCKET = 25
+    const trimBucket = async (isF1: boolean): Promise<number> => {
+      let q = admin
+        .from('news')
+        .select('id')
+        .order('published_at', { ascending: false, nullsFirst: false })
+        .order('created_at', { ascending: false })
+      q = isF1 ? q.eq('category', 'F1') : q.neq('category', 'F1')
+      const { data } = await q.range(KEEP_PER_BUCKET, 999)
+      const ids = ((data ?? []) as { id: string }[]).map((r) => r.id)
+      if (!ids.length) return 0
+      const { count } = await admin
+        .from('news')
+        .delete({ count: 'exact' })
+        .in('id', ids)
+      return count ?? 0
+    }
+    trimmed = (await trimBucket(true)) + (await trimBucket(false))
+  }
+
+  // Stamp the real last-fetch time — the single source of truth the client
+  // reads for the "Mis à jour il y a X" label (correct even on days with no
+  // new articles, since the fetch still ran at 06:00 Paris).
+  const lastFetchedAt = new Date().toISOString()
+  const { error: metaError } = await admin
+    .from('news_meta')
+    .upsert({ id: 'singleton', last_fetched_at: lastFetchedAt })
+  if (metaError) console.error('news_meta stamp failed:', metaError)
+
   const { count: tableTotal, error: countError } = await admin
     .from('news')
     .select('*', { count: 'exact', head: true })
 
   res.status(200).json({
+    lastFetchedAt,
     purged,
     purgedEn,
     expired,
@@ -894,6 +944,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     qualitySkipped,
     englishDropped,
     replaced,
+    trimmed,
     lateTranslated,
     processed: rows.length,
     perFeed,
