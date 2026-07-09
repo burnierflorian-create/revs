@@ -1,3 +1,9 @@
+// PRÉREQUIS : facturation activée sur le projet Google Cloud lié à GEMINI_API_KEY.
+// Aucun modèle image de l'API Gemini n'a de free tier (Lite compris).
+// Le playground AI Studio est gratuit mais utilise un accès distinct de la clé API.
+// (Vérifié 2026-07-09 : gemini-3.1-flash-lite/flash/2.5-flash-image → 429 free_tier
+//  limit:0 ; imagen-4.0-* → 400 "only available on paid plans".)
+//
 // Generate an image with Google Gemini (Google AI Studio) and save it to
 // public/generated/. Uses @google/genai's models.generateContent with an
 // IMAGE response modality; the image comes back as inline base64 data.
