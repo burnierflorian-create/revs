@@ -44,26 +44,6 @@ const h = React.createElement
 export default async function handler(req: Request): Promise<Response> {
   const url = new URL(req.url)
   const id = (url.searchParams.get('id') || '').trim()
-  const debug = url.searchParams.get('min') // '1' text-only, '2' + card box, '3' + img
-
-  // ── isolation harness: prove the Satori pipeline independent of layout ──
-  if (debug) {
-    try {
-      const font = await getFont()
-      let t: unknown
-      if (debug === '3') {
-        t = h('div', { style: { display: 'flex', width: '100%', height: '100%' } }, h('img', { src: url.searchParams.get('img') || '', width: 1200, height: 630, style: { width: 1200, height: 630, objectFit: 'cover' } }))
-      } else if (debug === '2') {
-        t = h('div', { style: { display: 'flex', width: '100%', height: '100%', padding: 60, background: '#0a0a0a' } }, h('div', { style: { display: 'flex', width: 400, height: 500, borderRadius: 24, backgroundImage: HOLO } }))
-      } else {
-        t = h('div', { style: { display: 'flex', width: '100%', height: '100%', background: '#0a0a0a', color: '#fff', fontSize: 64, fontWeight: 800, alignItems: 'center', justifyContent: 'center' } }, 'REVS')
-      }
-      const im = new ImageResponse(t as React.ReactElement, { width: 1200, height: 630, fonts: [{ name: 'Inter', data: font, weight: 800, style: 'normal' }] })
-      return new Response(await im.arrayBuffer(), { status: 200, headers: { 'Content-Type': 'image/png', 'x-og-debug': debug } })
-    } catch (e) {
-      return new Response(null, { status: 500, headers: { 'x-og-error': String((e as Error)?.message || e).slice(0, 300) } })
-    }
-  }
 
   let spot: { brand?: string; model?: string; year?: number | null; rarity?: string | null; photo_url?: string | null } | null =
     null
@@ -90,7 +70,10 @@ export default async function handler(req: Request): Promise<Response> {
     const rlabel = RARITY_LABELS[rarity] || 'CARTE'
     const accent = RARITY_COLOR[rarity] || '#E8203A'
     const holo = rarity === 'supercar' || rarity === 'hypercar'
-    const carName = [brand, model].filter(Boolean).join(' ') || 'REVS'
+    const fullName = [brand, model].filter(Boolean).join(' ') || 'REVS'
+    // Cap absurdly long names and scale the headline so it never overflows.
+    const carName = fullName.length > 42 ? `${fullName.slice(0, 41).trimEnd()}…` : fullName
+    const nameSize = carName.length > 30 ? 38 : carName.length > 22 ? 44 : 50
 
     // ── portrait card ──
     // Build the border fill without any `undefined` style keys — Satori calls
@@ -121,15 +104,15 @@ export default async function handler(req: Request): Promise<Response> {
     // ── right column ──
     const right = h(
       'div',
-      { style: { display: 'flex', flexDirection: 'column', flexGrow: 1, height: 560, justifyContent: 'center' } },
+      { style: { display: 'flex', flexDirection: 'column', width: 604, height: 560, justifyContent: 'center', overflow: 'hidden' } },
       [
         h('div', { key: 'logo', style: { display: 'flex', fontSize: 52, fontWeight: 800, letterSpacing: -1 } }, [
           h('span', { key: 'r', style: { color: '#E8203A' } }, 'R'),
           h('span', { key: 'e', style: { color: '#fff' } }, 'EVS'),
         ]),
         h('div', { key: 'rar', style: { display: 'flex', marginTop: 26, fontSize: 24, fontWeight: 800, color: accent, letterSpacing: 2 } }, rlabel.toUpperCase()),
-        h('div', { key: 'name', style: { display: 'flex', marginTop: 8, fontSize: 46, fontWeight: 800, color: '#fff', lineHeight: 1.05 } }, carName),
-        h('div', { key: 'tag', style: { display: 'flex', marginTop: 30, fontSize: 30, fontWeight: 800, color: 'rgba(255,255,255,0.92)' } }, 'Spotte. Collectionne. Deviens n°1.'),
+        h('div', { key: 'name', style: { display: 'flex', width: 600, marginTop: 8, fontSize: nameSize, fontWeight: 800, color: '#fff', lineHeight: 1.05 } }, carName),
+        h('div', { key: 'tag', style: { display: 'flex', width: 600, marginTop: 30, fontSize: 30, fontWeight: 800, color: 'rgba(255,255,255,0.92)' } }, 'Spotte. Collectionne. Deviens n°1.'),
         h('div', { key: 'pill', style: { display: 'flex', marginTop: 26, padding: '12px 22px', borderRadius: 999, background: '#fff', color: '#0a0a0a', fontSize: 24, fontWeight: 800, alignSelf: 'flex-start' } }, 'revs-ten.vercel.app'),
       ],
     )
