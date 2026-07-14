@@ -73,9 +73,12 @@ export default async function handler(req: Request): Promise<Response> {
     const carName = [brand, model].filter(Boolean).join(' ') || 'REVS'
 
     // ── portrait card ──
+    // Build the border fill without any `undefined` style keys — Satori calls
+    // .trim() on style values and crashes on undefined.
+    const cardBorder = holo ? { backgroundImage: HOLO } : { background: accent }
     const card = h(
       'div',
-      { style: { display: 'flex', width: 400, height: 560, borderRadius: 26, padding: 8, background: holo ? undefined : accent, backgroundImage: holo ? HOLO : undefined } },
+      { style: { display: 'flex', width: 400, height: 560, borderRadius: 26, padding: 8, ...cardBorder } },
       h(
         'div',
         { style: { display: 'flex', position: 'relative', width: 384, height: 544, borderRadius: 20, overflow: 'hidden', background: '#0e0e11' } },
