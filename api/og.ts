@@ -75,7 +75,7 @@ export default async function handler(req: Request): Promise<Response> {
     // ── portrait card ──
     const card = h(
       'div',
-      { style: { display: 'flex', width: 400, height: 560, borderRadius: 26, padding: 8, background: holo ? undefined : accent, backgroundImage: holo ? HOLO : undefined, boxShadow: `0 20px 60px rgba(0,0,0,0.6)` } },
+      { style: { display: 'flex', width: 400, height: 560, borderRadius: 26, padding: 8, background: holo ? undefined : accent, backgroundImage: holo ? HOLO : undefined } },
       h(
         'div',
         { style: { display: 'flex', position: 'relative', width: 384, height: 544, borderRadius: 20, overflow: 'hidden', background: '#0e0e11' } },
@@ -98,7 +98,7 @@ export default async function handler(req: Request): Promise<Response> {
     // ── right column ──
     const right = h(
       'div',
-      { style: { display: 'flex', flexDirection: 'column', flex: 1, height: 560, justifyContent: 'center' } },
+      { style: { display: 'flex', flexDirection: 'column', flexGrow: 1, height: 560, justifyContent: 'center' } },
       [
         h('div', { key: 'logo', style: { display: 'flex', fontSize: 52, fontWeight: 800, letterSpacing: -1 } }, [
           h('span', { key: 'r', style: { color: '#E8203A' } }, 'R'),
@@ -113,15 +113,24 @@ export default async function handler(req: Request): Promise<Response> {
 
     const tree = h(
       'div',
-      { style: { display: 'flex', width: '100%', height: '100%', padding: 70, gap: 56, alignItems: 'center', background: '#0a0a0a', backgroundImage: 'radial-gradient(900px 500px at 30% -10%, rgba(232,32,58,0.20), rgba(232,32,58,0) 60%)' } },
-      [card, right],
+      { style: { display: 'flex', width: '100%', height: '100%', padding: 70, alignItems: 'center', background: '#0a0a0a', backgroundImage: 'radial-gradient(circle at 32% 0%, rgba(232,32,58,0.22), rgba(10,10,10,0) 55%)' } },
+      [card, h('div', { key: 'gap', style: { display: 'flex', width: 56 } }), right],
     )
 
-    return new ImageResponse(tree, {
+    // Buffer the render INSIDE the try so a Satori error becomes a clean 302
+    // fallback (not a 0-byte 200 that breaks the preview).
+    const image = new ImageResponse(tree, {
       width: 1200,
       height: 630,
       fonts: [{ name: 'Inter', data: font, weight: 800, style: 'normal' }],
-      headers: { 'Cache-Control': 'public, max-age=300, s-maxage=86400, stale-while-revalidate=604800' },
+    })
+    const buf = await image.arrayBuffer()
+    return new Response(buf, {
+      status: 200,
+      headers: {
+        'Content-Type': 'image/png',
+        'Cache-Control': 'public, max-age=300, s-maxage=86400, stale-while-revalidate=604800',
+      },
     })
   } catch {
     // Never leave og:image broken → fall back to the car photo.
