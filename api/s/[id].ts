@@ -13,6 +13,10 @@ import { createClient } from '@supabase/supabase-js'
 
 export const config = { runtime: 'edge' }
 
+// Vercel injects env vars into process.env at runtime on the edge; declare it
+// so the function type-checks without @types/node (which isn't in scope here).
+declare const process: { env: Record<string, string | undefined> }
+
 const APP_ORIGIN = 'https://revs-ten.vercel.app'
 
 const RARITY_LABELS: Record<string, string> = {
