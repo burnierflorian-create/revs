@@ -57,7 +57,6 @@ export default function CardPreview() {
               rarity={c.rarity}
               serial={c.serial}
               serialTotal={c.total}
-              stats={c.stats}
             />
           ))}
         </div>

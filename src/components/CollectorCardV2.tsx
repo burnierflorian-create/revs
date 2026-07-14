@@ -13,13 +13,6 @@ import { fetchCardSpecs, type CardSpecs } from '../lib/cardSpecs'
 // (--cv-float, --cv-holo, --cv-shine-dur, --cv-w).
 // ─────────────────────────────────────────────────────────────────────
 
-export type CardStats = {
-  power?: string
-  accel?: string
-  vmax?: string
-  torque?: string
-}
-
 type FrameLook = {
   label: string
   frame: string
@@ -122,7 +115,6 @@ export default function CollectorCardV2({
   rarity,
   serial,
   serialTotal,
-  stats,
   specs,
   firstOnRevs = false,
   reveal = false,
@@ -138,7 +130,6 @@ export default function CollectorCardV2({
   rarity: Rarity
   serial: number
   serialTotal: number
-  stats?: CardStats
   specs?: CardSpecs | null
   firstOnRevs?: boolean
   reveal?: boolean
@@ -175,21 +166,16 @@ export default function CollectorCardV2({
   const [loading, setLoading] = useState(false)
   const triedRef = useRef(!!specs)
   useEffect(() => {
-    if (!flipped || triedRef.current || stats) return
+    if (!flipped || triedRef.current) return
     triedRef.current = true
     setLoading(true)
     fetchCardSpecs(brand, model, year).then((r) => {
       setFetched(r)
       setLoading(false)
     })
-  }, [flipped, stats, brand, model, year])
+  }, [flipped, brand, model, year])
 
   const eff = specs ?? fetched
-  const frontStats: CardStats =
-    stats ??
-    (eff
-      ? { power: eff.horsepower, accel: eff.zero_to_100, vmax: eff.top_speed, torque: eff.torque }
-      : {})
 
   // Micro-tilt parallax (ALL tiers) + holo sheen tracking (rare tiers).
   // nx/ny are normalized -0.5..0.5. GPU: tilt = transform on the tilt
@@ -493,48 +479,9 @@ export default function CollectorCardV2({
                     {model}
                   </div>
 
-                  <div style={statsGridStyle()}>
-                    {(
-                      [
-                        ['PWR', frontStats.power],
-                        ['0-100', frontStats.accel],
-                        ['VMAX', frontStats.vmax],
-                        ['CPL', frontStats.torque],
-                      ] as [string, string | undefined][]
-                    ).map(([k, val]) => (
-                      <div key={k} style={statCellStyle()}>
-                        <div
-                          style={{
-                            fontSize: 13,
-                            fontWeight: 900,
-                            lineHeight: 1,
-                            fontVariantNumeric: 'tabular-nums',
-                            color: '#fff',
-                            whiteSpace: 'nowrap',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                          }}
-                        >
-                          {val ?? '—'}
-                        </div>
-                        <div
-                          style={{
-                            fontSize: 8,
-                            fontWeight: 800,
-                            letterSpacing: '0.08em',
-                            color: '#E8203A',
-                            marginTop: 2,
-                          }}
-                        >
-                          {k}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
                   <div
                     style={{
-                      marginTop: 9,
+                      marginTop: 10,
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'space-between',
@@ -571,114 +518,60 @@ export default function CollectorCardV2({
             {/* ── BACK ── */}
             <div style={{ ...faceStyle(look.holo), transform: 'rotateY(180deg)' }}>
               <div style={{ ...innerStyle(), background: '#0c0c0f' }}>
-                <div style={{ padding: '14px 14px 12px', height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
+                <div style={{ padding: '20px 18px', height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
+                  {/* Name + year, centered. Rarity / serial / badge live on the
+                      front only — never repeated here. */}
                   <div
                     style={{
+                      textAlign: 'center',
                       fontFamily: 'var(--font-display, inherit)',
-                      fontSize: 16,
+                      fontSize: 17,
                       fontWeight: 800,
                       letterSpacing: '-0.02em',
+                      lineHeight: 1.15,
                     }}
                   >
                     {brand} {model}
-                    {year ? <span style={{ color: 'rgba(255,255,255,0.55)', fontWeight: 700 }}> · {year}</span> : ''}
-                  </div>
-                  <div
-                    style={{
-                      fontSize: 11,
-                      color: 'rgba(255,255,255,0.5)',
-                      marginTop: 2,
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 6,
-                      flexWrap: 'wrap',
-                    }}
-                  >
-                    <span>
-                      {look.label} · #{String(serial).padStart(3, '0')}/{serialTotal}
-                    </span>
-                    {firstOnRevs && (
-                      <span
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: 3,
-                          padding: '2px 6px',
-                          borderRadius: 6,
-                          fontSize: 8,
-                          fontWeight: 900,
-                          letterSpacing: '0.05em',
-                          color: '#0a0a0a',
-                          background: 'linear-gradient(120deg,#FFD700,#E8203A)',
-                        }}
-                      >
-                        <Trophy className="h-2.5 w-2.5" /> 1ᵉʳ SUR REVS
-                      </span>
+                    {year ? (
+                      <span style={{ color: 'rgba(255,255,255,0.5)', fontWeight: 700 }}> · {year}</span>
+                    ) : (
+                      ''
                     )}
                   </div>
+                  <div
+                    aria-hidden
+                    style={{
+                      width: 40,
+                      height: 2,
+                      margin: '12px auto 0',
+                      borderRadius: 2,
+                      background: 'linear-gradient(90deg, transparent, #E8203A, transparent)',
+                    }}
+                  />
 
-                  {loading ? (
-                    <div style={{ margin: 'auto', color: 'rgba(255,255,255,0.5)' }}>
-                      <Loader2 className="h-5 w-5 animate-spin" />
-                    </div>
-                  ) : (
-                    <>
-                      <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                        {(
-                          [
-                            ['Puissance', eff?.horsepower],
-                            ['0 – 100 km/h', eff?.zero_to_100],
-                            ['Vitesse max', eff?.top_speed],
-                            ['Couple', eff?.torque],
-                          ] as [string, string | undefined][]
-                        ).map(([k, val]) => (
-                          <div key={k}>
-                            <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '0.08em', color: 'rgba(255,255,255,0.45)' }}>
-                              {k.toUpperCase()}
-                            </div>
-                            <div style={{ fontSize: 14, fontWeight: 800, color: '#fff', marginTop: 1 }}>
-                              {val ?? '—'}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                      {eff?.architecture && (
-                        <div
-                          style={{
-                            marginTop: 10,
-                            fontSize: 11,
-                            color: 'rgba(255,255,255,0.7)',
-                            whiteSpace: 'nowrap',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                          }}
-                        >
-                          {eff.architecture}
-                        </div>
-                      )}
-                      {eff?.fun_fact && (
-                        <div
-                          style={{
-                            marginTop: 10,
-                            fontSize: 10.5,
-                            fontStyle: 'italic',
-                            lineHeight: 1.4,
-                            color: 'rgba(255,255,255,0.6)',
-                            borderTop: '1px solid rgba(255,255,255,0.08)',
-                            paddingTop: 9,
-                            display: '-webkit-box',
-                            WebkitLineClamp: 2,
-                            WebkitBoxOrient: 'vertical',
-                            overflow: 'hidden',
-                            minHeight: 0,
-                            flexShrink: 1,
-                          }}
-                        >
-                          «&nbsp;{eff.fun_fact}&nbsp;»
-                        </div>
-                      )}
-                    </>
-                  )}
+                  {/* Description in full, centered, filling the rest of the back. */}
+                  <div style={{ flex: 1, minHeight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    {loading ? (
+                      <Loader2 className="h-5 w-5 animate-spin" style={{ color: 'rgba(255,255,255,0.5)' }} />
+                    ) : eff?.fun_fact ? (
+                      <p
+                        style={{
+                          margin: 0,
+                          textAlign: 'center',
+                          fontSize: 13.5,
+                          fontStyle: 'italic',
+                          lineHeight: 1.55,
+                          color: 'rgba(255,255,255,0.82)',
+                        }}
+                      >
+                        «&nbsp;{eff.fun_fact}&nbsp;»
+                      </p>
+                    ) : (
+                      <p style={{ margin: 0, textAlign: 'center', fontSize: 12, color: 'rgba(255,255,255,0.35)' }}>
+                        Description bientôt disponible
+                      </p>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
@@ -784,19 +677,5 @@ function serialStyle(): React.CSSProperties {
     border: '1px solid rgba(255,255,255,0.14)',
     backdropFilter: 'blur(6px)',
     WebkitBackdropFilter: 'blur(6px)',
-  }
-}
-function statsGridStyle(): React.CSSProperties {
-  return { marginTop: 9, display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }
-}
-function statCellStyle(): React.CSSProperties {
-  return {
-    borderRadius: 8,
-    padding: '5px 2px 4px',
-    textAlign: 'center',
-    background: 'rgba(8,8,11,0.5)',
-    border: '1px solid rgba(255,255,255,0.14)',
-    backdropFilter: 'blur(3px)',
-    WebkitBackdropFilter: 'blur(3px)',
   }
 }
