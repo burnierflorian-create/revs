@@ -64,6 +64,7 @@ export default function CollectorCard({
     if (!reveal || prefersReducedMotion() || rarity !== 'hypercar') return
     const t = window.setTimeout(() => {
       openShareCard({
+        id: spot.id,
         photoUrl: spot.photo_url,
         brand: spot.brand,
         model: spot.model,
@@ -94,6 +95,7 @@ export default function CollectorCard({
       showShare={showShare}
       onShare={() =>
         openShareCard({
+          id: spot.id,
           photoUrl: spot.photo_url,
           brand: spot.brand,
           model: spot.model,

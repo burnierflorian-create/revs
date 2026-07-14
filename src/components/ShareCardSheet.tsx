@@ -10,6 +10,8 @@ const CHANNEL = 'revs:share-card'
 const APP_HOST = 'revs-ten.vercel.app'
 
 export type ShareCardInput = {
+  /** Spot id — builds the /s/:id share link with an Open Graph preview. */
+  id?: string
   photoUrl: string | null
   brand: string
   model: string
@@ -142,15 +144,15 @@ export default function ShareCardSheet() {
     if (!file) return
     const carName = (data?.model || data?.brand || 'voiture').trim()
     const code = (data?.refCode || data?.pseudo || '').trim()
-    // Clickable referral link that rides along with the image. NOTE: when the
-    // app ships, swap APP_HOST for the smart/store link (App Store + Play
-    // Store) — only this line changes.
-    const shareUrl = `https://${APP_HOST}/${code ? `?ref=${encodeURIComponent(code)}` : ''}`
-    // The link goes in `text`: it's the field messaging apps (WhatsApp,
-    // Messages, Telegram, Snapchat chat…) reliably keep and render as a
-    // tappable link alongside the shared image.
+    // Per-card link → /s/:id renders an Open Graph preview so the recipient
+    // sees the card AND can click through into REVS. Falls back to the home
+    // link if the card has no id. NOTE: at launch, swap APP_HOST for the
+    // smart/store link (App Store + Play Store) — only this line changes.
+    const cardPath = data?.id ? `/s/${encodeURIComponent(data.id)}` : '/'
+    const query = code ? `?ref=${encodeURIComponent(code)}` : ''
+    const cardLink = `https://${APP_HOST}${cardPath}${query}`
     const title = `Ma carte ${carName} · REVS`
-    const text = `J'ai spotté une ${carName} sur REVS 🏎️\nRejoins-moi et commence ta collection 👉 ${shareUrl}`
+    const text = `J'ai spotté une ${carName} sur REVS 🏎️ Spotte les tiennes 👇`
     const nav = navigator as Navigator & {
       canShare?: (d?: { files?: File[]; text?: string; title?: string; url?: string }) => boolean
     }
@@ -161,11 +163,11 @@ export default function ShareCardSheet() {
     }
     try {
       if (nav.canShare?.({ files: [file] })) {
-        // Image + link-in-text (most reliable across social/messaging apps).
-        await nav.share({ files: [file], title, text })
+        // Image + clickable card link together (Messages / WhatsApp / Discord…).
+        await nav.share({ files: [file], title, text, url: cardLink })
       } else {
         // No file sharing on this platform → at least share the clickable link.
-        await nav.share({ title, text: `J'ai spotté une ${carName} sur REVS 🏎️`, url: shareUrl })
+        await nav.share({ title, text, url: cardLink })
       }
     } catch (err) {
       // AbortError = user tapped cancel → do nothing. Any real failure (share

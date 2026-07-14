@@ -28,6 +28,7 @@ async function offerBestCardShare(): Promise<void> {
       (a, b) => rarityRank(b.rarity) - rarityRank(a.rarity),
     )[0]
     openShareCard({
+      id: best.id,
       photoUrl: best.photo_url,
       brand: best.brand,
       model: best.model,

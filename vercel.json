@@ -1,6 +1,9 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }],
+  "rewrites": [
+    { "source": "/s/:id", "destination": "/api/s/:id" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ],
   "crons": [
     { "path": "/api/fetch-news?tz=cest", "schedule": "0 4 * * *" },
     { "path": "/api/fetch-news?tz=cet", "schedule": "0 5 * * *" },
