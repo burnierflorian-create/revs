@@ -84,10 +84,17 @@ export default async function handler(req: Request): Promise<Response> {
   const appUrl = `${APP_ORIGIN}/${ref ? `?ref=${encodeURIComponent(ref)}` : ''}`
   const canonical = `${APP_ORIGIN}/s/${encodeURIComponent(id)}${ref ? `?ref=${encodeURIComponent(ref)}` : ''}`
 
-  const imageTags = photo
-    ? `<meta property="og:image" content="${esc(photo)}">
+  // og:image = the styled 1200×630 card render (falls back to the car photo
+  // itself if the render fails). Landscape so it crops well in every app.
+  const ogImage = spot
+    ? `${APP_ORIGIN}/api/og?id=${encodeURIComponent(id)}`
+    : photo
+  const imageTags = ogImage
+    ? `<meta property="og:image" content="${esc(ogImage)}">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="${esc(carName)}">
-<meta name="twitter:image" content="${esc(photo)}">`
+<meta name="twitter:image" content="${esc(ogImage)}">`
     : ''
 
   const html = `<!doctype html>
