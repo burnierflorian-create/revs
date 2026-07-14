@@ -132,8 +132,15 @@ export default async function handler(req: Request): Promise<Response> {
         'Cache-Control': 'public, max-age=300, s-maxage=86400, stale-while-revalidate=604800',
       },
     })
-  } catch {
-    // Never leave og:image broken → fall back to the car photo.
-    return Response.redirect(photo || `${APP_ORIGIN}/favicon.svg`, 302)
+  } catch (e) {
+    // Never leave og:image broken → fall back to the car photo. Surface the
+    // render error in a header for debugging (harmless to crawlers).
+    return new Response(null, {
+      status: 302,
+      headers: {
+        Location: photo || `${APP_ORIGIN}/favicon.svg`,
+        'x-og-error': String((e as Error)?.message || e).slice(0, 300),
+      },
+    })
   }
 }
