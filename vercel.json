@@ -1,7 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "rewrites": [
-    { "source": "/s/:id", "destination": "/api/s/:id" },
+    { "source": "/s/:id", "destination": "/api/s?id=:id" },
     { "source": "/(.*)", "destination": "/index.html" }
   ],
   "crons": [
