@@ -373,7 +373,7 @@ export default function CollectorCardV2({
             }}
           >
             {/* ── FRONT ── */}
-            <div style={faceStyle()}>
+            <div style={faceStyle(look.holo)}>
               <div style={innerStyle()}>
                 {photo ? (
                   <img
@@ -413,31 +413,8 @@ export default function CollectorCardV2({
                   }}
                 />
 
-                {/* Very light holo veil, confined to the dark bottom panel behind
-                    the text — the car photo itself stays clean. The real holo
-                    lives on the frame ring (holoRingStyle). */}
-                {look.holo && (
-                  <div
-                    aria-hidden
-                    style={{
-                      position: 'absolute',
-                      inset: 'auto 0 0 0',
-                      height: '38%',
-                      mixBlendMode: 'soft-light',
-                      opacity: 0.22,
-                      backgroundImage:
-                        'repeating-linear-gradient(115deg, rgba(255,0,140,0.5) 0%, rgba(0,220,255,0.5) 14%, rgba(180,90,255,0.5) 28%, rgba(255,225,60,0.5) 42%, rgba(255,0,140,0.5) 56%)',
-                      backgroundSize: '260% 100%',
-                      backgroundPosition: 'calc(50% + var(--hx,0) * 160%) 50%',
-                      WebkitMaskImage: 'linear-gradient(to top, #000, transparent)',
-                      maskImage: 'linear-gradient(to top, #000, transparent)',
-                      animation: 'cardv2-holo-drift 7s linear infinite alternate',
-                      pointerEvents: 'none',
-                      zIndex: 0,
-                    }}
-                  />
-                )}
-
+                {/* No holo film on the surface — the rainbow lives ONLY in the
+                    card border (faceStyle). The photo stays a clean photo. */}
                 {look.shine && <div aria-hidden style={shineStyle()} />}
 
                 {/* Top row: rarity + serial */}
@@ -589,11 +566,10 @@ export default function CollectorCardV2({
                   </div>
                 </div>
               </div>
-              {look.holo && <div aria-hidden style={holoRingStyle()} />}
             </div>
 
             {/* ── BACK ── */}
-            <div style={{ ...faceStyle(), transform: 'rotateY(180deg)' }}>
+            <div style={{ ...faceStyle(look.holo), transform: 'rotateY(180deg)' }}>
               <div style={{ ...innerStyle(), background: '#0c0c0f' }}>
                 <div style={{ padding: '16px 14px', height: '100%', display: 'flex', flexDirection: 'column' }}>
                   <div
@@ -694,7 +670,6 @@ export default function CollectorCardV2({
                   )}
                 </div>
               </div>
-              {look.holo && <div aria-hidden style={holoRingStyle()} />}
             </div>
           </button>
           </div>
@@ -730,39 +705,23 @@ export default function CollectorCardV2({
 }
 
 // ── Shared inline-style helpers (keep the JSX readable) ──
-function faceStyle(): React.CSSProperties {
+// The card frame. For holo tiers the BORDER itself is the rainbow (a gradient
+// painted in the 4px padding ring, sitting BEHIND the opaque inner content).
+// It can never touch the photo/text — there is no overlay, no mask, no blend.
+function faceStyle(holo?: boolean): React.CSSProperties {
   return {
     position: 'absolute',
     inset: 0,
     backfaceVisibility: 'hidden',
     WebkitBackfaceVisibility: 'hidden',
     borderRadius: 20,
-    padding: 3,
-    background: 'var(--frame)',
+    padding: holo ? 4 : 3,
+    background: holo
+      ? 'repeating-linear-gradient(115deg, rgba(255,0,150,1) 0%, rgba(0,225,255,1) 13%, rgba(180,90,255,1) 26%, rgba(255,230,70,1) 39%, rgba(255,0,150,1) 52%)'
+      : 'var(--frame)',
+    backgroundSize: holo ? '260% 100%' : undefined,
+    animation: holo ? 'cardv2-holo-drift 6s linear infinite alternate' : undefined,
   }
-}
-// Holographic frame for Ultra Rare / Legendary — a gradient BORDER (masked so
-// only the 3px ring shows), animated + tilt-tracked. Never covers the photo.
-function holoRingStyle(): React.CSSProperties {
-  return {
-    position: 'absolute',
-    inset: 0,
-    borderRadius: 20,
-    padding: 3,
-    background:
-      'repeating-linear-gradient(115deg, rgba(255,0,150,0.95) 0%, rgba(0,225,255,0.95) 13%, rgba(180,90,255,0.95) 26%, rgba(255,230,70,0.95) 39%, rgba(255,0,150,0.95) 52%)',
-    backgroundSize: '260% 100%',
-    backgroundPosition: 'calc(50% + var(--hx,0) * 200%) 50%',
-    WebkitMask: 'linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0)',
-    WebkitMaskComposite: 'xor',
-    maskComposite: 'exclude',
-    mask: 'linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0)',
-    animation: 'cardv2-holo-drift 6s linear infinite alternate',
-    mixBlendMode: 'screen',
-    opacity: 0.9,
-    pointerEvents: 'none',
-    zIndex: 3,
-  } as React.CSSProperties
 }
 function innerStyle(): React.CSSProperties {
   return {
