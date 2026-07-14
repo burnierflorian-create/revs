@@ -44,6 +44,26 @@ const h = React.createElement
 export default async function handler(req: Request): Promise<Response> {
   const url = new URL(req.url)
   const id = (url.searchParams.get('id') || '').trim()
+  const debug = url.searchParams.get('min') // '1' text-only, '2' + card box, '3' + img
+
+  // ── isolation harness: prove the Satori pipeline independent of layout ──
+  if (debug) {
+    try {
+      const font = await getFont()
+      let t: unknown
+      if (debug === '3') {
+        t = h('div', { style: { display: 'flex', width: '100%', height: '100%' } }, h('img', { src: url.searchParams.get('img') || '', width: 1200, height: 630, style: { width: 1200, height: 630, objectFit: 'cover' } }))
+      } else if (debug === '2') {
+        t = h('div', { style: { display: 'flex', width: '100%', height: '100%', padding: 60, background: '#0a0a0a' } }, h('div', { style: { display: 'flex', width: 400, height: 500, borderRadius: 24, backgroundImage: HOLO } }))
+      } else {
+        t = h('div', { style: { display: 'flex', width: '100%', height: '100%', background: '#0a0a0a', color: '#fff', fontSize: 64, fontWeight: 800, alignItems: 'center', justifyContent: 'center' } }, 'REVS')
+      }
+      const im = new ImageResponse(t as React.ReactElement, { width: 1200, height: 630, fonts: [{ name: 'Inter', data: font, weight: 800, style: 'normal' }] })
+      return new Response(await im.arrayBuffer(), { status: 200, headers: { 'Content-Type': 'image/png', 'x-og-debug': debug } })
+    } catch (e) {
+      return new Response(null, { status: 500, headers: { 'x-og-error': String((e as Error)?.message || e).slice(0, 300) } })
+    }
+  }
 
   let spot: { brand?: string; model?: string; year?: number | null; rarity?: string | null; photo_url?: string | null } | null =
     null
