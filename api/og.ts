@@ -136,7 +136,7 @@ export default async function handler(req: Request): Promise<Response> {
 
     const tree = h(
       'div',
-      { style: { display: 'flex', width: '100%', height: '100%', padding: 70, alignItems: 'center', background: '#0a0a0a', backgroundImage: 'radial-gradient(circle at 32% 0%, rgba(232,32,58,0.22), rgba(10,10,10,0) 55%)' } },
+      { style: { display: 'flex', width: '100%', height: '100%', padding: 70, alignItems: 'center', background: '#0a0a0a', backgroundImage: 'linear-gradient(120deg, rgba(232,32,58,0.16), rgba(10,10,10,0) 46%)' } },
       [card, h('div', { key: 'gap', style: { display: 'flex', width: 56 } }), right],
     )
 
