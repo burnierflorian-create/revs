@@ -414,7 +414,11 @@ export async function renderShareCard(d: ShareCardData): Promise<Blob> {
   ctx.textBaseline = 'alphabetic'
   ctx.textAlign = 'left'
 
+  // JPEG @ 0.9 — the visual is a photo + gradients, so JPEG is far lighter
+  // than PNG (~2.5 MB → typically 500–900 KB) with no visible loss. Lighter =
+  // faster, more reliable native shares. Background is fully opaque so there's
+  // no transparency to lose.
   return await new Promise<Blob>((resolve, reject) => {
-    canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('toBlob null'))), 'image/png')
+    canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('toBlob null'))), 'image/jpeg', 0.9)
   })
 }

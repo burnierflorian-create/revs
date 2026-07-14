@@ -80,7 +80,7 @@ export default function ShareCardSheet() {
           refUrl,
         })
         if (!alive) return
-        fileRef.current = new File([blob], 'revs-card.png', { type: 'image/png' })
+        fileRef.current = new File([blob], 'revs-card.jpg', { type: 'image/jpeg' })
         setPreviewUrl(URL.createObjectURL(blob))
         setPhase('ready')
       } catch (err) {
@@ -106,14 +106,35 @@ export default function ShareCardSheet() {
     fileRef.current = null
   }
 
-  function downloadImage() {
+  // Pure file download (desktop / Android / ultimate fallback).
+  function blobDownload() {
     if (!previewUrl) return
     const a = document.createElement('a')
     a.href = previewUrl
-    a.download = `revs-${(data?.model || data?.brand || 'card').replace(/\s+/g, '-').toLowerCase()}.png`
+    a.download = `revs-${(data?.model || data?.brand || 'card').replace(/\s+/g, '-').toLowerCase()}.jpg`
     document.body.appendChild(a)
     a.click()
     a.remove()
+  }
+
+  // Save to the photo gallery. On iOS (and Android) the only reliable route to
+  // the Photos gallery from the web is the native sheet's "Enregistrer l'image"
+  // — a plain <a download> lands in Files, not Photos. So we share the file
+  // ALONE (no link) so "Save Image" is front-and-centre; desktop / no-share
+  // falls back to a direct file download.
+  async function saveImage() {
+    const file = fileRef.current
+    const nav = navigator as Navigator & { canShare?: (d?: { files?: File[] }) => boolean }
+    if (file && nav.canShare?.({ files: [file] }) && nav.share) {
+      try {
+        await nav.share({ files: [file] })
+        return
+      } catch (err) {
+        if ((err as Error)?.name === 'AbortError') return // user cancelled
+        // real failure → fall through to a direct download
+      }
+    }
+    blobDownload()
   }
 
   async function shareImage() {
@@ -133,18 +154,24 @@ export default function ShareCardSheet() {
     const nav = navigator as Navigator & {
       canShare?: (d?: { files?: File[]; text?: string; title?: string; url?: string }) => boolean
     }
+    // No Web Share at all → download instead of an empty action.
+    if (!nav.share) {
+      blobDownload()
+      return
+    }
     try {
-      if (nav.canShare?.({ files: [file] }) && nav.share) {
+      if (nav.canShare?.({ files: [file] })) {
         // Image + link-in-text (most reliable across social/messaging apps).
         await nav.share({ files: [file], title, text })
-      } else if (nav.share) {
+      } else {
         // No file sharing on this platform → at least share the clickable link.
         await nav.share({ title, text: `J'ai spotté une ${carName} sur REVS 🏎️`, url: shareUrl })
-      } else {
-        downloadImage()
       }
-    } catch {
-      /* user cancelled the share sheet — no-op */
+    } catch (err) {
+      // AbortError = user tapped cancel → do nothing. Any real failure (share
+      // sheet errored / target rejected the payload) → fall back to download
+      // so the user is never left with an empty/black screen.
+      if ((err as Error)?.name !== 'AbortError') blobDownload()
     }
   }
 
@@ -197,26 +224,30 @@ export default function ShareCardSheet() {
             )}
           </div>
 
-          {/* Actions */}
-          <div className="mt-5 flex items-center gap-3">
+          {/* Actions — Download is primary (most reliable path to a story),
+              Share is secondary. */}
+          <div className="mt-5 flex flex-col gap-3">
             <button
-              onClick={downloadImage}
+              onClick={saveImage}
               disabled={phase !== 'ready'}
-              className="tappable flex flex-1 items-center justify-center gap-2 rounded-full py-3.5 text-sm font-bold disabled:opacity-40"
-              style={{ background: 'rgba(255,255,255,0.08)', color: '#fff' }}
+              className="tappable flex w-full items-center justify-center gap-2 rounded-full py-4 text-[15px] font-bold text-white transition-transform active:scale-[0.98] disabled:opacity-40"
+              style={{ background: '#E8203A', boxShadow: '0 8px 22px rgba(232,32,58,0.4)' }}
             >
-              <Download className="h-[18px] w-[18px]" />
-              Télécharger
+              <Download className="h-5 w-5" />
+              Télécharger ma carte
             </button>
             <button
               onClick={shareImage}
               disabled={phase !== 'ready'}
-              className="tappable flex flex-1 items-center justify-center gap-2 rounded-full py-3.5 text-sm font-bold text-white transition-transform active:scale-[0.98] disabled:opacity-40"
-              style={{ background: '#E8203A' }}
+              className="tappable flex w-full items-center justify-center gap-2 rounded-full py-3 text-sm font-bold disabled:opacity-40"
+              style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.85)' }}
             >
               <Share2 className="h-[18px] w-[18px]" />
-              Partager
+              Partager le lien
             </button>
+            <p className="px-2 text-center text-[12.5px] leading-snug text-white/50">
+              Télécharge ta carte puis ajoute-la à ta story Instagram ou Snap ✨
+            </p>
           </div>
         </div>
       </div>
