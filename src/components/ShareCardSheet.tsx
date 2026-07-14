@@ -4,6 +4,7 @@ import { Download, Loader2, Share2, X } from 'lucide-react'
 import type { Rarity } from '../lib/spots'
 import { myPseudo } from '../lib/push'
 import { fetchMyReferralStats } from '../lib/referrals'
+import { renderShareCard, type ShareStats } from '../lib/shareCardImage'
 
 const CHANNEL = 'revs:share-card'
 const APP_HOST = 'revs-ten.vercel.app'
@@ -14,6 +15,10 @@ export type ShareCardInput = {
   model: string
   year: number | null
   rarity: Rarity
+  serial?: number
+  serialTotal?: number
+  firstOnRevs?: boolean
+  stats?: ShareStats
   /** Optional headline shown above the preview (wow-moment auto-shares). */
   autoMessage?: string
 }
@@ -24,179 +29,7 @@ export function openShareCard(input: ShareCardInput) {
   window.dispatchEvent(new CustomEvent<ShareCardInput>(CHANNEL, { detail: input }))
 }
 
-// 4-bucket rarity visual for the story image (grey / blue / violet / gold).
-function storyRarity(r: Rarity): {
-  label: string
-  color: string
-  glow: string
-  particles: boolean
-} {
-  switch (r) {
-    case 'hypercar':
-      return { label: 'LÉGENDAIRE', color: '#FFD700', glow: 'rgba(255,215,0,0.55)', particles: true }
-    case 'supercar':
-    case 'exclusif':
-      return { label: 'ULTRA RARE', color: '#9B59B6', glow: 'rgba(155,89,182,0.55)', particles: true }
-    case 'performance':
-    case 'premium':
-      return { label: 'RARE', color: '#4A9EFF', glow: 'rgba(74,158,255,0.5)', particles: false }
-    default:
-      return { label: 'COMMUN', color: '#9aa0a6', glow: 'rgba(154,160,166,0.4)', particles: false }
-  }
-}
-
-// Deterministic star field for legendary / ultra-rare backgrounds (no
-// Math.random so the off-screen render stays stable).
-const STARS = Array.from({ length: 46 }, (_, i) => ({
-  left: ((i * 71) % 100) + (i % 3),
-  top: ((i * 137) % 100),
-  size: 2 + (i % 4),
-  opacity: 0.25 + ((i % 5) * 0.12),
-}))
-
 type Resolved = ShareCardInput & { refCode: string; pseudo: string }
-
-/** The 1080×1920 story design captured by html-to-image. Rendered
- *  off-screen (never visible to the user). */
-function StoryCard({
-  data,
-  nodeRef,
-}: {
-  data: Resolved
-  nodeRef: React.RefObject<HTMLDivElement | null>
-}) {
-  const sr = storyRarity(data.rarity)
-  const carName = data.model?.trim() || data.brand?.trim() || 'Voiture'
-  const refUrl = `${APP_HOST}?ref=${encodeURIComponent(data.refCode || data.pseudo)}`
-  return (
-    <div
-      ref={nodeRef}
-      style={{
-        position: 'fixed',
-        left: -99999,
-        top: 0,
-        width: 1080,
-        height: 1920,
-        background: 'linear-gradient(180deg, #0a0a0a 0%, #1a0a0a 100%)',
-        overflow: 'hidden',
-        fontFamily: 'Inter, system-ui, sans-serif',
-        color: '#fff',
-      }}
-    >
-      {/* Particle / star field for the rare tiers */}
-      {sr.particles &&
-        STARS.map((s, i) => (
-          <span
-            key={i}
-            style={{
-              position: 'absolute',
-              left: `${s.left}%`,
-              top: `${s.top}%`,
-              width: s.size,
-              height: s.size,
-              borderRadius: '50%',
-              background: sr.color,
-              opacity: s.opacity,
-              boxShadow: `0 0 ${s.size * 3}px ${sr.color}`,
-            }}
-          />
-        ))}
-
-      {/* Header: REVS logo + rarity badge */}
-      <div
-        style={{
-          position: 'absolute',
-          top: 64,
-          left: 64,
-          right: 64,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-        }}
-      >
-        <span style={{ fontWeight: 900, fontSize: 64, letterSpacing: '-3px', color: '#fff' }}>
-          REVS
-        </span>
-        <span
-          style={{
-            fontWeight: 800,
-            fontSize: 30,
-            letterSpacing: '2px',
-            padding: '12px 24px',
-            borderRadius: 999,
-            color: data.rarity === 'hypercar' ? '#1a1306' : sr.color,
-            background:
-              data.rarity === 'hypercar'
-                ? 'linear-gradient(120deg,#E0B341,#FFD700,#B8860B)'
-                : `${sr.color}26`,
-            border: `2px solid ${sr.color}`,
-          }}
-        >
-          {sr.label}
-        </span>
-      </div>
-
-      {/* Centered tilted photo with rarity frame + glow */}
-      <div
-        style={{
-          position: 'absolute',
-          top: 360,
-          left: '50%',
-          width: 820,
-          height: 1025,
-          transform: 'translateX(-50%) rotate(-3deg)',
-          borderRadius: 28,
-          overflow: 'hidden',
-          border: `12px solid ${sr.color}`,
-          boxShadow: `0 40px 90px rgba(0,0,0,0.7), 0 0 70px ${sr.glow}`,
-          background: '#000',
-        }}
-      >
-        {data.photoUrl ? (
-          <img
-            src={data.photoUrl}
-            crossOrigin="anonymous"
-            alt=""
-            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-          />
-        ) : (
-          <div
-            style={{
-              width: '100%',
-              height: '100%',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: 200,
-              fontWeight: 900,
-              color: 'rgba(255,255,255,0.08)',
-            }}
-          >
-            {data.brand?.charAt(0) || 'R'}
-          </div>
-        )}
-      </div>
-
-      {/* Car identity */}
-      <div style={{ position: 'absolute', left: 64, right: 64, top: 1470, textAlign: 'center' }}>
-        <div style={{ fontWeight: 900, fontSize: 64, lineHeight: 1.05, color: '#fff' }}>
-          {carName}
-        </div>
-        <div style={{ marginTop: 10, fontWeight: 800, fontSize: 36, color: '#E8203A' }}>
-          {data.brand?.trim()}
-          {data.year ? <span style={{ color: '#9aa0a6', fontWeight: 600 }}> · {data.year}</span> : null}
-        </div>
-      </div>
-
-      {/* Footer: branded referral link */}
-      <div style={{ position: 'absolute', left: 0, right: 0, bottom: 72, textAlign: 'center' }}>
-        <div style={{ fontWeight: 800, fontSize: 30, color: '#fff' }}>Télécharge REVS 🏎️</div>
-        <div style={{ marginTop: 8, fontSize: 26, color: '#9aa0a6' }}>{refUrl}</div>
-      </div>
-    </div>
-  )
-}
-
 type Phase = 'generating' | 'ready' | 'error'
 
 export default function ShareCardSheet() {
@@ -205,10 +38,8 @@ export default function ShareCardSheet() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [autoMessage, setAutoMessage] = useState<string | undefined>(undefined)
   const fileRef = useRef<File | null>(null)
-  const nodeRef = useRef<HTMLDivElement | null>(null)
 
-  // Listen for openShareCard() — resolve pseudo + referral code, then mount
-  // the off-screen design.
+  // Listen for openShareCard() — resolve pseudo + referral code, then render.
   useEffect(() => {
     const handler = (e: Event) => {
       const input = (e as CustomEvent<ShareCardInput>).detail
@@ -228,26 +59,27 @@ export default function ShareCardSheet() {
     return () => window.removeEventListener(CHANNEL, handler)
   }, [])
 
-  // Once the design node is mounted with data, capture it to a PNG.
+  // Render the 1080×1920 story on a canvas (deterministic, no tainting).
   useEffect(() => {
     if (!data) return
     let alive = true
-    const node = nodeRef.current
-    if (!node) return
-    // One frame so layout + the <img> settle before capture.
-    const id = window.setTimeout(async () => {
+    setPhase('generating')
+    ;(async () => {
       try {
-        // Lazy-load html-to-image so it stays out of the initial bundle.
-        const { toBlob } = await import('html-to-image')
-        const blob = await toBlob(node, {
-          width: 1080,
-          height: 1920,
-          pixelRatio: 1,
-          cacheBust: true,
-          backgroundColor: '#0a0a0a',
+        const refUrl = `${APP_HOST}?ref=${encodeURIComponent(data.refCode || data.pseudo)}`
+        const blob = await renderShareCard({
+          photoUrl: data.photoUrl,
+          brand: data.brand,
+          model: data.model,
+          year: data.year,
+          rarity: data.rarity,
+          serial: data.serial,
+          serialTotal: data.serialTotal,
+          firstOnRevs: data.firstOnRevs,
+          stats: data.stats,
+          refUrl,
         })
         if (!alive) return
-        if (!blob) throw new Error('toBlob returned null')
         fileRef.current = new File([blob], 'revs-card.png', { type: 'image/png' })
         setPreviewUrl(URL.createObjectURL(blob))
         setPhase('ready')
@@ -255,10 +87,9 @@ export default function ShareCardSheet() {
         console.error('[share] image generation failed:', err)
         if (alive) setPhase('error')
       }
-    }, 250)
+    })()
     return () => {
       alive = false
-      window.clearTimeout(id)
     }
   }, [data])
 
@@ -311,9 +142,6 @@ export default function ShareCardSheet() {
 
   return createPortal(
     <>
-      {/* Off-screen design captured by html-to-image (never shown). */}
-      <StoryCard data={data} nodeRef={nodeRef} />
-
       <div className="fixed inset-0 z-[95] flex items-end justify-center" role="dialog" aria-modal="true">
         <button
           aria-label="Fermer"

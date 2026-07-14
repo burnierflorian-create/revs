@@ -339,11 +339,25 @@ export default function CollectorCardV2({
               willChange: 'transform',
             }}
           >
+          {/* Rarity glow — a static ring BEHIND the card so it never flickers
+              during the flip and never lands on the photo. */}
+          <div
+            aria-hidden
+            style={{
+              position: 'absolute',
+              inset: 0,
+              borderRadius: 20,
+              boxShadow: 'var(--glow)',
+              pointerEvents: 'none',
+              zIndex: 0,
+            }}
+          />
           <button
             onClick={() => setFlipped((f) => !f)}
             aria-label={`${brand} ${model}`}
             style={{
               position: 'relative',
+              zIndex: 1,
               display: 'block',
               width: '100%',
               aspectRatio: '3 / 4.2',
@@ -352,6 +366,8 @@ export default function CollectorCardV2({
               padding: 0,
               cursor: 'pointer',
               transformStyle: 'preserve-3d',
+              WebkitTransformStyle: 'preserve-3d',
+              willChange: 'transform',
               transition: 'transform 0.55s cubic-bezier(0.34,1.35,0.45,1)',
               transform: flipped ? 'rotateY(180deg)' : 'rotateY(0deg)',
             }}
@@ -393,25 +409,31 @@ export default function CollectorCardV2({
                     position: 'absolute',
                     inset: 0,
                     background:
-                      'linear-gradient(to top, rgba(6,6,8,0.96) 0%, rgba(6,6,8,0.55) 34%, transparent 56%), linear-gradient(to bottom, rgba(6,6,8,0.5) 0%, transparent 22%)',
+                      'linear-gradient(to top, rgba(5,5,7,0.98) 0%, rgba(5,5,7,0.9) 22%, rgba(6,6,8,0.5) 42%, transparent 62%), linear-gradient(to bottom, rgba(6,6,8,0.5) 0%, transparent 22%)',
                   }}
                 />
 
+                {/* Very light holo veil, confined to the dark bottom panel behind
+                    the text — the car photo itself stays clean. The real holo
+                    lives on the frame ring (holoRingStyle). */}
                 {look.holo && (
                   <div
                     aria-hidden
                     style={{
                       position: 'absolute',
-                      inset: 0,
-                      mixBlendMode: 'color-dodge',
-                      opacity: 'var(--cv-holo)',
+                      inset: 'auto 0 0 0',
+                      height: '38%',
+                      mixBlendMode: 'soft-light',
+                      opacity: 0.22,
                       backgroundImage:
-                        'repeating-linear-gradient(115deg, rgba(255,0,120,0.28) 0%, rgba(0,220,255,0.28) 12%, rgba(180,80,255,0.28) 24%, rgba(255,220,0,0.28) 36%, rgba(255,0,120,0.28) 48%), radial-gradient(60% 55% at calc(50% + var(--hx,0)*80%) calc(42% + var(--hy,0)*80%), rgba(255,255,255,0.55), transparent 60%)',
-                      backgroundSize: '260% 260%, 100% 100%',
-                      backgroundPosition:
-                        'calc(50% + var(--hx,0) * 140%) calc(50% + var(--hy,0) * 140%), 0 0',
+                        'repeating-linear-gradient(115deg, rgba(255,0,140,0.5) 0%, rgba(0,220,255,0.5) 14%, rgba(180,90,255,0.5) 28%, rgba(255,225,60,0.5) 42%, rgba(255,0,140,0.5) 56%)',
+                      backgroundSize: '260% 100%',
+                      backgroundPosition: 'calc(50% + var(--hx,0) * 160%) 50%',
+                      WebkitMaskImage: 'linear-gradient(to top, #000, transparent)',
+                      maskImage: 'linear-gradient(to top, #000, transparent)',
                       animation: 'cardv2-holo-drift 7s linear infinite alternate',
                       pointerEvents: 'none',
+                      zIndex: 0,
                     }}
                   />
                 )}
@@ -468,9 +490,10 @@ export default function CollectorCardV2({
                   <div
                     style={{
                       fontSize: 11,
-                      fontWeight: 700,
-                      letterSpacing: '0.06em',
-                      color: 'rgba(255,255,255,0.62)',
+                      fontWeight: 800,
+                      letterSpacing: '0.07em',
+                      color: 'rgba(255,255,255,0.78)',
+                      textShadow: '0 1px 3px rgba(0,0,0,0.7)',
                     }}
                   >
                     {brand.toUpperCase()}
@@ -487,6 +510,7 @@ export default function CollectorCardV2({
                       whiteSpace: 'nowrap',
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
+                      textShadow: '0 2px 6px rgba(0,0,0,0.75)',
                     }}
                   >
                     {model}
@@ -565,6 +589,7 @@ export default function CollectorCardV2({
                   </div>
                 </div>
               </div>
+              {look.holo && <div aria-hidden style={holoRingStyle()} />}
             </div>
 
             {/* ── BACK ── */}
@@ -580,9 +605,40 @@ export default function CollectorCardV2({
                     }}
                   >
                     {brand} {model}
+                    {year ? <span style={{ color: 'rgba(255,255,255,0.55)', fontWeight: 700 }}> · {year}</span> : ''}
                   </div>
-                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginTop: 2 }}>
-                    {look.label} · #{String(serial).padStart(3, '0')}/{serialTotal}
+                  <div
+                    style={{
+                      fontSize: 11,
+                      color: 'rgba(255,255,255,0.5)',
+                      marginTop: 2,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      flexWrap: 'wrap',
+                    }}
+                  >
+                    <span>
+                      {look.label} · #{String(serial).padStart(3, '0')}/{serialTotal}
+                    </span>
+                    {firstOnRevs && (
+                      <span
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 3,
+                          padding: '2px 6px',
+                          borderRadius: 6,
+                          fontSize: 8,
+                          fontWeight: 900,
+                          letterSpacing: '0.05em',
+                          color: '#0a0a0a',
+                          background: 'linear-gradient(120deg,#FFD700,#E8203A)',
+                        }}
+                      >
+                        <Trophy className="h-2.5 w-2.5" /> 1ᵉʳ SUR REVS
+                      </span>
+                    )}
                   </div>
 
                   {loading ? (
@@ -621,10 +677,14 @@ export default function CollectorCardV2({
                             marginTop: 'auto',
                             fontSize: 11,
                             fontStyle: 'italic',
-                            lineHeight: 1.5,
+                            lineHeight: 1.45,
                             color: 'rgba(255,255,255,0.6)',
                             borderTop: '1px solid rgba(255,255,255,0.08)',
                             paddingTop: 10,
+                            display: '-webkit-box',
+                            WebkitLineClamp: 2,
+                            WebkitBoxOrient: 'vertical',
+                            overflow: 'hidden',
                           }}
                         >
                           «&nbsp;{eff.fun_fact}&nbsp;»
@@ -634,6 +694,7 @@ export default function CollectorCardV2({
                   )}
                 </div>
               </div>
+              {look.holo && <div aria-hidden style={holoRingStyle()} />}
             </div>
           </button>
           </div>
@@ -678,8 +739,30 @@ function faceStyle(): React.CSSProperties {
     borderRadius: 20,
     padding: 3,
     background: 'var(--frame)',
-    boxShadow: 'var(--glow)',
   }
+}
+// Holographic frame for Ultra Rare / Legendary — a gradient BORDER (masked so
+// only the 3px ring shows), animated + tilt-tracked. Never covers the photo.
+function holoRingStyle(): React.CSSProperties {
+  return {
+    position: 'absolute',
+    inset: 0,
+    borderRadius: 20,
+    padding: 3,
+    background:
+      'repeating-linear-gradient(115deg, rgba(255,0,150,0.95) 0%, rgba(0,225,255,0.95) 13%, rgba(180,90,255,0.95) 26%, rgba(255,230,70,0.95) 39%, rgba(255,0,150,0.95) 52%)',
+    backgroundSize: '260% 100%',
+    backgroundPosition: 'calc(50% + var(--hx,0) * 200%) 50%',
+    WebkitMask: 'linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0)',
+    WebkitMaskComposite: 'xor',
+    maskComposite: 'exclude',
+    mask: 'linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0)',
+    animation: 'cardv2-holo-drift 6s linear infinite alternate',
+    mixBlendMode: 'screen',
+    opacity: 0.9,
+    pointerEvents: 'none',
+    zIndex: 3,
+  } as React.CSSProperties
 }
 function innerStyle(): React.CSSProperties {
   return {
@@ -735,7 +818,9 @@ function statCellStyle(): React.CSSProperties {
     borderRadius: 8,
     padding: '5px 2px 4px',
     textAlign: 'center',
-    background: 'rgba(255,255,255,0.06)',
-    border: '1px solid rgba(255,255,255,0.10)',
+    background: 'rgba(8,8,11,0.5)',
+    border: '1px solid rgba(255,255,255,0.14)',
+    backdropFilter: 'blur(3px)',
+    WebkitBackdropFilter: 'blur(3px)',
   }
 }

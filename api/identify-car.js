@@ -1,4 +1,72 @@
 import Anthropic from '@anthropic-ai/sdk'
+import { createClient } from '@supabase/supabase-js'
+
+// ─────────── Rarity = f(market value). Single source of truth; mirror of
+// src/lib/rarity.ts. Rarity is DERIVED from the resale value, never guessed. ───────────
+const RARITY_BANDS = [
+  { rarity: 'standard', min: 0 },
+  { rarity: 'premium', min: 20000 },
+  { rarity: 'performance', min: 45000 },
+  { rarity: 'exclusif', min: 90000 },
+  { rarity: 'supercar', min: 130000 },
+  { rarity: 'hypercar', min: 400000 },
+]
+function rarityFromPrice(price) {
+  if (!price || price <= 0) return 'standard'
+  let out = 'standard'
+  for (const b of RARITY_BANDS) if (price >= b.min) out = b.rarity
+  return out
+}
+
+// ─────────── Catalog freeze: compute a model's value + rarity ONCE. ───────────
+const catalogNorm = (s) =>
+  (s ?? '')
+    .toString()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, ' ')
+const catalogSlug = (brand, model) => `${catalogNorm(brand)}|${catalogNorm(model)}`
+
+let _sb
+function getSb() {
+  if (_sb !== undefined) return _sb
+  const url = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+  _sb = url && key ? createClient(url, key, { auth: { persistSession: false } }) : null
+  return _sb
+}
+// Returns { market_value, rarity } for a known model, or null. Never throws.
+async function catalogLookup(brand, model) {
+  const sb = getSb()
+  if (!sb) return null
+  try {
+    const { data } = await sb
+      .from('car_catalog')
+      .select('market_value,rarity')
+      .eq('slug', catalogSlug(brand, model))
+      .maybeSingle()
+    return data ?? null
+  } catch {
+    return null
+  }
+}
+// Freeze a newly-priced model. Fire-and-forget; failure never blocks identify.
+async function catalogInsert(brand, model, marketValue, rarity) {
+  const sb = getSb()
+  if (!sb || !brand || !model) return
+  try {
+    await sb
+      .from('car_catalog')
+      .upsert(
+        { slug: catalogSlug(brand, model), brand, model, market_value: marketValue, rarity, updated_at: new Date().toISOString() },
+        { onConflict: 'slug', ignoreDuplicates: true },
+      )
+  } catch {
+    /* non-fatal */
+  }
+}
 
 // Sonnet does the VISUAL recognition (image). The market price is a
 // separate TEXT-ONLY call on Haiku (the cheapest model) — splitting the
@@ -655,14 +723,28 @@ export default async function handler(req, res) {
           }
         }
 
-        // The market price is a separate cheap Haiku text call so the
-        // expensive vision model never spends tokens guessing prices.
-        result.estimated_price = await lookupMarketPrice(
-          client,
-          result.brand,
-          result.model,
-          result.year,
-        )
+        // Value + rarity are FROZEN per model. If this model is already in
+        // the catalog, read its stored value/rarity — no Haiku call, no
+        // recompute. Otherwise: one cheap Haiku price call, derive rarity
+        // from the price thresholds, and freeze it for next time.
+        const known = await catalogLookup(result.brand, result.model)
+        if (known) {
+          result.estimated_price = known.market_value
+          result.rarity = known.rarity
+        } else {
+          const price = await lookupMarketPrice(
+            client,
+            result.brand,
+            result.model,
+            result.year,
+          )
+          result.estimated_price = price
+          result.rarity = rarityFromPrice(price)
+          // Don't freeze an unidentified model (it would poison the catalog).
+          if (!isGenericBrand(result.brand) && result.model && result.model !== NEVER_EMPTY_MODEL) {
+            await catalogInsert(result.brand, result.model, price, result.rarity)
+          }
+        }
         return sendJson(res, result)
       }
     } catch (e) {

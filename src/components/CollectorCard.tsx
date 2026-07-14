@@ -22,6 +22,13 @@ export function rarityRank(r: Rarity | null | undefined): number {
   return RARITY_ORDER.indexOf((r ?? 'standard') as Rarity)
 }
 
+// Stats for the share image, from whatever the spot already carries (no fetch).
+function shareStats(spot: Spot) {
+  const ci = spot.car_info
+  if (!ci) return undefined
+  return { power: ci.horsepower, accel: ci.zero_to_100, vmax: ci.top_speed }
+}
+
 // Flavor edition sizes → the collector "#012/N" denominator. Rarer tiers get
 // a smaller "print run" so the number reads as more precious. Tune here.
 const EDITION_SIZE: Record<Rarity, number> = {
@@ -62,6 +69,10 @@ export default function CollectorCard({
         model: spot.model,
         year: spot.year,
         rarity: 'hypercar',
+        serial: cardNumber,
+        serialTotal: EDITION_SIZE[rarity] ?? 999,
+        firstOnRevs: isFirstOnRevs,
+        stats: shareStats(spot),
         autoMessage: 'Ta carte est prête à être partagée ! 🔥',
       })
     }, 1400)
@@ -88,6 +99,10 @@ export default function CollectorCard({
           model: spot.model,
           year: spot.year,
           rarity,
+          serial: cardNumber,
+          serialTotal: EDITION_SIZE[rarity] ?? 999,
+          firstOnRevs: isFirstOnRevs,
+          stats: shareStats(spot),
         })
       }
     />
