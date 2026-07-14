@@ -120,16 +120,26 @@ export default function ShareCardSheet() {
     const file = fileRef.current
     if (!file) return
     const carName = (data?.model || data?.brand || 'voiture').trim()
+    const code = (data?.refCode || data?.pseudo || '').trim()
+    // Clickable referral link that rides along with the image. NOTE: when the
+    // app ships, swap APP_HOST for the smart/store link (App Store + Play
+    // Store) — only this line changes.
+    const shareUrl = `https://${APP_HOST}/${code ? `?ref=${encodeURIComponent(code)}` : ''}`
+    // The link goes in `text`: it's the field messaging apps (WhatsApp,
+    // Messages, Telegram, Snapchat chat…) reliably keep and render as a
+    // tappable link alongside the shared image.
+    const title = `Ma carte ${carName} · REVS`
+    const text = `J'ai spotté une ${carName} sur REVS 🏎️\nRejoins-moi et commence ta collection 👉 ${shareUrl}`
     const nav = navigator as Navigator & {
-      canShare?: (d?: { files?: File[] }) => boolean
+      canShare?: (d?: { files?: File[]; text?: string; title?: string; url?: string }) => boolean
     }
     try {
       if (nav.canShare?.({ files: [file] }) && nav.share) {
-        await nav.share({
-          files: [file],
-          title: `J'ai spotté une ${carName} sur REVS !`,
-          text: 'Télécharge REVS et commence à spotter 🏎️',
-        })
+        // Image + link-in-text (most reliable across social/messaging apps).
+        await nav.share({ files: [file], title, text })
+      } else if (nav.share) {
+        // No file sharing on this platform → at least share the clickable link.
+        await nav.share({ title, text: `J'ai spotté une ${carName} sur REVS 🏎️`, url: shareUrl })
       } else {
         downloadImage()
       }
