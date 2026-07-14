@@ -571,7 +571,7 @@ export default function CollectorCardV2({
             {/* ── BACK ── */}
             <div style={{ ...faceStyle(look.holo), transform: 'rotateY(180deg)' }}>
               <div style={{ ...innerStyle(), background: '#0c0c0f' }}>
-                <div style={{ padding: '16px 14px', height: '100%', display: 'flex', flexDirection: 'column' }}>
+                <div style={{ padding: '14px 14px 12px', height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
                   <div
                     style={{
                       fontFamily: 'var(--font-display, inherit)',
@@ -623,7 +623,7 @@ export default function CollectorCardV2({
                     </div>
                   ) : (
                     <>
-                      <div style={{ marginTop: 14, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                      <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                         {(
                           [
                             ['Puissance', eff?.horsepower],
@@ -643,24 +643,35 @@ export default function CollectorCardV2({
                         ))}
                       </div>
                       {eff?.architecture && (
-                        <div style={{ marginTop: 12, fontSize: 11, color: 'rgba(255,255,255,0.7)' }}>
+                        <div
+                          style={{
+                            marginTop: 10,
+                            fontSize: 11,
+                            color: 'rgba(255,255,255,0.7)',
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                          }}
+                        >
                           {eff.architecture}
                         </div>
                       )}
                       {eff?.fun_fact && (
                         <div
                           style={{
-                            marginTop: 'auto',
-                            fontSize: 11,
+                            marginTop: 10,
+                            fontSize: 10.5,
                             fontStyle: 'italic',
-                            lineHeight: 1.45,
+                            lineHeight: 1.4,
                             color: 'rgba(255,255,255,0.6)',
                             borderTop: '1px solid rgba(255,255,255,0.08)',
-                            paddingTop: 10,
+                            paddingTop: 9,
                             display: '-webkit-box',
                             WebkitLineClamp: 2,
                             WebkitBoxOrient: 'vertical',
                             overflow: 'hidden',
+                            minHeight: 0,
+                            flexShrink: 1,
                           }}
                         >
                           «&nbsp;{eff.fun_fact}&nbsp;»
@@ -708,19 +719,25 @@ export default function CollectorCardV2({
 // The card frame. For holo tiers the BORDER itself is the rainbow (a gradient
 // painted in the 4px padding ring, sitting BEHIND the opaque inner content).
 // It can never touch the photo/text — there is no overlay, no mask, no blend.
+//
+// NB: no CSS animation here on purpose. An animated compositing layer on a
+// backface-visibility:hidden element breaks backface culling on iOS Safari
+// (both faces render, back text shows mirrored). The border stays static so
+// the 3D flip is rock-solid. Each face also carries an explicit rotateY so
+// Safari reliably engages backface-visibility.
 function faceStyle(holo?: boolean): React.CSSProperties {
   return {
     position: 'absolute',
     inset: 0,
     backfaceVisibility: 'hidden',
     WebkitBackfaceVisibility: 'hidden',
+    transform: 'rotateY(0deg)',
     borderRadius: 20,
     padding: holo ? 4 : 3,
     background: holo
       ? 'repeating-linear-gradient(115deg, rgba(255,0,150,1) 0%, rgba(0,225,255,1) 13%, rgba(180,90,255,1) 26%, rgba(255,230,70,1) 39%, rgba(255,0,150,1) 52%)'
       : 'var(--frame)',
     backgroundSize: holo ? '260% 100%' : undefined,
-    animation: holo ? 'cardv2-holo-drift 6s linear infinite alternate' : undefined,
   }
 }
 function innerStyle(): React.CSSProperties {
