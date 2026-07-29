@@ -10,6 +10,7 @@ import {
   type CardProgress,
 } from '../lib/cardLevels'
 import CollectorCard, { rarityRank } from './CollectorCard'
+import CardSpotsSheet from './CardSpotsSheet'
 
 /** One evolving card per unique (brand, model, base colour). Repeat spots of
  *  the same car collapse into a single card (count = "spotté X fois"); the
@@ -29,6 +30,8 @@ export default function MyCollection({ spots }: { spots: Spot[] }) {
   const navigate = useNavigate()
   const [meta, setMeta] = useState<Map<string, CardMeta>>(new Map())
   const [progress, setProgress] = useState<Map<string, CardProgress>>(new Map())
+  const [sheetKey, setSheetKey] = useState<string | null>(null)
+  const [savingMain, setSavingMain] = useState(false)
 
   // One RPC for all the user's cards (community stats) + the per-card
   // level/photo state. Re-run when the spots list shape changes.
@@ -161,10 +164,33 @@ export default function MyCollection({ spots }: { spots: Spot[] }) {
     )
   }
 
+  const sheetCard = sheetKey
+    ? cards.find((c) => c.key === sheetKey) ?? null
+    : null
+
+  async function handleSetMain(spot: Spot) {
+    if (!sheetKey || !spot.photo_url) return
+    setSavingMain(true)
+    const { error } = await supabase.rpc('set_card_main_photo', {
+      p_spot_id: spot.id,
+    })
+    setSavingMain(false)
+    if (error) return
+    // Optimistic: reflect the new hero photo immediately.
+    setProgress((prev) => {
+      const cp = prev.get(sheetKey)
+      if (!cp) return prev
+      const next = new Map(prev)
+      next.set(sheetKey, { ...cp, main_photo_url: spot.photo_url })
+      return next
+    })
+  }
+
   return (
-    // 2-col grid at 100% width with an 8px gutter — each card is exactly
-    // 50% of the screen minus 4px. The parent profile tab is already
-    // full-bleed, so no horizontal padding is added here.
+    <>
+    {/* 2-col grid at 100% width with an 8px gutter — each card is exactly
+        50% of the screen minus 4px. The parent profile tab is already
+        full-bleed, so no horizontal padding is added here. */}
     <div className="grid grid-cols-2 gap-2">
       {sorted.map((c, i) => {
         const m = meta.get(c.rep.id)
@@ -188,6 +214,8 @@ export default function MyCollection({ spots }: { spots: Spot[] }) {
                   c.spots[c.spots.length - 1].created_at,
                 cumulativeXp: c.cp?.cumulative_xp ?? 0,
               }}
+              onViewSpots={() => setSheetKey(c.key)}
+              onChangePhoto={() => setSheetKey(c.key)}
               reveal={revealKeys.has(c.key)}
               showShare
             />
@@ -195,5 +223,24 @@ export default function MyCollection({ spots }: { spots: Spot[] }) {
         )
       })}
     </div>
+    {sheetCard && (
+      <CardSpotsSheet
+        open
+        onClose={() => setSheetKey(null)}
+        brand={sheetCard.rep.brand}
+        model={sheetCard.rep.model}
+        level={sheetCard.level}
+        count={sheetCard.count}
+        spots={sheetCard.spots}
+        mainPhotoUrl={
+          sheetCard.cp?.main_photo_url ??
+          sheetCard.cp?.best_photo_url ??
+          sheetCard.rep.photo_url
+        }
+        onSetMain={handleSetMain}
+        busy={savingMain}
+      />
+    )}
+    </>
   )
 }

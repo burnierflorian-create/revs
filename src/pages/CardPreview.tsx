@@ -1,5 +1,7 @@
+import { useState } from 'react'
 import CollectorCardV2 from '../components/CollectorCardV2'
-import type { Rarity } from '../lib/spots'
+import CardSpotsSheet from '../components/CardSpotsSheet'
+import type { Rarity, Spot } from '../lib/spots'
 
 // TEMPORARY preview — the full rarity ladder, to validate the redesign.
 // Public route (/card-preview); remove once signed off.
@@ -7,6 +9,13 @@ import type { Rarity } from '../lib/spots'
 const P1 = 'https://images.unsplash.com/photo-1567808291548-fc3ee04dbcf0?w=800'
 const P2 = 'https://images.unsplash.com/photo-1541348263662-e068662d82af?w=800'
 const P3 = 'https://images.unsplash.com/photo-1544829099-b9a0c07fad1a?w=800'
+
+// Fake spots to preview the Phase-3 history + photo-picker sheet.
+const DEMO_SPOTS = [
+  { id: 'demo-1', brand: 'Lamborghini', model: 'Huracán EVO', photo_url: P1, created_at: '2026-07-27T18:12:00Z', lat: 45.7578, lng: 4.832 },
+  { id: 'demo-2', brand: 'Lamborghini', model: 'Huracán EVO', photo_url: P2, created_at: '2026-06-14T11:03:00Z', lat: 45.764, lng: 4.8357 },
+  { id: 'demo-3', brand: 'Lamborghini', model: 'Huracán EVO', photo_url: P3, created_at: '2026-05-12T09:40:00Z', lat: 45.75, lng: 4.85 },
+] as unknown as Spot[]
 
 const CARDS: {
   rarity: Rarity
@@ -85,6 +94,8 @@ function EvoRow({
 }
 
 export default function CardPreview() {
+  const [demoOpen, setDemoOpen] = useState(false)
+  const [demoMain, setDemoMain] = useState<string | null>(P1)
   return (
     <div style={{ minHeight: '100dvh', background: '#0a0a0a', color: '#fff', padding: '28px 16px 60px' }}>
       <div style={{ maxWidth: 820, margin: '0 auto' }}>
@@ -132,7 +143,34 @@ export default function CardPreview() {
         <div style={{ marginTop: 32 }}>
           <EvoRow rarity="supercar" photo={P3} brand="Lamborghini" model="Huracán EVO" year={2022} category="supercar" total={250} />
         </div>
+
+        <h1 style={{ fontFamily: 'var(--font-display, inherit)', fontSize: 22, fontWeight: 900, letterSpacing: '-0.02em', marginTop: 48 }}>
+          Historique + photo principale (Phase 3)
+        </h1>
+        <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.55)', marginTop: 6 }}>
+          L'écran ouvert par « Mes spots » / « Photo » au dos d'une carte :
+          mini-map des lieux, tous les spots (date/heure), étoile = photo de la carte.
+        </p>
+        <button
+          onClick={() => setDemoOpen(true)}
+          className="tappable"
+          style={{ marginTop: 14, borderRadius: 9999, padding: '10px 18px', fontSize: 13, fontWeight: 800, color: '#fff', background: '#E8203A', border: 'none' }}
+        >
+          Ouvrir la démo
+        </button>
       </div>
+
+      <CardSpotsSheet
+        open={demoOpen}
+        onClose={() => setDemoOpen(false)}
+        brand="Lamborghini"
+        model="Huracán EVO"
+        level={4}
+        count={DEMO_SPOTS.length}
+        spots={DEMO_SPOTS}
+        mainPhotoUrl={demoMain}
+        onSetMain={(s) => setDemoMain(s.photo_url)}
+      />
     </div>
   )
 }

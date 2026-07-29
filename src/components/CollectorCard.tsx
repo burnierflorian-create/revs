@@ -45,6 +45,8 @@ export default function CollectorCard({
   cardNumber,
   isFirstOnRevs,
   evolution,
+  onViewSpots,
+  onChangePhoto,
   reveal = false,
   showShare = false,
 }: {
@@ -55,6 +57,9 @@ export default function CollectorCard({
   spotsCount?: number
   /** Per-card level/count/dates/XP → mastery visuals on the card. */
   evolution?: CardEvolution
+  /** Card back → open history + hero-photo picker (collection only). */
+  onViewSpots?: () => void
+  onChangePhoto?: () => void
   reveal?: boolean
   showShare?: boolean
 }) {
@@ -94,6 +99,8 @@ export default function CollectorCard({
       serialTotal={EDITION_SIZE[rarity] ?? 999}
       firstOnRevs={isFirstOnRevs}
       evolution={evolution}
+      onViewSpots={onViewSpots}
+      onChangePhoto={onChangePhoto}
       reveal={reveal && !prefersReducedMotion()}
       showShare={showShare}
       onShare={() =>

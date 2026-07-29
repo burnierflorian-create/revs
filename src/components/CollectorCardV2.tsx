@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Car, Crosshair, Crown, Eye, Flame, Loader2, Share2, Trophy } from 'lucide-react'
+import { Car, Crosshair, Crown, Eye, Flame, Images, ImagePlus, Loader2, Share2, Trophy } from 'lucide-react'
 import type { Rarity } from '../lib/spots'
 import { timeAgo } from '../lib/spots'
 import { fetchCardSpecs, type CardSpecs } from '../lib/cardSpecs'
@@ -153,6 +153,8 @@ export default function CollectorCardV2({
   reveal = false,
   showShare = false,
   onShare,
+  onViewSpots,
+  onChangePhoto,
   width = '100%',
 }: {
   photo: string | null
@@ -169,6 +171,9 @@ export default function CollectorCardV2({
   reveal?: boolean
   showShare?: boolean
   onShare?: () => void
+  /** Card back → open the full history + photo picker (collection only). */
+  onViewSpots?: () => void
+  onChangePhoto?: () => void
   width?: number | string
 }) {
   const look = RARITY_FRAME[rarity] ?? RARITY_FRAME.standard
@@ -692,6 +697,42 @@ export default function CollectorCardV2({
                       </div>
                     </div>
                   )}
+
+                  {/* Back actions (collection only): history + hero-photo picker.
+                      Divs (not buttons) + stopPropagation so they don't nest
+                      inside the flip button nor trigger a flip. */}
+                  {(onViewSpots || onChangePhoto) && (
+                    <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                      {onViewSpots && (
+                        <div
+                          role="button"
+                          tabIndex={0}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            onViewSpots()
+                          }}
+                          style={backBtnStyle()}
+                        >
+                          <Images style={{ width: 13, height: 13 }} />
+                          {count > 1 ? `${count} spots` : 'Mes spots'}
+                        </div>
+                      )}
+                      {onChangePhoto && (
+                        <div
+                          role="button"
+                          tabIndex={0}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            onChangePhoto()
+                          }}
+                          style={backBtnStyle()}
+                        >
+                          <ImagePlus style={{ width: 13, height: 13 }} />
+                          Photo
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -783,6 +824,24 @@ function topRowStyle(): React.CSSProperties {
     alignItems: 'flex-start',
     justifyContent: 'space-between',
     gap: 8,
+  }
+}
+function backBtnStyle(): React.CSSProperties {
+  return {
+    flex: 1,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    padding: '8px 0',
+    borderRadius: 10,
+    fontSize: 11,
+    fontWeight: 800,
+    color: 'rgba(255,255,255,0.9)',
+    background: 'rgba(255,255,255,0.06)',
+    border: '1px solid rgba(255,255,255,0.12)',
+    cursor: 'pointer',
+    userSelect: 'none',
   }
 }
 function serialStyle(): React.CSSProperties {
