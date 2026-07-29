@@ -127,7 +127,26 @@ const [spots, renders, specs] = await Promise.all([
   fetchAll('car_specs', 'brand,model,year,data'),
 ])
 
-const renderSet = new Set(renders.map((r) => `${norm(r.make)}|${norm(r.model)}`))
+// Render matching MUST mirror src/components/Showroom.tsx (resolveRender):
+// same make key, and every token of the render's model is a subset of the
+// spot's model tokens (most-specific wins). Exact string equality would
+// wrongly flag "Huracán Spyder" as having no "Huracan" render.
+const deburr = (s) => (s ?? '').toString().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+const mkey = (s) => deburr(s).toLowerCase().replace(/[^a-z0-9]+/g, '')
+const rtoks = (s) => deburr(s).toLowerCase().split(/[^a-z0-9]+/).filter(Boolean)
+const renderLib = renders.map((r) => ({ make: mkey(r.make), toks: rtoks(r.model), raw: r }))
+function resolveRender(brand, model) {
+  const b = mkey(brand)
+  const st = new Set(rtoks(model))
+  let best = -1
+  let hit = null
+  for (const r of renderLib) {
+    if (r.make !== b || r.toks.length === 0) continue
+    if (!r.toks.every((t) => st.has(t))) continue
+    if (r.toks.length > best) { best = r.toks.length; hit = r.raw }
+  }
+  return hit
+}
 const specByKey = new Map()
 for (const s of specs) {
   specByKey.set(`${norm(s.brand)}|${norm(s.model)}|${s.year ?? ''}`, s)
@@ -200,7 +219,7 @@ for (const [, g] of groups) {
 
   // 4 — render
   let vRender = '✅'
-  const hasRender = !!sp.realistic_render_url || renderSet.has(`${brand}|${model}`)
+  const hasRender = !!sp.realistic_render_url || !!resolveRender(sp.brand, sp.model)
   if (!hasRender) {
     if (sp.photo_url || sp.garage_image_url) { vRender = '⚠️'; issues.push('Pas de rendu showroom (fallback photo actif)') }
     else { vRender = '❌'; issues.push('Ni rendu ni photo') }
@@ -232,7 +251,12 @@ const tot = rows.length
 const cOK = rows.filter((r) => r.overall === '✅').length
 const cWarn = rows.filter((r) => r.overall === '⚠️').length
 const cBad = rows.filter((r) => r.overall === '❌').length
-const orphanRenders = renders.filter((r) => !groups.has(`${norm(r.make)}|${norm(r.model)}|`) && ![...groups.keys()].some((k) => k.startsWith(`${norm(r.make)}|${norm(r.model)}|`)))
+const usedRenders = new Set()
+for (const [, g] of groups) {
+  const hit = resolveRender(g.rep.brand, g.rep.model)
+  if (hit) usedRenders.add(hit)
+}
+const orphanRenders = renders.filter((r) => !usedRenders.has(r))
 
 const md = []
 md.push('# Audit de la base voitures — REVS\n')

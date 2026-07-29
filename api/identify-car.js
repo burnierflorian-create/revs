@@ -52,6 +52,72 @@ async function catalogLookup(brand, model) {
     return null
   }
 }
+// ─────────── Cost control: per-user quota + rate limit. ───────────
+// FAIL-OPEN by design: any auth/DB hiccup lets the capture through. We would
+// rather occasionally under-charge a quota than block a real user at launch.
+const FREE_DAILY = 6 // AI spots/day on the free tier (resets midnight UTC)
+const HARD_CAP = 200 // absolute daily ceiling, every tier — anti-abuse
+const COOLDOWN_MS = 3000 // min gap between two AI calls for one user
+const GRACE_DAYS = 3 // discovery window after signup = unlimited
+const UNLIMITED_TIERS = new Set(['premium', 'vip', 'pro'])
+const UNLIMITED_ROLES = new Set(['admin', 'premium', 'vip'])
+
+// Returns { ok:true } to proceed, or { ok:false, code, message } to block (429).
+async function checkAiQuota(req) {
+  const sb = getSb()
+  if (!sb) return { ok: true }
+  try {
+    const auth = req.headers.authorization || req.headers.Authorization || ''
+    const token = auth.startsWith('Bearer ') ? auth.slice(7).trim() : ''
+    if (!token) return { ok: true } // no session → don't block (fail-open)
+    const { data: u } = await sb.auth.getUser(token)
+    const user = u?.user
+    if (!user) return { ok: true }
+
+    const { data: prof } = await sb
+      .from('profiles')
+      .select('tier,role')
+      .eq('user_id', user.id)
+      .maybeSingle()
+    const unlimited =
+      UNLIMITED_TIERS.has((prof?.tier || 'free').toLowerCase()) ||
+      UNLIMITED_ROLES.has((prof?.role || '').toLowerCase())
+
+    const now = Date.now()
+    const created = user.created_at ? new Date(user.created_at).getTime() : 0
+    const inGrace = created > 0 && now - created < GRACE_DAYS * 86400000
+
+    const day = new Date().toISOString().slice(0, 10)
+    const { data: row } = await sb
+      .from('ai_usage')
+      .select('count,last_at')
+      .eq('user_id', user.id)
+      .eq('day', day)
+      .maybeSingle()
+    const count = row?.count || 0
+    const lastAt = row?.last_at ? new Date(row.last_at).getTime() : 0
+
+    // Cooldown + hard cap apply to EVERYONE, premium included.
+    if (lastAt && now - lastAt < COOLDOWN_MS)
+      return { ok: false, code: 'cooldown', message: 'Doucement ! Attends quelques secondes avant le prochain scan.' }
+    if (count >= HARD_CAP)
+      return { ok: false, code: 'hardcap', message: 'Limite quotidienne atteinte. Reviens demain !' }
+    if (!unlimited && !inGrace && count >= FREE_DAILY)
+      return { ok: false, code: 'quota', message: 'Tu as atteint ta limite du jour. Passe Premium pour scanner sans limite ✨' }
+
+    // Record the call (best-effort; a failed write must not block).
+    await sb
+      .from('ai_usage')
+      .upsert(
+        { user_id: user.id, day, count: count + 1, last_at: new Date().toISOString() },
+        { onConflict: 'user_id,day' },
+      )
+    return { ok: true }
+  } catch {
+    return { ok: true } // any error → fail-open
+  }
+}
+
 // Freeze a newly-priced model. Fire-and-forget; failure never blocks identify.
 async function catalogInsert(brand, model, marketValue, rarity) {
   const sb = getSb()
@@ -72,6 +138,10 @@ async function catalogInsert(brand, model, marketValue, rarity) {
 // separate TEXT-ONLY call on Haiku (the cheapest model) — splitting the
 // two cuts the price-side cost ~80% vs. asking Sonnet for everything.
 const MODEL = 'claude-sonnet-4-6'
+// Haiku handles vision on the first pass (5× cheaper than Sonnet). We only
+// escalate to Sonnet when Haiku's confidence is below HAIKU_MIN_CONFIDENCE.
+const HAIKU_VISION_MODEL = 'claude-haiku-4-5-20251001'
+const HAIKU_MIN_CONFIDENCE = 80
 const PRICE_MODEL = 'claude-haiku-4-5-20251001'
 
 // Market-price rule + real reference quotes (current resale value, NOT
@@ -523,9 +593,9 @@ function cleanModelName(s) {
 }
 
 
-async function callClaude(client, mimeType, imageBase64, system, maxTokens) {
+async function callClaude(client, mimeType, imageBase64, system, maxTokens, model = MODEL) {
   return client.messages.create({
-    model: MODEL,
+    model,
     max_tokens: maxTokens,
     system: [
       { type: 'text', text: system, cache_control: { type: 'ephemeral' } },
@@ -550,6 +620,44 @@ async function callClaude(client, mimeType, imageBase64, system, maxTokens) {
       },
     ],
   })
+}
+
+// Finish an accepted identification: rescue a generic brand (Sonnet), read
+// the frozen price/rarity from the catalog (zero AI when cached) or compute
+// it once via Haiku, freeze it, and send. Shared by the confident path and
+// the low-confidence Haiku fallback.
+async function enrichAndSend(res, client, mimeType, imageBase64, parsed, initial) {
+  let result = initial
+
+  // If the brand came back generic/empty ("Voiture", "Inconnue"…), fire ONE
+  // insistent vision call (Sonnet) that leans on silhouette + brand cues.
+  if (isGenericBrand(result.brand)) {
+    const better = await reanalyzeBrand(client, mimeType, imageBase64)
+    if (better && !isGenericBrand(finalize(better).brand)) {
+      result = finalize({ ...parsed, ...better })
+    }
+  }
+
+  // Value + rarity are FROZEN per model — read the catalog (no AI) when known,
+  // else one cheap Haiku price call, derive rarity, and freeze for next time.
+  const known = await catalogLookup(result.brand, result.model)
+  if (known) {
+    result.estimated_price = known.market_value
+    result.rarity = known.rarity
+  } else {
+    const price = await lookupMarketPrice(
+      client,
+      result.brand,
+      result.model,
+      result.year,
+    )
+    result.estimated_price = price
+    result.rarity = rarityFromPrice(price)
+    if (!isGenericBrand(result.brand) && result.model && result.model !== NEVER_EMPTY_MODEL) {
+      await catalogInsert(result.brand, result.model, price, result.rarity)
+    }
+  }
+  return sendJson(res, result)
 }
 
 // Text-only market-price lookup on Haiku (cheap). Returns an integer in
@@ -653,6 +761,12 @@ export default async function handler(req, res) {
     return sendJson(res, FALLBACK, 400)
   }
 
+  // Cost gate: quota / rate-limit before spending any AI tokens. Fail-open.
+  const quota = await checkAiQuota(req)
+  if (!quota.ok) {
+    return sendJson(res, { error: quota.code, message: quota.message }, 429)
+  }
+
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
   // Three escalating attempts: full prompt → simple prompt → minimal
@@ -664,11 +778,15 @@ export default async function handler(req, res) {
   // two legacy prompts stay as escalating fallbacks for the rare case
   // where the strict prompt fails to produce parseable JSON.
   const attempts = [
-    { system: SYSTEM_STRICT,  max: 600 },
-    { system: SYSTEM_SIMPLE,  max: 600 },
-    { system: SYSTEM_MINIMAL, max: 250 },
+    { model: HAIKU_VISION_MODEL, system: SYSTEM_STRICT,  max: 600, minConfidence: HAIKU_MIN_CONFIDENCE },
+    { model: MODEL,              system: SYSTEM_STRICT,  max: 600 },
+    { model: MODEL,              system: SYSTEM_SIMPLE,  max: 600 },
+    { model: MODEL,              system: SYSTEM_MINIMAL, max: 250 },
   ]
   let lastRawText = ''
+  // A parseable-but-low-confidence Haiku result, kept as a floor in case the
+  // Sonnet escalation also fails to beat it.
+  let fallback = null
   for (let i = 0; i < attempts.length; i += 1) {
     try {
       const r = await callClaude(
@@ -677,6 +795,7 @@ export default async function handler(req, res) {
         imageBase64,
         attempts[i].system,
         attempts[i].max,
+        attempts[i].model,
       )
       if (r.stop_reason === 'refusal') {
         // Stop trying — model explicitly refused.
@@ -707,45 +826,15 @@ export default async function handler(req, res) {
       }
 
       if (parsed && (parsed.brand || parsed.model || parsed.make)) {
-        // Vision recognition done (Sonnet).
-        let result = finalize(parsed)
-
-        // Point 3 — if the brand came back generic/empty ("Voiture",
-        // "Inconnue"…), don't accept it: fire ONE more insistent vision
-        // call (SYSTEM_INSIST) that leans on silhouette + brand cues. Keep
-        // it only if it actually names a real make.
-        if (isGenericBrand(result.brand)) {
-          const better = await reanalyzeBrand(client, mimeType, imageBase64)
-          if (better && !isGenericBrand(finalize(better).brand)) {
-            // Merge — the insistent pass overrides brand/model/etc, but any
-            // field it omitted keeps the first pass's value.
-            result = finalize({ ...parsed, ...better })
-          }
+        const result = finalize(parsed)
+        // Stop-on-confidence: accept the cheap Haiku pass only when it's
+        // confident enough; otherwise stash it and escalate to Sonnet.
+        const min = attempts[i].minConfidence
+        if (min && result.confidence < min) {
+          if (!fallback) fallback = { parsed, result }
+          continue
         }
-
-        // Value + rarity are FROZEN per model. If this model is already in
-        // the catalog, read its stored value/rarity — no Haiku call, no
-        // recompute. Otherwise: one cheap Haiku price call, derive rarity
-        // from the price thresholds, and freeze it for next time.
-        const known = await catalogLookup(result.brand, result.model)
-        if (known) {
-          result.estimated_price = known.market_value
-          result.rarity = known.rarity
-        } else {
-          const price = await lookupMarketPrice(
-            client,
-            result.brand,
-            result.model,
-            result.year,
-          )
-          result.estimated_price = price
-          result.rarity = rarityFromPrice(price)
-          // Don't freeze an unidentified model (it would poison the catalog).
-          if (!isGenericBrand(result.brand) && result.model && result.model !== NEVER_EMPTY_MODEL) {
-            await catalogInsert(result.brand, result.model, price, result.rarity)
-          }
-        }
-        return sendJson(res, result)
+        return enrichAndSend(res, client, mimeType, imageBase64, parsed, result)
       }
     } catch (e) {
       console.error(`[identify-car] attempt ${i + 1} threw:`, e?.message ?? e)
@@ -753,7 +842,12 @@ export default async function handler(req, res) {
     }
   }
 
-  // All 3 attempts failed to produce a usable JSON. Try to salvage brand
+  // Sonnet never beat the Haiku floor — use the stashed low-confidence result.
+  if (fallback) {
+    return enrichAndSend(res, client, mimeType, imageBase64, fallback.parsed, fallback.result)
+  }
+
+  // All attempts failed to produce a usable JSON. Try to salvage brand
   // and model from the raw prose of the last response.
   const rescued = rescueFromProse(lastRawText)
   if (rescued && (rescued.brand || rescued.model)) {

@@ -203,12 +203,13 @@ export default function NewSpot() {
     try {
       const resized = await resizeImageToJpeg(file)
       setImage(resized)
-      // AI-only downscale (1200px / q0.7). Larger than the display path on
-      // purpose: more pixels = sharper badges/logos for the vision model.
+      // AI-only downscale (768px / q0.85). Image tokens scale with pixel
+      // area (≈ w×h/750), so 768px is ~2× cheaper than 1200px; the higher
+      // JPEG quality keeps badges/logos legible for the vision model.
       // Best-effort: if it fails we fall back to image.base64 in analyze(),
       // so capture is never blocked.
       try {
-        const ai = await resizeImageToJpeg(file, 1200, 0.7)
+        const ai = await resizeImageToJpeg(file, 768, 0.85)
         setAiBase64(ai.base64)
       } catch {
         /* keep aiBase64 null → analyze() uses the full-res base64 */
@@ -315,24 +316,38 @@ export default function NewSpot() {
       imageBase64: aiBase64 ?? image.base64,
       mimeType: 'image/jpeg',
     })
-    const fetchJson = (path: string) =>
-      fetch(path, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body,
-        signal: ctrl.signal,
-      }).then((r) => r.json())
+    // Bearer token lets identify-car attribute the call to this user for
+    // quota / rate-limit accounting. Missing token = server fails open.
+    const { data: sess } = await supabase.auth.getSession()
+    const authToken = sess?.session?.access_token
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    }
+    if (authToken) headers.Authorization = `Bearer ${authToken}`
+    const doFetch = (path: string) =>
+      fetch(path, { method: 'POST', headers, body, signal: ctrl.signal })
+    const fetchJson = (path: string) => doFetch(path).then((r) => r.json())
     try {
       // Identify the car AND detect license plates in parallel — both
       // are vision calls of similar latency, no reason to serialise.
       // Plate detection failing is non-fatal: we just skip the blur.
-      const [carJson, plateJson] = await Promise.all([
-        fetchJson('/api/identify-car') as Promise<IdentifyResult>,
+      const [carRes, plateJson] = await Promise.all([
+        doFetch('/api/identify-car'),
         (fetchJson('/api/detect-plate') as Promise<{ plates: BBox[] }>).catch(
           () => ({ plates: [] as BBox[] }),
         ),
       ])
       clearTimeout(timer)
+
+      // 429 = daily quota reached / cooldown / anti-abuse cap. Show the
+      // server's message and bounce back to the capture step.
+      if (carRes.status === 429) {
+        const q = await carRes.json().catch(() => ({}))
+        cancelHeartbeat()
+        rejectAndRestart(q?.message || 'Tu as atteint ta limite du jour. Passe Premium ✨')
+        return
+      }
+      const carJson = (await carRes.json()) as IdentifyResult
 
       // Apply the plate blur to the in-memory blob BEFORE moving to the
       // edit step. By the time the user reaches publish(), image.blob
