@@ -22,6 +22,7 @@ type Card = {
   count: number
   level: number
   firstAt: string
+  cp?: CardProgress
 }
 
 export default function MyCollection({ spots }: { spots: Spot[] }) {
@@ -79,6 +80,7 @@ export default function MyCollection({ spots }: { spots: Spot[] }) {
         count: group.length,
         level: cp?.level ?? 1,
         firstAt: asc[0].created_at,
+        cp,
       }
     })
   }, [spots, progress])
@@ -177,6 +179,15 @@ export default function MyCollection({ spots }: { spots: Spot[] }) {
               cardNumber={cardNumberFor(c.key)}
               spotsCount={c.count}
               isFirstOnRevs={m?.is_first_on_revs ?? false}
+              evolution={{
+                level: c.level,
+                count: c.count,
+                firstSpotAt: c.cp?.first_spot_at ?? c.firstAt,
+                lastSpotAt:
+                  c.cp?.last_spot_at ??
+                  c.spots[c.spots.length - 1].created_at,
+                cumulativeXp: c.cp?.cumulative_xp ?? 0,
+              }}
               reveal={revealKeys.has(c.key)}
               showShare
             />

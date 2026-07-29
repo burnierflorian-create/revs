@@ -1,7 +1,39 @@
 import { useEffect, useRef, useState } from 'react'
-import { Car, Loader2, Share2, Trophy } from 'lucide-react'
+import { Car, Crosshair, Crown, Eye, Flame, Loader2, Share2, Trophy } from 'lucide-react'
 import type { Rarity } from '../lib/spots'
+import { timeAgo } from '../lib/spots'
 import { fetchCardSpecs, type CardSpecs } from '../lib/cardSpecs'
+
+// ── Card evolution (level-up) overlay, LAYERED on top of the rarity frame ──
+// A card levels 1→5 as the same car is re-spotted. The mastery treatment
+// intensifies the card WITHOUT changing its rarity: a Commune Nv5 stays
+// Commune but becomes a gold/red "Légende" trophy. Keep thresholds/badges in
+// sync with src/lib/cardLevels.ts.
+export type CardEvolution = {
+  level: number
+  count: number // "spotté X fois" (the user's own captures)
+  firstSpotAt?: string | null
+  lastSpotAt?: string | null
+  cumulativeXp?: number
+}
+
+type LevelFx = {
+  badge: string
+  Icon: typeof Crosshair
+  chipBg: string
+  chipFg: string
+  ring: string // outer aura colour (level glow)
+  shine: boolean
+  aura: boolean
+}
+// L1 has no badge (base card). L2-L5 escalate. L5 forces the holo/aura trophy
+// treatment even on a Commune.
+const LEVEL_FX: Record<number, LevelFx> = {
+  2: { badge: 'Chasseur', Icon: Crosshair, chipBg: 'linear-gradient(120deg,#7f8ea3,#c9d8ef)', chipFg: '#0c0c0f', ring: 'rgba(150,180,255,0.42)', shine: true, aura: false },
+  3: { badge: 'Traqueur', Icon: Crosshair, chipBg: 'linear-gradient(120deg,#2f7fd0,#7fd0ff)', chipFg: '#04121f', ring: 'rgba(90,200,255,0.5)', shine: true, aura: false },
+  4: { badge: 'Obsédé', Icon: Flame, chipBg: 'linear-gradient(120deg,#7d3ea8,#c98bf0)', chipFg: '#1a0a26', ring: 'rgba(190,120,240,0.55)', shine: true, aura: true },
+  5: { badge: 'Légende', Icon: Crown, chipBg: 'linear-gradient(120deg,#E0B341,#FFD700 45%,#E8203A)', chipFg: '#1a1306', ring: 'rgba(255,190,60,0.7)', shine: true, aura: true },
+}
 
 // ─────────────────────────────────────────────────────────────────────
 // Collector card v2 — FUT/EA-FC energy × Pokémon-TCG collectibility on the
@@ -117,6 +149,7 @@ export default function CollectorCardV2({
   serialTotal,
   specs,
   firstOnRevs = false,
+  evolution,
   reveal = false,
   showShare = false,
   onShare,
@@ -132,12 +165,16 @@ export default function CollectorCardV2({
   serialTotal: number
   specs?: CardSpecs | null
   firstOnRevs?: boolean
+  evolution?: CardEvolution
   reveal?: boolean
   showShare?: boolean
   onShare?: () => void
   width?: number | string
 }) {
   const look = RARITY_FRAME[rarity] ?? RARITY_FRAME.standard
+  const lvl = evolution?.level ?? 1
+  const count = evolution?.count ?? 1
+  const fx = LEVEL_FX[lvl] ?? null // null at L1 (base card)
   const rootRef = useRef<HTMLDivElement>(null)
   const tiltRef = useRef<HTMLDivElement>(null)
   const [flipped, setFlipped] = useState(false)
@@ -225,7 +262,16 @@ export default function CollectorCardV2({
 
   const catLabel = category && category !== 'other' ? category.toUpperCase() : ''
   const rootWidth = typeof width === 'number' ? `${width}px` : width
-  const particles = reveal && (look.holo || look.aura)
+  // Level intensifies the treatment on top of rarity: shine ≥ L2, gold bloom
+  // + reveal particles at the top levels — even for a low-rarity card.
+  const effShine = look.shine || lvl >= 2
+  const goldBloom = look.aura || lvl >= 5
+  const particles = reveal && (look.holo || look.aura || lvl >= 4)
+  const firstDate = evolution?.firstSpotAt
+    ? new Date(evolution.firstSpotAt).toLocaleDateString('fr-FR')
+    : null
+  const lastAgo = evolution?.lastSpotAt ? timeAgo(evolution.lastSpotAt) : null
+  const cumXp = evolution?.cumulativeXp ?? 0
 
   return (
     <div style={{ width: rootWidth }}>
@@ -299,7 +345,7 @@ export default function CollectorCardV2({
             transformStyle: 'preserve-3d',
           }}
         >
-          {look.aura && (
+          {goldBloom && (
             <div
               aria-hidden
               style={{
@@ -333,7 +379,9 @@ export default function CollectorCardV2({
               position: 'absolute',
               inset: 0,
               borderRadius: 20,
-              boxShadow: 'var(--glow)',
+              boxShadow: fx
+                ? `var(--glow), 0 0 0 2px ${fx.ring}, 0 0 34px 6px ${fx.ring}`
+                : 'var(--glow)',
               pointerEvents: 'none',
               zIndex: 0,
             }}
@@ -401,7 +449,7 @@ export default function CollectorCardV2({
 
                 {/* No holo film on the surface — the rainbow lives ONLY in the
                     card border (faceStyle). The photo stays a clean photo. */}
-                {look.shine && <div aria-hidden style={shineStyle()} />}
+                {effShine && <div aria-hidden style={shineStyle()} />}
 
                 {/* Top row: rarity + serial */}
                 <div style={topRowStyle()}>
@@ -450,6 +498,46 @@ export default function CollectorCardV2({
 
                 {/* Bottom block */}
                 <div style={{ position: 'absolute', inset: 'auto 12px 12px 12px', color: '#fff' }}>
+                  {(fx || count > 1) && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 7 }}>
+                      {fx && (
+                        <span
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 3,
+                            padding: '2px 7px',
+                            borderRadius: 7,
+                            fontSize: 9,
+                            fontWeight: 900,
+                            letterSpacing: '0.06em',
+                            textTransform: 'uppercase',
+                            color: fx.chipFg,
+                            background: fx.chipBg,
+                            boxShadow: '0 2px 8px rgba(0,0,0,0.35)',
+                          }}
+                        >
+                          <fx.Icon style={{ width: 10, height: 10 }} /> {fx.badge}
+                        </span>
+                      )}
+                      {count > 1 && (
+                        <span
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 3,
+                            fontSize: 9,
+                            fontWeight: 800,
+                            letterSpacing: '0.04em',
+                            color: 'rgba(255,255,255,0.74)',
+                            textShadow: '0 1px 3px rgba(0,0,0,0.75)',
+                          }}
+                        >
+                          <Eye style={{ width: 10, height: 10 }} /> Spotté ×{count}
+                        </span>
+                      )}
+                    </div>
+                  )}
                   <div
                     style={{
                       fontSize: 11,
@@ -572,6 +660,38 @@ export default function CollectorCardV2({
                       </p>
                     )}
                   </div>
+
+                  {/* Evolution footer: discovery / last capture / cumulative XP. */}
+                  {evolution && (
+                    <div
+                      style={{
+                        marginTop: 12,
+                        paddingTop: 10,
+                        borderTop: '1px solid rgba(255,255,255,0.08)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 5,
+                        fontSize: 10.5,
+                      }}
+                    >
+                      {firstDate && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', color: 'rgba(255,255,255,0.55)' }}>
+                          <span>Découverte</span>
+                          <span style={{ color: 'rgba(255,255,255,0.85)', fontWeight: 700 }}>{firstDate}</span>
+                        </div>
+                      )}
+                      {lastAgo && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', color: 'rgba(255,255,255,0.55)' }}>
+                          <span>Dernière capture</span>
+                          <span style={{ color: 'rgba(255,255,255,0.85)', fontWeight: 700 }}>{lastAgo}</span>
+                        </div>
+                      )}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', color: 'rgba(255,255,255,0.55)' }}>
+                        <span>XP cumulé{count > 1 ? ` · spotté ×${count}` : ''}</span>
+                        <span style={{ color: '#E8203A', fontWeight: 800 }}>{cumXp} XP</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

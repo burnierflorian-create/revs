@@ -27,6 +27,63 @@ const CARDS: {
   { rarity: 'hypercar', photo: P1, brand: 'Bugatti', model: 'Chiron Super Sport', year: 2023, category: 'hypercar', serial: 12, total: 100, stats: { power: '1600', accel: '2.4s', vmax: '440', torque: '1600' } },
 ]
 
+// Evolution ladder: same car at levels 1→5. counts = thresholds 1/3/5/10/20.
+const LADDER_COUNTS = [1, 3, 5, 10, 20]
+const LADDER_LABELS = ['Base', 'Chasseur', 'Traqueur', 'Obsédé', 'Légende']
+
+function EvoRow({
+  rarity,
+  photo,
+  brand,
+  model,
+  year,
+  category,
+  total,
+}: {
+  rarity: Rarity
+  photo: string
+  brand: string
+  model: string
+  year: number
+  category: string
+  total: number
+}) {
+  return (
+    <div
+      style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))',
+        gap: 22,
+      }}
+    >
+      {LADDER_COUNTS.map((count, i) => (
+        <div key={i}>
+          <div style={{ fontSize: 11, fontWeight: 800, color: 'rgba(255,255,255,0.5)', marginBottom: 6, letterSpacing: '0.04em' }}>
+            Nv{i + 1} · {LADDER_LABELS[i]}
+          </div>
+          <CollectorCardV2
+            photo={photo}
+            brand={brand}
+            model={model}
+            year={year}
+            category={category}
+            rarity={rarity}
+            serial={i + 1}
+            serialTotal={total}
+            evolution={{
+              level: i + 1,
+              count,
+              firstSpotAt: '2026-05-12T10:00:00Z',
+              lastSpotAt: '2026-07-27T18:00:00Z',
+              cumulativeXp: count * 40 + i * 30,
+            }}
+          />
+        </div>
+      ))}
+    </div>
+  )
+}
+
 export default function CardPreview() {
   return (
     <div style={{ minHeight: '100dvh', background: '#0a0a0a', color: '#fff', padding: '28px 16px 60px' }}>
@@ -59,6 +116,21 @@ export default function CardPreview() {
               serialTotal={c.total}
             />
           ))}
+        </div>
+
+        <h1 style={{ fontFamily: 'var(--font-display, inherit)', fontSize: 22, fontWeight: 900, letterSpacing: '-0.02em', marginTop: 48 }}>
+          Paliers d'évolution — une Commune qui devient un trophée
+        </h1>
+        <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.55)', marginTop: 6 }}>
+          Même voiture, du Nv1 au Nv5 (1 · 3 · 5 · 10 · 20 spots). La rareté ne
+          change pas — c'est le cadre, le badge et le compteur qui montent.
+          Touche une carte pour voir le dos (découverte / dernière capture / XP).
+        </p>
+        <div style={{ marginTop: 24 }}>
+          <EvoRow rarity="standard" photo={P2} brand="Volkswagen" model="Golf GTI" year={2021} category="other" total={9999} />
+        </div>
+        <div style={{ marginTop: 32 }}>
+          <EvoRow rarity="supercar" photo={P3} brand="Lamborghini" model="Huracán EVO" year={2022} category="supercar" total={250} />
         </div>
       </div>
     </div>

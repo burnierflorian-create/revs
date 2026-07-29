@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import type { Spot, Rarity } from '../lib/spots'
 import { prefersReducedMotion } from '../lib/motion'
 import { openShareCard } from './ShareCardSheet'
-import CollectorCardV2 from './CollectorCardV2'
+import CollectorCardV2, { type CardEvolution } from './CollectorCardV2'
 
 // Public API preserved for consumers (MyCollection, LevelUpOverlay, Map,
 // BrandDetail, Profile, NewSpot). The visual is now CollectorCardV2 — this
@@ -44,15 +44,17 @@ export default function CollectorCard({
   spot,
   cardNumber,
   isFirstOnRevs,
+  evolution,
   reveal = false,
   showShare = false,
 }: {
   spot: Spot
   cardNumber: number
   isFirstOnRevs: boolean
-  /** Accepted for API compatibility (community count) — surfaced on the
-   *  card back in a later pass. */
+  /** Accepted for API compatibility (community count). */
   spotsCount?: number
+  /** Per-card level/count/dates/XP → mastery visuals on the card. */
+  evolution?: CardEvolution
   reveal?: boolean
   showShare?: boolean
 }) {
@@ -91,6 +93,7 @@ export default function CollectorCard({
       serial={cardNumber}
       serialTotal={EDITION_SIZE[rarity] ?? 999}
       firstOnRevs={isFirstOnRevs}
+      evolution={evolution}
       reveal={reveal && !prefersReducedMotion()}
       showShare={showShare}
       onShare={() =>
