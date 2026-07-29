@@ -16,6 +16,7 @@ import {
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { type Rarity, type Spot } from '../lib/spots'
+import { cardKey } from '../lib/cardLevels'
 import { planDisplayName, planTier } from '../lib/plans'
 import { allBadges, computeUnlocks, type Badge } from '../lib/badges'
 import { badgeIcon } from '../lib/customIcons'
@@ -1324,14 +1325,25 @@ function CollectionDecks({ spots }: { spots: Spot[] }) {
           .sort(
             (a, b) => (b.estimated_price ?? 0) - (a.estimated_price ?? 0),
           )[0]?.photo_url ?? null
+      // Count UNIQUE cards (brand+model+colour), not raw spots — the
+      // collection is one evolving card per car.
+      const cards = new Set(
+        inRarity.map((s) => cardKey(s.brand ?? '', s.model ?? '', s.color)),
+      )
       return {
         rarity: r,
         label: t(`profilepage.rarity.${r}`),
-        count: inRarity.length,
+        count: cards.size,
         cover,
       }
     }).filter((d) => d.count > 0)
   }, [spots, t])
+
+  // Total unique cards across all rarities (one evolving card per car).
+  const totalCards = useMemo(
+    () => decks.reduce((n, d) => n + d.count, 0),
+    [decks],
+  )
 
   if (spots.length === 0) {
     // Reuse the MyCollection empty state so the message stays
@@ -1359,7 +1371,13 @@ function CollectionDecks({ spots }: { spots: Spot[] }) {
               {t(`profilepage.rarity.${openRarity}`)}
             </h3>
             <span className="text-xs font-normal text-fg2">
-              {t('profilepage.decks.cardCount', { count: filtered.length })}
+              {t('profilepage.decks.cardCount', {
+                count: new Set(
+                  filtered.map((s) =>
+                    cardKey(s.brand ?? '', s.model ?? '', s.color),
+                  ),
+                ).size,
+              })}
             </span>
           </div>
         </div>
@@ -1389,9 +1407,9 @@ function CollectionDecks({ spots }: { spots: Spot[] }) {
             {t('profilepage.decks.summaryLabel')}
           </span>
           <span className="font-display text-2xl font-extrabold leading-none text-fg">
-            {spots.length}
+            {totalCards}
             <span className="ml-1.5 text-[11px] font-bold text-fg2">
-              {t('profilepage.decks.cardWord', { count: spots.length })}
+              {t('profilepage.decks.cardWord', { count: totalCards })}
             </span>
           </span>
         </div>
