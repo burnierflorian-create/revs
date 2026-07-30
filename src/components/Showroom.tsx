@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { fetchCardSpecs, type CardSpecs } from '../lib/cardSpecs'
+import { cardBadge, cardKey, fetchMyCardProgress, type CardProgress } from '../lib/cardLevels'
 import type { Spot } from '../lib/spots'
 import showroomBg from '../assets/showroom.webp'
 
@@ -58,19 +59,53 @@ export default function Showroom({
   const [active, setActive] = useState(0)
   const [width, setWidth] = useState(0)
 
-  // Only exhibit real, identified cars. Hide "unknown model" captures (e.g. a
-  // photo that's mostly grass with no recognisable car). New spots passed in
-  // via props are picked up automatically.
-  const cars = useMemo(
-    () =>
-      spots.filter((s) => {
-        const b = (s.brand ?? '').trim()
-        const m = (s.model ?? '').trim()
-        if (!b || !m) return false
-        return !/inconnu|unknown|^n\/?a$/i.test(m) && !/inconnue?|unknown/i.test(b)
-      }),
-    [spots],
-  )
+  // Per-card level/hero-photo, so the garage stays consistent with the
+  // collection (one slot per card, same chosen photo).
+  const [cardProg, setCardProg] = useState<Map<string, CardProgress>>(new Map())
+  useEffect(() => {
+    let alive = true
+    fetchMyCardProgress().then((m) => {
+      if (alive) setCardProg(m)
+    })
+    return () => {
+      alive = false
+    }
+  }, [spots.length])
+
+  // Only exhibit real, identified cars, and DEDUPE by (brand, model, base
+  // colour) — the SAME uniqueness key as the collection. One slot per card,
+  // using the card's chosen hero photo. Hide "unknown model" captures.
+  const cars = useMemo(() => {
+    const identified = spots.filter((s) => {
+      const b = (s.brand ?? '').trim()
+      const m = (s.model ?? '').trim()
+      if (!b || !m) return false
+      return !/inconnu|unknown|^n\/?a$/i.test(m) && !/inconnue?|unknown/i.test(b)
+    })
+    const groups = new Map<string, Spot[]>()
+    for (const s of identified) {
+      const k = cardKey(s.brand ?? '', s.model ?? '', s.color)
+      const g = groups.get(k)
+      if (g) g.push(s)
+      else groups.set(k, [s])
+    }
+    return [...groups.entries()].map(([k, group]) => {
+      const asc = group
+        .slice()
+        .sort(
+          (a, b) =>
+            new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+        )
+      const cp = cardProg.get(k)
+      const chosen = cp?.main_photo_url ?? cp?.best_photo_url ?? null
+      const rep = (chosen && asc.find((s) => s.photo_url === chosen)) || asc[0]
+      // Surface the card level on the representative spot for the plaque.
+      return { ...rep, _level: cp?.level ?? 1, _count: group.length } as Spot & {
+        _level: number
+        _count: number
+      }
+    })
+  }, [spots, cardProg])
   const n = cars.length
   // Infinite loop: `active` is unbounded; wrap into [0, n). `side` caps the
   // neighbours shown so a car never appears twice on a small collection.
@@ -239,7 +274,7 @@ export default function Showroom({
     }
   }, [])
 
-  const activeSpot = cars[aw] as Spot | undefined
+  const activeSpot = cars[aw] as (Spot & { _level?: number; _count?: number }) | undefined
   const activeSpecs = activeSpot ? specsMap.get(specsKey(activeSpot)) : undefined
 
   if (n === 0) return null // nothing identified to exhibit
@@ -625,6 +660,39 @@ export default function Showroom({
             >
               {activeSpot.model}
             </div>
+            {(activeSpot._level ?? 1) >= 2 && (
+              <div
+                style={{
+                  marginTop: 6,
+                  display: 'flex',
+                  justifyContent: 'center',
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: 9.5,
+                    fontWeight: 900,
+                    letterSpacing: '0.08em',
+                    textTransform: 'uppercase',
+                    padding: '3px 9px',
+                    borderRadius: 8,
+                    color:
+                      (activeSpot._level ?? 1) >= 5 ? '#1a1306' : '#0c0c0f',
+                    background:
+                      (activeSpot._level ?? 1) >= 5
+                        ? 'linear-gradient(120deg,#E0B341,#FFD700 45%,#E8203A)'
+                        : (activeSpot._level ?? 1) >= 4
+                          ? 'linear-gradient(120deg,#7d3ea8,#c98bf0)'
+                          : (activeSpot._level ?? 1) >= 3
+                            ? 'linear-gradient(120deg,#2f7fd0,#7fd0ff)'
+                            : 'linear-gradient(120deg,#7f8ea3,#c9d8ef)',
+                  }}
+                >
+                  {cardBadge(activeSpot._level ?? 1) ?? ''}
+                  {(activeSpot._count ?? 1) > 1 ? ` · ×${activeSpot._count}` : ''}
+                </span>
+              </div>
+            )}
             {/* Spec grid — 3 stats so everything fits without truncation */}
             <div
               style={{

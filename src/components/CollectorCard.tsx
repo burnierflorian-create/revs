@@ -80,6 +80,8 @@ export default function CollectorCard({
         serial: cardNumber,
         serialTotal: EDITION_SIZE[rarity] ?? 999,
         firstOnRevs: isFirstOnRevs,
+        level: evolution?.level,
+        count: evolution?.count,
         stats: shareStats(spot),
         autoMessage: 'Ta carte est prête à être partagée ! 🔥',
       })
@@ -114,6 +116,8 @@ export default function CollectorCard({
           serial: cardNumber,
           serialTotal: EDITION_SIZE[rarity] ?? 999,
           firstOnRevs: isFirstOnRevs,
+          level: evolution?.level,
+          count: evolution?.count,
           stats: shareStats(spot),
         })
       }

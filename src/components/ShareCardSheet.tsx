@@ -20,6 +20,9 @@ export type ShareCardInput = {
   serial?: number
   serialTotal?: number
   firstOnRevs?: boolean
+  /** Card evolution → mastery badge + "spotté ×N" on the share visual. */
+  level?: number
+  count?: number
   stats?: ShareStats
   /** Optional headline shown above the preview (wow-moment auto-shares). */
   autoMessage?: string
@@ -78,6 +81,8 @@ export default function ShareCardSheet() {
           serial: data.serial,
           serialTotal: data.serialTotal,
           firstOnRevs: data.firstOnRevs,
+          level: data.level,
+          count: data.count,
           stats: data.stats,
           refUrl,
         })

@@ -8,6 +8,7 @@
 // top-right, "1er sur REVS" badge, brand·year + model at the bottom. No stats.
 
 import type { Rarity } from './spots'
+import { cardBadge } from './cardLevels'
 
 export type ShareStats = { power?: string; accel?: string; vmax?: string; torque?: string }
 export type ShareCardData = {
@@ -19,6 +20,9 @@ export type ShareCardData = {
   serial?: number
   serialTotal?: number
   firstOnRevs?: boolean
+  /** Card evolution — a mastery badge + "spotté ×N" when level ≥ 2 / count > 1. */
+  level?: number
+  count?: number
   stats?: ShareStats // kept for callers; no longer drawn on the share visual
   refUrl: string
 }
@@ -359,6 +363,49 @@ export async function renderShareCard(d: ShareCardData): Promise<Blob> {
     ctx.fillText(label, chipX + bw / 2, byy + 23)
     ctx.textBaseline = 'alphabetic'
     ctx.textAlign = 'left'
+  }
+
+  // Evolution row — mastery badge (level ≥ 2) + "spotté ×N", above the name.
+  const lvl = d.level ?? 1
+  const badge = cardBadge(lvl)
+  if (badge || (d.count ?? 1) > 1) {
+    const ey = pad + ih - 176
+    let ex = pad + 34
+    if (badge) {
+      ctx.font = `900 24px ${FONT}`
+      const lbl = `NV${lvl} · ${badge.toUpperCase()}`
+      const w = ctx.measureText(lbl).width + 36
+      let fill: string | CanvasGradient = '#c9d8ef'
+      let fg = '#0c0c0f'
+      if (lvl === 3) fill = '#7fd0ff'
+      else if (lvl === 4) {
+        fill = '#c98bf0'
+        fg = '#1a0a26'
+      } else if (lvl >= 5) {
+        const gg = ctx.createLinearGradient(ex, 0, ex + w, 0)
+        gg.addColorStop(0, '#E0B341')
+        gg.addColorStop(0.45, '#FFD700')
+        gg.addColorStop(1, '#E8203A')
+        fill = gg
+        fg = '#1a1306'
+      }
+      ctx.fillStyle = fill
+      roundRect(ctx, ex, ey, w, 44, 12)
+      ctx.fill()
+      ctx.fillStyle = fg
+      ctx.textAlign = 'left'
+      ctx.textBaseline = 'middle'
+      ctx.fillText(lbl, ex + 18, ey + 23)
+      ex += w + 12
+    }
+    if ((d.count ?? 1) > 1) {
+      ctx.font = `800 24px ${FONT}`
+      ctx.fillStyle = 'rgba(255,255,255,0.82)'
+      ctx.textAlign = 'left'
+      ctx.textBaseline = 'middle'
+      ctx.fillText(`SPOTTÉ ×${d.count}`, ex, ey + 23)
+    }
+    ctx.textBaseline = 'alphabetic'
   }
 
   // Bottom block: brand·year + model. No stats.
