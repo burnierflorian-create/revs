@@ -369,7 +369,7 @@ export async function renderShareCard(d: ShareCardData): Promise<Blob> {
   const lvl = d.level ?? 1
   const badge = cardBadge(lvl)
   if (badge || (d.count ?? 1) > 1) {
-    const ey = pad + ih - 176
+    const ey = pad + ih - 208
     let ex = pad + 34
     if (badge) {
       ctx.font = `900 24px ${FONT}`
