@@ -7,7 +7,6 @@ import { hasGeoPermission } from '../lib/geo'
 import { translateError } from '../lib/errors'
 import { stashPendingReferral } from '../lib/referrals'
 import { useAuth } from '../hooks/useAuth'
-import { storeVault } from '../lib/passwordVault'
 import { detectCountry, reverseGeocode, COUNTRY_NAMES } from '../lib/country'
 import { appConfig } from '../config/appConfig'
 
@@ -203,7 +202,7 @@ export default function Auth() {
           country: country.trim(),
         }
         if (cleanedCode.length === 6) meta.referral_code = cleanedCode
-        const { data: signupData, error } = await withTimeout(
+        const { error } = await withTimeout(
           supabase.auth.signUp({
             email: cleanEmail,
             password,
@@ -212,15 +211,6 @@ export default function Auth() {
         )
         if (error) throw error
         if (cleanedCode.length === 6) stashPendingReferral(cleanedCode)
-        // Auto-populate the local password vault so the Settings →
-        // Sécurité → "Voir mon mot de passe" row reveals correctly
-        // on this browser. No checkbox — the feature is always-on,
-        // matching what most native PWAs do via the OS keychain.
-        // clearVault() runs on every signout / account-delete path so
-        // a different user on the same browser never inherits this.
-        if (signupData?.user?.id) {
-          await storeVault(signupData.user.id, password)
-        }
         setInfo(t('auth.signupCreated'))
       } else if (mode === 'forgot') {
         // Supabase sends a password-reset email pointing to redirectTo
@@ -256,20 +246,13 @@ export default function Auth() {
         setConfirmPassword('')
         setInfo(t('auth.passwordUpdated'))
       } else {
-        const { data, error } = await withTimeout(
+        const { error } = await withTimeout(
           supabase.auth.signInWithPassword({
             email: cleanEmail,
             password,
           }),
         )
         if (error) throw error
-        // Always-on local password vault — same behaviour as native
-        // PWAs that use the OS keychain. clearVault() runs on every
-        // signout / account-delete path so the next user on the same
-        // browser never inherits the prior password.
-        if (data?.user?.id) {
-          await storeVault(data.user.id, password)
-        }
       }
     } catch (err) {
       setError(translateError(err))

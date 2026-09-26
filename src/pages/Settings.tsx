@@ -10,7 +10,6 @@ import {
   Cookie,
   Crown,
   Eye,
-  EyeOff,
   Flame,
   Heart,
   KeyRound,
@@ -35,7 +34,6 @@ import {
 import { supabase } from '../lib/supabase'
 import { useTheme } from '../lib/theme'
 import { hapticSuccess } from '../lib/haptic'
-import { clearVault, hasVault, readVault } from '../lib/passwordVault'
 import AvatarCropModal from '../components/AvatarCropModal'
 import { enablePush, pushSupported } from '../lib/push'
 import { translateError } from '../lib/errors'
@@ -234,11 +232,6 @@ export default function Settings() {
   const [passionsOpen, setPassionsOpen] = useState(false)
   const [passionsBusy, setPassionsBusy] = useState(false)
   const [passionsMsg, setPassionsMsg] = useState<string | null>(null)
-  // Password reveal — Sécurité row. revealed holds the decrypted
-  // plaintext when the user taps the eye, null otherwise. The vault
-  // is auto-populated at every login so we don't track its existence
-  // in state; togglePasswordReveal calls hasVault() on demand.
-  const [revealed, setRevealed] = useState<string | null>(null)
   const [isPublic, setIsPublic] = useState(true)
   const [notif, setNotif] = useState(false)
   const [geo, setGeo] = useState(false)
@@ -264,7 +257,6 @@ export default function Settings() {
       return
     }
     try {
-      clearVault()
       const { error } = await supabase.auth.signOut({ scope: 'global' })
       if (error) throw error
       hapticSuccess()
@@ -273,38 +265,6 @@ export default function Settings() {
     }
   }
 
-  // Toggle handler for the "Voir mon mot de passe" row. Vault is
-  // auto-populated at every login, so the happy path is just decrypt
-  // + show / re-mask. Sessions that pre-date the auto-store rollout
-  // surface a soft toast asking the user to re-login once.
-  async function togglePasswordReveal() {
-    if (revealed) {
-      setRevealed(null)
-      return
-    }
-    if (!userId) return
-    if (!hasVault()) {
-      setMsg(t('settingspage.vaultResyncLogin'))
-      window.setTimeout(() => setMsg(null), 3500)
-      return
-    }
-    try {
-      const pt = await readVault(userId)
-      if (pt) {
-        setRevealed(pt)
-        hapticSuccess()
-      } else {
-        // Vault entry exists but decryption failed (different user,
-        // corrupt entry). Wipe so the next login starts clean.
-        clearVault()
-          setMsg(t('settingspage.vaultDesync'))
-        window.setTimeout(() => setMsg(null), 3500)
-      }
-    } catch {
-      setMsg(t('settingspage.vaultReadError'))
-      window.setTimeout(() => setMsg(null), 2000)
-    }
-  }
 
   async function saveGarage() {
     if (!userId || garageBusy) return
@@ -901,7 +861,6 @@ export default function Settings() {
   }
 
   async function logout() {
-    clearVault()
     await supabase.auth.signOut()
     navigate('/auth', { replace: true })
   }
@@ -923,7 +882,6 @@ export default function Settings() {
       if (!res.ok || !data.deleted) {
         throw new Error(data.error || t('settingspage.deleteFailed'))
       }
-      clearVault()
       await supabase.auth.signOut()
       navigate('/auth', { replace: true })
     } catch (e) {
@@ -1591,43 +1549,6 @@ export default function Settings() {
               }}
             />
             {pwOpen && PasswordEditor}
-            {/* Voir mon mot de passe — always-on. The vault is
-                auto-populated at every login, so the eye reveals the
-                actual plaintext stored encrypted in localStorage via
-                AES-GCM with a userId-derived key. clearVault() runs
-                on every signout / account-delete path so a different
-                user on this browser never inherits the prior
-                password. */}
-            <div className="flex w-full items-center gap-3 border-b border-fg/[0.08] px-4 py-3.5 text-left last:border-0 text-fg">
-              <span className="flex h-9 w-9 flex-none items-center justify-center rounded-xl bg-fg/[0.06] text-fg/85">
-                <Eye className="h-4 w-4" />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block text-[15px] font-medium leading-tight">
-                  {t('settingspage.viewPassword')}
-                </span>
-                <span
-                  className="mt-0.5 block truncate font-mono text-xs leading-tight text-fg"
-                  style={{ letterSpacing: revealed ? '0' : '0.20em' }}
-                >
-                  {revealed ? revealed : '••••••••••••'}
-                </span>
-              </span>
-              <button
-                type="button"
-                onClick={togglePasswordReveal}
-                aria-label={
-                  revealed ? t('settingspage.hidePasswordAria') : t('settingspage.showPasswordAria')
-                }
-                className="tappable flex h-9 w-9 flex-none items-center justify-center rounded-full text-fg2 transition-colors hover:bg-fg/[0.04] hover:text-fg"
-              >
-                {revealed ? (
-                  <EyeOff className="h-4 w-4" />
-                ) : (
-                  <Eye className="h-4 w-4" />
-                )}
-              </button>
-            </div>
           </Section>
 
           {/* 2 — PREMIUM features. Hidden for free users; Mode Radar
