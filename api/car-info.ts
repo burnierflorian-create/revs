@@ -773,6 +773,59 @@ async function handleMarketPrice(
   res.status(200).json({ price })
 }
 
+// ─────────── Cache des fiches expert, par MODÈLE ───────────
+// `spots.car_info` est un cache par LIGNE : dix personnes photographiant la
+// même Ferrari 488 GTB déclenchaient dix fois le même appel Sonnet + jusqu'à
+// cinq recherches web, ~0,10 $ à chaque fois pour un résultat identique.
+// `car_info_cache` (migration 0070) déplace le cache au niveau du modèle.
+// `spots.car_info` reste alimenté pour ne rien changer en lecture.
+function carInfoSlug(brand: string, model: string, year: number | null): string {
+  const n = (v: string) =>
+    v
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+  return `${n(brand)}|${n(model)}|${year ?? 'na'}`
+}
+
+/** Fiche déjà connue pour ce modèle, ou null. Ne lève jamais : une panne de
+ *  cache doit dégrader vers un appel IA, pas casser la requête. */
+async function carInfoFromCache(
+  admin: SupabaseClient,
+  slug: string,
+): Promise<CarInfo | null> {
+  try {
+    const { data } = await admin
+      .from('car_info_cache')
+      .select('data')
+      .eq('slug', slug)
+      .maybeSingle()
+    return (data as { data?: CarInfo } | null)?.data ?? null
+  } catch {
+    return null
+  }
+}
+
+/** Gèle une fiche fraîchement calculée. Best-effort : un échec d'écriture ne
+ *  doit pas priver l'utilisateur de sa réponse. */
+async function carInfoToCache(
+  admin: SupabaseClient,
+  slug: string,
+  brand: string,
+  model: string,
+  year: number | null,
+  data: CarInfo,
+): Promise<void> {
+  try {
+    await admin.from('car_info_cache').upsert(
+      { slug, brand, model, year, data, updated_at: new Date().toISOString() },
+      { onConflict: 'slug' },
+    )
+  } catch (e) {
+    console.error('[car-info] mise en cache échouée:', e)
+  }
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Méthode non autorisée.' })
@@ -839,6 +892,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return
   }
 
+  // Cache par modèle : si une autre personne a déjà fait analyser cette
+  // voiture, on recopie sa fiche sur ce spot. Zéro appel IA, zéro recherche
+  // web — c'est l'économie principale de ce endpoint.
+  const slug = carInfoSlug(spot.brand, spot.model, spot.year ?? null)
+  const cachedForModel = await carInfoFromCache(admin, slug)
+  if (cachedForModel) {
+    await admin.from('spots').update({ car_info: cachedForModel }).eq('id', spotId)
+    console.log(`[car-info] cache modèle utilisé pour ${slug} — aucun appel IA`)
+    res.status(200).json({ car_info: cachedForModel, cached: 'model' })
+    return
+  }
+
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
   const yearPart = spot.year ? ` (${spot.year})` : ''
   const userMsg = `Voiture : ${spot.brand} ${spot.model}${yearPart}.`
@@ -880,6 +945,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // Persist so subsequent opens skip Claude entirely.
     await admin.from('spots').update({ car_info: info }).eq('id', spotId)
+    // Gel au niveau du modèle : le prochain spot de la même voiture, quel que
+    // soit son auteur, sera servi sans aucun appel IA.
+    await carInfoToCache(admin, slug, spot.brand, spot.model, spot.year ?? null, info)
     res.status(200).json({ car_info: info, cached: false })
   } catch (e) {
     const err = e as { message?: string }
