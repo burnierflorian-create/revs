@@ -96,33 +96,37 @@ const DRIVER_FIELDS = [
 ]
 
 // 2026 calendar — passed into prompts so Claude knows which race to
-// look up by `round`. Source of truth is src/lib/f1.ts (GP_2026), kept
-// in sync manually because the calendar barely changes mid-season.
+// look up by `round`. MIROIR EXACT de GP_2026 dans src/lib/f1.ts, qui reste la
+// source de vérité : GrandPrixDetail envoie le `round` issu de ce tableau-là,
+// et on le relit ici. Toute divergence fait interroger Claude sur le MAUVAIS
+// Grand Prix.
+// Corrigé le 26/09/2026 — l'ancienne version comptait 24 entrées dont deux
+// courses inexistantes (Bahreïn en avril, Arabie saoudite), décalant tous les
+// rounds à partir du 4e.
 const GP_2026_CAL: Record<number, { name: string; country: string; date: string }> = {
   1: { name: "GP d'Australie", country: 'Australie', date: '2026-03-08' },
   2: { name: 'GP de Chine', country: 'Chine', date: '2026-03-15' },
   3: { name: 'GP du Japon', country: 'Japon', date: '2026-03-29' },
-  4: { name: 'GP de Bahreïn', country: 'Bahreïn', date: '2026-04-12' },
-  5: { name: "GP d'Arabie saoudite", country: 'Arabie saoudite', date: '2026-04-19' },
-  6: { name: 'GP de Miami', country: 'États-Unis', date: '2026-05-03' },
-  7: { name: 'GP du Canada', country: 'Canada', date: '2026-05-24' },
-  8: { name: 'GP de Monaco', country: 'Monaco', date: '2026-06-07' },
-  9: { name: "GP d'Espagne", country: 'Espagne', date: '2026-06-14' },
-  10: { name: "GP d'Autriche", country: 'Autriche', date: '2026-06-28' },
-  11: { name: 'GP de Grande-Bretagne', country: 'Royaume-Uni', date: '2026-07-05' },
-  12: { name: 'GP de Belgique', country: 'Belgique', date: '2026-07-19' },
-  13: { name: 'GP de Hongrie', country: 'Hongrie', date: '2026-07-26' },
-  14: { name: 'GP des Pays-Bas', country: 'Pays-Bas', date: '2026-08-23' },
-  15: { name: "GP d'Italie", country: 'Italie', date: '2026-09-06' },
-  16: { name: 'GP de Madrid', country: 'Espagne', date: '2026-09-13' },
-  17: { name: "GP d'Azerbaïdjan", country: 'Azerbaïdjan', date: '2026-09-27' },
-  18: { name: 'GP de Singapour', country: 'Singapour', date: '2026-10-11' },
-  19: { name: 'GP des États-Unis', country: 'États-Unis', date: '2026-10-25' },
-  20: { name: 'GP de Mexico', country: 'Mexique', date: '2026-11-01' },
-  21: { name: 'GP de São Paulo', country: 'Brésil', date: '2026-11-08' },
-  22: { name: 'GP de Las Vegas', country: 'États-Unis', date: '2026-11-21' },
-  23: { name: 'GP du Qatar', country: 'Qatar', date: '2026-11-29' },
-  24: { name: 'GP d\'Abou Dabi', country: 'Émirats arabes unis', date: '2026-12-06' },
+  4: { name: 'GP de Miami', country: 'États-Unis', date: '2026-05-03' },
+  5: { name: 'GP du Canada', country: 'Canada', date: '2026-05-24' },
+  6: { name: 'GP de Monaco', country: 'Monaco', date: '2026-06-07' },
+  7: { name: 'GP de Barcelone', country: 'Espagne', date: '2026-06-14' },
+  8: { name: "GP d'Autriche", country: 'Autriche', date: '2026-06-28' },
+  9: { name: 'GP de Grande-Bretagne', country: 'Royaume-Uni', date: '2026-07-05' },
+  10: { name: 'GP de Belgique', country: 'Belgique', date: '2026-07-19' },
+  11: { name: 'GP de Hongrie', country: 'Hongrie', date: '2026-07-26' },
+  12: { name: 'GP des Pays-Bas', country: 'Pays-Bas', date: '2026-08-23' },
+  13: { name: "GP d'Italie", country: 'Italie', date: '2026-09-06' },
+  14: { name: 'GP de Madrid', country: 'Espagne', date: '2026-09-13' },
+  15: { name: "GP d'Azerbaïdjan", country: 'Azerbaïdjan', date: '2026-09-26' },
+  16: { name: 'GP de Bahreïn', country: 'Bahreïn', date: '2026-10-04' },
+  17: { name: 'GP de Singapour', country: 'Singapour', date: '2026-10-11' },
+  18: { name: 'GP des États-Unis', country: 'États-Unis', date: '2026-10-25' },
+  19: { name: 'GP de Mexico', country: 'Mexique', date: '2026-11-01' },
+  20: { name: 'GP de São Paulo', country: 'Brésil', date: '2026-11-08' },
+  21: { name: 'GP de Las Vegas', country: 'États-Unis', date: '2026-11-22' },
+  22: { name: 'GP du Qatar', country: 'Qatar', date: '2026-11-29' },
+  23: { name: "GP d'Abu Dhabi", country: 'Émirats arabes unis', date: '2026-12-06' },
 }
 
 // ─────────────────────── Prompts ───────────────────────

@@ -59,17 +59,17 @@ function cleanKey(s: string | undefined): string {
 const VAPID_PUBLIC = cleanKey(process.env.VAPID_PUBLIC_KEY)
 const VAPID_PRIVATE = cleanKey(process.env.VAPID_PRIVATE_KEY)
 
-// Keep race dates in sync with src/lib/f1.ts.
+// Keep race dates in sync with src/lib/f1.ts — régénéré le 26/09/2026 après
+// correction du calendrier (23 courses, plus de Bahreïn en avril ni d'Arabie
+// saoudite).
 const GP_2026: { name: string; date: string }[] = [
-  { name: "GP d'Australie", date: '2026-03-08T05:00:00Z' },
+  { name: "GP d'Australie", date: '2026-03-08T04:00:00Z' },
   { name: 'GP de Chine', date: '2026-03-15T07:00:00Z' },
   { name: 'GP du Japon', date: '2026-03-29T05:00:00Z' },
-  { name: 'GP de Bahreïn', date: '2026-04-12T15:00:00Z' },
-  { name: "GP d'Arabie saoudite", date: '2026-04-19T17:00:00Z' },
-  { name: 'GP de Miami', date: '2026-05-03T19:30:00Z' },
-  { name: 'GP du Canada', date: '2026-05-24T18:00:00Z' },
+  { name: 'GP de Miami', date: '2026-05-03T20:00:00Z' },
+  { name: 'GP du Canada', date: '2026-05-24T20:00:00Z' },
   { name: 'GP de Monaco', date: '2026-06-07T13:00:00Z' },
-  { name: "GP d'Espagne", date: '2026-06-14T13:00:00Z' },
+  { name: 'GP de Barcelone', date: '2026-06-14T13:00:00Z' },
   { name: "GP d'Autriche", date: '2026-06-28T13:00:00Z' },
   { name: 'GP de Grande-Bretagne', date: '2026-07-05T14:00:00Z' },
   { name: 'GP de Belgique', date: '2026-07-19T13:00:00Z' },
@@ -77,12 +77,13 @@ const GP_2026: { name: string; date: string }[] = [
   { name: 'GP des Pays-Bas', date: '2026-08-23T13:00:00Z' },
   { name: "GP d'Italie", date: '2026-09-06T13:00:00Z' },
   { name: 'GP de Madrid', date: '2026-09-13T13:00:00Z' },
-  { name: "GP d'Azerbaïdjan", date: '2026-09-27T11:00:00Z' },
+  { name: "GP d'Azerbaïdjan", date: '2026-09-26T11:00:00Z' },
+  { name: 'GP de Bahreïn', date: '2026-10-04T07:00:00Z' },
   { name: 'GP de Singapour', date: '2026-10-11T12:00:00Z' },
-  { name: 'GP des États-Unis', date: '2026-10-25T19:00:00Z' },
+  { name: 'GP des États-Unis', date: '2026-10-25T20:00:00Z' },
   { name: 'GP de Mexico', date: '2026-11-01T20:00:00Z' },
   { name: 'GP de São Paulo', date: '2026-11-08T17:00:00Z' },
-  { name: 'GP de Las Vegas', date: '2026-11-21T06:00:00Z' },
+  { name: 'GP de Las Vegas', date: '2026-11-22T04:00:00Z' },
   { name: 'GP du Qatar', date: '2026-11-29T16:00:00Z' },
   { name: "GP d'Abu Dhabi", date: '2026-12-06T13:00:00Z' },
 ]
