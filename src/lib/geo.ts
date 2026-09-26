@@ -125,3 +125,22 @@ export function getCurrentPositionSafe(
     }
   })
 }
+
+/** Précision de stockage des coordonnées : 3 décimales ≈ 111 m.
+ *
+ *  Assez fin pour situer un quartier sur la carte, trop grossier pour
+ *  désigner une adresse. Sans cet arrondi, plusieurs spots d'un même
+ *  utilisateur au même endroit trahissent son domicile au mètre près — et
+ *  `spots` est en lecture publique (`using (true)`), donc lisible par tout
+ *  porteur de la clé anonyme.
+ *
+ *  Miroir volontaire de round_spot_coords() côté base (migration 0069), qui
+ *  réapplique le même arrondi : le client peut être contourné, pas le trigger.
+ */
+export const COORD_DECIMALS = 3
+
+export function roundCoord(value: number): number {
+  if (!Number.isFinite(value)) return value
+  const f = 10 ** COORD_DECIMALS
+  return Math.round(value * f) / f
+}

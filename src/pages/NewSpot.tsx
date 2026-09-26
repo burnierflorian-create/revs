@@ -21,7 +21,7 @@ import {
 import { takePendingPhoto } from '../lib/pendingPhoto'
 import { useTheme } from '../lib/theme'
 import { emitNewSpot } from '../lib/feedSync'
-import { getCurrentPositionSafe } from '../lib/geo'
+import { getCurrentPositionSafe, roundCoord } from '../lib/geo'
 import { hapticError, hapticHeartbeat, hapticSuccess } from '../lib/haptic'
 import { maybePromptPush, myPseudo, notifyPush } from '../lib/push'
 import { brandSlugFor, getBrand } from '../lib/brands'
@@ -467,6 +467,11 @@ export default function NewSpot() {
       const photoLat = photoMeta?.lat ?? null
       const photoLng = photoMeta?.lng ?? null
       if (photoLat != null && photoLng != null) {
+        // Contrôle anti-fraude : on compare l'EXIF de la photo à la position
+        // réelle, en PRÉCISION PLEINE. Arrondir ici ajouterait jusqu'à ~78 m
+        // de dérive artificielle sur un seuil de 300 m, donc des rejets
+        // injustifiés. L'arrondi ne concerne que ce qui est stocké ou
+        // transmis, jamais ce qui est comparé localement.
         const drift = distanceMeters(
           photoLat,
           photoLng,
@@ -535,8 +540,8 @@ export default function NewSpot() {
       try {
         const { data: live } = await supabase
           .rpc('nearby_live_event', {
-            p_lat: pos.coords.latitude,
-            p_lng: pos.coords.longitude,
+            p_lat: roundCoord(pos.coords.latitude),
+            p_lng: roundCoord(pos.coords.longitude),
             p_radius_km: 5,
           })
           .maybeSingle()
@@ -560,8 +565,8 @@ export default function NewSpot() {
           estimated_price: result.estimated_price ?? null,
           rarity: result.rarity ?? 'standard',
           production: result.production ?? null,
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
+          lat: roundCoord(pos.coords.latitude),
+          lng: roundCoord(pos.coords.longitude),
           event_id: liveEventId,
         })
         .select('*')
@@ -594,8 +599,8 @@ export default function NewSpot() {
           url: '/map',
           type: 'nearby',
           nearby: {
-            lat: pos.coords.latitude,
-            lng: pos.coords.longitude,
+            lat: roundCoord(pos.coords.latitude),
+            lng: roundCoord(pos.coords.longitude),
             radiusKm: 10,
             excludeUserId: user.id,
           },
@@ -616,8 +621,8 @@ export default function NewSpot() {
             type: 'nearby',
             brand_nearby: {
               brand: slug,
-              lat: pos.coords.latitude,
-              lng: pos.coords.longitude,
+              lat: roundCoord(pos.coords.latitude),
+              lng: roundCoord(pos.coords.longitude),
               radiusKm: 50,
               excludeUserId: user.id,
             },
