@@ -36,10 +36,16 @@ const COOLDOWN_MS = 3000
 // gratuit consommait 6 reconnaissances (~0,01 $ chacune) mais ne pouvait
 // publier que 5 spots. Le 6e scan était payé pour rien, puis refusé à la
 // publication.
+//
+// 26/09/2026 — Premium ramené de 100 à 30. Ces valeurs sont la référence : tout
+// autre endroit qui affiche un plafond (src/lib/plans.ts,
+// src/components/WelcomeCelebration.tsx) doit citer les mêmes chiffres, et le
+// trigger de la migration 0068 les réplique côté base.
+//   free / starter  5  ·  premium  30  ·  vip  300
 const DAILY_LIMITS = {
   free: 5,
   starter: 5,
-  premium: 100,
+  premium: 30,
   vip: 300,
 }
 

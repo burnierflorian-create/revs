@@ -85,8 +85,10 @@ export const YEARLY_PRICES: Record<'premium' | 'vip', string> = {
 //
 // Deux familles de promesses ont été retirées :
 //   1. « Spots illimités » / « sans aucune limite journalière » — le portail
-//      IA (server/ai-gate.js) applique des plafonds fermes : 6/jour en
-//      gratuit, 100 en Premium, 300 en VIP. Annoncer l'illimité était faux.
+//      IA (server/ai-gate.js) applique des plafonds fermes. Ces chiffres sont
+//      la référence, répliquée par le trigger de la migration 0068 :
+//        free / starter  5  ·  premium  30  ·  vip  300
+//      Annoncer l'illimité était faux.
 //   2. Track days, concours, tirages au sort, paddock F1, invitations Monaco,
 //      accès anticipé aux événements — aucune de ces contreparties n'existe,
 //      ni dans le logiciel ni en dehors.
@@ -96,7 +98,7 @@ export const YEARLY_PRICES: Record<'premium' | 'vip', string> = {
 
 // Short labels used on the main /premium grid cards (one-liners).
 export const PREMIUM_PERKS = [
-  '100 spots IA par jour',
+  '30 spots IA par jour',
   'Mode Radar — notif en temps réel quand une supercar est près de toi',
   'Statistiques avancées',
   'Profil mis en avant dans le classement',
@@ -111,7 +113,7 @@ export const VIP_PERKS = [
 ]
 
 export const FREE_PERKS = [
-  '6 spots IA par jour',
+  '5 spots IA par jour',
   'Garage et collection de cartes',
   'Carte et fil',
   'XP, niveaux et badges',
@@ -124,8 +126,8 @@ export type DetailedPerk = { icon: string; title: string; body: string }
 export const PREMIUM_PERKS_DETAILED: DetailedPerk[] = [
   {
     icon: '⚡',
-    title: '100 spots IA par jour',
-    body: 'Passe de 6 à 100 reconnaissances par jour — de quoi couvrir un rassemblement entier sans jamais toucher le plafond.',
+    title: '30 spots IA par jour',
+    body: 'Passe de 5 à 30 reconnaissances par jour — de quoi couvrir un rassemblement entier.',
   },
   {
     icon: '🎯',
