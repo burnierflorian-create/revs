@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { createClient } from '@supabase/supabase-js'
 import { requireAiAccess, AI_ENDPOINTS } from '../server/ai-gate.js'
+import { checkRequestSize } from '../server/request-size.js'
 
 // ─────────── Rarity = f(market value). Single source of truth; mirror of
 // src/lib/rarity.ts. Rarity is DERIVED from the resale value, never guessed. ───────────
@@ -681,6 +682,13 @@ export default async function handler(req, res) {
   }
   if (req.method !== 'POST') {
     return sendJson(res, FALLBACK, 405)
+  }
+
+  // Taille du corps avant même l'authentification : inutile de consulter la
+  // base pour une requête qu'on va refuser de toute façon.
+  const tooLarge = checkRequestSize(req)
+  if (tooLarge) {
+    return sendJson(res, tooLarge.body, tooLarge.status)
   }
 
   // Portail d'accès AVANT tout le reste, y compris la lecture du corps : un

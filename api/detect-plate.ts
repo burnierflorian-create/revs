@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { requireAiAccess, AI_ENDPOINTS } from '../server/ai-gate.js'
+import { checkRequestSize } from '../server/request-size.js'
 
 // Vision model — plate localisation is a coarse rectangle estimate, not
 // full reasoning. Keeps latency low (we run this in the upload hot path,
@@ -175,6 +176,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // celle d'identify-car. NewSpot déclenche les deux EN PARALLÈLE pour une seule
   // capture — un compteur partagé diviserait le quota gratuit par deux et le
   // cooldown de 3 s ferait échouer systématiquement le second des deux appels.
+  // Taille du corps avant même l'authentification : inutile de consulter la
+  // base pour une requête qu'on va refuser de toute façon.
+  const tooLarge = checkRequestSize(req)
+  if (tooLarge) {
+    sendJson(res, tooLarge.body, tooLarge.status)
+    return
+  }
+
   const access = await requireAiAccess(req, AI_ENDPOINTS.DETECT_PLATE)
   if (!access.ok) {
     sendJson(res, access.body, access.status)
