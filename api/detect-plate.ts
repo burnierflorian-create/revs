@@ -6,7 +6,15 @@ import { checkRequestSize } from '../server/request-size.js'
 // Vision model — plate localisation is a coarse rectangle estimate, not
 // full reasoning. Keeps latency low (we run this in the upload hot path,
 // before the user taps Publish).
-const MODEL = 'claude-sonnet-4-6'
+//
+// 26/09/2026 — bascule Haiku en premier passage. Localiser un rectangle est
+// une tâche géométrique, pas du raisonnement : sur Sonnet elle coûtait
+// ~0,0041 $, soit 44 % du coût total d'une capture — autant que
+// l'identification complète de la voiture, qui tourne déjà sur Haiku.
+// Sonnet reste en second passage si Haiku ne rend pas de JSON exploitable,
+// sur le même principe d'escalade que identify-car.
+const HAIKU_MODEL = 'claude-haiku-4-5-20251001'
+const SONNET_MODEL = 'claude-sonnet-4-6'
 
 type AllowedMime = 'image/jpeg' | 'image/png' | 'image/webp'
 const ALLOWED_MIME = new Set<AllowedMime>([
@@ -127,13 +135,15 @@ async function callClaude(
   system: string,
   imageBase64: string,
   mimeType: AllowedMime,
+  model: string,
 ): Promise<string> {
   const r = await client.messages.create({
-    model: MODEL,
+    model,
     max_tokens: 600,
-    system: [
-      { type: 'text', text: system, cache_control: { type: 'ephemeral' } },
-    ],
+    // Pas de cache_control : ce prompt fait ~349 jetons, sous le minimum de
+    // ~1024 requis pour qu'un préfixe soit réellement mis en cache. Le
+    // marqueur était donc inerte.
+    system: [{ type: 'text', text: system }],
     messages: [
       {
         role: 'user',
@@ -219,12 +229,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-  // Two-step ladder: full prompt first; if Claude returns garbage,
-  // retry once with a minimal prompt. Anything still unparseable falls
-  // through to []. Logged so we can audit empty cases via Vercel logs.
-  for (const prompt of [SYSTEM, SYSTEM_RETRY]) {
+  // Échelle en deux temps : Haiku avec le prompt complet, puis — seulement si
+  // la réponse est inexploitable — Sonnet avec un prompt minimal. Le second
+  // passage est rare, donc le coût moyen suit celui de Haiku. Tout ce qui
+  // reste illisible retombe sur []. Journalisé pour auditer les cas vides
+  // via les logs Vercel.
+  const attempts: { prompt: string; model: string }[] = [
+    { prompt: SYSTEM, model: HAIKU_MODEL },
+    { prompt: SYSTEM_RETRY, model: SONNET_MODEL },
+  ]
+  for (const { prompt, model } of attempts) {
     try {
-      const text = await callClaude(client, prompt, imageBase64, mimeType)
+      const text = await callClaude(client, prompt, imageBase64, mimeType, model)
       const parsed = extractJSON(text)
       if (parsed && 'plates' in parsed) {
         const cleaned = cleanPlates(parsed.plates)
