@@ -682,6 +682,15 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return sendJson(res, FALLBACK, 405)
   }
+
+  // Portail d'accès AVANT tout le reste, y compris la lecture du corps : un
+  // POST sans jeton reçoit 401 avant tout traitement. Ensuite cooldown et
+  // quota, avant toute dépense de jetons. Fail-closed — un refus ne laisse
+  // passer aucun appel Claude. Voir server/ai-gate.js.
+  const access = await requireAiAccess(req, AI_ENDPOINTS.IDENTIFY)
+  if (!access.ok) {
+    return sendJson(res, access.body, access.status)
+  }
   if (!process.env.ANTHROPIC_API_KEY) {
     return sendJson(res, FALLBACK, 500)
   }
@@ -703,14 +712,6 @@ export default async function handler(req, res) {
     !ALLOWED_MIME.has(mimeType)
   ) {
     return sendJson(res, FALLBACK, 400)
-  }
-
-  // Portail d'accès : authentification obligatoire, puis cooldown et quota,
-  // AVANT toute dépense de jetons. Fail-closed — un refus ne laisse passer
-  // aucun appel Claude. Voir server/ai-gate.js.
-  const access = await requireAiAccess(req, AI_ENDPOINTS.IDENTIFY)
-  if (!access.ok) {
-    return sendJson(res, access.body, access.status)
   }
 
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
