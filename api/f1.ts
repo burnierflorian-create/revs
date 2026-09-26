@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import type { VercelRequest, VercelResponse } from '@vercel/node'
+import { hasF1SessionNear } from '../server/f1-calendar.js'
 
 // PAUSE 25/09/2026 — rebrancher en version optimisée avant beta
 // F1 : ajouter contrôle de fraîcheur generated_at dans refreshEntity()
@@ -576,6 +577,17 @@ async function handleRace(req: VercelRequest, res: VercelResponse) {
 // driver prompts (with lastFiveGps) come back heavy.
 const BATCH = 4
 
+// Plafond d'appels IA par exécution (26/09/2026). Protection contre une
+// reprise après arrêt : sans lui, une première exécution relançait les 30
+// entités d'un coup, soit ~1,80 $. Le garde-fou de fraîcheur fait le reste du
+// travail — les entités déjà rafraîchies retournent 'skipped:fresh' sans
+// consommer de budget, donc sur les deux ou trois jours d'un week-end de GP
+// les 30 entités finissent toutes traitées, 15 par passage.
+const MAX_AI_CALLS_PER_RUN = 15
+
+/** Compteur d'appels IA partagé par toutes les entités d'une exécution. */
+type AiBudget = { used: number; max: number }
+
 async function refreshEntity(
   client: Anthropic,
   admin: Admin,
@@ -583,6 +595,7 @@ async function refreshEntity(
   slug: string,
   displayName: string,
   isTeam: boolean,
+  budget: AiBudget,
 ): Promise<string> {
   try {
   const { data: existing } = await admin
@@ -604,6 +617,14 @@ async function refreshEntity(
       return 'skipped:fresh'
     }
   }
+
+  // Budget épuisé : on s'arrête proprement sans appeler Claude. L'entité sera
+  // reprise au passage suivant, où le garde-fou de fraîcheur laissera passer
+  // celles qui n'ont pas encore été traitées.
+  if (budget.used >= budget.max) {
+    return 'skipped:budget'
+  }
+  budget.used += 1
 
   if (!existing?.data) {
     const parsed = await callClaude(
@@ -691,10 +712,35 @@ async function handleRefresh(req: VercelRequest, res: VercelResponse) {
     return
   }
 
+  // ─── Étape A : portail calendrier, GRATUIT ───
+  // Ne synchroniser que lorsqu'un week-end de Grand Prix est en cours ou vient
+  // de s'achever. Hors de ces fenêtres, les classements et les résultats n'ont
+  // pas bougé : relancer 30 appels Sonnet + web_search ne produirait rien.
+  // ~24 GP par an, fenêtre de 30 h avant à 48 h après chaque session, soit de
+  // l'ordre de 70 jours d'activité au lieu de 365.
+  //
+  // `?force=1` court-circuite le test pour une reprise manuelle.
+  if (req.query.force !== '1') {
+    const verdict = await hasF1SessionNear()
+    if (!verdict.active) {
+      console.log(`[f1 refresh] ${verdict.reason} — aucun appel IA`)
+      res.status(200).json({ skipped: true, reason: verdict.reason })
+      return
+    }
+    console.log(
+      `[f1 refresh] session détectée (${verdict.sessions.length}) — ex. ${verdict.sessions[0].label} ${verdict.sessions[0].race} — synchronisation lancée`,
+    )
+  } else {
+    console.log('[f1 refresh] force=1 — portail calendrier court-circuité')
+  }
+
   const admin = createClient(SUPABASE_URL, SERVICE_ROLE, {
     auth: { persistSession: false },
   })
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+
+  // Budget partagé par toutes les entités de cette exécution.
+  const budget: AiBudget = { used: 0, max: MAX_AI_CALLS_PER_RUN }
 
   const only = String(req.query.only ?? '')
   const doTeams = only !== 'drivers'
@@ -722,7 +768,7 @@ async function handleRefresh(req: VercelRequest, res: VercelResponse) {
       const batch = entries.slice(i, i + BATCH)
       const out = await Promise.allSettled(
         batch.map(([slug, name]) =>
-          refreshEntity(client, admin, 'f1_teams', slug, name, true),
+          refreshEntity(client, admin, 'f1_teams', slug, name, true, budget),
         ),
       )
       out.forEach((r, idx) => {
@@ -737,7 +783,7 @@ async function handleRefresh(req: VercelRequest, res: VercelResponse) {
       const batch = entries.slice(i, i + BATCH)
       const out = await Promise.allSettled(
         batch.map(([slug, name]) =>
-          refreshEntity(client, admin, 'f1_drivers', slug, name, false),
+          refreshEntity(client, admin, 'f1_drivers', slug, name, false, budget),
         ),
       )
       out.forEach((r, idx) => {
@@ -747,7 +793,18 @@ async function handleRefresh(req: VercelRequest, res: VercelResponse) {
     }
   }
 
-  res.status(200).json({ teams: teamResults, drivers: driverResults })
+  if (budget.used >= budget.max) {
+    console.warn(
+      `[f1 refresh] plafond de ${budget.max} appels IA atteint — entités restantes reprises au prochain passage`,
+    )
+  }
+  res.status(200).json({
+    teams: teamResults,
+    drivers: driverResults,
+    aiCalls: budget.used,
+    aiCallsMax: budget.max,
+    capped: budget.used >= budget.max,
+  })
 }
 
 // ─────────────────────── Dispatch ───────────────────────

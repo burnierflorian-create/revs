@@ -63,33 +63,40 @@ avant le rebranchement.
 > par projet, donc cela implique de convertir aussi le bloc `rewrites` — dont la règle
 > SPA `/(.*)` → `/index.html` est critique. Non fait volontairement.
 
-Recoller ces trois objets dans le tableau `crons` de `vercel.json`, puis déployer :
+Recoller ces deux objets dans le tableau `crons` de `vercel.json`, puis déployer :
 
 ```json
-{ "path": "/api/fetch-news?tz=cest", "schedule": "0 4 * * *" },
-{ "path": "/api/fetch-news?tz=cet",  "schedule": "0 5 * * *" },
-{ "path": "/api/f1?refresh=1",       "schedule": "0 4 */2 * *" }
+{ "path": "/api/fetch-news", "schedule": "0 7 * * *" },
+{ "path": "/api/f1?refresh=1", "schedule": "0 6 * * *" }
 ```
 
 Le tableau complet redevient alors :
 
 ```json
 "crons": [
-  { "path": "/api/fetch-news?tz=cest", "schedule": "0 4 * * *" },
-  { "path": "/api/fetch-news?tz=cet", "schedule": "0 5 * * *" },
+  { "path": "/api/fetch-news", "schedule": "0 7 * * *" },
+  { "path": "/api/f1?refresh=1", "schedule": "0 6 * * *" },
   { "path": "/api/cron-notify", "schedule": "0 17 * * *" },
   { "path": "/api/cron-notify?action=stats", "schedule": "30 3 * * *" },
-  { "path": "/api/cron-notify?action=refresh-prices", "schedule": "0 4 1 * *" },
-  { "path": "/api/f1?refresh=1", "schedule": "0 4 */2 * *" }
+  { "path": "/api/cron-notify?action=refresh-prices", "schedule": "0 4 1 * *" }
 ]
 ```
 
-Les deux entrées `fetch-news` sont normales et ne font pas double emploi : Vercel ne
-planifie qu'en UTC, donc le handler tire à 04:00 et 05:00 UTC et ne travaille que sur le
-tir qui tombe à 06:00 heure de Paris (04:00 UTC en été, 05:00 en hiver). L'autre no-ope.
+**Ce qui change par rapport à la configuration d'origine.**
 
-Penser aussi à retirer les blocs `PAUSE 25/09/2026` en tête de `api/fetch-news.ts` et
-`api/f1.ts`.
+`fetch-news` passe d'une paire d'entrées (04:00 et 05:00 UTC, avec une porte
+sur l'heure de Paris à l'intérieur du handler) à une entrée unique à 07:00 UTC,
+soit 09:00 à Paris en été et 08:00 en hiver. La porte `parisHour !== 6` du
+handler doit être retirée ou élargie, sinon l'exécution no-opera : elle
+n'accepte aujourd'hui que le tir qui tombe à 06:00 heure de Paris.
+
+`f1?refresh=1` passe de « tous les deux jours » à « tous les jours à 06:00
+UTC », mais l'endpoint décide désormais lui-même s'il travaille : il consulte
+d'abord le calendrier F1 et sort immédiatement hors week-end de Grand Prix.
+Voir la section suivante.
+
+Penser aussi à retirer les blocs `PAUSE 25/09/2026` en tête de
+`api/fetch-news.ts` et `api/f1.ts`.
 
 ---
 
@@ -98,6 +105,13 @@ Penser aussi à retirer les blocs `PAUSE 25/09/2026` en tête de `api/fetch-news
 ### 1. News — tri Haiku avant Sonnet
 
 **État : à faire.** Référence : diagnostic §05.
+
+**Correction d'une prémisse.** La cadence d'origine n'était pas « toutes les
+6 h » : `vercel.json` déclarait deux entrées (04:00 et 05:00 UTC) dont une
+seule travaillait, grâce à une porte sur l'heure de Paris dans le handler. Le
+coût réel était donc déjà d'environ **0,16 $/jour, soit ~4,80 $/mois** — et non
+~19,20 $. Passer à une exécution quotidienne à 07:00 UTC ne change donc pas le
+coût ; c'est l'optimisation ci-dessous qui le divise par cinq.
 
 Aujourd'hui, un seul appel Sonnet fait à la fois le tri de pertinence, la catégorisation,
 la traduction du titre et la rédaction du résumé — on paie donc le tarif rédaction pour
@@ -125,23 +139,82 @@ pertinence + catégorie, ~50 jetons de sortie) sur les candidats, et **Sonnet** 
 sur les articles retenus. Cible : ~0,032 $ par exécution contre ~0,16 $ aujourd'hui,
 soit **−80 %**.
 
-### 2. F1 — contrôle de fraîcheur dans `refreshEntity()`
+### 2. F1 — portail calendrier + plafond d'appels
 
-**État : DÉJÀ FAIT** — présent dans l'arbre de travail au 25/09/2026, à committer.
+**État : FAIT** — `server/f1-calendar.js` et le câblage dans `api/f1.ts`,
+26/09/2026. Il reste à décider du rebranchement.
 
-`refreshEntity()` (`api/f1.ts`) lit désormais `generated_at` en plus de `data`, et retourne
-`skipped:fresh` sans appeler Claude pour toute entité déjà peuplée et rafraîchie depuis
-moins de `TTL_MS` (7 jours). Un `generated_at` absent ou illisible est traité comme périmé,
-pour ne jamais bloquer une ligne réellement obsolète.
+Trois garde-fous se composent désormais, du moins cher au plus cher :
 
-Il reste donc **un point ouvert avant rebranchement** : comprendre pourquoi le cron n'écrit
-plus rien depuis le 01/09/2026. Les dates d'écriture montrent un dépérissement progressif
-(4 entités le 29/08, 3 le 31/08, 23 le 01/09, puis plus rien) — profil typique d'une
-fonction qui expire de plus en plus tôt, pas d'un cron désactivé. `api/f1.ts` déclare
-`maxDuration: 300`, mais 30 appels Claude + `web_search` par lots de 4 peuvent dépasser ce
-budget. **Les logs Vercel trancheront.** Avec le contrôle de fraîcheur, le premier passage
-après rebranchement restera de toute façon le plus long — envisager de traiter les entités
-par tranches (`?slice=1of2`, déjà supporté par le handler).
+1. **Portail calendrier (gratuit, aucun appel IA).** `hasF1SessionNear()`
+   consulte le calendrier de la saison et ne laisse passer l'exécution que si
+   une session F1 tombe dans une fenêtre de 30 h avant à 48 h après maintenant.
+   Hors de ces fenêtres, le handler renvoie `{skipped:true, reason:'no_f1_session'}`
+   sans toucher à Claude. Mesuré sur 2026 : **120 jours actifs sur 365**.
+
+2. **Garde-fou de fraîcheur (7 jours).** Une entité rafraîchie récemment
+   retourne `skipped:fresh` sans appel IA. C'est lui qui fait que, sur les cinq
+   ou six jours actifs d'un week-end de GP, seuls les premiers passages
+   dépensent réellement.
+
+3. **Plafond de 15 appels IA par exécution** (`MAX_AI_CALLS_PER_RUN`). Il y a 30
+   entités (10 écuries + 20 pilotes) : un passage en traite 15, le lendemain
+   reprend les 15 restantes puisque le garde-fou de fraîcheur les laisse
+   passer. La réponse expose `aiCalls`, `aiCallsMax` et `capped`.
+
+`?force=1` court-circuite le portail calendrier pour une reprise manuelle.
+
+**Pourquoi Jolpica / Ergast et pas OpenF1.** La spec visait
+`api.openf1.org`. Testé le 26/09/2026, cette API renvoie **401** avec
+« Live F1 session in progress. Global API access (including past sessions) is
+restricted to authenticated users until the session ends. » Elle se ferme aux
+appels anonymes **pendant** les sessions live, c'est-à-dire exactement quand le
+test doit fonctionner. `api.jolpi.ca` est déjà utilisé par
+`scripts/sync-f1-grid.mjs`, répond 200, n'a pas cette restriction, et livre le
+détail de chaque session du week-end.
+
+**Fenêtre arrière de 30 h : ce n'est pas un réglage cosmétique.** Les
+classements, les points et le « dernier GP » ne changent qu'**après** la course.
+Sans borne arrière, le portail se serait déclenché dès le mercredi ou le
+vendredi, le garde-fou de fraîcheur aurait tout rafraîchi avant la course, puis
+aurait sauté le lendemain comme « déjà frais » — et les classements auraient
+été systématiquement une course en retard. Vérifié : avec 30 h, **les 23
+courses de 2026 ont bien un passage après leur arrivée**.
+
+**Jolpica limite le débit.** Un HTTP 429 a été observé en rafale. Le module
+mémorise le calendrier 6 h en mémoire et retente une fois après 1,5 s. Le
+portail est **fail-closed** : calendrier injoignable → on ne synchronise pas.
+Sauter un jour ne coûte rien, lancer 30 appels « au cas où » coûte ~1,80 $.
+
+**Coût attendu après rebranchement :** ~23 week-ends de GP par an, ~30 entités
+chacun réparties sur deux passages de 15, à ~0,059 $ l'entité, soit **~1,77 $
+par week-end → ~41 $/an ≈ 3,4 $/mois**. À comparer aux ~27 $/mois de la
+configuration « tous les deux jours sans aucun garde-fou ».
+
+**Point ouvert.** La cause de l'arrêt du 1er septembre 2026 n'est pas élucidée
+— le dépérissement progressif (4 entités le 29/08, 3 le 31/08, 23 le 01/09,
+puis rien) évoque un dépassement de durée. Le plafond de 15 appels réduit
+mécaniquement le risque, mais seuls les logs Vercel trancheront.
+
+---
+
+### 3. Bug repéré au passage : `GP_2026_CAL` est faux
+
+`api/f1.ts` embarque un calendrier codé en dur, injecté dans les prompts « pour
+que Claude sache quelle course chercher par `round` ». Confronté aux données
+Jolpica du 26/09/2026, il est décalé :
+
+| round | `GP_2026_CAL` | Réalité Jolpica |
+|---|---|---|
+| 15 | GP d'Italie, 06/09 | GP d'Azerbaïdjan, **26/09** |
+| 16 | GP de Madrid, 13/09 | GP de Bahreïn en Malaisie, 04/10 |
+| 17 | GP d'Azerbaïdjan, **27/09** | GP de Singapour, 11/10 |
+| 18 | GP de Singapour, 11/10 | GP des États-Unis, 25/10 |
+
+Il compte aussi 24 entrées contre 23 courses réelles. Conséquence : les prompts
+F1 demandent à Claude des informations sur **le mauvais Grand Prix**. Non
+corrigé — ce n'était pas dans le périmètre. À traiter avant de rebrancher, sans
+quoi le cron produira des données fausses en payant pour elles.
 
 ---
 
