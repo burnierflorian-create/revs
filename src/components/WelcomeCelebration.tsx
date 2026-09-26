@@ -9,30 +9,54 @@ type Tier = 'premium' | 'vip'
 
 type Slide = { emoji: string; title: string; body: string }
 
+// ─────────────────────── Avantages annoncés ───────────────────────
+// Réaligné le 26/09/2026. Cet écran s'affiche juste APRÈS un paiement
+// réussi, en clés Stripe live : c'est l'endroit du produit où une promesse
+// fausse coûte le plus cher. Deux y figuraient encore :
+//   - « Spots illimités / Plus aucune limite journalière » : faux, le portail
+//     IA applique des plafonds fermes (server/ai-gate.js).
+//   - « Concours VIP / tirage du mois » : aucune contrepartie n'existe, ni
+//     dans le logiciel ni en dehors.
+//
+// Règle : ne rien lister ici qui ne soit pas vérifiable dans le code.
 const PREMIUM_SLIDES: Slide[] = [
+  {
+    emoji: '⚡',
+    title: '100 spots IA par jour',
+    body: 'Tu passes à 100 reconnaissances par jour — de quoi couvrir un rassemblement entier.',
+  },
   {
     emoji: '🎯',
     title: 'Mode Radar activé',
     body: 'Tu recevras une notif dès qu’une supercar est spottée près de toi.',
   },
   {
-    emoji: '✅',
-    title: 'Spots illimités',
-    body: 'Plus aucune limite journalière — spotte autant que tu veux.',
-  },
-  {
     emoji: '🏆',
-    title: 'Ton badge est actif',
+    title: 'Ton badge Premium est actif',
     body: 'Il apparaît sur tous tes spots et sur ton profil.',
   },
 ]
 
 const VIP_SLIDES: Slide[] = [
-  ...PREMIUM_SLIDES,
   {
-    emoji: '🎰',
-    title: 'Concours VIP',
-    body: 'Tu participes automatiquement au tirage du mois pour des expériences uniques.',
+    emoji: '⚡',
+    title: '300 spots IA par jour',
+    body: 'Le plafond le plus haut de REVS — 300 reconnaissances par jour.',
+  },
+  {
+    emoji: '🎯',
+    title: 'Mode Radar activé',
+    body: 'Tu recevras une notif dès qu’une supercar est spottée près de toi.',
+  },
+  {
+    emoji: '💬',
+    title: 'Support prioritaire',
+    body: 'Tes messages passent devant sur toute question ou tout souci technique.',
+  },
+  {
+    emoji: '👑',
+    title: 'Ton badge VIP est actif',
+    body: 'Le badge le plus rare de REVS, visible sur tes spots et ton profil.',
   },
 ]
 
