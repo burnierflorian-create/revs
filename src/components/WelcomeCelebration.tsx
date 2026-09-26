@@ -19,11 +19,31 @@ type Slide = { emoji: string; title: string; body: string }
 //     dans le logiciel ni en dehors.
 //
 // Règle : ne rien lister ici qui ne soit pas vérifiable dans le code.
+// ─────────────────────── Avantages annoncés ───────────────────────
+// Cet écran s'affiche juste APRÈS un paiement réussi, en clés Stripe live.
+// C'est l'endroit du produit où une promesse fausse coûte le plus cher, donc la
+// règle est stricte : on ne liste QUE ce qui est vérifiable dans le code.
+//
+// Retiré le 26/09/2026 : « Spots illimités », « Plus aucune limite
+// journalière », « Concours VIP » et le tirage du mois — aucun n'existait.
+//
+// DÉLIBÉRÉMENT ABSENTS, bien que listés dans src/lib/plans.ts :
+//   - « Statistiques avancées » : aucune implémentation (ni carte de chaleur,
+//     ni stats conditionnées au tier).
+//   - « Profil mis en avant dans le classement » : Leaderboard.tsx ne connaît
+//     ni tier ni premium.
+//   - « Support prioritaire » (VIP) : aucun canal dédié.
+// Vérifié par recherche sur tout src/ le 26/09/2026 — isPremiumOrAbove() et
+// isVip() ne gardent aucune fonctionnalité. À rajouter ici le jour où elles
+// existent, pas avant.
+//
+// Les plafonds citent server/ai-gate.js, qui fait foi : free 5, premium 30,
+// vip 300.
 const PREMIUM_SLIDES: Slide[] = [
   {
     emoji: '⚡',
-    title: '100 spots IA par jour',
-    body: 'Tu passes à 100 reconnaissances par jour — de quoi couvrir un rassemblement entier.',
+    title: '30 spots IA par jour',
+    body: 'Tu passes de 5 à 30 reconnaissances par jour — de quoi couvrir un rassemblement entier.',
   },
   {
     emoji: '🎯',
@@ -37,6 +57,10 @@ const PREMIUM_SLIDES: Slide[] = [
   },
 ]
 
+// Le palier VIP garde ses propres diapositives pour une seule raison : son
+// plafond est réellement différent (300/jour). Afficher « 30 spots » à un
+// abonné VIP serait une nouvelle information fausse — l'inverse du but visé.
+// Si VIP doit être fermé, cela se joue sur appConfig.SHOW_VIP_PLAN, pas ici.
 const VIP_SLIDES: Slide[] = [
   {
     emoji: '⚡',
@@ -49,13 +73,8 @@ const VIP_SLIDES: Slide[] = [
     body: 'Tu recevras une notif dès qu’une supercar est spottée près de toi.',
   },
   {
-    emoji: '💬',
-    title: 'Support prioritaire',
-    body: 'Tes messages passent devant sur toute question ou tout souci technique.',
-  },
-  {
     emoji: '👑',
-    title: 'Ton badge VIP est actif',
+    title: 'Ton badge est actif',
     body: 'Le badge le plus rare de REVS, visible sur tes spots et ton profil.',
   },
 ]
