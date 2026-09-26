@@ -547,13 +547,24 @@ function cleanModelName(s) {
 }
 
 
+// ─────────── Note sur le cache de prompt (26/09/2026) ───────────
+// `cache_control: ephemeral` a été retiré ici. Il était actif — SYSTEM_STRICT
+// dépasse le minimum d'environ 1024 jetons requis pour qu'un préfixe soit
+// réellement mis en cache — mais à perte : une écriture de cache est facturée
+// 1,25x et sa durée de vie est de 5 minutes. Avec le trafic actuel (3 appels
+// enregistrés dans ai_usage en deux mois), aucune écriture n'était jamais
+// relue avant d'expirer. Chaque scan payait donc 25 % de surcoût sur son
+// prompt système, soit ~865 jetons pour rien.
+//
+// À REMETTRE dès que le trafic dépasse durablement ~1 scan toutes les 5
+// minutes : au-delà, les lectures à 0,1x rentabilisent largement l'écriture.
+// Vérifier alors `usage.cache_read_input_tokens` dans la réponse — s'il reste
+// à zéro, c'est qu'un élément du préfixe varie d'un appel à l'autre.
 async function callClaude(client, mimeType, imageBase64, system, maxTokens, model = MODEL) {
   return client.messages.create({
     model,
     max_tokens: maxTokens,
-    system: [
-      { type: 'text', text: system, cache_control: { type: 'ephemeral' } },
-    ],
+    system: [{ type: 'text', text: system }],
     messages: [
       {
         role: 'user',
