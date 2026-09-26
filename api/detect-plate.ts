@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
 import type { VercelRequest, VercelResponse } from '@vercel/node'
+import { requireAiAccess, AI_ENDPOINTS } from '../server/ai-gate.js'
 
 // Vision model — plate localisation is a coarse rectangle estimate, not
 // full reasoning. Keeps latency low (we run this in the upload hot path,
@@ -19,7 +20,9 @@ function isAllowedMime(m: unknown): m is AllowedMime {
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
+  // Authorization ajouté : l'endpoint exige désormais un jeton Bearer, et sans
+  // cet en-tête le préflight d'un appel cross-origin échouerait.
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 }
 
 // Reframed as a privacy/anonymisation task — helps the model not refuse
@@ -162,6 +165,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     sendJson(res, { plates: [] }, 405)
     return
   }
+
+  // Portail d'accès AVANT tout le reste — y compris avant la lecture du corps,
+  // pour qu'une image de 10 Mo envoyée sans jeton soit rejetée au plus tôt.
+  // Cet endpoint n'avait AUCUN contrôle jusqu'au 25/09/2026 : ni jeton, ni
+  // quota, ni rate-limit, pour un appel Claude vision à chaque requête.
+  //
+  // Note : il compte sur sa propre ligne de quota (clé `detect-plate`), pas sur
+  // celle d'identify-car. NewSpot déclenche les deux EN PARALLÈLE pour une seule
+  // capture — un compteur partagé diviserait le quota gratuit par deux et le
+  // cooldown de 3 s ferait échouer systématiquement le second des deux appels.
+  const access = await requireAiAccess(req, AI_ENDPOINTS.DETECT_PLATE)
+  if (!access.ok) {
+    sendJson(res, access.body, access.status)
+    return
+  }
+
   if (!process.env.ANTHROPIC_API_KEY) {
     // Fail open: empty plates → caller uploads photo as-is rather than
     // blocking the entire publish flow on a config issue.

@@ -13,7 +13,7 @@ import {
   fetchActiveChallenges,
   type Challenge,
 } from '../lib/challenges'
-import { challengeIcon } from '../lib/customIcons'
+import { challengeIcon, challengeMedallion } from '../lib/customIcons'
 import { prefersReducedMotion } from '../lib/motion'
 import { fetchLiveEvents, type LiveEvent } from '../lib/liveEvents'
 
@@ -977,12 +977,14 @@ function GpCountdownCard({
         <p className="min-w-0 flex-1 truncate text-[17px] font-bold text-white">
           {name}
         </p>
-        <span
-          className="flex-none rounded-full px-2.5 py-1 text-[10px] font-extrabold tracking-wide text-white"
-          style={{ background: '#E8203A', letterSpacing: '0.08em' }}
-        >
-          F1
-        </span>
+        <img
+          src={challengeMedallion('vitesse', 30)}
+          alt="F1"
+          width={30}
+          height={30}
+          className="h-[30px] w-[30px] flex-none"
+        />
+        <span className="sr-only">F1</span>
       </div>
 
       {/* Circuit — grey italic */}
@@ -1134,8 +1136,16 @@ const CityRankCard = memo(function CityRankCard({
           className="tappable flex w-full items-center justify-between gap-3 rounded-2xl p-4 text-left transition-transform active:scale-[0.99]"
           style={cardStyle}
         >
-          <p className="text-sm font-medium text-white/80">
-            🏆 {t('home.city.addCity')}
+          <p className="flex items-center gap-2 text-sm font-medium text-white/80">
+            <img
+              src={challengeMedallion('classement', 22)}
+              alt=""
+              aria-hidden
+              width={22}
+              height={22}
+              className="inline-block h-[22px] w-[22px] flex-none"
+            />
+            {t('home.city.addCity')}
           </p>
           <ChevronRight className="h-5 w-5 flex-none text-white/30" />
         </button>
@@ -1183,8 +1193,16 @@ const CityRankCard = memo(function CityRankCard({
         )}
 
         <div className="relative flex items-center">
-          <span className="flex-1 text-[14px] font-bold text-white">
-            🏆 {t('home.city.ranking')}
+          <span className="flex flex-1 items-center gap-2 text-[14px] font-bold text-white">
+            <img
+              src={challengeMedallion('classement', 24)}
+              alt=""
+              aria-hidden
+              width={24}
+              height={24}
+              className="inline-block h-6 w-6 flex-none"
+            />
+            {t('home.city.ranking')}
           </span>
           <span
             className="text-[14px] font-extrabold"

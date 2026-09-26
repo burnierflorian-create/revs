@@ -3,6 +3,19 @@ import { createClient } from '@supabase/supabase-js'
 import { XMLParser } from 'fast-xml-parser'
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 
+// PAUSE 25/09/2026 — rebrancher en version optimisée avant beta
+// News : ajouter tri Haiku avant Sonnet (voir diagnostic §05)
+//
+// Les deux entrées cron (tz=cest 0 4 * * * / tz=cet 0 5 * * *) sont EN PAUSE,
+// pas supprimées : ~700 appels Sonnet pour 7 articles publiés en 25 jours,
+// sans lecteurs. Leur JSON exact et la procédure de rebranchement sont dans
+// docs/CRONS_PAUSE.md — vercel.json est du JSON strict validé contre un schéma
+// en `additionalProperties: false`, donc il n'accepte ni commentaire ni clé
+// maison pour y garder les lignes en veille.
+//
+// Le code ci-dessous est INCHANGÉ. L'endpoint reste atteignable manuellement
+// (?force=1) et le contenu déjà en base reste servi à l'app.
+//
 // Requested model claude-sonnet-4-20250514 is deprecated (retires
 // 2026-06-15); using its current drop-in replacement.
 const MODEL = 'claude-sonnet-4-6'

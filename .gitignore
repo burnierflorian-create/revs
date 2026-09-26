@@ -27,3 +27,5 @@ dist-ssr
 # one-shot plate-blur migration progress (scripts/blur-existing-plates.mjs)
 scripts/.blur-progress.json
 .env*
+backups/
+.github/workflows/

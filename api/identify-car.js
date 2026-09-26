@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { createClient } from '@supabase/supabase-js'
+import { requireAiAccess, AI_ENDPOINTS } from '../server/ai-gate.js'
 
 // ─────────── Rarity = f(market value). Single source of truth; mirror of
 // src/lib/rarity.ts. Rarity is DERIVED from the resale value, never guessed. ───────────
@@ -52,71 +53,12 @@ async function catalogLookup(brand, model) {
     return null
   }
 }
-// ─────────── Cost control: per-user quota + rate limit. ───────────
-// FAIL-OPEN by design: any auth/DB hiccup lets the capture through. We would
-// rather occasionally under-charge a quota than block a real user at launch.
-const FREE_DAILY = 6 // AI spots/day on the free tier (resets midnight UTC)
-const HARD_CAP = 200 // absolute daily ceiling, every tier — anti-abuse
-const COOLDOWN_MS = 3000 // min gap between two AI calls for one user
-const GRACE_DAYS = 3 // discovery window after signup = unlimited
-const UNLIMITED_TIERS = new Set(['premium', 'vip', 'pro'])
-const UNLIMITED_ROLES = new Set(['admin', 'premium', 'vip'])
-
-// Returns { ok:true } to proceed, or { ok:false, code, message } to block (429).
-async function checkAiQuota(req) {
-  const sb = getSb()
-  if (!sb) return { ok: true }
-  try {
-    const auth = req.headers.authorization || req.headers.Authorization || ''
-    const token = auth.startsWith('Bearer ') ? auth.slice(7).trim() : ''
-    if (!token) return { ok: true } // no session → don't block (fail-open)
-    const { data: u } = await sb.auth.getUser(token)
-    const user = u?.user
-    if (!user) return { ok: true }
-
-    const { data: prof } = await sb
-      .from('profiles')
-      .select('tier,role')
-      .eq('user_id', user.id)
-      .maybeSingle()
-    const unlimited =
-      UNLIMITED_TIERS.has((prof?.tier || 'free').toLowerCase()) ||
-      UNLIMITED_ROLES.has((prof?.role || '').toLowerCase())
-
-    const now = Date.now()
-    const created = user.created_at ? new Date(user.created_at).getTime() : 0
-    const inGrace = created > 0 && now - created < GRACE_DAYS * 86400000
-
-    const day = new Date().toISOString().slice(0, 10)
-    const { data: row } = await sb
-      .from('ai_usage')
-      .select('count,last_at')
-      .eq('user_id', user.id)
-      .eq('day', day)
-      .maybeSingle()
-    const count = row?.count || 0
-    const lastAt = row?.last_at ? new Date(row.last_at).getTime() : 0
-
-    // Cooldown + hard cap apply to EVERYONE, premium included.
-    if (lastAt && now - lastAt < COOLDOWN_MS)
-      return { ok: false, code: 'cooldown', message: 'Doucement ! Attends quelques secondes avant le prochain scan.' }
-    if (count >= HARD_CAP)
-      return { ok: false, code: 'hardcap', message: 'Limite quotidienne atteinte. Reviens demain !' }
-    if (!unlimited && !inGrace && count >= FREE_DAILY)
-      return { ok: false, code: 'quota', message: 'Tu as atteint ta limite du jour. Passe Premium pour scanner sans limite ✨' }
-
-    // Record the call (best-effort; a failed write must not block).
-    await sb
-      .from('ai_usage')
-      .upsert(
-        { user_id: user.id, day, count: count + 1, last_at: new Date().toISOString() },
-        { onConflict: 'user_id,day' },
-      )
-    return { ok: true }
-  } catch {
-    return { ok: true } // any error → fail-open
-  }
-}
+// ─────────── Cost control: auth + per-user quota + rate limit. ───────────
+// Le contrôle vit désormais dans server/ai-gate.js, partagé avec detect-plate
+// (point de vérité unique). Il est FAIL-CLOSED : plus de fenêtre de grâce
+// « 3 jours illimités », plus de tolérance sur un jeton absent, plus de
+// repli silencieux sur profiles.tier — le tier vient de user_tier(), dérivé
+// de l'abonnement Stripe.
 
 // Freeze a newly-priced model. Fire-and-forget; failure never blocks identify.
 async function catalogInsert(brand, model, marketValue, rarity) {
@@ -163,7 +105,9 @@ Réponds UNIQUEMENT par le nombre entier en euros, rien d'autre (pas de symbole,
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
+  // Authorization ajouté : l'endpoint exige désormais un jeton Bearer, et sans
+  // cet en-tête le préflight d'un appel cross-origin échouerait.
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 }
 
 const ALLOWED_MIME = new Set([
@@ -761,10 +705,12 @@ export default async function handler(req, res) {
     return sendJson(res, FALLBACK, 400)
   }
 
-  // Cost gate: quota / rate-limit before spending any AI tokens. Fail-open.
-  const quota = await checkAiQuota(req)
-  if (!quota.ok) {
-    return sendJson(res, { error: quota.code, message: quota.message }, 429)
+  // Portail d'accès : authentification obligatoire, puis cooldown et quota,
+  // AVANT toute dépense de jetons. Fail-closed — un refus ne laisse passer
+  // aucun appel Claude. Voir server/ai-gate.js.
+  const access = await requireAiAccess(req, AI_ENDPOINTS.IDENTIFY)
+  if (!access.ok) {
+    return sendJson(res, access.body, access.status)
   }
 
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })

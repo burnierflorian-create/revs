@@ -339,12 +339,24 @@ export default function NewSpot() {
       ])
       clearTimeout(timer)
 
-      // 429 = daily quota reached / cooldown / anti-abuse cap. Show the
-      // server's message and bounce back to the capture step.
-      if (carRes.status === 429) {
+      // Refus du portail IA (server/ai-gate.js) : 401 session absente ou
+      // expirée, 429 cooldown ou quota du jour, 503 portail indisponible.
+      // Dans les trois cas on affiche le message du serveur et on revient à
+      // l'étape capture — sans ce garde, un 401 tombait dans le chemin
+      // nominal et ouvrait l'étape 3 avec un formulaire vide.
+      if (
+        carRes.status === 401 ||
+        carRes.status === 429 ||
+        carRes.status === 503
+      ) {
         const q = await carRes.json().catch(() => ({}))
         cancelHeartbeat()
-        rejectAndRestart(q?.message || 'Tu as atteint ta limite du jour. Passe Premium ✨')
+        rejectAndRestart(
+          q?.message ||
+            (carRes.status === 401
+              ? 'Session expirée — reconnecte-toi pour scanner.'
+              : 'Tu as atteint ta limite du jour, réessaie demain'),
+        )
         return
       }
       const carJson = (await carRes.json()) as IdentifyResult

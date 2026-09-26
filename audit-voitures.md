@@ -1,38 +1,40 @@
 # Audit de la base voitures — REVS
 
-_Lecture seule. 27 spots · 27 voitures distinctes · 51 rendus · 27 fiches specs._
+_Lecture seule. 29 spots · 29 voitures distinctes · 51 rendus · 38 fiches specs._
 
-**Bilan : ✅ 24 conformes · ⚠️ 1 à corriger · ❌ 2 donnée fausse/manquante**
+**Bilan : ✅ 24 conformes · ⚠️ 3 à corriger · ❌ 2 donnée fausse/manquante**
 
 | Voiture | Année | Spots | Rareté | Nom | Prix | Stats | Rendu | Couleur | Détail |
 |---|--:|--:|---|:-:|:-:|:-:|:-:|:-:|---|
-| ❌ **Ferrari Modèle inconnu** | 2020 | 1 | supercar | ❌ | ✅<br>185 000 € | ❌ | ⚠️ | ✅ | Modèle non identifié ("Modèle inconnu") · Aucune stat (puissance/0-100/vmax) · Pas de rendu showroom (fallback photo actif) |
-| ❌ **Ferrari Modèle inconnu** | 2018 | 1 | supercar | ❌ | ✅<br>165 000 € | ❌ | ⚠️ | ✅ | Modèle non identifié ("Modèle inconnu") · Aucune stat (puissance/0-100/vmax) · Pas de rendu showroom (fallback photo actif) |
-| ⚠️ **Ferrari 488 GTB** | 2016 | 1 | supercar | ✅ | ✅<br>240 000 € | ✅ | ⚠️ | ✅ | Pas de rendu showroom (fallback photo actif) |
-| ✅ **Porsche Cayman S** | 2014 | 1 | performance | ✅ | ✅<br>45 000 € | ✅ | ✅ | ✅ | — |
-| ✅ **BMW M2 Competition - Safety Car KMH Lifestyle** | 2019 | 1 | performance | ✅ | ✅<br>58 000 € | ✅ | ✅ | ✅ | — |
-| ✅ **Audi TT Coupé Mk3 TTS ou TFSI** | 2020 | 1 | premium | ✅ | ✅<br>42 000 € | ✅ | ✅ | ✅ | — |
+| ❌ **Ferrari Modèle inconnu** | 2020 | 1 | supercar | ❌ | ✅<br>280 000 € | ❌ | ⚠️ | ✅ | Modèle non identifié ("Modèle inconnu") · Aucune stat (puissance/0-100/vmax) · Pas de rendu showroom (fallback photo actif) |
+| ❌ **Ferrari Modèle inconnu** | 2018 | 1 | supercar | ❌ | ✅<br>180 000 € | ❌ | ⚠️ | ✅ | Modèle non identifié ("Modèle inconnu") · Aucune stat (puissance/0-100/vmax) · Pas de rendu showroom (fallback photo actif) |
+| ⚠️ **Ferrari 488 Pista** | 2019 | 1 | hypercar | ✅ | ⚠️<br>285 000 € | ✅ | ✅ | ✅ | Prix 285 000 € bas pour rareté hypercar |
+| ⚠️ **Ferrari 488 GTB** | 2016 | 1 | supercar | ✅ | ✅<br>185 000 € | ✅ | ⚠️ | ✅ | Pas de rendu showroom (fallback photo actif) |
+| ⚠️ **Bentley Bentley R-Type** | 1953 | 1 | supercar | ✅ | ✅<br>185 000 € | ✅ | ⚠️ | ✅ | Pas de rendu showroom (fallback photo actif) |
+| ✅ **BMW M2 Competition - Safety Car KMH Lifestyle** | 2019 | 1 | performance | ✅ | ✅<br>45 000 € | ✅ | ✅ | ✅ | — |
 | ✅ **Nissan Juke** | 2012 | 1 | standard | ✅ | ✅<br>8 500 € | ✅ | ✅ | ✅ | — |
-| ✅ **Mercedes-AMG GLE 63 S Coupé** | 2023 | 1 | exclusif | ✅ | ✅<br>115 000 € | ✅ | ✅ | ✅ | — |
+| ✅ **Porsche Cayman S** | 2014 | 1 | performance | ✅ | ✅<br>35 000 € | ✅ | ✅ | ✅ | — |
+| ✅ **Audi TT Coupé Mk3 TTS ou TFSI** | 2020 | 1 | premium | ✅ | ✅<br>32 000 € | ✅ | ✅ | ✅ | — |
+| ✅ **Mercedes-AMG GLE 63 S Coupé** | 2023 | 1 | exclusif | ✅ | ✅<br>89 000 € | ✅ | ✅ | ✅ | — |
 | ✅ **Nissan Juke Mk1** | 2013 | 1 | standard | ✅ | ✅<br>8 500 € | ✅ | ✅ | ✅ | — |
-| ✅ **Mercedes-AMG GT Roadster – GT 63 Roadster / GT S Roadster** | 2024 | 1 | supercar | ✅ | ✅<br>210 000 € | ✅ | ✅ | ✅ | — |
-| ✅ **Rolls-Royce Ghost** | 2012 | 1 | exclusif | ✅ | ✅<br>95 000 € | ✅ | ✅ | ✅ | — |
-| ✅ **McLaren 570S Spider** | 2018 | 1 | supercar | ✅ | ✅<br>135 000 € | ✅ | ✅ | ✅ | — |
-| ✅ **Porsche 911 GT3 RS** | 2023 | 1 | supercar | ✅ | ✅<br>335 000 € | ✅ | ✅ | ✅ | — |
-| ✅ **Porsche 911 GT3** | 2018 | 1 | supercar | ✅ | ✅<br>145 000 € | ✅ | ✅ | ✅ | — |
-| ✅ **Chevrolet Corvette C6 Grand Sport** | 2010 | 1 | performance | ✅ | ✅<br>45 000 € | ✅ | ✅ | ✅ | — |
-| ✅ **McLaren 720S** | 2019 | 1 | supercar | ✅ | ✅<br>215 000 € | ✅ | ✅ | ✅ | — |
-| ✅ **Skoda Fabia Mk3 Monte Carlo** | 2018 | 1 | standard | ✅ | ✅<br>8 500 € | ✅ | ✅ | ✅ | — |
-| ✅ **Porsche 911 Carrera** | 2022 | 1 | exclusif | ✅ | ✅<br>98 000 € | ✅ | ✅ | ✅ | — |
+| ✅ **Mercedes-AMG GT Roadster – GT 63 Roadster / GT S Roadster** | 2024 | 1 | supercar | ✅ | ✅<br>145 000 € | ✅ | ✅ | ✅ | — |
+| ✅ **Rolls-Royce Ghost** | 2012 | 1 | exclusif | ✅ | ✅<br>85 000 € | ✅ | ✅ | ✅ | — |
+| ✅ **Lamborghini Huracán Spyder** | 2018 | 1 | supercar | ✅ | ✅<br>185 000 € | ✅ | ✅ | ✅ | — |
+| ✅ **Porsche 911 GT3 RS** | 2023 | 1 | supercar | ✅ | ✅<br>195 000 € | ✅ | ✅ | ✅ | — |
+| ✅ **Skoda Fabia Mk3 Monte Carlo** | 2018 | 1 | standard | ✅ | ✅<br>12 500 € | ✅ | ✅ | ✅ | — |
+| ✅ **McLaren 720S** | 2019 | 1 | supercar | ✅ | ✅<br>95 000 € | ✅ | ✅ | ✅ | — |
 | ✅ **Chevrolet Corvette C6 Coupé** | 2008 | 1 | premium | ✅ | ✅<br>35 000 € | ✅ | ✅ | ✅ | — |
-| ✅ **Ferrari 488 Pista** | 2019 | 1 | hypercar | ✅ | ✅<br>490 000 € | ✅ | ✅ | ✅ | — |
-| ✅ **Lamborghini Huracán Spyder** | 2018 | 1 | supercar | ✅ | ✅<br>200 000 € | ✅ | ✅ | ✅ | — |
-| ✅ **Lamborghini Huracán EVO** | 2020 | 1 | supercar | ✅ | ✅<br>215 000 € | ✅ | ✅ | ✅ | — |
-| ✅ **BMW Série 4 Gran Coupé** | 2022 | 1 | performance | ✅ | ✅<br>55 000 € | ✅ | ✅ | ✅ | — |
-| ✅ **Toyota GT86 – première génération** | 2013 | 1 | standard | ✅ | ✅<br>18 000 € | ✅ | ✅ | ✅ | — |
-| ✅ **Lamborghini Huracán Spyder** | 2020 | 1 | supercar | ✅ | ✅<br>230 000 € | ✅ | ✅ | ✅ | — |
+| ✅ **Lamborghini Huracán EVO** | 2020 | 1 | supercar | ✅ | ✅<br>185 000 € | ✅ | ✅ | ✅ | — |
+| ✅ **Porsche 911 GT3** | 2018 | 1 | supercar | ✅ | ✅<br>89 000 € | ✅ | ✅ | ✅ | — |
+| ✅ **Chevrolet Corvette C6 Grand Sport** | 2010 | 1 | performance | ✅ | ✅<br>45 000 € | ✅ | ✅ | ✅ | — |
+| ✅ **Porsche 911 Carrera** | 2022 | 1 | exclusif | ✅ | ✅<br>89 000 € | ✅ | ✅ | ✅ | — |
+| ✅ **Lamborghini Huracán Spyder** | 2020 | 1 | supercar | ✅ | ✅<br>185 000 € | ✅ | ✅ | ✅ | — |
 | ✅ **McLaren GT** | 2022 | 1 | supercar | ✅ | ✅<br>185 000 € | ✅ | ✅ | ✅ | — |
-| ✅ **Porsche Cayenne Coupé GTS** | 2022 | 1 | performance | ✅ | ✅<br>78 000 € | ✅ | ✅ | ✅ | — |
+| ✅ **BMW Série 4 Gran Coupé** | 2022 | 1 | performance | ✅ | ✅<br>35 000 € | ✅ | ✅ | ✅ | — |
+| ✅ **Toyota GT86 – première génération** | 2013 | 1 | standard | ✅ | ✅<br>12 500 € | ✅ | ✅ | ✅ | — |
+| ✅ **McLaren 570S Spider** | 2018 | 1 | supercar | ✅ | ✅<br>95 000 € | ✅ | ✅ | ✅ | — |
+| ✅ **Porsche Cayenne Coupé GTS** | 2022 | 1 | performance | ✅ | ✅<br>89 000 € | ✅ | ✅ | ✅ | — |
+| ✅ **Lamborghini Huracán LP 610-4** | 2014 | 1 | exclusif | ✅ | ✅<br>95 000 € | ✅ | ✅ | ✅ | — |
 
 ## Rendus orphelins (car_renders sans spot correspondant) — 31
 

@@ -7,13 +7,14 @@ import {
   adaptiveStatSize,
   flagEmoji,
   formatStatNumber,
-  getF1Driver,
-  getF1Team,
   nationality,
   newsIlikeOr,
   proxyImage,
   splitStatValue,
 } from '../lib/f1team'
+import { useF1Grid, findDriver, findTeam } from '../lib/f1grid'
+import { DriverHelmet } from '../components/F1Visual'
+import { appConfig } from '../config/appConfig'
 import { timeAgo } from '../lib/spots'
 import { Skeleton } from '../components/Skeleton'
 
@@ -56,8 +57,9 @@ export default function F1DriverDetail() {
   const { t } = useTranslation()
   const { slug } = useParams<{ slug: string }>()
   const navigate = useNavigate()
-  const driver = getF1Driver(slug)
-  const team = driver ? getF1Team(driver.team) : undefined
+  const grid = useF1Grid()
+  const driver = findDriver(grid, slug)
+  const team = driver ? findTeam(grid, driver.team) : undefined
   const color = team?.color ?? '#333333'
 
   const [data, setData] = useState<DriverData | null>(null)
@@ -112,7 +114,7 @@ export default function F1DriverDetail() {
     return () => {
       active = false
     }
-  }, [driver])
+  }, [driver?.slug])
 
   const age = useMemo(() => {
     if (!data?.birthDate || data.birthDate === 'N/A') return null
@@ -121,6 +123,17 @@ export default function F1DriverDetail() {
     const ms = Date.now() - d.getTime()
     return Math.floor(ms / (1000 * 60 * 60 * 24 * 365.25))
   }, [data])
+
+  // While the live grid is still loading, a slug we don't yet recognise
+  // isn't "not found" — it may be a new driver. Hold the not-found state
+  // until the grid has settled.
+  if (!driver && grid.loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-bg text-fg">
+        <Loader2 className="h-6 w-6 animate-spin text-fg2" />
+      </div>
+    )
+  }
 
   if (!driver) {
     return (
@@ -541,13 +554,15 @@ function DriverHeroPortrait({
   color: string
 }) {
   const [failed, setFailed] = useState(false)
-  const showPhoto = photo && !failed
+  const showPhoto = appConfig.SHOW_F1_PHOTOS && photo && !failed
   return (
     <div
       className="relative flex h-28 w-28 items-center justify-center overflow-hidden rounded-full font-display text-3xl font-extrabold tracking-tighter text-white"
       style={{
-        background: `linear-gradient(135deg, ${color}, ${color}99)`,
-        border: '2px solid rgba(255,255,255,0.18)',
+        background: showPhoto
+          ? `linear-gradient(135deg, ${color}, ${color}99)`
+          : 'rgba(255,255,255,0.05)',
+        border: `2px solid ${color}`,
         boxShadow: `0 12px 36px ${color}55`,
       }}
     >
@@ -559,8 +574,10 @@ function DriverHeroPortrait({
           onError={() => setFailed(true)}
           className="absolute inset-0 h-full w-full object-cover object-top"
         />
-      ) : (
+      ) : appConfig.SHOW_F1_PHOTOS ? (
         initials
+      ) : (
+        <DriverHelmet color={color} className="h-full w-full p-2" />
       )}
     </div>
   )

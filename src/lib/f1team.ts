@@ -258,6 +258,13 @@ export function nationality(country: string): string {
     DE: 'Allemand',
     JP: 'Japonais',
     BR: 'Brésilien',
+    AR: 'Argentin',
+    FI: 'Finlandais',
+    MX: 'Mexicain',
+    US: 'Américain',
+    DK: 'Danois',
+    CN: 'Chinois',
+    BE: 'Belge',
   }
   return map[country.toUpperCase()] ?? country
 }

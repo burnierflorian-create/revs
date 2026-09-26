@@ -9,6 +9,37 @@ import { stashPendingReferral } from '../lib/referrals'
 import { useAuth } from '../hooks/useAuth'
 import { storeVault } from '../lib/passwordVault'
 import { detectCountry, reverseGeocode, COUNTRY_NAMES } from '../lib/country'
+import { appConfig } from '../config/appConfig'
+
+// iOS autofill and copy/paste routinely inject invisible characters into
+// the email field — zero-width spaces, a BOM, or a non-breaking space —
+// plus stray leading/trailing whitespace. gotrue then rejects the login
+// as "Invalid login credentials" even though the visible text is correct.
+// Strip them so what the user sees is what we send.
+function sanitizeEmail(raw: string): string {
+  return raw.replace(/[\u200B\u200C\u200D\uFEFF\u00A0]/g, '').trim()
+}
+
+// Guards every auth network call: if the promise never settles (a hung
+// Web Locks acquisition, a stalled request), reject after `ms` so the
+// submit handler's `finally` runs, the spinner clears and the user can
+// retry — instead of the button staying frozen on "…" forever. The
+// thrown "timed out" message is mapped to French by translateError.
+function withTimeout<T>(p: PromiseLike<T>, ms = 20000): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('Request timed out')), ms)
+    Promise.resolve(p).then(
+      (v) => {
+        clearTimeout(timer)
+        resolve(v)
+      },
+      (e) => {
+        clearTimeout(timer)
+        reject(e)
+      },
+    )
+  })
+}
 
 type PseudoStatus = 'idle' | 'invalid' | 'checking' | 'ok' | 'taken'
 const PSEUDO_RE = /^[a-zA-Z0-9_]{3,20}$/
@@ -151,6 +182,10 @@ export default function Auth() {
     setError(null)
     setInfo(null)
     setLoading(true)
+    // Normalise the email once for every branch — strips invisible
+    // autofill characters so login/signup/reset all match what the user
+    // sees. Password is intentionally left byte-for-byte intact.
+    const cleanEmail = sanitizeEmail(email)
     try {
       if (mode === 'signup') {
         const cleanPseudo = pseudo.trim()
@@ -168,11 +203,13 @@ export default function Auth() {
           country: country.trim(),
         }
         if (cleanedCode.length === 6) meta.referral_code = cleanedCode
-        const { data: signupData, error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: { data: meta },
-        })
+        const { data: signupData, error } = await withTimeout(
+          supabase.auth.signUp({
+            email: cleanEmail,
+            password,
+            options: { data: meta },
+          }),
+        )
         if (error) throw error
         if (cleanedCode.length === 6) stashPendingReferral(cleanedCode)
         // Auto-populate the local password vault so the Settings →
@@ -193,9 +230,8 @@ export default function Auth() {
         // origin is forced to the prod URL when the request fires
         // from localhost so dev testing produces working email links.
         const redirectTo = `${resetRedirectOrigin()}/reset-password`
-        const { error } = await supabase.auth.resetPasswordForEmail(
-          email,
-          { redirectTo },
+        const { error } = await withTimeout(
+          supabase.auth.resetPasswordForEmail(cleanEmail, { redirectTo }),
         )
         if (error) throw error
         setInfo(t('auth.resetSent'))
@@ -220,10 +256,12 @@ export default function Auth() {
         setConfirmPassword('')
         setInfo(t('auth.passwordUpdated'))
       } else {
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        })
+        const { data, error } = await withTimeout(
+          supabase.auth.signInWithPassword({
+            email: cleanEmail,
+            password,
+          }),
+        )
         if (error) throw error
         // Always-on local password vault — same behaviour as native
         // PWAs that use the OS keychain. clearVault() runs on every
@@ -275,9 +313,16 @@ export default function Auth() {
         </div>
 
         {/* Social login — Apple first (iOS requirement), then Google,
-            then an "ou" divider. Hidden during password-reset flows. */}
-        {mode !== 'forgot' && mode !== 'recover' && (
+            then an "ou" divider. Hidden during password-reset flows, and
+            each provider is gated behind its appConfig flag so we don't
+            surface a broken button while the OAuth credentials aren't set
+            up yet. The whole block (incl. the "ou" divider) collapses when
+            both providers are off, leaving a clean email-only form. */}
+        {mode !== 'forgot' &&
+          mode !== 'recover' &&
+          (appConfig.SHOW_APPLE_AUTH || appConfig.SHOW_GOOGLE_AUTH) && (
           <div className="mb-6 space-y-2.5">
+            {appConfig.SHOW_APPLE_AUTH && (
             <button
               type="button"
               onClick={() => oauth('apple')}
@@ -290,6 +335,8 @@ export default function Auth() {
               </svg>
               {t('auth.continueWithApple')}
             </button>
+            )}
+            {appConfig.SHOW_GOOGLE_AUTH && (
             <button
               type="button"
               onClick={() => oauth('google')}
@@ -305,6 +352,7 @@ export default function Auth() {
               </svg>
               {t('auth.continueWithGoogle')}
             </button>
+            )}
             <div className="flex items-center gap-3 pt-1">
               <span className="h-px flex-1 bg-fg/10" />
               <span className="text-[11px] font-medium text-fg2/70">{t('auth.or')}</span>

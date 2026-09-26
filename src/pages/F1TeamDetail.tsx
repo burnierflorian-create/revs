@@ -5,15 +5,16 @@ import { ArrowLeft, Loader2, Trophy } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import {
   adaptiveStatSize,
-  driversByTeam,
   flagEmoji,
   formatStatNumber,
-  getF1Team,
   newsIlikeOr,
   proxyImage,
   splitStatValue,
   type F1Driver,
 } from '../lib/f1team'
+import { useF1Grid, findTeam, driversOfTeam } from '../lib/f1grid'
+import { DriverHelmet } from '../components/F1Visual'
+import { appConfig } from '../config/appConfig'
 import { timeAgo } from '../lib/spots'
 import { Skeleton } from '../components/Skeleton'
 
@@ -55,8 +56,12 @@ export default function F1TeamDetail() {
   const { t } = useTranslation()
   const { slug } = useParams<{ slug: string }>()
   const navigate = useNavigate()
-  const team = getF1Team(slug)
-  const drivers = useMemo(() => (team ? driversByTeam(team.slug) : []), [team])
+  const grid = useF1Grid()
+  const team = findTeam(grid, slug)
+  const drivers = useMemo(
+    () => (team ? driversOfTeam(grid, team.slug) : []),
+    [grid, team],
+  )
 
   const [data, setData] = useState<TeamData | null>(null)
   const [generatedAt, setGeneratedAt] = useState<string | null>(null)
@@ -111,7 +116,15 @@ export default function F1TeamDetail() {
     return () => {
       active = false
     }
-  }, [team])
+  }, [team?.slug])
+
+  if (!team && grid.loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-bg text-fg">
+        <Loader2 className="h-6 w-6 animate-spin text-fg2" />
+      </div>
+    )
+  }
 
   if (!team) {
     return (
@@ -491,7 +504,7 @@ function DriverPill({
   color: string
   onClick: () => void
 }) {
-  const photoUrl = proxyImage(driver.photo)
+  const photoUrl = appConfig.SHOW_F1_PHOTOS ? proxyImage(driver.photo) : undefined
   return (
     <button
       onClick={onClick}
@@ -501,7 +514,7 @@ function DriverPill({
       <span
         className="relative flex h-11 w-11 flex-none items-center justify-center overflow-hidden rounded-full font-display text-sm font-extrabold tracking-tighter text-white"
         style={{
-          background: color,
+          background: photoUrl ? color : 'rgba(255,255,255,0.06)',
           boxShadow: `0 6px 18px ${color}55`,
         }}
       >
@@ -513,7 +526,7 @@ function DriverPill({
             className="absolute inset-0 h-full w-full object-cover object-top"
           />
         ) : (
-          driver.number ?? driver.name.charAt(0)
+          <DriverHelmet color={color} className="h-full w-full p-0.5" />
         )}
       </span>
       <div className="min-w-0 flex-1">

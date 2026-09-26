@@ -50,7 +50,7 @@
     "city": "Ville",
     "cityPlaceholder": "Ex: Annecy",
     "country": "Pays",
-    "referralCode": "Code de parrainage",
+    "referralCode": "Code de parrainage (facultatif)",
     "referralPlaceholder": "ABC123",
     "referralHint": "Optionnel — +50 XP pour toi et ton parrain.",
     "referralChars": "{{count}}/6 caractères",
@@ -99,6 +99,45 @@
       "placeholder": "Ex : Ferrari F40, Porsche 911…",
       "suggestionsTitle": "Suggestions",
       "skip": "Je ne sais pas encore"
+    },
+    "why": {
+      "title": "Rends REVS unique",
+      "body": "On va te poser quelques questions rapides (moins d'une minute). Tes réponses servent à personnaliser ton expérience : tes défis, ton classement, tes récompenses et le contenu que tu vois. Plus tes réponses sont précises, plus REVS colle à tes goûts.",
+      "cta": "C'est parti"
+    },
+    "brands": {
+      "title": "Tes marques préférées",
+      "subtitle": "Choisis-en 1 à 3 — on mettra en avant ce que tu aimes.",
+      "searchPlaceholder": "Rechercher une marque…",
+      "maxHint": "3 maximum",
+      "empty": "Aucune marque trouvée."
+    },
+    "universes": {
+      "title": "Tes univers auto",
+      "subtitle": "Choisis 1 à 3 univers qui te parlent le plus.",
+      "maxHint": "3 maximum",
+      "options": {
+        "hypercars_supercars": "Hypercars & supercars",
+        "f1_motorsport": "F1 & sport auto",
+        "gt_touring": "GT & grand tourisme",
+        "youngtimers_classics": "Youngtimers & classiques",
+        "jdm": "JDM (japonaises)",
+        "muscle_american": "Muscle & américaines",
+        "hot_hatch": "Sportives compactes",
+        "luxury_prestige": "Luxe & prestige",
+        "tuning": "Préparations & tuning",
+        "suv_4x4": "SUV & 4x4"
+      }
+    },
+    "ambition": {
+      "title": "C'est quoi ton objectif ?",
+      "subtitle": "Ça nous aide à te proposer les bons défis.",
+      "options": {
+        "fun": "Juste pour le plaisir",
+        "ranking": "Grimper dans les classements",
+        "city_number_one": "Devenir n°1 de ma ville",
+        "collection": "Compléter ma collection"
+      }
     },
     "interests": {
       "title": "Qu'est-ce qui te fait vibrer ?",
@@ -723,6 +762,13 @@
     "myVehicleSub": "Renseigne ton modèle quotidien",
     "socialNetworks": "Réseaux sociaux",
     "socialNetworksSub": "Lie ton Instagram ou TikTok",
+    "sectionPassions": "Mes passions auto",
+    "passionsSub": "Marques, univers et objectif — modifiables quand tu veux",
+    "passionsBrands": "Marques préférées",
+    "passionsUniverses": "Univers auto",
+    "passionsAmbition": "Mon objectif",
+    "passionsNone": "Aucune sélection",
+    "passionsSaved": "Passions enregistrées ✅",
     "sectionSecurity": "Sécurité",
     "editEmail": "Modifier mon e-mail",
     "editPassword": "Modifier mon mot de passe",
@@ -902,6 +948,9 @@
     "raceSummary": "Résumé de la course",
     "teams": "Écuries",
     "drivers": "Pilotes",
+    "results": "Résultats",
+    "resultsEmpty": "Aucun résultat pour le moment.",
+    "winner": "Vainqueur",
     "teamsAndDrivers": "Écuries & Pilotes",
     "points": "{{pts}} pts"
   },

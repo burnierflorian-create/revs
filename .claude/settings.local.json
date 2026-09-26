@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc *)",
+      "Bash(npm run *)",
+      "Bash(git checkout *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push *)",
+      "Bash(gh pr create --base main --head fix/8-corrections-ui --title '8 corrections UI : description spot, pills filtres, marqueur carte, plein écran profil' --body ' *)"
+    ]
+  }
+}

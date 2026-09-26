@@ -50,7 +50,7 @@
     "city": "City",
     "cityPlaceholder": "e.g. London",
     "country": "Country",
-    "referralCode": "Referral code",
+    "referralCode": "Referral code (optional)",
     "referralPlaceholder": "ABC123",
     "referralHint": "Optional — +50 XP for you and your referrer.",
     "referralChars": "{{count}}/6 characters",
@@ -99,6 +99,45 @@
       "placeholder": "e.g. Ferrari F40, Porsche 911…",
       "suggestionsTitle": "Suggestions",
       "skip": "I'm not sure yet"
+    },
+    "why": {
+      "title": "Make REVS yours",
+      "body": "We'll ask you a few quick questions (under a minute). Your answers personalise your experience: your challenges, your ranking, your rewards and the content you see. The more precise your answers, the better REVS matches your taste.",
+      "cta": "Let's go"
+    },
+    "brands": {
+      "title": "Your favourite brands",
+      "subtitle": "Pick 1 to 3 — we'll surface what you love.",
+      "searchPlaceholder": "Search a brand…",
+      "maxHint": "3 max",
+      "empty": "No brand found."
+    },
+    "universes": {
+      "title": "Your car universes",
+      "subtitle": "Pick 1 to 3 that speak to you most.",
+      "maxHint": "3 max",
+      "options": {
+        "hypercars_supercars": "Hypercars & supercars",
+        "f1_motorsport": "F1 & motorsport",
+        "gt_touring": "GT & grand touring",
+        "youngtimers_classics": "Youngtimers & classics",
+        "jdm": "JDM (Japanese)",
+        "muscle_american": "Muscle & American",
+        "hot_hatch": "Hot hatches",
+        "luxury_prestige": "Luxury & prestige",
+        "tuning": "Builds & tuning",
+        "suv_4x4": "SUV & 4x4"
+      }
+    },
+    "ambition": {
+      "title": "What's your goal?",
+      "subtitle": "This helps us pick the right challenges for you.",
+      "options": {
+        "fun": "Just for fun",
+        "ranking": "Climb the rankings",
+        "city_number_one": "Become my city's #1",
+        "collection": "Complete my collection"
+      }
     },
     "interests": {
       "title": "What gets your heart racing?",
@@ -723,6 +762,13 @@
     "myVehicleSub": "Enter your daily model",
     "socialNetworks": "Social networks",
     "socialNetworksSub": "Link your Instagram or TikTok",
+    "sectionPassions": "My car passions",
+    "passionsSub": "Brands, universes and goal — editable anytime",
+    "passionsBrands": "Favourite brands",
+    "passionsUniverses": "Car universes",
+    "passionsAmbition": "My goal",
+    "passionsNone": "Nothing selected",
+    "passionsSaved": "Passions saved ✅",
     "sectionSecurity": "Security",
     "editEmail": "Edit my email",
     "editPassword": "Edit my password",
@@ -902,6 +948,9 @@
     "raceSummary": "Race summary",
     "teams": "Teams",
     "drivers": "Drivers",
+    "results": "Results",
+    "resultsEmpty": "No results yet.",
+    "winner": "Winner",
     "teamsAndDrivers": "Teams & Drivers",
     "points": "{{pts}} pts"
   },

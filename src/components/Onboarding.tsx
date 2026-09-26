@@ -3,8 +3,15 @@ import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { ArrowLeft, Bell, Check, MapPin, Search } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { searchCars } from '../lib/cars'
+import { searchCars, CAR_MAKES } from '../lib/cars'
 import { currentLang, type Lang } from '../i18n'
+import {
+  UNIVERSES,
+  AMBITIONS,
+  MAX_BRANDS,
+  MAX_UNIVERSES,
+  toggleCapped,
+} from '../lib/passions'
 
 // ─────────────────────────────────────────────────────────────────────
 // First-launch onboarding — a linear 8-step flow (no guided tour). The
@@ -19,33 +26,23 @@ import { currentLang, type Lang } from '../i18n'
 // ─────────────────────────────────────────────────────────────────────
 
 const RED = '#E8203A'
-// 7-step flow (the "community rules" step was removed). Last step = S_GEO,
-// which finishes the flow via advance().
-const TOTAL = 7
+// 10-step flow: language → founder hello → "why these questions" intro →
+// the passion questionnaire (brands, dream car, universes, ambition) →
+// discovery source → notification + location permissions. Last step =
+// S_GEO, which finishes the flow via advance().
+const TOTAL = 10
 
 // Step indices (kept named for readability).
 const S_LANG = 0
 const S_FLORIAN = 1
-const S_DREAM = 2
-const S_INTERESTS = 3
-const S_SOURCE = 4
-const S_NOTIF = 5
-const S_GEO = 6
-
-const INTERESTS = [
-  'supercars',
-  'hypercars',
-  'jdm',
-  'classics',
-  'f1',
-  'electric',
-  'tuning',
-  'suvs',
-  'american',
-  'german',
-  'italian',
-  'rally',
-] as const
+const S_WHY = 2
+const S_BRANDS = 3
+const S_DREAM = 4
+const S_UNIVERSES = 5
+const S_AMBITION = 6
+const S_SOURCE = 7
+const S_NOTIF = 8
+const S_GEO = 9
 
 const SOURCES = [
   'instagram',
@@ -103,7 +100,10 @@ export default function Onboarding() {
   const [lang, setLang] = useState<Lang>(() => currentLang())
   const [dreamQuery, setDreamQuery] = useState('')
   const [dreamCar, setDreamCar] = useState('')
-  const [interests, setInterests] = useState<string[]>([])
+  const [brandQuery, setBrandQuery] = useState('')
+  const [preferredBrands, setPreferredBrands] = useState<string[]>([])
+  const [preferredUniverses, setPreferredUniverses] = useState<string[]>([])
+  const [ambition, setAmbition] = useState<string | null>(null)
   const [source, setSource] = useState<string | null>(null)
   const [notifOn, setNotifOn] = useState(false)
   const [geoOn, setGeoOn] = useState(false)
@@ -180,10 +180,11 @@ export default function Onboarding() {
     })()
   }
 
-  function toggleInterest(id: string) {
-    setInterests((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
-    )
+  function toggleBrand(id: string) {
+    setPreferredBrands((prev) => toggleCapped(prev, id, MAX_BRANDS))
+  }
+  function toggleUniverse(id: string) {
+    setPreferredUniverses((prev) => toggleCapped(prev, id, MAX_UNIVERSES))
   }
 
   async function requestNotif() {
@@ -251,7 +252,9 @@ export default function Onboarding() {
             onboarding_completed: true,
             language: lang,
             dream_car: dreamCar.trim() || null,
-            interests,
+            preferred_brands: preferredBrands,
+            preferred_universes: preferredUniverses,
+            ambition,
             discovery_source: source,
           })
           .eq('user_id', user.id)
@@ -266,6 +269,15 @@ export default function Onboarding() {
   // Autocomplete over the full car database (src/lib/cars.ts) — so "Maserati"
   // surfaces MC20/Ghibli/Levante…, etc.
   const dreamSuggestions = searchCars(dreamQuery, 8)
+
+  // Brand picker list — the full make catalogue, filtered live by the
+  // search box. Empty query shows every make (scrollable).
+  const brandQ = brandQuery.trim().toLowerCase()
+  const brandList = brandQ
+    ? CAR_MAKES.filter((m) => m.toLowerCase().includes(brandQ))
+    : CAR_MAKES
+  const brandsFull = preferredBrands.length >= MAX_BRANDS
+  const universesFull = preferredUniverses.length >= MAX_UNIVERSES
 
   // ── Footer (primary CTA + optional secondary skip), per step ──
   function renderFooter() {
@@ -293,6 +305,14 @@ export default function Onboarding() {
         return primary(t('onboarding.ui.continue'), advance)
       case S_FLORIAN:
         return primary(t('onboarding.florian.cta'), advance)
+      case S_WHY:
+        return primary(t('onboarding.why.cta'), advance)
+      case S_BRANDS:
+        return primary(
+          t('onboarding.ui.continue'),
+          advance,
+          preferredBrands.length === 0,
+        )
       case S_DREAM:
         return (
           <>
@@ -300,8 +320,14 @@ export default function Onboarding() {
             {!dreamCar && secondary(t('onboarding.dreamCar.skip'), advance)}
           </>
         )
-      case S_INTERESTS:
-        return primary(t('onboarding.ui.continue'), advance, interests.length === 0)
+      case S_UNIVERSES:
+        return primary(
+          t('onboarding.ui.continue'),
+          advance,
+          preferredUniverses.length === 0,
+        )
+      case S_AMBITION:
+        return primary(t('onboarding.ui.continue'), advance, ambition === null)
       case S_SOURCE:
         return primary(t('onboarding.ui.continue'), advance, source === null)
       case S_NOTIF:
@@ -414,6 +440,89 @@ export default function Onboarding() {
           </StepShell>
         )
 
+      case S_WHY:
+        return (
+          <StepShell
+            title={t('onboarding.why.title')}
+            subtitle={t('onboarding.why.body')}
+          />
+        )
+
+      case S_BRANDS:
+        return (
+          <StepShell
+            title={t('onboarding.brands.title')}
+            subtitle={t('onboarding.brands.subtitle')}
+          >
+            {/* Selected chips — removable, always visible even while the
+                list below is filtered by search. */}
+            {preferredBrands.length > 0 && (
+              <div className="mb-3 flex flex-wrap gap-2">
+                {preferredBrands.map((b) => (
+                  <button
+                    key={b}
+                    type="button"
+                    onClick={() => toggleBrand(b)}
+                    className="tappable flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-semibold active:scale-95"
+                    style={{
+                      background: 'rgba(232,32,58,0.16)',
+                      border: `1px solid ${RED}`,
+                      color: '#fff',
+                    }}
+                  >
+                    {b}
+                    <span className="text-white/70">×</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="relative">
+              <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-white/40" />
+              <input
+                value={brandQuery}
+                onChange={(e) => setBrandQuery(e.target.value)}
+                placeholder={t('onboarding.brands.searchPlaceholder')}
+                className="w-full rounded-2xl py-3.5 pl-11 pr-4 text-sm text-white placeholder-white/35 outline-none focus:ring-2 focus:ring-accent/45"
+                style={{
+                  background: 'rgba(255,255,255,0.04)',
+                  border: '1.5px solid rgba(255,255,255,0.1)',
+                  backdropFilter: 'blur(12px)',
+                  WebkitBackdropFilter: 'blur(12px)',
+                }}
+              />
+            </div>
+            <p className="mt-2 px-1 text-[11px] text-white/40">
+              {preferredBrands.length}/{MAX_BRANDS} · {t('onboarding.brands.maxHint')}
+            </p>
+            <div className="mt-3 grid max-h-[42vh] grid-cols-2 gap-2.5 overflow-y-auto pr-1">
+              {brandList.map((b) => {
+                const sel = preferredBrands.includes(b)
+                const capped = !sel && brandsFull
+                return (
+                  <OptionButton
+                    key={b}
+                    selected={sel}
+                    onClick={() => toggleBrand(b)}
+                    className={`flex items-center justify-between gap-2 ${
+                      capped ? 'opacity-40' : ''
+                    }`}
+                  >
+                    <span className="truncate">{b}</span>
+                    {sel && (
+                      <Check className="h-4 w-4 flex-none" style={{ color: RED }} />
+                    )}
+                  </OptionButton>
+                )
+              })}
+              {brandList.length === 0 && (
+                <p className="col-span-2 py-6 text-center text-[13px] text-white/40">
+                  {t('onboarding.brands.empty')}
+                </p>
+              )}
+            </div>
+          </StepShell>
+        )
+
       case S_DREAM:
         return (
           <StepShell
@@ -473,24 +582,58 @@ export default function Onboarding() {
           </StepShell>
         )
 
-      case S_INTERESTS:
+      case S_UNIVERSES:
         return (
           <StepShell
-            title={t('onboarding.interests.title')}
-            subtitle={t('onboarding.interests.subtitle')}
+            title={t('onboarding.universes.title')}
+            subtitle={t('onboarding.universes.subtitle')}
           >
+            <p className="mb-3 px-1 text-[11px] text-white/40">
+              {preferredUniverses.length}/{MAX_UNIVERSES} ·{' '}
+              {t('onboarding.universes.maxHint')}
+            </p>
             <div className="grid grid-cols-2 gap-2.5">
-              {INTERESTS.map((id) => (
+              {UNIVERSES.map((id) => {
+                const sel = preferredUniverses.includes(id)
+                const capped = !sel && universesFull
+                return (
+                  <OptionButton
+                    key={id}
+                    selected={sel}
+                    onClick={() => toggleUniverse(id)}
+                    className={`flex items-center justify-between gap-2 ${
+                      capped ? 'opacity-40' : ''
+                    }`}
+                  >
+                    <span className="truncate">
+                      {t(`onboarding.universes.options.${id}`)}
+                    </span>
+                    {sel && (
+                      <Check className="h-4 w-4 flex-none" style={{ color: RED }} />
+                    )}
+                  </OptionButton>
+                )
+              })}
+            </div>
+          </StepShell>
+        )
+
+      case S_AMBITION:
+        return (
+          <StepShell
+            title={t('onboarding.ambition.title')}
+            subtitle={t('onboarding.ambition.subtitle')}
+          >
+            <div className="flex flex-col gap-2.5">
+              {AMBITIONS.map((id) => (
                 <OptionButton
                   key={id}
-                  selected={interests.includes(id)}
-                  onClick={() => toggleInterest(id)}
+                  selected={ambition === id}
+                  onClick={() => setAmbition(id)}
                   className="flex items-center justify-between gap-2"
                 >
-                  <span className="truncate">
-                    {t(`onboarding.interests.options.${id}`)}
-                  </span>
-                  {interests.includes(id) && (
+                  <span>{t(`onboarding.ambition.options.${id}`)}</span>
+                  {ambition === id && (
                     <Check className="h-4 w-4 flex-none" style={{ color: RED }} />
                   )}
                 </OptionButton>

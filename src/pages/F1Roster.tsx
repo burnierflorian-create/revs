@@ -1,18 +1,21 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
-import {
-  F1_DRIVERS,
-  F1_TEAMS,
-  proxyImage,
-  splitStatValue,
-  type F1Team,
-  type F1Driver,
-} from '../lib/f1team'
+import { proxyImage, type F1Team, type F1Driver } from '../lib/f1team'
+import { useF1Grid } from '../lib/f1grid'
+import { DriverHelmet, CarSilhouette } from '../components/F1Visual'
+import { appConfig } from '../config/appConfig'
 import { supabase } from '../lib/supabase'
 
-type Tab = 'teams' | 'drivers'
+type Tab = 'teams' | 'drivers' | 'results'
+
+type ResultRow = {
+  round: number
+  race_name: string
+  winner_name: string | null
+  winner_team_slug: string | null
+}
 
 // Rendered both standalone (/f1-roster route) and embedded inside the
 // Discover F1 sub-tab. `embedded` flips between a full-page layout
@@ -25,34 +28,69 @@ export default function F1Roster({
   const { t } = useTranslation()
   const navigate = useNavigate()
   const [tab, setTab] = useState<Tab>('teams')
-  // Championship points per team, pulled from the cached f1_teams sheet
-  // (public-read). currentPoints is a free-text Claude field, so we
-  // extract the leading integer with splitStatValue.
+  // Live grid (mercato-accurate), synced from OpenF1. Falls back to the
+  // static catalogue instantly, then swaps in the DB grid when it loads.
+  const { teams, drivers } = useF1Grid()
+  // Real constructor standings (points + championship position), synced
+  // from Jolpica into f1_grid_teams. Replaces the old AI-estimated points.
   const [points, setPoints] = useState<Record<string, string>>({})
+  const [positions, setPositions] = useState<Record<string, number>>({})
   useEffect(() => {
     let active = true
     supabase
-      .from('f1_teams')
-      .select('slug, data')
+      .from('f1_grid_teams')
+      .select('team_slug, points, position')
       .then(({ data }) => {
         if (!active || !data) return
-        const m: Record<string, string> = {}
-        for (const row of data as { slug: string; data: { currentPoints?: string } | null }[]) {
-          const raw = row.data?.currentPoints
-          if (raw) m[row.slug] = splitStatValue(raw).number
+        const pts: Record<string, string> = {}
+        const pos: Record<string, number> = {}
+        for (const r of data as {
+          team_slug: string
+          points: number | null
+          position: number | null
+        }[]) {
+          if (r.points != null) pts[r.team_slug] = String(r.points)
+          if (r.position != null) pos[r.team_slug] = r.position
         }
-        setPoints(m)
+        setPoints(pts)
+        setPositions(pos)
       })
     return () => {
       active = false
     }
   }, [])
 
+  // 2026 race winners (Jolpica), newest first.
+  const [results, setResults] = useState<ResultRow[]>([])
+  useEffect(() => {
+    let active = true
+    supabase
+      .from('f1_results')
+      .select('round, race_name, winner_name, winner_team_slug')
+      .order('round', { ascending: false })
+      .then(({ data }) => {
+        if (active && data) setResults(data as ResultRow[])
+      })
+    return () => {
+      active = false
+    }
+  }, [])
+
+  // Order the grid by championship position when we have it (leader first),
+  // falling back to the static catalogue order.
+  const orderedTeams = useMemo(
+    () =>
+      [...teams].sort(
+        (a, b) => (positions[a.slug] ?? 99) - (positions[b.slug] ?? 99),
+      ),
+    [teams, positions],
+  )
+
   const grid = (
     <div className="px-4 pb-8">
       {/* Écuries / Pilotes — Apple text nav (no pills) */}
       <div className="mb-5 flex gap-6 px-1">
-        {(['teams', 'drivers'] as Tab[]).map((tabKey) => {
+        {(['teams', 'drivers', 'results'] as Tab[]).map((tabKey) => {
           const active = tab === tabKey
           return (
             <button
@@ -63,7 +101,7 @@ export default function F1Roster({
               <span
                 className={active ? 'font-medium text-fg' : 'font-normal text-fg2'}
               >
-                {tabKey === 'teams' ? t('f1gp.teams') : t('f1gp.drivers')}
+                {t(`f1gp.${tabKey}`)}
               </span>
               {active && (
                 <span className="absolute inset-x-0 -bottom-px h-px bg-fg" />
@@ -74,9 +112,17 @@ export default function F1Roster({
       </div>
 
       {tab === 'teams' ? (
-        <TeamsGrid teams={F1_TEAMS} points={points} />
+        <TeamsGrid teams={orderedTeams} points={points} />
+      ) : tab === 'drivers' ? (
+        <DriversGrid
+          drivers={drivers}
+          teamColor={Object.fromEntries(teams.map((tm) => [tm.slug, tm.color]))}
+        />
       ) : (
-        <DriversGrid />
+        <ResultsList
+          results={results}
+          teamColor={Object.fromEntries(teams.map((tm) => [tm.slug, tm.color]))}
+        />
       )}
     </div>
   )
@@ -136,7 +182,7 @@ function TeamCard({ team, pts }: { team: F1Team; pts?: string }) {
       }}
     >
       <div className="relative aspect-[5/4] w-full overflow-hidden">
-        {photoUrl && (
+        {appConfig.SHOW_F1_PHOTOS && photoUrl ? (
           <img
             src={photoUrl}
             alt={team.name}
@@ -144,6 +190,11 @@ function TeamCard({ team, pts }: { team: F1Team; pts?: string }) {
             onError={() => setPhotoFailed(true)}
             className="absolute inset-0 h-full w-full object-contain"
             style={{ padding: '14px' }}
+          />
+        ) : (
+          <CarSilhouette
+            color={team.color}
+            className="absolute inset-0 h-full w-full p-5 opacity-95"
           />
         )}
       </div>
@@ -162,17 +213,73 @@ function TeamCard({ team, pts }: { team: F1Team; pts?: string }) {
   )
 }
 
-function DriversGrid() {
+function DriversGrid({
+  drivers,
+  teamColor,
+}: {
+  drivers: F1Driver[]
+  teamColor: Record<string, string>
+}) {
   const navigate = useNavigate()
   return (
     <div className="grid grid-cols-2 gap-3">
-      {F1_DRIVERS.map((d) => (
+      {drivers.map((d) => (
         <DriverCard
           key={d.slug}
           driver={d}
+          color={teamColor[d.team] ?? '#888888'}
           onClick={() => navigate(`/f1-driver/${d.slug}`)}
         />
       ))}
+    </div>
+  )
+}
+
+function ResultsList({
+  results,
+  teamColor,
+}: {
+  results: ResultRow[]
+  teamColor: Record<string, string>
+}) {
+  const { t } = useTranslation()
+  if (results.length === 0) {
+    return (
+      <p className="px-1 py-8 text-center text-sm text-fg2">
+        {t('f1gp.resultsEmpty')}
+      </p>
+    )
+  }
+  return (
+    <div className="flex flex-col gap-2">
+      {results.map((r) => {
+        const color = (r.winner_team_slug && teamColor[r.winner_team_slug]) || '#888888'
+        return (
+          <div
+            key={r.round}
+            className="flex items-center gap-3 rounded-2xl bg-card p-3"
+            style={{ border: '1px solid var(--color-border)', borderLeft: `3px solid ${color}` }}
+          >
+            <span className="flex h-8 w-8 flex-none items-center justify-center rounded-full font-display text-[13px] font-black tabular-nums text-white/80"
+              style={{ background: 'rgba(255,255,255,0.06)' }}>
+              {r.round}
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="truncate font-display text-sm font-extrabold tracking-tight text-fg">
+                {r.race_name}
+              </p>
+              {r.winner_name && (
+                <p className="mt-0.5 truncate text-[12px] text-fg2">
+                  <span className="font-semibold" style={{ color }}>
+                    {t('f1gp.winner')}
+                  </span>{' '}
+                  · {r.winner_name}
+                </p>
+              )}
+            </div>
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -182,9 +289,11 @@ function DriversGrid() {
 // above the name.
 function DriverCard({
   driver,
+  color,
   onClick,
 }: {
   driver: F1Driver
+  color: string
   onClick: () => void
 }) {
   const [photoFailed, setPhotoFailed] = useState(false)
@@ -195,11 +304,11 @@ function DriverCard({
       onClick={onClick}
       className="tappable group relative aspect-[5/6] overflow-hidden rounded-md text-left"
       style={{
-        background: 'rgb(var(--color-card))',
+        background: `radial-gradient(120% 80% at 50% 18%, ${color}26 0%, rgb(var(--color-card)) 62%)`,
         border: '1px solid var(--color-border)',
       }}
     >
-      {photoUrl ? (
+      {appConfig.SHOW_F1_PHOTOS && photoUrl ? (
         <img
           src={photoUrl}
           alt={driver.name}
@@ -209,11 +318,11 @@ function DriverCard({
           style={{ objectPosition: 'center top' }}
         />
       ) : (
-        driver.number !== null && (
-          <div className="absolute inset-0 flex items-center justify-center font-display text-6xl font-black text-fg/10">
-            {driver.number}
-          </div>
-        )
+        <DriverHelmet
+          color={color}
+          number={driver.number}
+          className="absolute inset-0 h-full w-full pb-8 pt-3"
+        />
       )}
 
       {/* Bottom legibility gradient */}

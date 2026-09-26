@@ -2,6 +2,20 @@ import Anthropic from '@anthropic-ai/sdk'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 
+// PAUSE 25/09/2026 — rebrancher en version optimisée avant beta
+// F1 : ajouter contrôle de fraîcheur generated_at dans refreshEntity()
+//
+// Le cron `/api/f1?refresh=1` (0 4 */2 * *) est EN PAUSE, pas supprimé : il
+// coûtait ~27 $/mois en Sonnet + web_search sans utilisateurs actifs. Son
+// entrée exacte et la procédure de rebranchement sont dans docs/CRONS_PAUSE.md
+// — vercel.json est du JSON strict validé contre un schéma en
+// `additionalProperties: false`, donc il n'accepte ni commentaire ni clé
+// maison pour y garder la ligne en veille.
+//
+// Le contrôle de fraîcheur ci-dessous (refreshEntity) est DÉJÀ en place. Il
+// sert de filet pour les relances manuelles ; il ne remplace pas la décision
+// de laisser le cron débranché.
+//
 // Unified F1 fact-sheet endpoint. Three modes dispatched by query string:
 //   GET  /api/f1?refresh=1                → cron / manual batch refresh
 //   POST /api/f1?type=team&body.slug=…    → team detail (auth required)
@@ -573,9 +587,23 @@ async function refreshEntity(
   try {
   const { data: existing } = await admin
     .from(table)
-    .select('data')
+    .select('data, generated_at')
     .eq('slug', slug)
     .maybeSingle()
+
+  // Garde-fou coût (25/09/2026) : une entité déjà peuplée et rafraîchie il y
+  // a moins de TTL_MS ne repart PAS vers Claude. Sans ce test, chaque passage
+  // relançait 30 appels Sonnet + web_search (~1,80 $) quelle que soit la
+  // fraîcheur des données. Un `generated_at` absent ou illisible est traité
+  // comme périmé, pour ne jamais bloquer une ligne réellement obsolète.
+  if (existing?.data) {
+    const stamp = existing.generated_at
+      ? new Date(existing.generated_at as string).getTime()
+      : NaN
+    if (Number.isFinite(stamp) && Date.now() - stamp < TTL_MS) {
+      return 'skipped:fresh'
+    }
+  }
 
   if (!existing?.data) {
     const parsed = await callClaude(

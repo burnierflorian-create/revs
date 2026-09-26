@@ -22,6 +22,7 @@ import {
   Radar as RadarIcon,
   RotateCcw,
   Scale,
+  Search,
   Shield,
   Car,
   Smartphone,
@@ -38,6 +39,14 @@ import { clearVault, hasVault, readVault } from '../lib/passwordVault'
 import AvatarCropModal from '../components/AvatarCropModal'
 import { enablePush, pushSupported } from '../lib/push'
 import { translateError } from '../lib/errors'
+import { CAR_MAKES } from '../lib/cars'
+import {
+  UNIVERSES,
+  AMBITIONS,
+  MAX_BRANDS,
+  MAX_UNIVERSES,
+  toggleCapped,
+} from '../lib/passions'
 import {
   fetchMyRadarPrefs,
   getCurrentPosition,
@@ -216,6 +225,15 @@ export default function Settings() {
   const [socialBusy, setSocialBusy] = useState(false)
   const [garageMsg, setGarageMsg] = useState<string | null>(null)
   const [socialMsg, setSocialMsg] = useState<string | null>(null)
+  // "Mes passions auto" (0060) — editable copies of the onboarding
+  // answers: preferred brands (1–3), universes (1–3), single ambition.
+  const [preferredBrands, setPreferredBrands] = useState<string[]>([])
+  const [preferredUniverses, setPreferredUniverses] = useState<string[]>([])
+  const [ambition, setAmbition] = useState<string | null>(null)
+  const [passionsQuery, setPassionsQuery] = useState('')
+  const [passionsOpen, setPassionsOpen] = useState(false)
+  const [passionsBusy, setPassionsBusy] = useState(false)
+  const [passionsMsg, setPassionsMsg] = useState<string | null>(null)
   // Password reveal — Sécurité row. revealed holds the decrypted
   // plaintext when the user taps the eye, null otherwise. The vault
   // is auto-populated at every login so we don't track its existence
@@ -307,6 +325,38 @@ export default function Settings() {
       setGarageMsg(translateError(e))
     } finally {
       setGarageBusy(false)
+    }
+  }
+
+  function togglePassionBrand(id: string) {
+    setPreferredBrands((prev) => toggleCapped(prev, id, MAX_BRANDS))
+  }
+  function togglePassionUniverse(id: string) {
+    setPreferredUniverses((prev) => toggleCapped(prev, id, MAX_UNIVERSES))
+  }
+
+  async function savePassions() {
+    if (!userId || passionsBusy) return
+    setPassionsBusy(true)
+    setPassionsMsg(null)
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({
+          preferred_brands: preferredBrands,
+          preferred_universes: preferredUniverses,
+          ambition,
+        })
+        .eq('user_id', userId)
+      if (error) throw error
+      hapticSuccess()
+      setPassionsMsg(t('settingspage.passionsSaved'))
+      window.setTimeout(() => setPassionsMsg(null), 2000)
+      setPassionsOpen(false)
+    } catch (e) {
+      setPassionsMsg(translateError(e))
+    } finally {
+      setPassionsBusy(false)
     }
   }
 
@@ -425,7 +475,7 @@ export default function Settings() {
         await Promise.all([
           supabase
             .from('profiles')
-            .select('pseudo, ville, avatar, is_public, role, garage_brand, instagram, tiktok, dream_car')
+            .select('pseudo, ville, avatar, is_public, role, garage_brand, instagram, tiktok, dream_car, preferred_brands, preferred_universes, ambition')
             .eq('user_id', user.id)
             .maybeSingle(),
           supabase
@@ -452,6 +502,18 @@ export default function Settings() {
         setGarageBrand((prof as { garage_brand?: string | null }).garage_brand ?? '')
         setInstagram((prof as { instagram?: string | null }).instagram ?? '')
         setTiktok((prof as { tiktok?: string | null }).tiktok ?? '')
+        const pp = prof as {
+          preferred_brands?: string[] | null
+          preferred_universes?: string[] | null
+          ambition?: string | null
+        }
+        setPreferredBrands(
+          Array.isArray(pp.preferred_brands) ? pp.preferred_brands : [],
+        )
+        setPreferredUniverses(
+          Array.isArray(pp.preferred_universes) ? pp.preferred_universes : [],
+        )
+        setAmbition(pp.ambition ?? null)
       }
       if (np)
         setNpref({
@@ -1048,6 +1110,158 @@ export default function Settings() {
     </div>
   )
 
+  // ─────────────────────── Inline "passions auto" editor ───────────────────────
+
+  const passionBrandQ = passionsQuery.trim().toLowerCase()
+  const passionBrandList = passionBrandQ
+    ? CAR_MAKES.filter((m) => m.toLowerCase().includes(passionBrandQ))
+    : CAR_MAKES
+  const passionBrandsFull = preferredBrands.length >= MAX_BRANDS
+  const passionUniversesFull = preferredUniverses.length >= MAX_UNIVERSES
+
+  // Small option pill shared by the brand grid + universe grid + ambition
+  // list. `key` is required because callers return it straight from .map().
+  const passionPill = (
+    key: string,
+    selected: boolean,
+    onClick: () => void,
+    label: string,
+    dimmed = false,
+  ) => (
+    <button
+      key={key}
+      type="button"
+      onClick={onClick}
+      className={`tappable rounded-2xl px-3.5 py-3 text-left text-[13px] font-semibold transition-all active:scale-[0.98] ${
+        selected
+          ? 'bg-accent/15 text-fg'
+          : `bg-card text-fg2 ${dimmed ? 'opacity-45' : ''}`
+      }`}
+      style={{
+        border: `1.5px solid ${selected ? 'var(--color-accent)' : 'var(--color-border)'}`,
+      }}
+    >
+      {label}
+    </button>
+  )
+
+  const PassionsEditor = (
+    <div className="space-y-5 px-4 pb-4 pt-2">
+      {/* Marques préférées */}
+      <div className="space-y-2">
+        <span className="label-up block px-1 text-[10px] text-fg2">
+          {t('settingspage.passionsBrands')} · {preferredBrands.length}/{MAX_BRANDS}
+        </span>
+        {preferredBrands.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {preferredBrands.map((b) => (
+              <button
+                key={b}
+                type="button"
+                onClick={() => togglePassionBrand(b)}
+                className="tappable flex items-center gap-1.5 rounded-full bg-accent/15 px-3 py-1.5 text-[13px] font-semibold text-fg active:scale-95"
+                style={{ border: '1px solid var(--color-accent)' }}
+              >
+                {b}
+                <span className="text-fg2">×</span>
+              </button>
+            ))}
+          </div>
+        )}
+        <div className="relative">
+          <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-fg2/60" />
+          <input
+            type="text"
+            autoComplete="off"
+            value={passionsQuery}
+            onChange={(e) => setPassionsQuery(e.target.value)}
+            placeholder={t('onboarding.brands.searchPlaceholder')}
+            className="w-full rounded-2xl bg-card py-3 pl-10 pr-4 text-sm text-fg placeholder-fg2/60 outline-none focus:ring-2 focus:ring-accent/45"
+            style={{ border: '1px solid var(--color-border)' }}
+          />
+        </div>
+        <div className="grid max-h-[34vh] grid-cols-2 gap-2 overflow-y-auto pr-1">
+          {passionBrandList.map((b) => {
+            const sel = preferredBrands.includes(b)
+            return passionPill(
+              b,
+              sel,
+              () => togglePassionBrand(b),
+              b,
+              !sel && passionBrandsFull,
+            )
+          })}
+          {passionBrandList.length === 0 && (
+            <p className="col-span-2 py-4 text-center text-[12px] text-fg2">
+              {t('onboarding.brands.empty')}
+            </p>
+          )}
+        </div>
+      </div>
+
+      {/* Univers auto */}
+      <div className="space-y-2">
+        <span className="label-up block px-1 text-[10px] text-fg2">
+          {t('settingspage.passionsUniverses')} · {preferredUniverses.length}/{MAX_UNIVERSES}
+        </span>
+        <div className="grid grid-cols-2 gap-2">
+          {UNIVERSES.map((id) => {
+            const sel = preferredUniverses.includes(id)
+            return passionPill(
+              id,
+              sel,
+              () => togglePassionUniverse(id),
+              t(`onboarding.universes.options.${id}`),
+              !sel && passionUniversesFull,
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Ambition */}
+      <div className="space-y-2">
+        <span className="label-up block px-1 text-[10px] text-fg2">
+          {t('settingspage.passionsAmbition')}
+        </span>
+        <div className="grid grid-cols-1 gap-2">
+          {AMBITIONS.map((id) =>
+            passionPill(
+              id,
+              ambition === id,
+              () => setAmbition(id),
+              t(`onboarding.ambition.options.${id}`),
+            ),
+          )}
+        </div>
+      </div>
+
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={savePassions}
+          disabled={passionsBusy}
+          className="flex-1 rounded-full bg-accent py-2.5 text-xs font-extrabold tracking-wider text-fg disabled:opacity-50"
+        >
+          {passionsBusy ? '…' : t('settingspage.save')}
+        </button>
+        <button
+          type="button"
+          onClick={() => setPassionsOpen(false)}
+          className="rounded-full bg-card px-4 py-2.5 text-xs font-semibold text-fg2"
+          style={{ border: '1px solid var(--color-border)' }}
+        >
+          {t('settingspage.cancel')}
+        </button>
+      </div>
+      {passionsMsg && (
+        <p className="rounded-xl bg-emerald-500/10 px-3 py-2 text-[11px] font-semibold text-emerald-400"
+          style={{ border: '1px solid rgba(16, 185, 129, 0.25)' }}>
+          {passionsMsg}
+        </p>
+      )}
+    </div>
+  )
+
   // ─────────────────────── Inline profile editor ───────────────────────
 
   const ProfileEditor = (
@@ -1323,6 +1537,30 @@ export default function Settings() {
               }}
             />
             {socialOpen && SocialEditor}
+          </Section>
+
+          {/* 1ter — MES PASSIONS AUTO — editable copy of the onboarding
+              preferences (brands / universes / ambition). Stored only for
+              now; the personalisation modules that read them come later. */}
+          <Section title={t('settingspage.sectionPassions')}>
+            <Row
+              icon={<Flame className="h-4 w-4" />}
+              label={t('settingspage.sectionPassions')}
+              sub={
+                preferredBrands.length > 0
+                  ? preferredBrands.join(' · ')
+                  : preferredUniverses.length > 0
+                    ? preferredUniverses
+                        .map((u) => t(`onboarding.universes.options.${u}`))
+                        .join(' · ')
+                    : t('settingspage.passionsSub')
+              }
+              onClick={() => {
+                setPassionsMsg(null)
+                setPassionsOpen((v) => !v)
+              }}
+            />
+            {passionsOpen && PassionsEditor}
           </Section>
 
           {/* 1bis — SÉCURITÉ — relocated email + password + new global
