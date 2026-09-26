@@ -156,17 +156,45 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return
   }
 
-  const body =
-    typeof req.body === 'string' ? JSON.parse(req.body) : req.body || {}
-  const { plan, userId, email } = body as {
-    plan?: string
-    userId?: string
-    email?: string
+  // ─── Identité : jeton vérifié, jamais le corps de la requête ───
+  // Avant le 26/09/2026, `userId` venait du body sans aucune vérification :
+  // n'importe qui pouvait ouvrir une session de paiement au nom d'un autre
+  // compte, et `client_reference_id` — sur lequel le webhook s'appuie pour
+  // rattacher l'abonnement — était donc falsifiable.
+  if (!SUPABASE_URL || !SERVICE_ROLE) {
+    res.status(500).json({ error: 'Service indisponible.' })
+    return
+  }
+  const admin = createClient(SUPABASE_URL, SERVICE_ROLE, {
+    auth: { persistSession: false },
+  })
+  const authH = req.headers.authorization || ''
+  const token = authH.startsWith('Bearer ') ? authH.slice(7).trim() : ''
+  let authedUser: { id: string; email?: string } | null = null
+  if (token) {
+    try {
+      const { data } = await admin.auth.getUser(token)
+      authedUser = data?.user ?? null
+    } catch (e) {
+      console.error('[checkout] getUser threw:', e)
+    }
+  }
+  if (!authedUser?.id) {
+    res.status(401).json({ error: 'Non autorisé. Reconnecte-toi.' })
+    return
   }
 
+  const body =
+    typeof req.body === 'string' ? JSON.parse(req.body) : req.body || {}
+  // `userId` du body est volontairement ignoré. `email` n'est qu'un
+  // pré-remplissage de champ Stripe : on préfère celui du compte vérifié.
+  const { plan } = body as { plan?: string }
+  const userId = authedUser.id
+  const email = authedUser.email ?? (body as { email?: string }).email
+
   const selected = plan ? PLANS[plan] : undefined
-  if (!plan || !selected || !userId) {
-    res.status(400).json({ error: 'Formule invalide ou utilisateur manquant.' })
+  if (!plan || !selected) {
+    res.status(400).json({ error: 'Formule invalide.' })
     return
   }
 

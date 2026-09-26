@@ -64,14 +64,19 @@ export default function PremiumCheckout() {
         data: { user },
       } = await supabase.auth.getUser()
       if (!user) throw new Error(t('premiumpage.errNotAuthenticated'))
+      // L'endpoint exige désormais un jeton Bearer et en déduit lui-même
+      // l'identité : il ignore tout `userId` envoyé dans le corps. Sans cet
+      // en-tête, le checkout renvoie 401.
+      const { data: sess } = await supabase.auth.getSession()
+      const accessToken = sess?.session?.access_token
+      if (!accessToken) throw new Error(t('premiumpage.errNotAuthenticated'))
       const res = await fetch('/api/create-checkout-session', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          plan: planId,
-          userId: user.id,
-          email: user.email,
-        }),
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ plan: planId }),
       })
       const data = (await res.json()) as { url?: string; error?: string }
       if (data.url) {
