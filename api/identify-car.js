@@ -141,6 +141,9 @@ const BASE = {
   reason: '',
   estimated_price: null,
   rarity: 'standard',
+  // 'ai' | 'catalog' | 'price_estimate' | null — voir finalize() et
+  // enrichAndSend(). null signifie qu'aucune source n'a pu se prononcer.
+  rarity_source: null,
   production: null,
   // Architecture line per the 2026-06-02 strict prompt — surfaces
   // "V8 BiTurbo / Transm. Intégrale" style spec instantly without
@@ -489,6 +492,12 @@ function finalize(raw) {
         ? normalizeInt(o.price_estimate ?? o.estimated_price)
         : null,
     rarity: VALID_RARITY.has(o.rarity) ? o.rarity : 'standard',
+    // Seul endroit qui sache si la rareté vient VRAIMENT de l'IA : au-dessus,
+    // une rareté absente ou invalide est repliée sur 'standard', donc le champ
+    // `rarity` seul ne permet plus de distinguer « l'IA a dit standard » de
+    // « l'IA n'a rien dit ». On trace l'origine ici, et enrichAndSend s'en
+    // sert pour décider s'il doit compléter. null = l'IA n'a pas tranché.
+    rarity_source: VALID_RARITY.has(o.rarity) ? 'ai' : null,
     // Architecture line — clamped to 60 chars so a verbose Claude
     // response doesn't blow out the card-back row. Empty string is
     // the safe default when the prompt didn't produce one.
@@ -583,12 +592,28 @@ async function enrichAndSend(res, client, mimeType, imageBase64, parsed, initial
     }
   }
 
-  // Value + rarity are FROZEN per model — read the catalog (no AI) when known,
-  // else one cheap Haiku price call, derive rarity, and freeze for next time.
+  // ─── Rareté : l'IA d'abord, le prix seulement en dernier recours ───
+  // Avant le 26/09/2026, rarityFromPrice() écrasait systématiquement la
+  // rareté que le prompt vision avait déterminée. C'était un bug de
+  // hiérarchie : SYSTEM_STRICT demande une rareté fondée sur le VOLUME DE
+  // PRODUCTION mondial, puis le code la remplaçait par une dérivation du
+  // prix de revente — deux règles contradictoires, la moins informée gagnant.
+  //
+  // Ordre de priorité désormais :
+  //   1. 'ai'             → le prompt a renvoyé une rareté valide, on la garde
+  //   2. 'catalog'        → rareté déjà gelée pour ce modèle
+  //   3. 'price_estimate' → dernier recours, dérivée du prix
+  const aiDecided = result.rarity_source === 'ai'
+
+  // Le PRIX, lui, reste gelé par modèle : c'est ce qui garantit qu'une même
+  // voiture est valorisée pareil pour tout le monde.
   const known = await catalogLookup(result.brand, result.model)
   if (known) {
     result.estimated_price = known.market_value
-    result.rarity = known.rarity
+    if (!aiDecided) {
+      result.rarity = known.rarity
+      result.rarity_source = 'catalog'
+    }
   } else {
     const price = await lookupMarketPrice(
       client,
@@ -597,11 +622,20 @@ async function enrichAndSend(res, client, mimeType, imageBase64, parsed, initial
       result.year,
     )
     result.estimated_price = price
-    result.rarity = rarityFromPrice(price)
+    if (!aiDecided) {
+      result.rarity = rarityFromPrice(price)
+      result.rarity_source = 'price_estimate'
+    }
     if (!isGenericBrand(result.brand) && result.model && result.model !== NEVER_EMPTY_MODEL) {
+      // On gèle la rareté RETENUE (donc celle de l'IA quand elle s'est
+      // prononcée), pas la dérivation du prix : le catalogue conserve ainsi
+      // la meilleure information disponible pour les spots suivants.
       await catalogInsert(result.brand, result.model, price, result.rarity)
     }
   }
+  console.log(
+    `[rarity] ${result.brand} ${result.model} → ${result.rarity} (source: ${result.rarity_source ?? 'aucune'})`,
+  )
   return sendJson(res, result)
 }
 
