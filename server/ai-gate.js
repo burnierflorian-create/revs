@@ -31,9 +31,14 @@ const COOLDOWN_MS = 3000
 // Quotas journaliers par tier, remis à zéro à minuit heure de Paris.
 // `user_tier()` (migration 0015) renvoie 'premium' | 'vip' | 'starter' | null ;
 // tout le reste retombe sur le tier gratuit.
+// 26/09/2026 — le gratuit passe de 6 à 5 pour coller à la limite de spots
+// PUBLIABLES par jour. Les deux plafonds étaient désalignés : un utilisateur
+// gratuit consommait 6 reconnaissances (~0,01 $ chacune) mais ne pouvait
+// publier que 5 spots. Le 6e scan était payé pour rien, puis refusé à la
+// publication.
 const DAILY_LIMITS = {
-  free: 6,
-  starter: 6,
+  free: 5,
+  starter: 5,
   premium: 100,
   vip: 300,
 }
@@ -43,6 +48,8 @@ const MESSAGES = {
   invalid_token: 'Authentication required',
   cooldown: 'Doucement ! Attends quelques secondes avant le prochain scan.',
   quota_exceeded: 'Tu as atteint ta limite du jour, réessaie demain',
+  publish_quota_exceeded:
+    'Tu as publié tous tes spots du jour, réessaie demain',
   gate_unavailable:
     'Service momentanément indisponible, réessaie dans un instant.',
 }
@@ -59,13 +66,78 @@ function getServiceClient() {
 
 /** Date du jour au format YYYY-MM-DD en heure de Paris — la remise à zéro du
  *  quota suit le fuseau de l'utilisateur, pas UTC. */
-function parisDay(now = new Date()) {
+export function parisDay(now = new Date()) {
   return new Intl.DateTimeFormat('en-CA', {
     timeZone: 'Europe/Paris',
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
   }).format(now)
+}
+
+/** Composantes date+heure d'un instant, lues en heure de Paris. */
+function parisParts(d) {
+  const f = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/Paris',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  })
+  const o = {}
+  for (const p of f.formatToParts(d)) if (p.type !== 'literal') o[p.type] = p.value
+  return o
+}
+
+/**
+ * Instant UTC correspondant à minuit, heure de Paris, du jour en cours.
+ * Sert de borne basse pour compter les spots publiés « aujourd'hui » dans la
+ * table `spots`, dont `created_at` est un timestamptz.
+ *
+ * Paris est à UTC+1 en hiver et UTC+2 en été : on teste les deux décalages et
+ * on retient l'instant qui retombe exactement sur 00:00 le bon jour. Le
+ * passage à l'heure d'été saute 02:00, jamais minuit, donc les deux nuits de
+ * changement d'heure sont traitées correctement.
+ *
+ * @returns {Date}
+ */
+export function parisDayStart(now = new Date()) {
+  const today = parisDay(now)
+  const base = Date.parse(`${today}T00:00:00Z`)
+  for (const offsetHours of [1, 2]) {
+    const candidate = new Date(base - offsetHours * 3600000)
+    const p = parisParts(candidate)
+    if (
+      `${p.year}-${p.month}-${p.day}` === today &&
+      p.hour === '00' &&
+      p.minute === '00'
+    ) {
+      return candidate
+    }
+  }
+  // Repli : minuit UTC. Au pire la fenêtre est décalée d'une ou deux heures,
+  // ce qui vaut mieux que de ne pas compter du tout.
+  console.warn('[ai-gate] offset Paris indéterminé, repli sur minuit UTC')
+  return new Date(base)
+}
+
+/** Nombre de spots publiés par l'utilisateur depuis minuit heure de Paris.
+ *  Renvoie null si le comptage échoue — l'appelant décide quoi en faire. */
+async function countSpotsToday(sb, userId) {
+  try {
+    const { count, error } = await sb
+      .from('spots')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', userId)
+      .gte('created_at', parisDayStart().toISOString())
+    if (error) throw new Error(error.message)
+    return typeof count === 'number' ? count : null
+  } catch (e) {
+    console.error('[ai-gate] comptage des spots du jour échoué:', e?.message ?? e)
+    return null
+  }
 }
 
 /** SHA-256 salé de l'IP appelante. On ne stocke jamais l'IP en clair : le
@@ -169,6 +241,23 @@ export async function requireAiAccess(req, endpoint) {
     console.error('[ai-gate] user_tier failed, falling back to free:', e?.message ?? e)
   }
   const limit = DAILY_LIMITS[tier] ?? DAILY_LIMITS.free
+
+  // ─── Plafond de PUBLICATION, vérifié côté serveur ───
+  // Jusqu'au 26/09/2026, la limite de spots publiables par jour n'existait que
+  // dans le navigateur (NewSpot.tsx) : un INSERT PostgREST direct l'ignorait
+  // complètement. Elle est désormais contrôlée ici, sur la table `spots`, avec
+  // la même borne de journée que le quota de scans — minuit heure de Paris.
+  //
+  // Ce test passe AVANT ai_gate_consume() : un utilisateur qui a déjà publié
+  // son quota est refusé sans perdre un crédit de scan au passage.
+  const published = await countSpotsToday(sb, user.id)
+  if (published !== null && published >= limit) {
+    console.log(
+      `[quota] user ${user.id} (tier ${tier}) — ${published}/${limit} spots publiés aujourd'hui, scan refusé`,
+    )
+    await logAbuse(sb, req, endpoint, 'publish_quota_exceeded')
+    return deny(429, 'publish_quota_exceeded')
+  }
 
   // Cooldown + quota + incrément, atomiques côté Postgres : deux requêtes
   // concurrentes ne peuvent pas consommer deux fois le même crédit.

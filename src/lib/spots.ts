@@ -409,3 +409,50 @@ export async function resizeImageToJpeg(
     URL.revokeObjectURL(url)
   }
 }
+
+/**
+ * Instant UTC de minuit, heure de Paris, du jour en cours.
+ *
+ * Sert de borne basse pour compter les spots publiés « aujourd'hui ». Miroir
+ * volontaire de `parisDayStart()` dans server/ai-gate.js — le serveur reste
+ * l'autorité, cette copie ne sert qu'au contrôle d'agrément côté client avant
+ * l'upload. Si l'une change, changer l'autre.
+ *
+ * Paris est à UTC+1 en hiver et UTC+2 en été : on teste les deux décalages et
+ * on retient l'instant qui retombe exactement sur 00:00 le bon jour. Le
+ * passage à l'heure d'été saute 02:00, jamais minuit.
+ */
+export function parisDayStart(now = new Date()): Date {
+  const fmtDay = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/Paris',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  })
+  const today = fmtDay.format(now)
+  const base = Date.parse(`${today}T00:00:00Z`)
+  const fmtFull = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/Paris',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  })
+  for (const offsetHours of [1, 2]) {
+    const candidate = new Date(base - offsetHours * 3600000)
+    const p: Record<string, string> = {}
+    for (const part of fmtFull.formatToParts(candidate)) {
+      if (part.type !== 'literal') p[part.type] = part.value
+    }
+    if (
+      `${p.year}-${p.month}-${p.day}` === today &&
+      p.hour === '00' &&
+      p.minute === '00'
+    ) {
+      return candidate
+    }
+  }
+  return new Date(base)
+}

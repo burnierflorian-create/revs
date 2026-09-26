@@ -16,6 +16,7 @@ import {
   type PhotoMeta,
   type Rarity,
   type SpotCategory,
+  parisDayStart,
 } from '../lib/spots'
 import { takePendingPhoto } from '../lib/pendingPhoto'
 import { useTheme } from '../lib/theme'
@@ -485,6 +486,16 @@ export default function NewSpot() {
       if (!user) throw new Error(t('newspot.notAuthenticatedThrow'))
 
       // Limite quotidienne : 5 spots/jour pour les comptes gratuits.
+      //
+      // Contrôle d'AGRÉMENT uniquement — l'autorité est côté serveur, dans
+      // server/ai-gate.js, qui refuse déjà le scan quand le quota de
+      // publication est atteint. Celui-ci évite juste un upload inutile.
+      //
+      // 26/09/2026 : la borne de journée passe de minuit UTC à minuit heure de
+      // Paris, et le comptage lit `spots` au lieu de `spot_count_daily` — dont
+      // la colonne `date` est alimentée par un trigger en `current_date`, donc
+      // en UTC. Les deux compteurs étaient désynchronisés une à deux heures par
+      // nuit selon la saison.
       const { data: sub } = await supabase
         .from('subscriptions')
         .select('status')
@@ -493,14 +504,12 @@ export default function NewSpot() {
       const subscribed =
         sub?.status === 'active' || sub?.status === 'trialing'
       if (!subscribed) {
-        const today = new Date().toISOString().slice(0, 10)
-        const { data: cnt } = await supabase
-          .from('spot_count_daily')
-          .select('count')
+        const { count } = await supabase
+          .from('spots')
+          .select('id', { count: 'exact', head: true })
           .eq('user_id', user.id)
-          .eq('date', today)
-          .maybeSingle()
-        if ((cnt?.count ?? 0) >= 5) {
+          .gte('created_at', parisDayStart().toISOString())
+        if ((count ?? 0) >= 5) {
           setLimitReached(true)
           setPubError(t('newspot.limitReached'))
           setPubStatus('')

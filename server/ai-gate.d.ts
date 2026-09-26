@@ -26,9 +26,16 @@ export type AiAccessDenied = {
     | 'invalid_token'
     | 'cooldown'
     | 'quota_exceeded'
+    | 'publish_quota_exceeded'
     | 'gate_unavailable'
   body: { error: string; message: string }
 }
+
+/** Jour courant en heure de Paris, au format YYYY-MM-DD. */
+export declare function parisDay(now?: Date): string
+
+/** Instant UTC de minuit, heure de Paris, du jour en cours. */
+export declare function parisDayStart(now?: Date): Date
 
 export declare function requireAiAccess(
   req: VercelRequest,
