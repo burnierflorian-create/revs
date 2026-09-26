@@ -80,9 +80,23 @@ export const YEARLY_PRICES: Record<'premium' | 'vip', string> = {
   vip: '249,99 €',
 }
 
+// ─────────────────────── Contenu des offres ───────────────────────
+// Réaligné le 26/09/2026 sur ce que le code livre RÉELLEMENT.
+//
+// Deux familles de promesses ont été retirées :
+//   1. « Spots illimités » / « sans aucune limite journalière » — le portail
+//      IA (server/ai-gate.js) applique des plafonds fermes : 6/jour en
+//      gratuit, 100 en Premium, 300 en VIP. Annoncer l'illimité était faux.
+//   2. Track days, concours, tirages au sort, paddock F1, invitations Monaco,
+//      accès anticipé aux événements — aucune de ces contreparties n'existe,
+//      ni dans le logiciel ni en dehors.
+//
+// Règle pour la suite : ne rien ajouter ici qui ne soit pas vérifiable dans
+// le code ou déjà contractualisé.
+
 // Short labels used on the main /premium grid cards (one-liners).
 export const PREMIUM_PERKS = [
-  'Spots illimités',
+  '100 spots IA par jour',
   'Mode Radar — notif en temps réel quand une supercar est près de toi',
   'Statistiques avancées',
   'Profil mis en avant dans le classement',
@@ -90,22 +104,18 @@ export const PREMIUM_PERKS = [
 ]
 
 export const VIP_PERKS = [
+  '300 spots IA par jour',
   'Tout le Premium inclus',
-  '🔥 Accès anticipé aux événements 48h avant tout le monde',
-  'Badge Propriétaire certifié',
-  'Events exclusifs et track days privés',
-  'Badge VIP 👑',
+  'Support prioritaire',
+  'Badge VIP exclusif 👑',
 ]
 
-// Concours VIP — surfaced separately on the main grid card AND in
-// the checkout page so it reads as a true hero perk, not an item
-// buried in a list.
-export const VIP_CONCOURS = {
-  title: 'Concours exclusifs VIP',
-  body: 'Chaque mois, les membres VIP participent automatiquement à des tirages au sort pour gagner des expériences uniques : tours en supercar, invitations à Monaco, accès paddock F1, meets privés avec des propriétaires de supercars. Plus tu restes VIP longtemps, plus tu accumules de chances de gagner.',
-}
-
-export const FREE_PERKS = ['Carte et fil', '5 spots / jour', 'Events publics']
+export const FREE_PERKS = [
+  '6 spots IA par jour',
+  'Garage et collection de cartes',
+  'Carte et fil',
+  'XP, niveaux et badges',
+]
 
 // Detailed perks used in the full-screen /premium/checkout pages —
 // each item gets an emoji icon, a bold title, and a longer body.
@@ -114,8 +124,8 @@ export type DetailedPerk = { icon: string; title: string; body: string }
 export const PREMIUM_PERKS_DETAILED: DetailedPerk[] = [
   {
     icon: '⚡',
-    title: 'Spots illimités',
-    body: 'Poste autant de spots que tu veux, sans aucune limite journalière.',
+    title: '100 spots IA par jour',
+    body: 'Passe de 6 à 100 reconnaissances par jour — de quoi couvrir un rassemblement entier sans jamais toucher le plafond.',
   },
   {
     icon: '🎯',
@@ -141,28 +151,23 @@ export const PREMIUM_PERKS_DETAILED: DetailedPerk[] = [
 
 export const VIP_PERKS_DETAILED: DetailedPerk[] = [
   {
+    icon: '⚡',
+    title: '300 spots IA par jour',
+    body: 'Le plafond le plus haut de REVS : 300 reconnaissances par jour, pour les spotteurs qui sortent tous les jours.',
+  },
+  {
     icon: '✨',
     title: 'Tout le Premium inclus',
-    body: 'L’intégralité des avantages Premium, inclus dans le VIP.',
+    body: 'Mode Radar, statistiques avancées et profil mis en avant — l’intégralité des avantages Premium.',
   },
   {
-    icon: '🏅',
-    title: 'Badge Propriétaire certifié',
-    body: 'Certifie que tu possèdes une supercar — un badge unique sur ton profil qui te distingue de la communauté.',
-  },
-  {
-    icon: '🏁',
-    title: 'Events exclusifs et track days privés',
-    body: 'Accès à des events réservés aux membres VIP — track days privés, meets exclusifs, rencontres avec des collectionneurs.',
+    icon: '💬',
+    title: 'Support prioritaire',
+    body: 'Tes messages passent devant : une réponse en priorité sur toute question ou tout souci technique.',
   },
   {
     icon: '👑',
-    title: 'Badge VIP',
+    title: 'Badge VIP exclusif',
     body: 'Le badge le plus rare de REVS, visible sur tous tes spots et ton profil.',
-  },
-  {
-    icon: '🎰',
-    title: VIP_CONCOURS.title,
-    body: VIP_CONCOURS.body,
   },
 ]

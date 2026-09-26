@@ -612,7 +612,7 @@
     "rejectGpsIncoherent": "Inconsistent location",
     "statusAuthenticating": "Authenticating…",
     "notAuthenticatedThrow": "Not authenticated",
-    "limitReached": "You've reached your limit of 5 spots today. Go Premium for unlimited spots.",
+    "limitReached": "You've reached your limit of 5 spots today. Go Premium to publish more.",
     "statusUploading": "Uploading photo…",
     "uploadLabel": "Photo upload",
     "statusPublishing": "Publishing…",

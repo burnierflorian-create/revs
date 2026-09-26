@@ -8,7 +8,6 @@ import {
   MONTHLY_PRICES,
   planTier,
   PREMIUM_PERKS,
-  VIP_CONCOURS,
   VIP_PERKS,
   YEARLY_PRICES,
   type Interval,
@@ -441,21 +440,9 @@ function VipCard({
         ))}
       </ul>
 
-      {/* Concours VIP — hero perk */}
-      <div
-        className="mt-4 rounded-2xl p-3.5"
-        style={{
-          border: '1px solid rgba(212,175,55,0.35)',
-          background: 'rgba(212,175,55,0.07)',
-        }}
-      >
-        <p className="flex items-center gap-2 text-sm font-extrabold tracking-tighter text-[#ffd700]">
-          🎰 {VIP_CONCOURS.title}
-        </p>
-        <p className="mt-1.5 text-xs leading-relaxed text-fg/75">
-          {VIP_CONCOURS.body}
-        </p>
-      </div>
+      {/* Bloc « Concours exclusifs VIP » retiré le 26/09/2026 : il mettait en
+          héros des contreparties inexistantes (tirages au sort, paddock F1,
+          invitations Monaco). Ne rien remettre ici sans contrepartie réelle. */}
 
       <button
         onClick={locked ? undefined : onPick}
