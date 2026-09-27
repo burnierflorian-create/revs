@@ -1,10 +1,3 @@
-// Étiquette de version affichée à l'utilisateur — badge flottant
-// (BetaBadge) et ligne « Version » dans Réglages → Avancé.
-//
-// SOURCE UNIQUE : c'est le seul endroit à modifier pour passer en BETA 1,
-// BETA 2, puis v1.0. Purement informatif, aucune fonctionnalité n'en dépend.
-export const APP_VERSION = 'BETA 0'
-
 export const appConfig = {
   // AUTH — providers OAuth masqués tant que les credentials ne sont pas
   // configurés (Supabase + Google Cloud Console / Apple Developer).

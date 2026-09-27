@@ -296,6 +296,12 @@
       "spotToEnter": "Spot to enter the {{city}} ranking.",
       "spotters": "{{count}} spotter",
       "spotters_plural": "{{count}} spotters"
+    },
+    "latestSpots": {
+      "title": "Latest spots"
+    },
+    "missions": {
+      "empty": "No active mission"
     }
   },
   "feedpage": {

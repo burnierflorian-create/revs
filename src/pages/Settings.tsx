@@ -33,7 +33,7 @@ import {
   Info,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { APP_VERSION } from '../config/appConfig'
+import { APP_VERSION } from '../lib/constants'
 import { useTheme } from '../lib/theme'
 import { hapticSuccess } from '../lib/haptic'
 import AvatarCropModal from '../components/AvatarCropModal'
@@ -1943,7 +1943,7 @@ export default function Settings() {
               label={t('settingspage.appVersion')}
               right={
                 <span className="font-mono text-[12px] tracking-wider text-fg2">
-                  {APP_VERSION}
+                  REVS v{APP_VERSION}
                 </span>
               }
               noChevron

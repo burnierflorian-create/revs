@@ -1,4 +1,4 @@
-import { APP_VERSION } from '../config/appConfig'
+import { APP_STAGE } from '../lib/constants'
 
 // Étiquette de version flottante, montée une seule fois dans MainLayout pour
 // apparaître sur toutes les pages.
@@ -22,11 +22,11 @@ import { APP_VERSION } from '../config/appConfig'
 export default function BetaBadge() {
   return (
     <span
-      aria-label={`Version ${APP_VERSION}`}
+      aria-label={`Version ${APP_STAGE}`}
       className="pointer-events-none fixed left-3 z-[39] select-none rounded-full border border-fg/10 bg-card/70 px-2 py-[3px] text-[10px] font-semibold uppercase leading-none tracking-[0.12em] text-fg/45 backdrop-blur-md"
       style={{ bottom: 'calc(env(safe-area-inset-bottom) + 14px)' }}
     >
-      {APP_VERSION}
+      {APP_STAGE}
     </span>
   )
 }

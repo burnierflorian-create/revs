@@ -296,6 +296,12 @@
       "spotToEnter": "Spotte pour entrer dans le classement de {{city}}.",
       "spotters": "{{count}} spotter",
       "spotters_plural": "{{count}} spotters"
+    },
+    "latestSpots": {
+      "title": "Derniers spots"
+    },
+    "missions": {
+      "empty": "Aucune mission en cours"
     }
   },
   "feedpage": {

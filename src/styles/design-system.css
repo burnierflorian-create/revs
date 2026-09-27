@@ -45,34 +45,42 @@
      the scroll panes reserve `3.5rem + var` so content sits ~8px above. */
   --safe-bottom: max(11px, calc(env(safe-area-inset-bottom) - 1.4rem));
 
-  /* ── Background ambience (pure CSS, ULTRA subtle depth + warmth) ──
-     Tune everything at once with --amb-intensity (0 = flat #0a0a0a,
-     1 = default, >1 = stronger). Individual layers below can also be
-     dialled independently. GPU-cheap: static gradients painted once,
-     no background-attachment:fixed (that janks mobile scroll). */
-  --amb-intensity: 1;
-  /* Soft lighter halo toward top-centre fading to pure black at the
-     edges → depth. */
-  --amb-radial: radial-gradient(
-    135% 95% at 50% -12%,
-    rgba(255, 255, 255, calc(0.045 * var(--amb-intensity))) 0%,
-    rgba(255, 255, 255, 0) 46%
-  );
-  /* Barely-there warm red glow in the top-right corner. */
+  /* ── Background ambience — « Dark Automotive » (refonte 27/09/2026) ──
+     Presque noir, mais avec de la profondeur. Trois couches statiques,
+     toutes pilotables d'un coup par --amb-intensity (0 = #0a0a0a plat,
+     1 = valeurs nominales ci-dessous). GPU-cheap : peintes une fois, pas
+     de background-attachment:fixed (ça fait saccader le scroll mobile).
+
+     La trame carbone diagonale a été RETIRÉE du fond global — elle
+     texturait toute l'application et tirait le rendu vers le « dashboard
+     de jeu ». Elle reste disponible en classe utilitaire .carbon-weave
+     pour les composants qui la veulent ponctuellement. */
+  --amb-intensity: 0.7;
+  /* Halo rouge très discret, coin haut-droit. */
   --amb-glow: radial-gradient(
-    55% 45% at 90% 4%,
+    ellipse at 85% 5%,
     rgba(232, 32, 58, calc(0.06 * var(--amb-intensity))) 0%,
-    rgba(232, 32, 58, 0) 62%
+    transparent 60%
   );
-  /* Whisper-thin carbon weave (diagonal hairlines, ~1.5% alpha). */
-  --amb-carbon: repeating-linear-gradient(
-    45deg,
-    rgba(255, 255, 255, calc(0.016 * var(--amb-intensity))) 0,
-    rgba(255, 255, 255, calc(0.016 * var(--amb-intensity))) 1px,
-    transparent 1px,
-    transparent 3px
+  /* Contrepoint froid, coin bas-gauche — évite que le fond ne penche
+     entièrement vers le rouge. */
+  --amb-cool: radial-gradient(
+    ellipse at 15% 95%,
+    rgba(30, 40, 60, calc(0.04 * var(--amb-intensity))) 0%,
+    transparent 50%
   );
-  --amb-image: var(--amb-carbon), var(--amb-glow), var(--amb-radial);
+  /* « Ligne de route » : un trait horizontal en dégradé à 35% du haut.
+     Réalisé en linear-gradient à bandes pour rester une seule couche de
+     fond, sans pseudo-élément.  */
+  --amb-roadline: linear-gradient(
+    to bottom,
+    transparent 0%,
+    transparent 34.9%,
+    rgba(232, 32, 58, calc(0.03 * var(--amb-intensity))) 35%,
+    transparent 35.15%,
+    transparent 100%
+  );
+  --amb-image: var(--amb-roadline), var(--amb-glow), var(--amb-cool);
 }
 
 /* ─────────────────────── Light theme overrides ───────────────────────

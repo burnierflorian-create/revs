@@ -1,4 +1,5 @@
 import { effectiveTitle } from '../lib/titles'
+import { APP_STAGE } from '../lib/constants'
 
 /** Inline chip rendering a user's title (XP-derived or manual special).
  *  Pass the user's XP and their `profiles.title` value — the chip picks
@@ -41,6 +42,28 @@ export default function TitleChip({
     >
       {t.emoji && <span aria-hidden>{t.emoji}</span>}
       {t.label}
+    </span>
+  )
+}
+
+/** Chip du palier de version (« 🧪 BÊTA »), posé à côté de TitleChip dans
+ *  l'en-tête de l'accueil. Même gabarit que TitleChip — mêmes paddings, même
+ *  arrondi, même graisse — pour que les deux se lisent comme une paire, mais
+ *  en ambre/orange plutôt qu'en or ou en rouge : le palier est une information
+ *  d'état, pas une distinction. */
+export function StageChip({ size = 'sm' }: { size?: 'xs' | 'sm' }) {
+  const pad = size === 'xs' ? 'px-2 py-0.5 text-[10px]' : 'px-2.5 py-1 text-xs'
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded-full font-semibold text-amber-400 ${pad}`}
+      style={{
+        background:
+          'linear-gradient(120deg, rgba(217,119,6,0.22) 0%, rgba(249,115,22,0.16) 100%)',
+        border: '1px solid rgba(249,115,22,0.38)',
+      }}
+    >
+      <span aria-hidden>🧪</span>
+      {APP_STAGE}
     </span>
   )
 }
