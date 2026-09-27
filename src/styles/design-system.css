@@ -45,42 +45,73 @@
      the scroll panes reserve `3.5rem + var` so content sits ~8px above. */
   --safe-bottom: max(11px, calc(env(safe-area-inset-bottom) - 1.4rem));
 
-  /* ── Background ambience — « Dark Automotive » (refonte 27/09/2026) ──
-     Presque noir, mais avec de la profondeur. Trois couches statiques,
-     toutes pilotables d'un coup par --amb-intensity (0 = #0a0a0a plat,
-     1 = valeurs nominales ci-dessous). GPU-cheap : peintes une fois, pas
-     de background-attachment:fixed (ça fait saccader le scroll mobile).
+  /* ── Background ambience — « Dark Automotive » (v2, 27/09/2026) ──
+     Objectif : plus « noir profond avec une atmosphère » que « noir plat ».
+     Cinq couches statiques + la trame carbone, toutes pilotables d'un coup
+     par --amb-intensity. GPU-cheap : peintes une fois, pas de
+     background-attachment:fixed (ça fait saccader le scroll mobile).
 
-     La trame carbone diagonale a été RETIRÉE du fond global — elle
-     texturait toute l'application et tirait le rendu vers le « dashboard
-     de jeu ». Elle reste disponible en classe utilitaire .carbon-weave
-     pour les composants qui la veulent ponctuellement. */
-  --amb-intensity: 0.7;
-  /* Halo rouge très discret, coin haut-droit. */
+     --amb-intensity repasse à 1 : les alphas ci-dessous sont donc rendus
+     TELS QUELS. À 0.7 (valeur précédente) ils perdaient 30 % et c'est
+     précisément ce qui donnait un fond trop uniforme. Pour atténuer
+     l'ensemble, baisser cette seule variable — c'est tout l'intérêt de la
+     garder.
+
+     ORDRE DES COUCHES : en CSS, la première de background-image est la plus
+     HAUTE de la pile. Le vignettage vient donc en premier, sinon il serait
+     peint sous les dégradés et n'assombrirait pas les bords. */
+  --amb-intensity: 1;
+
+  /* 5 · Vignettage des bords — effet « cockpit ». En tête de pile pour
+     assombrir réellement ce qui est dessous. */
+  --amb-vignette: radial-gradient(
+    ellipse 70% 60% at 50% 50%,
+    transparent 50%,
+    rgba(0, 0, 0, calc(0.3 * var(--amb-intensity))) 100%
+  );
+  /* 1 · Halo rouge en haut à droite — rappel de l'accent REVS. */
   --amb-glow: radial-gradient(
-    ellipse at 85% 5%,
-    rgba(232, 32, 58, calc(0.06 * var(--amb-intensity))) 0%,
-    transparent 60%
-  );
-  /* Contrepoint froid, coin bas-gauche — évite que le fond ne penche
-     entièrement vers le rouge. */
-  --amb-cool: radial-gradient(
-    ellipse at 15% 95%,
-    rgba(30, 40, 60, calc(0.04 * var(--amb-intensity))) 0%,
-    transparent 50%
-  );
-  /* « Ligne de route » : un trait horizontal en dégradé à 35% du haut.
-     Réalisé en linear-gradient à bandes pour rester une seule couche de
-     fond, sans pseudo-élément.  */
-  --amb-roadline: linear-gradient(
-    to bottom,
-    transparent 0%,
-    transparent 34.9%,
-    rgba(232, 32, 58, calc(0.03 * var(--amb-intensity))) 35%,
-    transparent 35.15%,
+    ellipse 60% 50% at 85% 8%,
+    rgba(232, 32, 58, calc(0.07 * var(--amb-intensity))) 0%,
     transparent 100%
   );
-  --amb-image: var(--amb-roadline), var(--amb-glow), var(--amb-cool);
+  /* 2 · Lueur chaude en haut au centre — c'est elle qui crée la profondeur.
+     La couleur est sombre mais son alpha élevé l'éclaircit légèrement
+     au-dessus de #0a0a0a, avec une dominante chaude. */
+  --amb-warm: radial-gradient(
+    ellipse 80% 40% at 50% 0%,
+    rgba(40, 20, 25, calc(0.5 * var(--amb-intensity))) 0%,
+    transparent 100%
+  );
+  /* 3 · Reflet froid en bas à gauche — empêche le fond de pencher
+     entièrement vers le rouge. */
+  --amb-cool: radial-gradient(
+    ellipse 50% 40% at 10% 95%,
+    rgba(20, 30, 50, calc(0.04 * var(--amb-intensity))) 0%,
+    transparent 100%
+  );
+  /* 4 · « Ligne de route » : un trait horizontal à ~34 % du haut. */
+  --amb-roadline: linear-gradient(
+    to bottom,
+    transparent 33%,
+    rgba(232, 32, 58, calc(0.025 * var(--amb-intensity))) 34%,
+    rgba(232, 32, 58, calc(0.025 * var(--amb-intensity))) 34.3%,
+    transparent 35%
+  );
+  /* 6 · Trame carbone diagonale — REMISE dans le fond global, mais à 0.5 %
+     d'alpha au lieu de 1.6 %, donc à la limite du perceptible. Elle avait été
+     retirée le 26/09 parce qu'à 1.6 % elle texturait visiblement toute
+     l'application. La classe utilitaire .carbon-weave reste indépendante et
+     nettement plus marquée (3.2 %), pour les composants qui la veulent. */
+  --amb-carbon: repeating-linear-gradient(
+    45deg,
+    rgba(255, 255, 255, calc(0.005 * var(--amb-intensity))) 0,
+    rgba(255, 255, 255, calc(0.005 * var(--amb-intensity))) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+  --amb-image: var(--amb-vignette), var(--amb-carbon), var(--amb-glow),
+    var(--amb-warm), var(--amb-cool), var(--amb-roadline);
 }
 
 /* ─────────────────────── Light theme overrides ───────────────────────
