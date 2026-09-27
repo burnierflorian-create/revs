@@ -1,7 +1,7 @@
 // Single source of truth for the subscription tier system. Used by
 // Premium.tsx (checkout), Settings.tsx (current plan label),
 // Profile.tsx (premium badges), and anywhere we need to gate features
-// like the Radar mode or advanced stats.
+// like the Radar mode.
 //
 // `subscriptions.plan` in Supabase can hold either:
 //   - a current plan ID like "premium_monthly" / "vip_yearly"
@@ -92,6 +92,12 @@ export const YEARLY_PRICES: Record<'premium' | 'vip', string> = {
 //   2. Track days, concours, tirages au sort, paddock F1, invitations Monaco,
 //      accès anticipé aux événements — aucune de ces contreparties n'existe,
 //      ni dans le logiciel ni en dehors.
+//   3. « Statistiques avancées » et « Profil mis en avant dans le classement »
+//      (retirés le 27/09/2026) — aucune implémentation : pas de carte de
+//      chaleur, aucune statistique conditionnée au tier, et Leaderboard.tsx
+//      ne connaît ni tier ni premium. isPremiumOrAbove() et isVip() ne
+//      gardent aucune fonctionnalité dans tout src/. À remettre le jour où
+//      elles existent, pas avant.
 //
 // Règle pour la suite : ne rien ajouter ici qui ne soit pas vérifiable dans
 // le code ou déjà contractualisé.
@@ -100,8 +106,6 @@ export const YEARLY_PRICES: Record<'premium' | 'vip', string> = {
 export const PREMIUM_PERKS = [
   '30 spots IA par jour',
   'Mode Radar — notif en temps réel quand une supercar est près de toi',
-  'Statistiques avancées',
-  'Profil mis en avant dans le classement',
   'Badge Premium ⚡',
 ]
 
@@ -135,16 +139,6 @@ export const PREMIUM_PERKS_DETAILED: DetailedPerk[] = [
     body: 'Reçois une notification dès qu’une supercar est spottée à moins de 10 km de toi en temps réel.',
   },
   {
-    icon: '📊',
-    title: 'Statistiques avancées',
-    body: 'Carte de chaleur de tes spots, marques favorites, évolution XP semaine par semaine, heures de spotting.',
-  },
-  {
-    icon: '👤',
-    title: 'Profil mis en avant',
-    body: 'Ton profil apparaît en priorité dans le classement global.',
-  },
-  {
     icon: '⚡',
     title: 'Badge Premium',
     body: 'Un badge exclusif visible sur tous tes spots et ton profil.',
@@ -160,7 +154,7 @@ export const VIP_PERKS_DETAILED: DetailedPerk[] = [
   {
     icon: '✨',
     title: 'Tout le Premium inclus',
-    body: 'Mode Radar, statistiques avancées et profil mis en avant — l’intégralité des avantages Premium.',
+    body: 'Le Mode Radar et le badge Premium, inclus dans le VIP.',
   },
   {
     icon: '💬',
