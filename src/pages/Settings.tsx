@@ -30,7 +30,6 @@ import {
   UserPlus,
   Users,
   Globe,
-  Info,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { APP_VERSION } from '../lib/constants'
@@ -1934,20 +1933,6 @@ export default function Settings() {
               onClick={resetOnboarding}
               wrap
             />
-            {/* Version — informatif. Source unique : APP_VERSION dans
-                src/config/appConfig.ts, la même constante qu'affiche le badge
-                flottant. Pas d'onClick, donc Row rend un <div> et non un
-                <button disabled> (voir le commentaire de Row). */}
-            <Row
-              icon={<Info className="h-4 w-4" />}
-              label={t('settingspage.appVersion')}
-              right={
-                <span className="font-mono text-[12px] tracking-wider text-fg2">
-                  REVS v{APP_VERSION}
-                </span>
-              }
-              noChevron
-            />
           </Section>
 
           {/* 7 — ZONE SENSIBLE */}
@@ -2026,6 +2011,13 @@ export default function Settings() {
           <p className="pt-4 text-center text-[10px] text-fg/30">
             <Mail className="mr-1 inline h-3 w-3" />
             contact@revs.app
+          </p>
+
+          {/* Version — tout en bas, discrète. Source unique : APP_VERSION dans
+              src/lib/constants.ts, la même constante que le chip BÊTA de
+              l'accueil et que l'étiquette flottante. */}
+          <p className="mb-4 mt-8 text-center text-xs text-fg2 opacity-50">
+            REVS v{APP_VERSION}
           </p>
         </div>
       )}

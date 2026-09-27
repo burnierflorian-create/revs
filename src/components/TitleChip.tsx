@@ -52,14 +52,16 @@ export default function TitleChip({
  *  en ambre/orange plutôt qu'en or ou en rouge : le palier est une information
  *  d'état, pas une distinction. */
 export function StageChip({ size = 'sm' }: { size?: 'xs' | 'sm' }) {
-  const pad = size === 'xs' ? 'px-2 py-0.5 text-[10px]' : 'px-2.5 py-1 text-xs'
+  const pad =
+    size === 'xs' ? 'px-2 py-0.5 text-[10px]' : 'px-2.5 py-0.5 text-xs'
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded-full font-semibold text-amber-400 ${pad}`}
+      className={`inline-flex items-center gap-1 rounded-full border font-bold ${pad}`}
       style={{
         background:
-          'linear-gradient(120deg, rgba(217,119,6,0.22) 0%, rgba(249,115,22,0.16) 100%)',
-        border: '1px solid rgba(249,115,22,0.38)',
+          'linear-gradient(135deg, rgba(245,158,11,0.15), rgba(249,115,22,0.10))',
+        borderColor: 'rgba(245,158,11,0.4)',
+        color: '#f59e0b',
       }}
     >
       <span aria-hidden>🧪</span>
