@@ -30,8 +30,10 @@ import {
   UserPlus,
   Users,
   Globe,
+  Info,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { APP_VERSION } from '../config/appConfig'
 import { useTheme } from '../lib/theme'
 import { hapticSuccess } from '../lib/haptic'
 import AvatarCropModal from '../components/AvatarCropModal'
@@ -1931,6 +1933,20 @@ export default function Settings() {
               sub={t('settingspage.resetOnboardingSub')}
               onClick={resetOnboarding}
               wrap
+            />
+            {/* Version — informatif. Source unique : APP_VERSION dans
+                src/config/appConfig.ts, la même constante qu'affiche le badge
+                flottant. Pas d'onClick, donc Row rend un <div> et non un
+                <button disabled> (voir le commentaire de Row). */}
+            <Row
+              icon={<Info className="h-4 w-4" />}
+              label={t('settingspage.appVersion')}
+              right={
+                <span className="font-mono text-[12px] tracking-wider text-fg2">
+                  {APP_VERSION}
+                </span>
+              }
+              noChevron
             />
           </Section>
 

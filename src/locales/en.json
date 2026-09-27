@@ -816,6 +816,7 @@
     "motivationPlaceholder": "Your motivation",
     "sendRequest": "Send the request",
     "sectionAdvanced": "Advanced",
+    "appVersion": "Version",
     "resetOnboarding": "Clear cache and restart onboarding",
     "resetOnboardingSub": "Resets the welcome screen",
     "sensitiveZone": "Sensitive zone",
