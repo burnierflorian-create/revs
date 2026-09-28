@@ -140,6 +140,9 @@ const BASE = {
   valid: true,
   reason: '',
   estimated_price: null,
+  // Brouillon d'une phrase produit par le prompt vision, pré-rempli dans le
+  // champ Description de l'étape 3. L'utilisateur reste libre de le réécrire.
+  description: '',
   rarity: 'standard',
   // 'ai' | 'catalog' | 'price_estimate' | null — voir finalize() et
   // enrichAndSend(). null signifie qu'aucune source n'a pu se prononcer.
@@ -220,6 +223,7 @@ Reconnais ces marques même de DOS ou de CÔTÉ, y compris sur une photo médioc
   "confidence": 85,
   "rarity": "standard|premium|performance|exclusif|supercar|hypercar",
   "specs": "Configuration moteur / Transmission",
+  "description": "une phrase courte et factuelle sur ce que la photo montre",
   "valid": true
 }
 
@@ -228,6 +232,7 @@ Règles :
 - "color" : teinte nommée quand tu la reconnais ("gris nardo", "bleu Santorin", "vert British Racing", "rouge Rosso Corsa") plutôt qu'un simple "gris" ou "rouge".
 - "confidence" : entier 0-100, ta certitude réelle sur l'ensemble marque + modèle + version.
 - "specs" : moteur précis si identifiable visuellement ("V12 NA / Propulsion", "Flat-6 Biturbo / 4RM"), sinon configuration générale.
+- "description" : UNE phrase courte (15 mots maximum), factuelle, en français, sur ce que la photo montre réellement — la teinte, une finition remarquable, le contexte. Ex : "Huracán jaune Giallo Orion garée en ville, jantes noires". Elle sert de brouillon que l'utilisateur pourra réécrire : reste sobre, n'invente rien, pas de superlatif ni de ponctuation d'enthousiasme.
 - NE renvoie PAS de prix : il est calculé séparément par un appel dédié.
 - Le champ s'appelle "brand", pas "make".
 - Pas d'appel web : appuie-toi UNIQUEMENT sur cette photo et tes connaissances statiques.
@@ -421,6 +426,9 @@ function finalize(raw) {
     details_used: normalizeStringArray(o.details_used),
     valid,
     reason: normalizeString(o.reason ?? o.rarity_reason),
+    // Tronquée à 140 caractères : le champ de l'étape 3 est une ligne, et une
+    // réponse bavarde ne doit pas déborder ni décourager la réécriture.
+    description: normalizeString(o.description).slice(0, 140),
     estimated_price:
       valid !== false
         ? normalizeInt(o.price_estimate ?? o.estimated_price)

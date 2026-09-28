@@ -665,7 +665,8 @@
     "viewSubscriptions": "VIEW SUBSCRIPTIONS",
     "later": "Later",
     "retry": "RETRY",
-    "lowConfidenceBadge": "⚠️ Distant target — Low recognition"
+    "lowConfidenceBadge": "⚠️ Distant target — Low recognition",
+    "cooldown": "Easy! Wait {{seconds}}s before the next scan."
   },
   "racepage": {
     "back": "Back",

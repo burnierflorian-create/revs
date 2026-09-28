@@ -137,6 +137,9 @@ export type IdentifyResult = {
   valid: boolean
   reason: string
   estimated_price: number | null
+  /** Brouillon d'une phrase généré par le prompt vision, pré-rempli dans le
+   *  champ Description de l'étape 3 et librement réécrit par l'utilisateur. */
+  description?: string
   rarity?: Rarity | null
   production?: number | null
 }

@@ -37,6 +37,13 @@ type Step = 1 | 2 | 3 | 4
 const MAX_PHOTO_AGE_MS = 5 * 60 * 1000
 const MAX_GPS_DRIFT_M = 300
 
+// Écart minimum entre deux scans, en miroir de COOLDOWN_MS dans
+// server/ai-gate.js. Le serveur reste l'AUTORITÉ — il applique le même délai
+// de façon atomique en SQL, donc inviolable. Ce garde client ne fait
+// qu'éviter le travail inutile : sans lui, un double appui déclenchait un
+// upload d'image complet et un aller-retour réseau pour finir en 429.
+const SCAN_COOLDOWN_MS = 3000
+
 // Supabase errors (Postgrest/Storage) are plain objects, NOT Error
 // instances — so a bare `instanceof Error` check hides the real cause.
 // Log the full shape and return an Error carrying a useful message.
@@ -66,6 +73,27 @@ function supaError(label: string, e: unknown): Error {
   )
 }
 
+/** Le trigger enforce_spot_daily_quota (migration 0068) refuse l'insertion
+ *  au-delà du plafond du palier. Il lève une exception SQL avec le code
+ *  `check_violation` (23514) et le hint `spot_daily_quota_exceeded`.
+ *
+ *  Sans ce test, supaError() produisait un message technique — « Publication a
+ *  échoué : Limite de 5 spots par jour atteinte… [23514] » — avec le code SQL
+ *  apparent. On reconnaît le hint, qui est stable et ne dépend pas de la langue
+ *  du message, pour afficher le texte du serveur seul.
+ *
+ *  Ce chemin est rare : le portail IA bloque déjà le scan en amont. Il ne
+ *  s'atteint qu'en publiant sans scanner.
+ *
+ *  On teste le HINT SEUL, jamais le code 23514 : `spots_rarity_check` porte le
+ *  même code, et une rareté invalide aurait alors affiché un message de quota
+ *  doublé d'une relance Premium. Le hint, lui, n'est posé que par ce trigger. */
+function quotaMessage(e: unknown): string | null {
+  const o = (e ?? {}) as { hint?: string; message?: string }
+  if (o.hint !== 'spot_daily_quota_exceeded') return null
+  return o.message?.trim() || i18n.t('newspot.limitReached')
+}
+
 const EMPTY_RESULT: IdentifyResult = {
   brand: '',
   model: '',
@@ -77,6 +105,7 @@ const EMPTY_RESULT: IdentifyResult = {
   valid: true,
   reason: '',
   estimated_price: null,
+  description: '',
   rarity: 'standard',
   production: null,
 }
@@ -124,6 +153,8 @@ export default function NewSpot() {
   const [gpVille, setGpVille] = useState('')
   const [gpSaving, setGpSaving] = useState(false)
   const [gpErr, setGpErr] = useState<string | null>(null)
+  // Horodatage du dernier scan lancé — alimente le garde de cooldown.
+  const lastScanRef = useRef(0)
 
   useEffect(() => {
     return () => {
@@ -297,10 +328,25 @@ export default function NewSpot() {
     setYear(r.year != null ? String(r.year) : '')
     setColor(r.color)
     setCategory(r.category === 'classic' ? 'other' : r.category)
+    // Brouillon de description proposé par l'IA. On ne l'impose pas : si
+    // l'utilisateur a déjà écrit quelque chose, on ne l'écrase pas.
+    if (r.description) setDescription((d) => d || r.description || '')
   }
 
   async function analyze() {
     if (!image) return
+    const since = Date.now() - lastScanRef.current
+    if (since < SCAN_COOLDOWN_MS) {
+      setRejection(
+        t('newspot.cooldown', {
+          seconds: Math.ceil((SCAN_COOLDOWN_MS - since) / 1000),
+        }),
+      )
+      hapticError()
+      return
+    }
+    lastScanRef.current = Date.now()
+    setRejection(null)
     setStep(2)
     // Haptic heartbeat — feels like a low-pulse sensor scan during the
     // laser animation. cancelHeartbeat is called in every exit path
@@ -571,7 +617,19 @@ export default function NewSpot() {
         })
         .select('*')
         .single()
-      if (insErr) throw supaError(t('newspot.publishLabel'), insErr)
+      if (insErr) {
+        // Plafond de publication atteint côté base : message propre plutôt que
+        // l'erreur SQL brute, et même traitement visuel que le garde client
+        // (bandeau + lien Premium via limitReached).
+        const quota = quotaMessage(insErr)
+        if (quota) {
+          setLimitReached(true)
+          setPubError(quota)
+          setPubStatus('')
+          return
+        }
+        throw supaError(t('newspot.publishLabel'), insErr)
+      }
       const insertedSpot = (inserted as Spot | null) ?? null
       const newSpotId = insertedSpot?.id ?? null
       // Instant feed re-render — hand the full row to the (kept-alive)

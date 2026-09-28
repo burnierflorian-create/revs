@@ -665,7 +665,8 @@
     "viewSubscriptions": "VOIR LES ABONNEMENTS",
     "later": "Plus tard",
     "retry": "RÉESSAYER",
-    "lowConfidenceBadge": "⚠️ Cible éloignée — Reconnaissance basse"
+    "lowConfidenceBadge": "⚠️ Cible éloignée — Reconnaissance basse",
+    "cooldown": "Doucement ! Attends {{seconds}} s avant le prochain scan."
   },
   "racepage": {
     "back": "Retour",
