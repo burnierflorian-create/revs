@@ -1,7 +1,7 @@
 // Single source of truth for the subscription tier system. Used by
 // Premium.tsx (checkout), Settings.tsx (current plan label),
 // Profile.tsx (premium badges), and anywhere we need to gate features
-// like the Radar mode.
+// for tier-gated features.
 //
 // `subscriptions.plan` in Supabase can hold either:
 //   - a current plan ID like "premium_monthly" / "vip_yearly"
@@ -92,7 +92,14 @@ export const YEARLY_PRICES: Record<'premium' | 'vip', string> = {
 //   2. Track days, concours, tirages au sort, paddock F1, invitations Monaco,
 //      accès anticipé aux événements — aucune de ces contreparties n'existe,
 //      ni dans le logiciel ni en dehors.
-//   3. « Statistiques avancées » et « Profil mis en avant dans le classement »
+//   3. Mode Radar — retiré des perks le 27/09/2026. La fonctionnalité EXISTE
+//      et fonctionne (gardée côté SQL par 0020-radar.sql via user_tier), mais
+//      elle n'a pas de sens tant que la densité d'utilisateurs est trop faible
+//      pour qu'une notification de proximité se déclenche. Le code est
+//      conservé — src/pages/Radar.tsx, src/lib/radar.ts, la section des
+//      réglages — seule la page est masquée. À remettre quand la densité
+//      suivra.
+//   4. « Statistiques avancées » et « Profil mis en avant dans le classement »
 //      (retirés le 27/09/2026) — aucune implémentation : pas de carte de
 //      chaleur, aucune statistique conditionnée au tier, et Leaderboard.tsx
 //      ne connaît ni tier ni premium. isPremiumOrAbove() et isVip() ne
@@ -105,7 +112,6 @@ export const YEARLY_PRICES: Record<'premium' | 'vip', string> = {
 // Short labels used on the main /premium grid cards (one-liners).
 export const PREMIUM_PERKS = [
   '30 spots IA par jour',
-  'Mode Radar — notif en temps réel quand une supercar est près de toi',
   'Badge Premium ⚡',
 ]
 
@@ -134,11 +140,6 @@ export const PREMIUM_PERKS_DETAILED: DetailedPerk[] = [
     body: 'Passe de 5 à 30 reconnaissances par jour — de quoi couvrir un rassemblement entier.',
   },
   {
-    icon: '🎯',
-    title: 'Mode Radar',
-    body: 'Reçois une notification dès qu’une supercar est spottée à moins de 10 km de toi en temps réel.',
-  },
-  {
     icon: '⚡',
     title: 'Badge Premium',
     body: 'Un badge exclusif visible sur tous tes spots et ton profil.',
@@ -154,7 +155,7 @@ export const VIP_PERKS_DETAILED: DetailedPerk[] = [
   {
     icon: '✨',
     title: 'Tout le Premium inclus',
-    body: 'Le Mode Radar et le badge Premium, inclus dans le VIP.',
+    body: 'Le badge Premium et tous les avantages du palier, inclus dans le VIP.',
   },
   {
     icon: '💬',

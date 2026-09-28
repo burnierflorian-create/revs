@@ -10,22 +10,15 @@ type Tier = 'premium' | 'vip'
 type Slide = { emoji: string; title: string; body: string }
 
 // ─────────────────────── Avantages annoncés ───────────────────────
-// Réaligné le 26/09/2026. Cet écran s'affiche juste APRÈS un paiement
-// réussi, en clés Stripe live : c'est l'endroit du produit où une promesse
-// fausse coûte le plus cher. Deux y figuraient encore :
-//   - « Spots illimités / Plus aucune limite journalière » : faux, le portail
-//     IA applique des plafonds fermes (server/ai-gate.js).
-//   - « Concours VIP / tirage du mois » : aucune contrepartie n'existe, ni
-//     dans le logiciel ni en dehors.
-//
-// Règle : ne rien lister ici qui ne soit pas vérifiable dans le code.
-// ─────────────────────── Avantages annoncés ───────────────────────
 // Cet écran s'affiche juste APRÈS un paiement réussi, en clés Stripe live.
 // C'est l'endroit du produit où une promesse fausse coûte le plus cher, donc la
 // règle est stricte : on ne liste QUE ce qui est vérifiable dans le code.
 //
-// Retiré le 26/09/2026 : « Spots illimités », « Plus aucune limite
+// Retirés le 26/09/2026 : « Spots illimités », « Plus aucune limite
 // journalière », « Concours VIP » et le tirage du mois — aucun n'existait.
+// Retiré le 27/09/2026 : « Mode Radar activé ». La fonctionnalité existe et
+// fonctionne, mais elle a été sortie des arguments de vente tant que la densité
+// d'utilisateurs ne permet pas aux notifications de proximité de se déclencher.
 //
 // DÉLIBÉRÉMENT ABSENTS, bien que listés dans src/lib/plans.ts :
 //   - « Statistiques avancées » : aucune implémentation (ni carte de chaleur,
@@ -33,9 +26,8 @@ type Slide = { emoji: string; title: string; body: string }
 //   - « Profil mis en avant dans le classement » : Leaderboard.tsx ne connaît
 //     ni tier ni premium.
 //   - « Support prioritaire » (VIP) : aucun canal dédié.
-// Vérifié par recherche sur tout src/ le 26/09/2026 — isPremiumOrAbove() et
-// isVip() ne gardent aucune fonctionnalité. À rajouter ici le jour où elles
-// existent, pas avant.
+// Vérifié par recherche sur tout src/ — isPremiumOrAbove() et isVip() ne
+// gardent aucune fonctionnalité. À rajouter le jour où elles existent.
 //
 // Les plafonds citent server/ai-gate.js, qui fait foi : free 5, premium 30,
 // vip 300.
@@ -44,11 +36,6 @@ const PREMIUM_SLIDES: Slide[] = [
     emoji: '⚡',
     title: '30 spots IA par jour',
     body: 'Tu passes de 5 à 30 reconnaissances par jour — de quoi couvrir un rassemblement entier.',
-  },
-  {
-    emoji: '🎯',
-    title: 'Mode Radar activé',
-    body: 'Tu recevras une notif dès qu’une supercar est spottée près de toi.',
   },
   {
     emoji: '🏆',
@@ -66,11 +53,6 @@ const VIP_SLIDES: Slide[] = [
     emoji: '⚡',
     title: '300 spots IA par jour',
     body: 'Le plafond le plus haut de REVS — 300 reconnaissances par jour.',
-  },
-  {
-    emoji: '🎯',
-    title: 'Mode Radar activé',
-    body: 'Tu recevras une notif dès qu’une supercar est spottée près de toi.',
   },
   {
     emoji: '👑',
