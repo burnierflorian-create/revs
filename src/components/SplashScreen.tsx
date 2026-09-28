@@ -9,8 +9,7 @@ import '../styles/splash-animation.css'
 // ═══════════════════════════════════════════════════════════════════════
 //
 //  0,00 → 0,30  un feu arrière rouge apparaît au centre, au loin
-//  0,30 → 0,70  il trace le R du monogramme (stroke-dashoffset)
-//  0,70 → 1,00  il enchaîne sur le V, sans rupture
+//  0,30 → 1,00  il trace le monogramme d'un seul geste continu
 //  1,00 → 1,30  un reflet métallique balaie le mark
 //  1,30 → 1,60  REVS puis la tagline se posent dessous
 //  1,60 → 1,80  palier stable
@@ -26,6 +25,10 @@ import '../styles/splash-animation.css'
 //
 // Remplace l'intro précédente (le mark arrivait par la gauche avec une
 // traînée de flou, et REVS s'égrenait lettre par lettre en police système).
+
+// Fenêtre de tracé : de 0,30 s (fin de l'étincelle) à 1,00 s.
+const TRACE_START = 300
+const TRACE_MS = 700
 
 const FULL_MS = 2000
 const BRIEF_MS = 500
@@ -65,24 +68,58 @@ export default function SplashScreen() {
 
   const full = mode === 'full' && !reduced
 
-  // Longueur de chaque contour, mesurée sur le tracé réel. C'est ce qui rend
-  // le tracé indépendant de la géométrie : si le monogramme est redessiné,
-  // l'animation suit sans qu'aucune constante ne soit à corriger.
+  // Mesure des tracés, puis séquencement du geste.
   //
-  // useLayoutEffect et non useEffect : la mesure doit être écrite AVANT la
-  // première peinture, sinon les contours apparaissent entiers pendant une
+  // Les cinq pièces sont parcourues À LA SUITE, chacune pendant une durée
+  // proportionnelle à sa longueur : la pointe avance donc à vitesse
+  // constante d'un bout à l'autre du monogramme. C'est ce qui manquait à la
+  // version précédente, où les trois pièces du R partaient toutes en même
+  // temps et où le R et le V avaient chacun leur propre courbe ease-in-out —
+  // d'où un arrêt net, visible, à la jonction.
+  //
+  // Tout est dérivé de getTotalLength() : si le monogramme est redessiné, le
+  // séquencement se recalcule seul, sans constante à corriger.
+  //
+  // useLayoutEffect et non useEffect : les valeurs doivent être écrites AVANT
+  // la première peinture, sinon les contours apparaissent entiers pendant une
   // frame avant de se rétracter.
   useLayoutEffect(() => {
     if (!full) return
     const svg = svgRef.current
     if (!svg) return
-    for (const el of svg.querySelectorAll<SVGPathElement>(
-      '.revs-splash__trace',
-    )) {
-      // getTotalLength additionne tous les sous-tracés d'un même path — la
-      // panse et son contrepoinçon se tracent donc à la suite, ce qui est
-      // exactement le geste voulu.
-      el.style.setProperty('--len', String(el.getTotalLength()))
+
+    const traces = [
+      ...svg.querySelectorAll<SVGPathElement>('.revs-splash__trace'),
+    ]
+    if (!traces.length) return
+
+    // getTotalLength additionne les sous-tracés d'un même path — la panse et
+    // son contrepoinçon se dessinent donc à la suite, ce qui est le geste
+    // voulu.
+    const lens = traces.map((el) => el.getTotalLength())
+    const total = lens.reduce((a, b) => a + b, 0)
+    if (!total) return
+
+    // Fin de tracé par groupe — purement local à la mesure.
+    const fillEnd: Record<string, number> = {}
+    let acc = 0
+    traces.forEach((el, i) => {
+      const start = TRACE_START + (TRACE_MS * acc) / total
+      const dur = (TRACE_MS * lens[i]) / total
+      el.style.setProperty('--len', String(lens[i]))
+      el.style.setProperty('--delay', `${start.toFixed(1)}ms`)
+      el.style.setProperty('--dur', `${dur.toFixed(1)}ms`)
+      acc += lens[i]
+      // Le remplissage d'un groupe démarre quand sa dernière pièce est
+      // tracée. On le pose ici parce que c'est le seul endroit qui connaît
+      // la répartition réelle des durées.
+      const g = el.dataset.group
+      if (g) fillEnd[g] = TRACE_START + (TRACE_MS * acc) / total
+    })
+
+    for (const [g, end] of Object.entries(fillEnd)) {
+      const el = svg.querySelector<SVGGElement>(`.revs-splash__fill--${g}`)
+      el?.style.setProperty('--delay', `${end.toFixed(1)}ms`)
     }
   }, [full])
 
@@ -113,8 +150,12 @@ export default function SplashScreen() {
 
   const rParts = MONOGRAM.parts.filter((p) => p.group === 'R')
   const vParts = MONOGRAM.parts.filter((p) => p.group === 'V')
+  // Le geste parcourt le R puis le V, dans l'ordre de la charte.
+  const traceParts = [...rParts, ...vParts]
+  // Le rouge REVS est invariant ; les masses claires suivent le thème via
+  // currentColor, pour que le monogramme reste lisible sur fond clair.
   const colorOf = (role: 'light' | 'accent') =>
-    role === 'accent' ? '#E8203A' : '#FFFFFF'
+    role === 'accent' ? 'var(--revs-red)' : 'currentColor'
 
   return (
     <div
@@ -139,17 +180,21 @@ export default function SplashScreen() {
         >
           {/* Contours — le geste qui dessine. Rendus uniquement en version
               complète : en version courte il n'y a rien à tracer. */}
-          {full &&
-            (['R', 'V'] as const).map((g) =>
-              (g === 'R' ? rParts : vParts).map((p, i) => (
+          {full && (
+            <g className="revs-splash__traces">
+              {traceParts.map((p, i) => (
                 <path
-                  key={`t-${g}-${i}`}
-                  className={`revs-splash__trace revs-splash__trace--${g.toLowerCase()}`}
+                  key={`t-${i}`}
+                  data-group={p.group}
+                  className={`revs-splash__trace${
+                    i === 0 ? ' revs-splash__trace--first' : ''
+                  }${i === traceParts.length - 1 ? ' revs-splash__trace--last' : ''}`}
                   d={p.d}
                   stroke={colorOf(p.role)}
                 />
-              )),
-            )}
+              ))}
+            </g>
+          )}
 
           {/* Remplissages — le logo définitif, dans ses couleurs de charte. */}
           <g className="revs-splash__fill revs-splash__fill--r">
@@ -180,10 +225,10 @@ export default function SplashScreen() {
       {full && (
         <div className="flex flex-col items-center gap-3">
           <span className="revs-splash__word">
-            <RevsWordmark height={34} color="#FFFFFF" />
+            <RevsWordmark height={34} />
           </span>
           <span className="revs-splash__tag">
-            <RevsTagline height={11} color="#9A9A9A" />
+            <RevsTagline height={11} color="rgb(var(--color-fg-2))" />
           </span>
         </div>
       )}

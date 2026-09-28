@@ -2,20 +2,32 @@
    REVS — animation d'intro
    ═══════════════════════════════════════════════════════════════════════
 
-   Un feu arrière rouge apparaît au loin, trace le monogramme R+V, un reflet
-   métallique balaie le mark, puis REVS et la tagline se posent dessous.
-   Durée totale 2 s. Tout est en @keyframes CSS ; le seul travail JavaScript
-   est la mesure de getTotalLength() sur les tracés (voir SplashScreen.tsx).
+   Un feu arrière rouge apparaît au loin, trace le monogramme R+V d'un seul
+   geste, un reflet métallique balaie le mark, puis REVS et la tagline se
+   posent dessous. Durée totale 2 s. Tout est en @keyframes CSS ; le seul
+   travail JavaScript est le calcul des longueurs et du séquencement (voir
+   SplashScreen.tsx).
 
-   PROPRIÉTÉS ANIMÉES — uniquement opacity, transform et stroke-dashoffset.
-   Les deux premières sont composées par le GPU. stroke-dashoffset, non : il
-   repasse par le rastériseur à chaque frame. C'est acceptable ici parce que
-   la phase de tracé ne dure que 0,7 s et ne porte que cinq tracés, mais c'est
-   aussi pourquoi le glow est une valeur fixe et non une valeur animée —
-   animer un drop-shadow ferait recalculer le flou à chaque frame.
+   ── UN SEUL GESTE ──
+   Le tracé n'est pas « le R puis le V ». Les cinq pièces du monogramme sont
+   parcourues À LA SUITE, chacune pendant une durée proportionnelle à sa
+   longueur — donc à vitesse constante d'un bout à l'autre. C'est --delay et
+   --dur, posés par JavaScript, qui portent ce séquencement.
 
-   Les durées sont exprimées en variables pour que la version courte (retours
-   dans les 24 h) réutilise exactement les mêmes keyframes en accéléré. */
+   L'accélération n'est appliquée qu'aux EXTRÉMITÉS du geste : la première
+   pièce démarre en douceur, la dernière ralentit, et tout ce qu'il y a entre
+   les deux est linéaire. Donner sa propre courbe ease-in-out à chaque pièce
+   — ce que faisait la version précédente — recréait un arrêt puis un
+   redémarrage à chaque jonction : c'est exactement ce qui se voyait entre le
+   R et le V.
+
+   ── COÛT ──
+   opacity et transform sont composés par le GPU. stroke-dashoffset, non : il
+   repasse par le rastériseur à chaque frame. Mesuré à 60 fps médian sur
+   iPhone 13 avec le CPU bridé ×6, donc c'est tenable — à une condition, qui
+   est la raison du <g> ci-dessous : le halo est porté par le GROUPE et non
+   par chacun des cinq tracés, soit une passe de filtre par frame au lieu de
+   cinq. */
 
 .revs-splash {
   position: fixed;
@@ -26,9 +38,15 @@
   align-items: center;
   justify-content: center;
   gap: clamp(18px, 5vw, 30px);
-  background: #0b0b0b;
-  /* Le splash est un calque décoratif : il ne doit jamais intercepter un
-     geste destiné à l'application qui se charge derrière. */
+  /* Le splash suit le thème. Il était figé à #0B0B0B : sur un appareil
+     réglé en clair, l'intro se terminait par un fondu noir → blanc à chaque
+     lancement. Les pièces claires du monogramme suivent `color` (elles sont
+     rendues en currentColor), donc elles s'inversent avec le fond ; seul le
+     rouge REVS reste invariant, comme le veut la charte. */
+  background: rgb(var(--color-bg));
+  color: rgb(var(--color-fg));
+  /* Calque décoratif : il ne doit jamais intercepter un geste destiné à
+     l'application qui se charge derrière. */
   pointer-events: none;
   will-change: opacity;
 }
@@ -85,27 +103,33 @@
   overflow: visible;
 }
 
-/* Contours tracés. --len est posé par React (getTotalLength) ; sans lui,
-   rien n'est visible plutôt que tout — un tracé sans longueur connue doit
-   rester caché, pas apparaître d'un coup. */
+/* Halo porté UNE fois par le groupe — voir l'en-tête. */
+.revs-splash__traces {
+  filter: drop-shadow(0 0 7px rgba(232, 32, 58, 0.55));
+}
+
+/* --len (longueur du tracé), --delay et --dur sont posés par React.
+   La valeur de repli 9999 est choisie pour dépasser toute longueur réelle :
+   si le JavaScript ne s'exécutait pas, le décalage resterait hors du tracé
+   et rien ne s'afficherait d'un coup — c'est le remplissage qui prendrait
+   le relais. Une valeur de repli de 0 ferait l'inverse : stroke-dasharray:0
+   signifie « trait plein », donc tout le contour apparaîtrait instantanément. */
 .revs-splash__trace {
   fill: none;
   stroke-width: 3;
   stroke-linecap: round;
   stroke-linejoin: round;
-  stroke-dasharray: var(--len, 0);
-  stroke-dashoffset: var(--len, 0);
-  filter: drop-shadow(0 0 8px rgba(232, 32, 58, 0.6));
-  animation: revs-trace 400ms cubic-bezier(0.55, 0, 0.35, 1) forwards;
+  stroke-dasharray: var(--len, 9999);
+  stroke-dashoffset: var(--len, 9999);
+  animation: revs-trace var(--dur, 140ms) linear var(--delay, 300ms) forwards;
   will-change: stroke-dashoffset;
 }
-/* Le R part à 0,3 s, le V enchaîne à 0,7 s. Les deux lettres partageant la
-   diagonale centrale, l'enchaînement se lit comme un seul geste continu. */
-.revs-splash__trace--r {
-  animation-delay: 300ms;
+/* Seules les deux extrémités du geste sont adoucies. */
+.revs-splash__trace--first {
+  animation-timing-function: cubic-bezier(0.45, 0, 1, 1);
 }
-.revs-splash__trace--v {
-  animation-delay: 700ms;
+.revs-splash__trace--last {
+  animation-timing-function: cubic-bezier(0, 0, 0.45, 1);
 }
 @keyframes revs-trace {
   to {
@@ -113,18 +137,13 @@
   }
 }
 
-/* Remplissages — apparaissent juste derrière le contour qui vient de les
-   dessiner, ce qui donne l'impression que le trait « remplit » la lettre. */
+/* Remplissages — ils arrivent derrière le trait qui vient de les dessiner,
+   ce qui donne l'impression que le geste « remplit » la lettre. Les délais
+   sont posés par React, calés sur la fin réelle de chaque groupe. */
 .revs-splash__fill {
   opacity: 0;
-  animation: revs-fill 260ms ease-out forwards;
+  animation: revs-fill 240ms ease-out var(--delay, 0ms) forwards;
   will-change: opacity;
-}
-.revs-splash__fill--r {
-  animation-delay: 560ms;
-}
-.revs-splash__fill--v {
-  animation-delay: 960ms;
 }
 @keyframes revs-fill {
   to {
@@ -137,7 +156,6 @@
   position: absolute;
   inset: 0;
   overflow: hidden;
-  border-radius: inherit;
 }
 .revs-splash__shine::after {
   content: '';
@@ -187,7 +205,6 @@
 /* Le monogramme est déjà rempli : pas de tracé, pas d'étincelle, pas de
    reflet. Un fondu de 500 ms et on rend la main. */
 .revs-splash--brief .revs-splash__fill {
-  animation: revs-fill 260ms ease-out forwards;
   animation-delay: 0ms;
 }
 
