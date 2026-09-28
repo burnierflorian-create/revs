@@ -9,6 +9,7 @@ import { stashPendingReferral } from '../lib/referrals'
 import { useAuth } from '../hooks/useAuth'
 import { detectCountry, reverseGeocode, COUNTRY_NAMES } from '../lib/country'
 import { appConfig } from '../config/appConfig'
+import { RevsLogo } from '../components/Logo'
 
 // iOS autofill and copy/paste routinely inject invisible characters into
 // the email field — zero-width spaces, a BOM, or a non-breaking space —
@@ -283,14 +284,16 @@ export default function Auth() {
       />
 
       <div className="relative mx-auto flex min-h-screen w-full max-w-sm flex-col px-7 pt-[max(4rem,calc(env(safe-area-inset-top)+3rem))] pb-[max(2rem,env(safe-area-inset-bottom))]">
-        {/* Logo + tagline */}
+        {/* Logo + tagline.
+            Jusqu'au 28/09/2026 le titre était composé en police système avec
+            le R en rouge — une troisième écriture de la marque, différente à
+            la fois du monogramme et de l'icône. C'est maintenant le verrou
+            officiel (monogramme R+V + REVS), en tracés vectoriels.
+            Le <h1> est conservé pour la structure du document : le SVG porte
+            aria-label="REVS", ce qui lui donne son nom accessible. */}
         <div className="mb-10 text-center">
-          <h1
-            className="font-display font-extrabold leading-none"
-            style={{ fontSize: '64px', letterSpacing: '-2px' }}
-          >
-            <span className="text-accent">R</span>
-            <span className="text-fg">EVS</span>
+          <h1 className="flex justify-center text-fg">
+            <RevsLogo height={52} />
           </h1>
           <p className="mt-3 text-sm text-fg2">{t('auth.tagline')}</p>
         </div>

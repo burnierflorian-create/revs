@@ -25,21 +25,42 @@ export default defineConfig({
         injectionPoint: 'self.__WB_MANIFEST',
         globPatterns: ['**/*.html'],
       },
-      includeAssets: ['favicon.svg'],
+      includeAssets: ['favicon.svg', 'brand/favicon-32.png', 'brand/favicon-16.png'],
       manifest: {
-        name: 'revs',
-        short_name: 'revs',
-        description: 'Spotte les supercars autour de toi',
+        name: 'REVS',
+        short_name: 'REVS',
+        description: 'Cars. Spots. Passion.',
+        // theme_color teinte la barre système Android ; background_color est
+        // la couleur peinte AVANT le premier rendu (écran de lancement PWA).
+        // On aligne ce dernier sur --revs-black (#0B0B0B) de la charte.
         theme_color: '#E8203A',
-        background_color: '#0A0A0A',
+        background_color: '#0B0B0B',
         display: 'standalone',
         orientation: 'portrait',
         start_url: '/',
         scope: '/',
+        // Toutes générées par scripts/build-brand.mjs depuis le même master.
+        //
+        // `maskable` : Android recadre l'icône dans la forme choisie par le
+        // lanceur et peut rogner jusqu'à ~20 % sur chaque bord. Le master
+        // laisse volontairement 12 % de marge autour du monogramme, donc le
+        // même fichier tient les deux rôles sans être tronqué.
         icons: [
+          {
+            src: '/brand/revs-icon-128.png',
+            sizes: '128x128',
+            type: 'image/png',
+            purpose: 'any',
+          },
           {
             src: '/icons/icon-192x192.png',
             sizes: '192x192',
+            type: 'image/png',
+            purpose: 'any',
+          },
+          {
+            src: '/brand/revs-icon-256.png',
+            sizes: '256x256',
             type: 'image/png',
             purpose: 'any',
           },

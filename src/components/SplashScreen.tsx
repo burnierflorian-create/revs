@@ -1,11 +1,16 @@
 import { useEffect, useState } from 'react'
 import { prefersReducedMotion } from '../lib/motion'
-import { RevsMark } from './Logo'
+import { RevsMark, RevsWordmark } from './Logo'
 
-// Premium launch splash built on the REVS logo (Piste 2): the R mark tears in
-// from the left with speed lines + a motion-blur trail, and "REVS" is revealed
-// in its wake (S in red), then it fades to the app. ~2.3s, 100% GPU
-// (transform/opacity). Skipped under reduced motion. Overlay — never blocks.
+// Splash de lancement : le monogramme R+V arrive par la gauche avec une
+// traînée de flou de mouvement, puis le mot REVS se révèle dans son sillage.
+// ~2,3 s, 100 % GPU (transform/opacity). Ignoré si l'utilisateur a demandé
+// moins d'animations. C'est un calque — il ne bloque jamais l'application.
+//
+// 28/09/2026 : le mot était composé en lettres HTML dans une police système
+// (« Arial Black »), avec un S rouge. Il est désormais rendu par RevsWordmark,
+// c'est-à-dire les mêmes tracés vectoriels que le reste de l'identité — même
+// forme sur tous les appareils, et le rouge est porté par le V.
 
 const DURATION = 2350
 
@@ -44,35 +49,25 @@ export default function SplashScreen() {
       <div className="rvsplash-logo">
         <span className="rvsplash-mark">
           <span className="rvsplash-ghost rvsplash-ghost-3">
-            <RevsMark size={100} />
+            <RevsMark height={100} color="#FFFFFF" />
           </span>
           <span className="rvsplash-ghost rvsplash-ghost-2">
-            <RevsMark size={100} />
+            <RevsMark height={100} color="#FFFFFF" />
           </span>
           <span className="rvsplash-ghost rvsplash-ghost-1">
-            <RevsMark size={100} />
+            <RevsMark height={100} color="#FFFFFF" />
           </span>
           <span className="rvsplash-markmain">
-            <RevsMark size={100} />
+            <RevsMark height={100} color="#FFFFFF" />
           </span>
         </span>
         <span className="rvsplash-word">
-          {['R', 'E', 'V', 'S'].map((ch, i) => (
-            <span
-              key={ch}
-              className={
-                ch === 'S' ? 'rvsplash-letter rvsplash-letter-s' : 'rvsplash-letter'
-              }
-              style={{ animationDelay: `${0.55 + i * 0.09}s` }}
-            >
-              {ch}
-            </span>
-          ))}
+          <RevsWordmark height={84} color="#FFFFFF" />
           <span className="rvsplash-glint" />
         </span>
       </div>
 
-      <div className="rvsplash-tag">CARSPOTTING</div>
+      <div className="rvsplash-tag">CARS. SPOTS. PASSION.</div>
     </div>
   )
 }

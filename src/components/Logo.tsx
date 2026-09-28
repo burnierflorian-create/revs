@@ -1,90 +1,156 @@
-// REVS brand logo — Piste 2: a bold italic "R" cut by red speed lines, with
-// the "REVS" wordmark (S in signature red #E8203A). Single source of truth for
-// the splash, header, app icon and any brand surface. Pure SVG, crisp at any
-// size. `mono` renders the R in one colour (for dark or light backgrounds).
+// Identité visuelle REVS — surface React.
+//
+// Le dessin n'est PAS défini ici : il vient de src/lib/brand-paths.ts, généré
+// par scripts/build-brand.mjs à partir de la même géométrie que les SVG de
+// public/brand/, les icônes d'application, le favicon et le splash. Modifier
+// le logo se fait donc dans le générateur puis `npm run brand` — jamais dans
+// ce fichier.
+//
+// Remplace l'ancienne identité (un « R » italique barré de lignes de vitesse,
+// et un mot REVS composé en Arial via un <span>). Deux raisons de l'avoir
+// abandonnée : le mot dépendait d'une police système, donc il changeait de
+// forme d'un appareil à l'autre ; et le symbole n'avait aucun rapport avec le
+// monogramme R+V validé.
+import { LOCKUP, MONOGRAM, WORDMARK, type BrandPart } from '../lib/brand-paths'
 
-const RED = '#E8203A'
+// Les deux couleurs par défaut passent par le design system plutôt que par
+// des hexadécimaux figés, pour deux raisons distinctes :
+//
+//  · `currentColor` rend le logo THÉMATIQUE. REVS a un thème clair : un logo
+//    codé en blanc dur y serait invisible. Le parent impose la couleur avec
+//    text-fg (ou text-white pour les surfaces toujours sombres comme le
+//    splash), et le monogramme suit.
+//  · `var(--revs-red)` est dérivé de --color-accent : il ne peut donc pas
+//    exister deux rouges REVS qui divergent.
+const RED = 'var(--revs-red)'
+const SILVER = 'currentColor'
 
-// The symbol only — the dynamic R + trailing speed lines. viewBox 0 0 120 120.
-export function RevsMark({
-  size = 40,
-  color = '#F5F5F7',
-  lines = RED,
+function Paths({
+  parts,
+  light,
+  accent,
 }: {
-  size?: number
-  color?: string
-  lines?: string
+  parts: BrandPart[]
+  light: string
+  accent: string
 }) {
   return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 120 120"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      aria-label="REVS"
-    >
-      {/* trailing speed lines */}
-      <rect x="6" y="45" width="34" height="5" rx="2.5" fill={lines} />
-      <rect x="12" y="60" width="28" height="5" rx="2.5" fill={lines} opacity="0.6" />
-      <rect x="18" y="75" width="22" height="5" rx="2.5" fill={lines} opacity="0.32" />
-      {/* bold italic R */}
-      <g transform="skewX(-9) translate(14 0)" fill={color} fillRule="evenodd">
+    <>
+      {parts.map((p, i) => (
         <path
-          d="M 40 26 L 70 26 C 86 26 95 36 95 50 C 95 62 88 70 76 72 L 98 96 L 76 96 L 56 74 L 56 96 L 40 96 Z
-             M 56 40 L 68 40 C 76 40 80 44 80 50 C 80 56 76 60 68 60 L 56 60 Z"
+          key={i}
+          d={p.d}
+          fill={p.role === 'accent' ? accent : light}
+          fillRule={p.rule}
         />
-      </g>
+      ))}
+    </>
+  )
+}
+
+/**
+ * Monogramme R+V seul — le symbole officiel de l'application.
+ *
+ * `height` pilote la taille : le monogramme est nettement plus large que haut
+ * (ratio ~1.9), donc caler sur la hauteur évite les surprises de mise en page.
+ * `mono` force une seule couleur, pour les fonds complexes et l'impression.
+ */
+export function RevsMark({
+  height = 32,
+  color = SILVER,
+  accent = RED,
+  mono = false,
+  title = 'REVS',
+}: {
+  height?: number
+  color?: string
+  accent?: string
+  mono?: boolean
+  title?: string
+}) {
+  const w = (MONOGRAM.w / MONOGRAM.h) * height
+  return (
+    <svg
+      width={w}
+      height={height}
+      viewBox={`0 0 ${MONOGRAM.w} ${MONOGRAM.h}`}
+      xmlns="http://www.w3.org/2000/svg"
+      role="img"
+      aria-label={title}
+    >
+      <Paths parts={MONOGRAM.parts} light={color} accent={mono ? color : accent} />
     </svg>
   )
 }
 
-// The "REVS" wordmark — bold italic, S in red. Uses the app display font.
+/**
+ * Le mot REVS seul, en tracés.
+ *
+ * Existe pour les compositions où le monogramme est déjà présent par ailleurs
+ * — le splash, typiquement. Auparavant ce mot était du texte HTML en
+ * « Arial Black » : sa forme dépendait des polices installées sur l'appareil,
+ * et le S rouge ne correspondait à aucune règle du système. Ici c'est le même
+ * dessin que partout ailleurs, et le rouge est sur le V.
+ */
 export function RevsWordmark({
   height = 32,
-  color = '#F5F5F7',
+  color = SILVER,
+  accent = RED,
+  mono = false,
+  title = 'REVS',
 }: {
   height?: number
   color?: string
+  accent?: string
+  mono?: boolean
+  title?: string
 }) {
+  const w = (WORDMARK.w / WORDMARK.h) * height
   return (
-    <span
-      aria-label="REVS"
-      style={{
-        fontFamily: 'var(--font-display, "Arial Black", Arial, sans-serif)',
-        fontWeight: 900,
-        fontStyle: 'italic',
-        fontSize: height,
-        lineHeight: 1,
-        letterSpacing: '-0.05em',
-        color,
-        userSelect: 'none',
-        whiteSpace: 'nowrap',
-      }}
+    <svg
+      width={w}
+      height={height}
+      viewBox={`0 0 ${WORDMARK.w} ${WORDMARK.h}`}
+      xmlns="http://www.w3.org/2000/svg"
+      role="img"
+      aria-label={title}
     >
-      REV<span style={{ color: RED }}>S</span>
-    </span>
+      <Paths parts={WORDMARK.parts} light={color} accent={mono ? color : accent} />
+    </svg>
   )
 }
 
-// Horizontal lockup — symbol + wordmark.
+/**
+ * Verrou horizontal officiel : monogramme + REVS.
+ *
+ * C'est la version destinée aux en-têtes. Pas de tagline ici — elle existe
+ * uniquement dans public/brand/revs-logo-tagline.svg, pour les usages où le
+ * logo dispose de place (réseaux sociaux, présentations, Open Graph).
+ */
 export function RevsLogo({
-  height = 34,
-  color = '#F5F5F7',
+  height = 28,
+  color = SILVER,
+  accent = RED,
+  mono = false,
+  title = 'REVS',
 }: {
   height?: number
   color?: string
+  accent?: string
+  mono?: boolean
+  title?: string
 }) {
+  const w = (LOCKUP.w / LOCKUP.h) * height
   return (
-    <span
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: height * 0.28,
-      }}
+    <svg
+      width={w}
+      height={height}
+      viewBox={`0 0 ${LOCKUP.w} ${LOCKUP.h}`}
+      xmlns="http://www.w3.org/2000/svg"
+      role="img"
+      aria-label={title}
     >
-      <RevsMark size={height * 1.15} color={color} />
-      <RevsWordmark height={height} color={color} />
-    </span>
+      <Paths parts={LOCKUP.parts} light={color} accent={mono ? color : accent} />
+    </svg>
   )
 }

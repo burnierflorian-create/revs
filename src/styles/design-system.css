@@ -25,6 +25,21 @@
   --color-accent:    232 32 58;    /* #e8203a — rouge REVS (invariant) */
   --color-border:    rgba(255, 255, 255, 0.06); /* bordure carte subtile */
   --color-divider:   rgba(255, 255, 255, 0.08); /* séparateur */
+
+  /* ── Couleurs de MARQUE (charte 28/09/2026) ──
+     Distinctes des couleurs d'INTERFACE ci-dessus, et c'est volontaire :
+     celles-ci ne basculent JAMAIS avec le thème. Le logo REVS est le même
+     objet en clair et en sombre — seule change la variante de fichier que
+     l'on choisit d'afficher, pas la définition de la couleur.
+
+     --revs-red est dérivé de --color-accent plutôt que réécrit en dur : il
+     ne peut donc pas exister deux rouges REVS qui divergent. Avant cette
+     charte, public/icons/master.svg utilisait #D40000 — un second rouge qui
+     ne correspondait à rien. */
+  --revs-red:   rgb(var(--color-accent)); /* #e8203a */
+  --revs-black: #0b0b0b;
+  --revs-white: #ffffff;
+  --revs-gray:  #9a9a9a;
   /* Glass plates — used by Home radar card, Feed search bar, Profile
      stats pill, etc. Light variant inverts to white-tint so the same
      style={{ background: 'var(--color-glass)' }} renders correctly in
@@ -69,10 +84,16 @@
     transparent 50%,
     rgba(0, 0, 0, calc(0.3 * var(--amb-intensity))) 100%
   );
-  /* 1 · Halo rouge en haut à droite — rappel de l'accent REVS. */
+  /* 1 · Halo rouge — rappel de l'accent REVS.
+     28/09 : déplacé de « haut à droite » (85% 8%) vers le CENTRE-HAUT, et
+     alpha ramené de 0.07 à 0.04, sur demande explicite (fourchette
+     visée 0.02–0.04). Note pour plus tard : centré, le halo se superpose
+     à --amb-warm qui occupe déjà 50% 0%, donc il colore la même zone au
+     lieu d'équilibrer la diagonale. Si le fond reparaît trop symétrique,
+     c'est ce déplacement qu'il faut annuler en premier. */
   --amb-glow: radial-gradient(
-    ellipse 60% 50% at 85% 8%,
-    rgba(232, 32, 58, calc(0.07 * var(--amb-intensity))) 0%,
+    ellipse 60% 50% at 50% 0%,
+    rgba(232, 32, 58, calc(0.04 * var(--amb-intensity))) 0%,
     transparent 100%
   );
   /* 2 · Lueur chaude en haut au centre — c'est elle qui crée la profondeur.
@@ -98,15 +119,22 @@
     rgba(232, 32, 58, calc(0.025 * var(--amb-intensity))) 34.3%,
     transparent 35%
   );
-  /* 6 · Trame carbone diagonale — REMISE dans le fond global, mais à 0.5 %
-     d'alpha au lieu de 1.6 %, donc à la limite du perceptible. Elle avait été
-     retirée le 26/09 parce qu'à 1.6 % elle texturait visiblement toute
-     l'application. La classe utilitaire .carbon-weave reste indépendante et
-     nettement plus marquée (3.2 %), pour les composants qui la veulent. */
+  /* 6 · Trame carbone diagonale — 3 % d'alpha (demandé le 28/09, fourchette
+     0.03–0.05).
+     ATTENTION, historique contradictoire à connaître avant de retoucher :
+       26/09 → 1.6 %, jugée trop visible (« elle texturait toute l'appli »),
+               donc retirée du fond global ;
+       27/09 → remise à 0.5 %, à la limite du perceptible ;
+       28/09 → remontée à 3 %, soit ~2× le réglage rejeté le 26/09.
+     Le bas de la fourchette a été retenu volontairement. Si l'effet
+     « toute l'appli est texturée » revient, c'est cette valeur — pas une
+     autre couche — qu'il faut redescendre (0.005 était le compromis qui
+     tenait). La classe utilitaire .carbon-weave reste indépendante et plus
+     marquée (3.2 %), pour les composants qui la veulent explicitement. */
   --amb-carbon: repeating-linear-gradient(
     45deg,
-    rgba(255, 255, 255, calc(0.005 * var(--amb-intensity))) 0,
-    rgba(255, 255, 255, calc(0.005 * var(--amb-intensity))) 1px,
+    rgba(255, 255, 255, calc(0.03 * var(--amb-intensity))) 0,
+    rgba(255, 255, 255, calc(0.03 * var(--amb-intensity))) 1px,
     transparent 1px,
     transparent 3px
   );
@@ -1367,8 +1395,11 @@ html.light .brand-logo-mono {
 .rvsplash-mark {
   position: relative;
   display: inline-flex;
-  width: clamp(64px, 20vw, 104px);
-  aspect-ratio: 1;
+  /* Le monogramme R+V est nettement plus large que haut (270.16 × 144 dans
+     src/lib/brand-paths.ts, soit ~1.876). L'ancien symbole était carré : sans
+     cette correction le logo serait étiré à l'écran de lancement. */
+  width: clamp(112px, 34vw, 184px);
+  aspect-ratio: 1.876;
   transform: translateX(-66vw);
   animation: rvsplash-mark 0.92s cubic-bezier(0.16, 1, 0.3, 1) 0.1s both;
   will-change: transform;
@@ -1382,27 +1413,26 @@ html.light .brand-logo-mono {
 .rvsplash-ghost-2 { transform: translateX(-34%); opacity: 0.15; filter: blur(2px); }
 .rvsplash-ghost-3 { transform: translateX(-54%); opacity: 0.08; filter: blur(3px); }
 
+/* Le mot est maintenant un SVG (RevsWordmark) et non plus quatre <span> dans
+   une police système. La révélation se joue donc sur le bloc entier au lieu
+   d'être décalée lettre par lettre — un balayage plutôt qu'un égrenage. */
 .rvsplash-word {
   position: relative;
   display: flex;
-  font-family: var(--font-display, "Arial Black", Arial, sans-serif);
-  font-weight: 900;
-  font-style: italic;
-  font-size: clamp(44px, 14vw, 84px);
-  letter-spacing: -0.05em;
-  color: #F5F5F7;
-}
-.rvsplash-letter {
-  display: inline-block;
   opacity: 0;
   transform: translateX(-28px);
   filter: blur(9px);
-  text-shadow: 0 0 22px rgba(232, 32, 58, 0.4), 0 4px 26px rgba(0, 0, 0, 0.6);
-  animation: rvsplash-letter 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: rvsplash-word 0.62s cubic-bezier(0.22, 1, 0.36, 1) 0.55s both;
   will-change: transform, opacity, filter;
 }
-.rvsplash-letter-s { color: #E8203A; }
-@keyframes rvsplash-letter {
+.rvsplash-word svg {
+  display: block;
+  height: clamp(40px, 12.5vw, 76px);
+  width: auto;
+  filter: drop-shadow(0 0 22px rgba(232, 32, 58, 0.4))
+    drop-shadow(0 4px 26px rgba(0, 0, 0, 0.6));
+}
+@keyframes rvsplash-word {
   to { opacity: 1; transform: translateX(0); filter: blur(0); }
 }
 /* a bright glint sweeping across the word once it's revealed */

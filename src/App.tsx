@@ -24,11 +24,14 @@ const Challenges = lazy(() => import('./pages/Challenges'))
 const Badges = lazy(() => import('./pages/Badges'))
 const BadgeDetail = lazy(() => import('./pages/BadgeDetail'))
 const Referral = lazy(() => import('./pages/Referral'))
-// Radar — masqué le 27/09/2026. La page et sa logique (src/pages/Radar.tsx,
-// src/lib/radar.ts) sont CONSERVÉES : seul l'accès est coupé, le temps que la
-// densité d'utilisateurs rende les notifications de proximité pertinentes.
-// Pour réactiver : décommenter l'import et la route ci-dessous.
-// const Radar = lazy(() => import('./pages/Radar'))
+// Radar — retiré de l'UI le 27/09/2026, le temps que la densité
+// d'utilisateurs rende les notifications de proximité pertinentes.
+// 28/09 : la ROUTE est rétablie (elle avait été commentée la veille). Elle
+// reste donc joignable en tapant /radar, mais rien dans l'interface n'y
+// mène — c'est le comportement demandé : « la garder mais elle sera juste
+// inaccessible depuis l'UI ». Ce n'est pas un contrôle d'accès : une URL
+// devinée ou partagée ouvre la page.
+const Radar = lazy(() => import('./pages/Radar'))
 const Games = lazy(() => import('./pages/Games'))
 const Race = lazy(() => import('./pages/Race'))
 const EventLive = lazy(() => import('./pages/EventLive'))
@@ -165,7 +168,9 @@ export default function App() {
           <Route path="/badges" element={lazyRoute(<Badges />)} />
           <Route path="/badges/:slug" element={lazyRoute(<BadgeDetail />)} />
           <Route path="/referral" element={lazyRoute(<Referral />)} />
-          {/* <Route path="/radar" element={lazyRoute(<Radar />)} /> */}
+          {/* Route conservée mais sans aucun lien depuis l'UI — voir le
+              commentaire à côté de l'import. */}
+          <Route path="/radar" element={lazyRoute(<Radar />)} />
           <Route path="/games" element={lazyRoute(<Games />)} />
           <Route path="/race" element={lazyRoute(<Race />)} />
           <Route path="/event/:id/live" element={lazyRoute(<EventLive />)} />

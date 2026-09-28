@@ -1,4 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1170" height="2532" viewBox="0 0 1170 2532">
-  <rect width="1170" height="2532" fill="#0A0A0A"/>
-  <text x="585" y="1266" font-family="Helvetica, Arial, sans-serif" font-size="220" font-weight="700" fill="#D40000" text-anchor="middle" dominant-baseline="central">revs</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2732 2732" width="2732" height="2732">
+  <rect width="2732" height="2732" fill="#0B0B0B"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M890.91,1086.32 L1002.78,1086.32 L904.15,1645.68 L792.28,1645.68 Z M1002.78,1086.32 L1245.18,1086.32 L1337.32,1198.19 L1317.6,1310.06 L1186,1421.94 L943.61,1421.94 Z M983.06,1198.19 L1206.8,1198.19 L1222.16,1216.84 L1209.01,1291.42 L1187.08,1310.06 L963.33,1310.06 Z"/>
+  <path fill="#FFFFFF" d="M1140.46,1310.06 L1252.34,1310.06 L1342.32,1645.68 L1230.45,1645.68 Z"/>
+  <path fill="#E8203A" d="M1263.82,1086.32 L1375.69,1086.32 L1527.11,1496.52 L1500.81,1645.68 L1472.84,1645.68 Z"/>
+  <path fill="#FFFFFF" d="M1527.11,1496.52 L1827.85,1086.32 L1939.72,1086.32 L1533.44,1645.68 L1500.81,1645.68 Z"/>
 </svg>

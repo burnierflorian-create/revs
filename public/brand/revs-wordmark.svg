@@ -1,1 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 70" width="220" height="70"><text x="0" y="41.4" font-family="Arial, Helvetica, sans-serif" font-weight="900" font-style="italic" font-size="56" letter-spacing="-3" fill="#F5F5F7">REV<tspan fill="#E8203A">S</tspan></text></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 443.63 124" width="443.63" height="124">
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M29.63,12 L55.63,12 L38,112 L12,112 Z M55.63,12 L95.63,12 L113.75,34 L109.52,58 L83.64,80 L43.64,80 Z M51.05,38 L85.05,38 L86.7,40 L84.58,52 L82.23,54 L48.23,54 Z"/>
+  <path fill="#FFFFFF" d="M76.82,62 L102.82,62 L112,112 L86,112 Z"/>
+  <path fill="#FFFFFF" d="M141.63,12 L167.63,12 L150,112 L124,112 Z M167.63,12 L225.63,12 L209.05,38 L163.05,38 Z M161.11,49 L209.11,49 L192.52,75 L156.52,75 Z M154.58,86 L212.58,86 L196,112 L150,112 Z"/>
+  <path fill="#E8203A" d="M237.63,12 L263.63,12 L277.52,58 L268,112 Z"/>
+  <path fill="#FFFFFF" d="M277.52,58 L307.63,12 L333.63,12 L268,112 Z"/>
+  <path fill="#FFFFFF" d="M345.63,12 L431.63,12 L427.05,38 L367.05,38 L365.11,49 L425.11,49 L414,112 L328,112 L332.58,86 L392.58,86 L394.52,75 L334.52,75 Z"/>
+</svg>

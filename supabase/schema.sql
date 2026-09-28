@@ -1,6 +1,9 @@
 -- ─────────────────────── Schéma REVS — public ───────────────────────
 --
--- GÉNÉRÉ AUTOMATIQUEMENT depuis la base de production le 2026-09-28.
+-- Schema REVS — généré le 2026-09-28
+-- Source: Supabase project gdrdspfktnweqozrezjq
+--
+-- GÉNÉRÉ AUTOMATIQUEMENT depuis la base de production.
 -- Ne pas éditer à la main : régénérer avec le script de dump.
 --
 -- Ce fichier est un INSTANTANÉ documentaire, pas une migration. La source

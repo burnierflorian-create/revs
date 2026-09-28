@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">REVS</string>
+    <string name="title_activity_main">REVS</string>
+    <string name="package_name">app.revs.carspotting</string>
+    <string name="custom_url_scheme">app.revs.carspotting</string>
+</resources>

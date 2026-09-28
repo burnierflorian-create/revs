@@ -2,7 +2,14 @@
 <html lang="fr">
   <head>
     <meta charset="UTF-8" />
+
+    <!-- Favicon. Le SVG couvre tous les navigateurs modernes ; les deux PNG
+         sont là pour les contextes qui ne savent pas lire un favicon
+         vectoriel (anciens Safari, agrégateurs, aperçus de liens). Tous
+         sortent du même dessin — voir scripts/build-brand.mjs. -->
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/brand/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/brand/favicon-16.png" />
 
     <!-- Viewport safe area (notch Android + home bar iOS) -->
     <!-- maximum-scale=1 + user-scalable=no kill the iOS focus auto-zoom
@@ -32,7 +39,7 @@
       name="apple-mobile-web-app-status-bar-style"
       content="black-translucent"
     />
-    <meta name="apple-mobile-web-app-title" content="revs" />
+    <meta name="apple-mobile-web-app-title" content="REVS" />
     <link rel="apple-touch-icon" href="/icons/icon-180x180.png" />
     <link
       rel="apple-touch-icon"
@@ -52,7 +59,41 @@
       href="/splashscreens/iphone14.png"
     />
 
-    <title>revs</title>
+    <title>REVS — Cars. Spots. Passion.</title>
+    <meta
+      name="description"
+      content="REVS — repère, photographie et collectionne les voitures que tu croises. Cars. Spots. Passion."
+    />
+
+    <!-- Partage social. L'URL de og:image DOIT être absolue : Facebook,
+         WhatsApp, iMessage et Discord ne résolvent pas les chemins relatifs.
+         Le domaine est celui de la production Vercel — à changer ici en même
+         temps qu'un éventuel nom de domaine propre. -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="REVS" />
+    <meta property="og:title" content="REVS — Cars. Spots. Passion." />
+    <meta
+      property="og:description"
+      content="Repère, photographie et collectionne les voitures que tu croises."
+    />
+    <meta property="og:url" content="https://revs-ten.vercel.app/" />
+    <meta
+      property="og:image"
+      content="https://revs-ten.vercel.app/brand/og-image.jpg"
+    />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Logo REVS — Cars. Spots. Passion." />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="REVS — Cars. Spots. Passion." />
+    <meta
+      name="twitter:description"
+      content="Repère, photographie et collectionne les voitures que tu croises."
+    />
+    <meta
+      name="twitter:image"
+      content="https://revs-ten.vercel.app/brand/og-image.jpg"
+    />
 
     <!-- Self-heal: if a hashed asset 404s (stale service worker serving an
          old index.html after a deploy), unregister the SW, clear caches and
