@@ -9,23 +9,36 @@ Charte officielle, en vigueur depuis le 28/09/2026.
 
 ## Le monogramme
 
-Un R et un V construits comme **un seul dessin**, pas comme deux lettres
-posées côte à côte.
+Un R et un V construits comme **un seul dessin**. Le mark repose sur deux
+familles d'obliques, et c'est ce qui le fait tenir :
 
-- La **diagonale rouge** est le bras gauche du V. Elle traverse la panse du R
-  entre y≈8 et y≈37 : c'est cette intersection qui soude les deux lettres.
-- Le **jambage du R** court en parallèle, blanc, à 6 unités d'écart constant.
-  Cette double diagonale est la signature du mark.
-- Tout est bâti sur une grille de **120 unités de hauteur** avec une graisse
-  **unique de 24 unités**, puis incliné de **10°** d'un seul bloc.
+| | pente | pièces |
+|---|---|---|
+| descendantes-**droite** | +0.42 | jambage du R, **bras gauche du V** |
+| descendantes-**gauche** | −0.45 | dalle rouge, **bras droit du V** |
 
-L'inclinaison produit un effet qu'on cherchait : les deux bras du V n'ont plus
-la même pente (le gauche s'adoucit à 0.37, le droit se redresse à 0.73). C'est
-de là que vient la sensation de vitesse — pas d'un glow, pas d'un dégradé, pas
-de « lignes de mouvement ».
+Le jambage du R et le bras gauche du V courent en parallèle à **10 unités
+d'écart constant** : c'est la double diagonale qui donne sa vitesse au mark.
 
-**Ratio du monogramme : 270.16 × 144 ≈ 1.876.** Toujours dimensionner par la
-hauteur.
+**Le R n'a pas de hampe.** Sa place est tenue par la **dalle rouge**,
+détachée d'environ 5 unités du coin bas-gauche de la panse. C'est le point
+de construction le plus important — et c'est pour ça que le monogramme « se
+lit rouge à gauche » alors que la panse, elle, est claire.
+
+Répartition des couleurs :
+
+- **rouge** : la dalle (position de la hampe) + le bras gauche du V ;
+- **blanc** : la panse du R avec son contrepoinçon, son jambage, et le bras
+  droit du V.
+
+Tout est bâti sur une grille de **120 unités de hauteur**, graisse **unique de
+24 unités**. Aucune inclinaison globale : les obliques sont dessinées dans
+leurs coordonnées finales, et leurs deux pentes sont volontairement
+différentes — ce qu'un skew uniforme ne peut pas produire. Le mot REVS, lui,
+porte sa propre italique de 10°.
+
+**Ratio du monogramme ≈ 1.84** (la planche de référence est à 1.82). Toujours
+dimensionner par la hauteur.
 
 ---
 
@@ -55,16 +68,23 @@ thème clair, c'est le fichier qu'on affiche, pas la définition de la couleur.
 
 | Contexte | Fichier |
 |---|---|
-| Fond sombre (défaut) | `revs-logo-primary.svg` (= `revs-logo-dark.svg`) |
-| Fond clair | `revs-logo-light.svg` |
-| Avec tagline | `revs-logo-tagline.svg` / `-light.svg` |
+| **Logo principal** (vertical : monogramme / REVS / tagline) | `revs-logo-primary.svg` · `.png` · `-light.svg` |
+| Logo horizontal | `revs-logo-horizontal.svg` · `.png` · `-tagline.svg` · `-light.svg` |
 | Une seule couleur | `revs-logo-monochrome-white.svg` / `-black.svg` |
 | Symbole seul | `revs-monogram.svg`, `-light`, `-white`, `-black` |
 | Mot seul | `revs-wordmark.svg`, `-light` |
-| Icône d'application | `revs-icon-master.svg` + `revs-icon-{1024,512,256,128}.png` |
+| Icône d'app (coins arrondis) | `revs-icon-{1024,512,256,128}.png` |
+| Icône carrée (natif / maskable) | `revs-icon-master.svg` |
 | Favicon | `favicon.svg`, `favicon-{32,16}.png` |
-| Partage social | `og-image.jpg` (1200×630) |
-| Écran de lancement | `splash.png` (2732×2732) |
+| Partage social | `revs-og-image.jpg` (1200×630) |
+| Écran de lancement | `revs-splash.svg` · `.png` (2732×2732) |
+
+⚠️ **`revs-icon-*.png` a des coins arrondis et donc de la transparence.**
+Réservés au web et à la communication. Ne **jamais** les utiliser comme icône
+native : iOS applique déjà son propre masque (double arrondi) et refuse un
+canal alpha à l'upload App Store, et l'icône adaptative Android exige une
+image à fond perdu. Les cibles natives et l'icône PWA `maskable` passent par
+le master **carré**.
 
 **Dans l'application, ne pas référencer ces fichiers** : utiliser les
 composants de `src/components/Logo.tsx` (`RevsMark`, `RevsWordmark`,
@@ -89,8 +109,10 @@ Par défaut ils rendent en `currentColor` : le parent impose la couleur avec
 - Recomposer « REVS » avec une police. Le mot est un tracé ; toute police
   système donnera une forme différente d'un appareil à l'autre — c'est
   exactement ce que cette charte a corrigé.
-- Déplacer le rouge sur une autre lettre. Le rouge est **sur le V**, dans le
-  monogramme comme dans le mot. C'est la règle du système, pas une décoration.
+- Déplacer le rouge. Dans le monogramme il porte la dalle et le bras gauche
+  du V ; dans le mot, le bras gauche du V. C'est une règle de système, pas
+  une décoration — et surtout, ne pas colorer la panse du R : c'est elle qui
+  porte le contraste qui distingue le R du V.
 - Ajouter un glow, une ombre portée ou un dégradé dans un fichier maître. Les
   effets appartiennent aux maquettes.
 - Arrondir les coins du master d'icône : il est carré, les plateformes posent
@@ -107,10 +129,11 @@ Par défaut ils rendent en `currentColor` : le parent impose la couleur avec
 - **`og:image` pointe sur `https://revs-ten.vercel.app`** en dur dans
   `index.html`. À changer en même temps qu'un éventuel nom de domaine propre —
   les réseaux sociaux ne résolvent pas les chemins relatifs.
-- **Pas de logo dans l'en-tête de l'application.** Aucune surface n'en
-  affichait avant cette charte (`MainLayout` n'a pas d'en-tête de marque, et
-  `TitleChip` montre le titre de l'utilisateur). Le composant est prêt : un
-  `<RevsLogo height={20} />` suffit le jour où on en veut un.
+- **L'application n'a pas d'en-tête.** `MainLayout` laisse chaque onglet
+  gérer son haut de page. Le monogramme est donc posé dans la barre de
+  micro-stats de l'accueil (`Home.tsx`), à gauche du compteur « en ligne » :
+  c'est la seule barre de tête réelle, et l'y insérer évitait de décaler tout
+  le contenu. Les autres onglets n'affichent pas la marque.
 
 ---
 

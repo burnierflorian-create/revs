@@ -37,6 +37,7 @@ import TitleChip, { StageChip } from '../components/TitleChip'
 import { checkLevelUp } from '../components/LevelUpOverlay'
 import LiquidXpBar from '../components/LiquidXpBar'
 import { triggerStreakBreak } from '../components/StreakBreak'
+import { RevsMark } from '../components/Logo'
 
 type CommunityStats = {
   spots_today: number
@@ -311,7 +312,15 @@ export default function Home() {
     <div className="relative min-h-screen bg-bg px-5 pb-12 pt-[max(0.75rem,env(safe-area-inset-top))] text-fg">
       {/* ─── 1 · MICRO-STATS — fluid, box-less, straight on the page ─── */}
       <div className="flex items-center justify-between px-1 pb-3 pt-2">
-        <span className="inline-flex items-center gap-2 text-[12px] font-semibold text-fg/70">
+        <span className="inline-flex items-center gap-2.5 text-[12px] font-semibold text-fg/70">
+          {/* Monogramme R+V — seule présence de la marque dans l'application.
+              Il est posé DANS la barre de micro-stats existante plutôt que
+              dans une nouvelle rangée : l'application n'a pas d'en-tête
+              (MainLayout laisse chaque onglet gérer son haut de page), et
+              ajouter une bande aurait décalé tout le contenu de l'accueil.
+              `text-fg` le rend thématique — le mark hérite de currentColor. */}
+          <RevsMark height={15} title="REVS" />
+          <span className="h-3 w-px flex-none bg-fg/15" aria-hidden />
           <span className="relative flex h-2 w-2 flex-none" aria-hidden>
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-70" />
             <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />

@@ -65,7 +65,7 @@ const SLANT = 10 // degrés d'inclinaison italique
 const TAN = Math.tan((SLANT * Math.PI) / 180)
 
 /** Incline un point : plus il est bas, plus il recule. y=0 est la référence. */
-const shear = ([x, y]) => [x - TAN * y, y]
+const shear = ([x, y]) => [x, y] // géométrie déjà en coordonnées finales
 
 const r2 = (n) => Math.round(n * 100) / 100
 
@@ -95,85 +95,110 @@ function bbox(polys) {
 }
 
 // ══════════════════════════════════════════════════════════════════════
-//  MONOGRAMME R+V — grille 0..225 × 0..120, graisse 24
+//  MONOGRAMME R+V — d'après la planche de référence du 28/09/2026
 // ══════════════════════════════════════════════════════════════════════
 //
-//  · R_STEM     hampe verticale du R
-//  · R_BOWL     panse du R (+ son contrepoinçon, évidé en evenodd)
-//  · DIAGONAL   ROUGE — jambage du R *et* bras gauche du V : le trait partagé
-//  · V_ARM      bras droit du V
+// Le mark est construit sur DEUX familles de diagonales, et c'est ce qui
+// fait sa lecture :
+//   · les obliques « descendantes-gauche » (pente -0.38) : hampe du R, bras
+//     droit du V, et la dalle rouge ;
+//   · les obliques « descendantes-droite » (pente +0.36) : jambage du R et
+//     bras gauche du V, qui courent en parallèle à 8 unités d'écart.
 //
-// La diagonale traverse la panse entre y≈8 et y≈37 : c'est cette intersection
-// qui soude le R au V. En dessous, elle descend seule jusqu'à la pointe du V.
+// RÉPARTITION DES COULEURS — relevée sur la planche, pas déduite :
+//   ROUGE : la dalle inclinée en bas à gauche (écho de la hampe du R) et le
+//           bras gauche du V, c'est-à-dire la diagonale centrale ;
+//   BLANC : la panse du R avec son contrepoinçon, sa hampe, son jambage, et
+//           le bras droit du V.
 //
-const R_STEM = [
-  [0, 0],
-  [24, 0],
-  [24, 120],
-  [0, 120],
+// La panse du R reste donc CLAIRE. C'est elle qui porte la lisibilité : la
+// passer en rouge ferait perdre le contraste qui distingue le R du V, et la
+// référence ne la montre pas rouge.
+//
+// Aucune inclinaison globale n'est appliquée ici : contrairement à la version
+// précédente, les obliques sont dessinées directement dans leurs coordonnées
+// finales. Les deux pentes sont volontairement DIFFÉRENTES (-0.38 / +0.36),
+// ce qui est impossible à obtenir avec un skew uniforme et c'est précisément
+// ce déséquilibre qui donne son allure au monogramme.
+
+const SL_L = -0.45 // obliques descendantes-gauche
+const SL_R = 0.42 // obliques descendantes-droite
+const WGT = 24 // graisse unique
+const BOWL_SL = 0.5 // biais du flanc gauche du R
+
+/** Parallélogramme oblique : bord gauche en (x0,y0), pente `sl`, jusqu'à y1. */
+const bar = (x0, y0, y1, sl, w = WGT) => [
+  [x0, y0],
+  [x0 + w, y0],
+  [x0 + w + sl * (y1 - y0), y1],
+  [x0 + sl * (y1 - y0), y1],
 ]
+
+// ── Le R ──
+// Panse COMPACTE : 118 de large pour 64 de haut. La première tentative l'avait
+// faite deux fois trop grande, ce qui la faisait lire comme un « F ». Le
+// contrepoinçon est une fente courte, pas une ouverture.
 const R_BOWL_OUT = [
-  [24, 0],
-  [76, 0],
-  [100, 24],
-  [100, 48],
-  [76, 72],
-  [24, 72],
+  [6, 0],
+  [100, 0],
+  [120, 20],
+  [120, 44],
+  [100, 64],
+  [6 + BOWL_SL * 64, 64],
 ]
 const R_BOWL_IN = [
-  [24, 24],
-  [72, 24],
-  [76, 28],
-  [76, 44],
-  [72, 48],
-  [24, 48],
-]
-// Jambage du R. Il naît À L'INTÉRIEUR de la panse (son arête haute, en y=40,
-// est entièrement couverte par celle-ci : aucune amorce ne flotte dans le
-// vide) et sort du contour vers y≈58 pour rejoindre la ligne de pied.
-//
-// Sans lui, le R se lit « P » : la panse seule ne suffit pas, et la diagonale
-// rouge est trop lointaine pour tenir le rôle de jambage. Le jambage et la
-// diagonale rouge courent donc en parallèle, séparés d'un écart constant de
-// 6 unités — c'est cette double diagonale qui donne sa vitesse au monogramme.
-const R_LEG = [
-  [62, 48],
-  [86, 48],
-  [118, 120],
-  [94, 120],
-]
-const DIAGONAL = [
-  [80, 0],
-  [104, 0],
-  [152, 88],
-  [152, 120],
-  [146, 120],
-]
-const V_ARM = [
-  [152, 88],
-  [201, 0],
-  [225, 0],
-  [159, 120],
-  [152, 120],
+  [6 + BOWL_SL * 24, 24],
+  [88, 24],
+  [96, 30],
+  [96, 34],
+  [88, 40],
+  [6 + BOWL_SL * 40, 40],
 ]
 
-const MONO_BOX = bbox([R_STEM, R_BOWL_OUT, R_LEG, DIAGONAL, V_ARM])
+// Jambage : part de l'intérieur de la panse (y=40) et descend à droite.
+const R_LEG = bar(92, 44, 120, SL_R)
 
-/**
- * Corps du monogramme.
- * @param light  couleur des masses "blanc/argent" (R + bras droit du V)
- * @param accent couleur de la diagonale partagée
- */
-function monogramParts(dx, dy) {
+// Dalle ROUGE — tient la place de la hampe, détachée d'environ 5 unités du
+// flanc gauche de la panse. Même graisse et même famille d'angle que les
+// lettres : c'est une contre-forme, pas un trait de vitesse.
+const RED_SLAB = bar(9, 64, 120, SL_L)
+
+// ── Le V ──
+// Bras gauche ROUGE, parallèle au jambage du R à 10 unités d'écart constant.
+const V_LX = 116 + SL_R * (0 - 44) + 10
+const V_RX = 201.1
+const V_VY = (V_RX - (V_LX + WGT)) / (SL_R - SL_L)
+const V_VX = V_LX + WGT + SL_R * V_VY
+
+const V_LEFT = [
+  [V_LX, 0],
+  [V_LX + WGT, 0],
+  [V_VX, V_VY],
+  [V_VX, 120],
+  [V_LX + SL_R * 120, 120],
+]
+const V_RIGHT = [
+  [V_VX, V_VY],
+  [V_RX, 0],
+  [V_RX + WGT, 0],
+  [V_RX + WGT + SL_L * 120, 120],
+  [V_VX, 120],
+]
+
+const MONO_BOX = bbox([R_BOWL_OUT, R_LEG, RED_SLAB, V_LEFT, V_RIGHT])
+
+function monogramParts(dx, dy, k = 1) {
+  const S = (pts) => pts.map(([x, y]) => [x * k, y * k])
   return [
+    { role: 'accent', d: poly(S(RED_SLAB), dx, dy) },
     {
       role: 'light',
       rule: 'evenodd',
-      d: `${poly(R_STEM, dx, dy)} ${poly(R_BOWL_OUT, dx, dy)} ${poly(R_BOWL_IN, dx, dy)}`,
+      d: `${poly(S(R_BOWL_OUT), dx, dy)} ${poly(S(R_BOWL_IN), dx, dy)}`,
     },
-    { role: 'light', d: poly(R_LEG, dx, dy) },
-    { role: 'accent', d: poly(DIAGONAL, dx, dy) },
-    { role: 'light', d: poly(V_ARM, dx, dy) },
+    { role: 'light', d: poly(S(R_LEG), dx, dy) },
+    { role: 'accent', d: poly(S(V_LEFT), dx, dy) },
+    { role: 'light', d: poly(S(V_RIGHT), dx, dy) },
   ]
 }
 
@@ -329,7 +354,12 @@ const TRACK = 12
 const WORD_W = WORD.reduce((s, l) => s + l.w, 0) + TRACK * (WORD.length - 1)
 
 /** Le mot REVS, en coordonnées locales cap-100. */
+const WORD_SLANT = Math.tan((10 * Math.PI) / 180)
+
 function wordmarkParts(dx, dy, scale = 1) {
+  // Inclinaison propre au mot (10°). Le monogramme, lui, tient son élan de
+  // ses deux pentes dissymétriques et n'est pas incliné globalement.
+  const ital = ([x, y]) => [x - WORD_SLANT * y, y]
   let x = 0
   const parts = []
   for (const { g, w } of WORD) {
@@ -340,7 +370,7 @@ function wordmarkParts(dx, dy, scale = 1) {
         d: grp.parts
           .map((pts) =>
             poly(
-              pts.map(([px, py]) => [(px + x) * scale, py * scale]),
+              pts.map(([px, py]) => ital([(px + x) * scale, py * scale])),
               dx,
               dy,
             ),
@@ -403,9 +433,8 @@ function taglineBody(color, dx, dy, scale) {
     if (g.d) {
       // On incline en translatant chaque glyphe : la pente du trait suit la
       // même inclinaison que les lettres du logo.
-      const sk = -TAN * TAG_CAP * scale
       parts.push(
-        `<g transform="translate(${r2(dx + x * scale - sk * 0)} ${r2(dy)}) scale(${r2(scale)}) skewX(-${SLANT})"><path d="${g.d}"/></g>`,
+        `<g transform="translate(${r2(dx + x * scale)} ${r2(dy)}) scale(${r2(scale)}) skewX(-${SLANT})"><path d="${g.d}"/></g>`,
       )
     }
     x += g.w + TAG_TRACK
@@ -432,7 +461,7 @@ function monogramSvg(light, accent) {
 // verticalement sur le monogramme.
 const GAP = 46
 const WORD_SCALE = 1
-const WORD_BOX_W = WORD_W + TAN * 100 // largeur après inclinaison
+const WORD_BOX_W = WORD_W + WORD_SLANT * 100 // largeur après inclinaison
 
 /** Logo horizontal. `tagline` ajoute CARS. SPOTS. PASSION. sous le mot. */
 function logoSvg(light, accent, taglineColor = null) {
@@ -440,7 +469,7 @@ function logoSvg(light, accent, taglineColor = null) {
   const wordX = PAD + MONO_BOX.w + GAP
   const wordY = PAD + (MONO_BOX.h - 100) / 2
   // `poly` incline autour de y=0 ; on compense le décalage du mot.
-  const wordDx = wordX + TAN * wordY
+  const wordDx = wordX + WORD_SLANT * 100
 
   let body =
     monogramBody(light, accent, monoDx, PAD) +
@@ -456,7 +485,7 @@ function logoSvg(light, accent, taglineColor = null) {
     const tScale = (WORD_BOX_W * 0.98) / tm.w
     const tY = PAD + MONO_BOX.h + 26
     body +=
-      '\n  ' + taglineBody(taglineColor, wordX - TAN * TAG_CAP * tScale + 2, tY, tScale)
+      '\n  ' + taglineBody(taglineColor, wordX + WORD_SLANT * TAG_CAP * tScale, tY, tScale)
     h = tY + TAG_CAP * tScale + PAD
   }
   return svg(w, h, body)
@@ -466,27 +495,97 @@ function logoSvg(light, accent, taglineColor = null) {
 function wordmarkSvg(light, accent) {
   const w = WORD_BOX_W + PAD * 2
   const h = 100 + PAD * 2
-  return svg(w, h, wordmarkBody(light, accent, PAD + TAN * 100, PAD))
+  return svg(w, h, wordmarkBody(light, accent, PAD + WORD_SLANT * 100, PAD))
 }
 
-/** Master d'icône : CARRÉ, sans coins arrondis (les OS posent leur masque). */
+/**
+ * Master d'icône CARRÉ, sans coins arrondis dessinés.
+ * Utilisé pour les icônes natives et l'icône PWA `maskable`, où le système
+ * pose lui-même son masque : des coins transparents y produiraient un double
+ * arrondi sur iOS, et un canal alpha fait rejeter le binaire à l'App Store.
+ */
 function iconSvg(size, bg, light, accent, fill = 0.76) {
-  const s = (size * fill) / MONO_BOX.w
-  const w = MONO_BOX.w * s
-  const h = MONO_BOX.h * s
-  const dx = (size - w) / 2 - MONO_BOX.x0 * s
+  const k = (size * fill) / MONO_BOX.w
+  const w = MONO_BOX.w * k
+  const h = MONO_BOX.h * k
+  const dx = (size - w) / 2 - MONO_BOX.x0 * k
   const dy = (size - h) / 2
   const body =
     (bg ? `<rect width="${size}" height="${size}" fill="${bg}"/>\n  ` : '') +
-    [
-      `<path fill="${light}" fill-rule="evenodd" d="${poly(R_STEM.map(sc(s)), dx, dy)} ${poly(R_BOWL_OUT.map(sc(s)), dx, dy)} ${poly(R_BOWL_IN.map(sc(s)), dx, dy)}"/>`,
-      `<path fill="${light}" d="${poly(R_LEG.map(sc(s)), dx, dy)}"/>`,
-      `<path fill="${accent}" d="${poly(DIAGONAL.map(sc(s)), dx, dy)}"/>`,
-      `<path fill="${light}" d="${poly(V_ARM.map(sc(s)), dx, dy)}"/>`,
-    ].join('\n  ')
+    partsToSvg(monogramParts(dx, dy, k), light, accent)
   return svg(size, size, body)
 }
-const sc = (s) => ([x, y]) => [x * s, y * s]
+
+/**
+ * Logo VERTICAL — la version principale de la charte :
+ *   monogramme R+V, puis REVS dessous, puis la tagline.
+ * Les deux blocs sont centrés l'un sur l'autre et calés à la même largeur.
+ */
+function verticalLogoSvg(light, accent, taglineColor = null) {
+  const monoW = MONO_BOX.w
+  // Le mot est mis à la largeur du monogramme : c'est ce qui donne au bloc
+  // son alignement vertical franc, gauche comme droite.
+  const wScale = monoW / WORD_BOX_W
+  const wordH = 100 * wScale
+  const GAP_V = 22
+
+  const w = monoW + PAD * 2
+  const monoDx = PAD - MONO_BOX.x0
+  const wordY = PAD + MONO_BOX.h + GAP_V
+
+  let body =
+    monogramBody(light, accent, monoDx, PAD) +
+    '\n  ' +
+    wordmarkBody(light, accent, PAD + WORD_SLANT * 100 * wScale, wordY, wScale)
+
+  let h = wordY + wordH + PAD
+
+  if (taglineColor) {
+    const tm = taglineMetrics()
+    const tScale = (monoW * 0.92) / tm.w
+    const tY = wordY + wordH + 26
+    body +=
+      '\n  ' +
+      taglineBody(
+        taglineColor,
+        PAD + monoW * 0.04 + WORD_SLANT * TAG_CAP * tScale,
+        tY,
+        tScale,
+      )
+    h = tY + TAG_CAP * tScale + PAD
+  }
+  return svg(w, h, body)
+}
+
+/**
+ * Icône à COINS ARRONDIS, avec un liseré rouge qui s'intensifie vers le bas.
+ *
+ * ⚠️ Réservée au web et à la communication. NE PAS l'utiliser comme icône
+ * native : iOS applique déjà son propre masque (on obtiendrait un double
+ * arrondi) et refuse un canal alpha à l'upload App Store, tandis que l'icône
+ * adaptative Android exige une image à fond perdu. Les cibles natives passent
+ * par iconSvg(), carrée.
+ */
+function roundedIconSvg(size, light, accent, fill = 0.66) {
+  const r = size * 0.225 // proche du superellipse iOS
+  const k = (size * fill) / MONO_BOX.w
+  const w = MONO_BOX.w * k
+  const h = MONO_BOX.h * k
+  const dx = (size - w) / 2 - MONO_BOX.x0 * k
+  const dy = (size - h) / 2
+  const sw = Math.max(1, size * 0.011)
+  const body = `<defs>
+    <linearGradient id="rim" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0.35" stop-color="${accent}" stop-opacity="0"/>
+      <stop offset="0.78" stop-color="${accent}" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="${accent}" stop-opacity="1"/>
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="${size}" height="${size}" rx="${r2(r)}" fill="${BLACK}"/>
+  ${partsToSvg(monogramParts(dx, dy, k), light, accent)}
+  <rect x="${r2(sw / 2)}" y="${r2(sw / 2)}" width="${r2(size - sw)}" height="${r2(size - sw)}" rx="${r2(r - sw / 2)}" fill="none" stroke="url(#rim)" stroke-width="${r2(sw)}"/>`
+  return svg(size, size, body)
+}
 
 // ══════════════════════════════════════════════════════════════════════
 //  Écriture
@@ -503,12 +602,28 @@ write('public/brand/revs-monogram-light.svg', monogramSvg(BLACK, RED))
 write('public/brand/revs-monogram-white.svg', monogramSvg(WHITE, WHITE))
 write('public/brand/revs-monogram-black.svg', monogramSvg(BLACK, BLACK))
 
-// ── SVG maîtres : logo horizontal ──
-write('public/brand/revs-logo-primary.svg', logoSvg(WHITE, RED))
+// ── Logo PRINCIPAL : vertical (monogramme / REVS / tagline) ──
+// C'est la version 01 de la planche de référence.
+const LOGO_PRIMARY = verticalLogoSvg(WHITE, RED, GRAY)
+write('public/brand/revs-logo-primary.svg', LOGO_PRIMARY)
+write('public/brand/revs-logo-vertical.svg', LOGO_PRIMARY)
+write(
+  'public/brand/revs-logo-primary-light.svg',
+  verticalLogoSvg(BLACK, RED, GRAY_ON_LIGHT),
+)
+
+// ── Logo HORIZONTAL : monogramme + REVS sur une ligne ──
+write('public/brand/revs-logo-horizontal.svg', logoSvg(WHITE, RED))
+write(
+  'public/brand/revs-logo-horizontal-tagline.svg',
+  logoSvg(WHITE, RED, GRAY),
+)
 write('public/brand/revs-logo-dark.svg', logoSvg(WHITE, RED))
 write('public/brand/revs-logo-light.svg', logoSvg(BLACK, RED))
-write('public/brand/revs-logo-tagline.svg', logoSvg(WHITE, RED, GRAY))
-write('public/brand/revs-logo-tagline-light.svg', logoSvg(BLACK, RED, GRAY_ON_LIGHT))
+write(
+  'public/brand/revs-logo-horizontal-light.svg',
+  logoSvg(BLACK, RED, GRAY_ON_LIGHT),
+)
 write('public/brand/revs-logo-monochrome-white.svg', logoSvg(WHITE, WHITE))
 write('public/brand/revs-logo-monochrome-black.svg', logoSvg(BLACK, BLACK))
 
@@ -536,7 +651,7 @@ write('public/favicon.svg', FAVICON)
   const wordY = PAD + (MONO_BOX.h - 100) / 2
   const lock = [
     ...monogramParts(PAD - MONO_BOX.x0, PAD),
-    ...wordmarkParts(wordX + TAN * wordY, wordY, WORD_SCALE),
+    ...wordmarkParts(wordX + WORD_SLANT * 100, wordY, WORD_SCALE),
   ]
   const fmt = (parts) =>
     parts
@@ -571,7 +686,7 @@ export const WORDMARK = {
   w: ${r2(WORD_BOX_W + PAD * 2)},
   h: ${r2(100 + PAD * 2)},
   parts: [
-${fmt(wordmarkParts(PAD + TAN * 100, PAD, WORD_SCALE))}
+${fmt(wordmarkParts(PAD + WORD_SLANT * 100, PAD, WORD_SCALE))}
   ] as BrandPart[],
 }
 
@@ -599,9 +714,32 @@ const png = (svgStr, size, dest) =>
     .toFile(out(dest))
     .then(() => written.push(dest))
 
-// Icônes de marque
+// ── Icônes de marque : coins arrondis + liseré rouge en bas ──
+// Le liseré est un contour dégradé, transparent en haut et plein en bas.
+// C'est la seule pièce de la charte qui utilise un dégradé : les SVG maîtres
+// du logo restent en aplats.
+const ICON_ROUNDED = roundedIconSvg(1024, WHITE, RED)
+write('public/brand/revs-icon-rounded.svg', ICON_ROUNDED)
 for (const s of [1024, 512, 256, 128])
-  await png(ICON_MASTER, s, `public/brand/revs-icon-${s}.png`)
+  await png(ICON_ROUNDED, s, `public/brand/revs-icon-${s}.png`)
+
+// ── Logo principal en PNG (fond transparent) ──
+{
+  const m = LOGO_PRIMARY.match(/viewBox="0 0 ([\d.]+) ([\d.]+)"/)
+  await sharp(Buffer.from(LOGO_PRIMARY), { density: 900 })
+    .resize({ width: 1200, height: Math.round((1200 * +m[2]) / +m[1]) })
+    .png({ compressionLevel: 9 })
+    .toFile(out('public/brand/revs-logo-primary.png'))
+  written.push('public/brand/revs-logo-primary.png')
+
+  const hz = logoSvg(WHITE, RED)
+  const mh = hz.match(/viewBox="0 0 ([\d.]+) ([\d.]+)"/)
+  await sharp(Buffer.from(hz), { density: 900 })
+    .resize({ width: 1200, height: Math.round((1200 * +mh[2]) / +mh[1]) })
+    .png({ compressionLevel: 9 })
+    .toFile(out('public/brand/revs-logo-horizontal.png'))
+  written.push('public/brand/revs-logo-horizontal.png')
+}
 
 // Favicons
 for (const s of [32, 16]) await png(FAVICON, s, `public/brand/favicon-${s}.png`)
@@ -623,19 +761,20 @@ const OG_H = 630
   const body = `<rect width="${OG_W}" height="${OG_H}" fill="${BLACK}"/>
   <g transform="translate(${r2((OG_W - lw * s) / 2)} ${r2((OG_H - lh * s) / 2)}) scale(${r2(s)})">${logo.replace(/^[\s\S]*?>\n?/, '').replace(/<\/svg>\s*$/, '')}</g>`
   const ogSvg = svg(OG_W, OG_H, body)
-  writeFileSync(out('public/brand/og-image.svg'), ogSvg)
+  writeFileSync(out('public/brand/revs-og-image.svg'), ogSvg)
   await sharp(Buffer.from(ogSvg), { density: 200 })
     .resize(OG_W, OG_H, { fit: 'fill' })
     .jpeg({ quality: 92, chromaSubsampling: '4:4:4' })
-    .toFile(out('public/brand/og-image.jpg'))
-  written.push('public/brand/og-image.svg', 'public/brand/og-image.jpg')
+    .toFile(out('public/brand/revs-og-image.jpg'))
+  written.push('public/brand/revs-og-image.svg', 'public/brand/revs-og-image.jpg')
 }
 
 // ── Splash 2732×2732 : monogramme centré sur fond noir ──
 // Carré : Capacitor l'utilise pour toutes les tailles d'écran en le rognant.
 const SPLASH = iconSvg(2732, BLACK, WHITE, RED, 0.42)
+write('public/brand/revs-splash.svg', SPLASH)
 writeFileSync(out('public/splashscreens/master-splash.svg'), SPLASH)
-await png(SPLASH, 2732, 'public/brand/splash.png')
+await png(SPLASH, 2732, 'public/brand/revs-splash.png')
 written.push('public/splashscreens/master-splash.svg')
 
 // Splash iOS legacy référencé par index.html (iPhone 14 — 1170×2532)

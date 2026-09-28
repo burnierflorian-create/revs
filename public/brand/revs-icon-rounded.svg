@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <linearGradient id="rim" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0.35" stop-color="#E8203A" stop-opacity="0"/>
+      <stop offset="0.78" stop-color="#E8203A" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#E8203A" stop-opacity="1"/>
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="1024" height="1024" rx="230.4" fill="#0B0B0B"/>
+  <path fill="#E8203A" d="M244.66,523.2 L311.88,523.2 L241.3,680.05 L174.08,680.05 Z"/>
+  <path fill="#FFFFFF" fill-rule="evenodd" d="M236.26,343.95 L499.54,343.95 L555.55,399.97 L555.55,467.19 L499.54,523.2 L325.88,523.2 Z M269.87,411.17 L465.93,411.17 L488.33,427.98 L488.33,439.18 L465.93,455.98 L292.27,455.98 Z"/>
+  <path fill="#FFFFFF" d="M477.13,467.19 L544.35,467.19 L633.75,680.05 L566.53,680.05 Z"/>
+  <path fill="#E8203A" d="M520.6,343.95 L587.82,343.95 L681.9,567.95 L681.9,680.05 L661.76,680.05 Z"/>
+  <path fill="#FFFFFF" d="M681.9,567.95 L782.7,343.95 L849.92,343.95 L698.68,680.05 L681.9,680.05 Z"/>
+  <rect x="5.63" y="5.63" width="1012.74" height="1012.74" rx="224.77" fill="none" stroke="url(#rim)" stroke-width="11.26"/>
+</svg>
