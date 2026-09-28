@@ -270,7 +270,8 @@
     },
     "spotter": {
       "aria": "Spot a car — open the camera",
-      "label": "Spot"
+      "label": "Spot",
+      "fromLibrary": "Choose a photo"
     },
     "gp": {
       "days": "DAYS",
@@ -302,7 +303,23 @@
     },
     "missions": {
       "empty": "No active mission"
-    }
+    },
+    "seeAll": "See all",
+    "upcomingEvent": "Upcoming event",
+    "currentChallenges": "Current challenges",
+    "noEvent": "No upcoming event right now.",
+    "stats": {
+      "spots": "Spots",
+      "brands": "Brands",
+      "models": "Models",
+      "streak": "Streak"
+    },
+    "cd": {
+      "days": "Days",
+      "hours": "Hours",
+      "minutes": "Minutes"
+    },
+    "onlineShort": "online"
   },
   "feedpage": {
     "slides": {

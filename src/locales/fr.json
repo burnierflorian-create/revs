@@ -270,7 +270,8 @@
     },
     "spotter": {
       "aria": "Spotter une voiture — ouvrir la caméra",
-      "label": "Spotter"
+      "label": "Spotter",
+      "fromLibrary": "Choisir une photo"
     },
     "gp": {
       "days": "JOURS",
@@ -302,7 +303,23 @@
     },
     "missions": {
       "empty": "Aucune mission en cours"
-    }
+    },
+    "seeAll": "Voir tout",
+    "upcomingEvent": "Événement à venir",
+    "currentChallenges": "Défis du moment",
+    "noEvent": "Aucun événement à venir pour le moment.",
+    "stats": {
+      "spots": "Spots",
+      "brands": "Marques",
+      "models": "Modèles",
+      "streak": "Série"
+    },
+    "cd": {
+      "days": "Jours",
+      "hours": "Heures",
+      "minutes": "Minutes"
+    },
+    "onlineShort": "en ligne"
   },
   "feedpage": {
     "slides": {

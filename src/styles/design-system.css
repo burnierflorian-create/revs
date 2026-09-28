@@ -1500,3 +1500,23 @@ html.light .brand-logo-mono {
 @media (prefers-reduced-motion: reduce) {
   .home-bar-rise { animation: none !important; }
 }
+
+/* ─────────────── Accueil — apparition des blocs (refonte 28/09/2026) ───────────────
+   Une seule animation, décalée par palier. Uniquement opacity et transform,
+   donc composée par le GPU : l'accueil ne doit jamais attendre son animation.
+   `both` garde l'état initial pendant le délai — sans quoi les blocs
+   clignoteraient à l'écran avant de commencer. */
+.home-rise {
+  animation: home-rise 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  will-change: transform, opacity;
+}
+.home-rise--2 { animation-delay: 70ms; }
+.home-rise--3 { animation-delay: 140ms; }
+.home-rise--4 { animation-delay: 210ms; }
+@keyframes home-rise {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .home-rise { animation: none; }
+}
