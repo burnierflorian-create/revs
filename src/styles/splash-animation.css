@@ -2,41 +2,46 @@
    REVS — animation d'intro
    ═══════════════════════════════════════════════════════════════════════
 
-   Un halo rouge diffus apparaît au loin, se concentre derrière le monogramme
-   qui se révèle, un reflet métallique le balaie, puis REVS et la tagline se
-   posent dessous. 2 s au total, CSS natif, aucune librairie.
+   « REVS vient de démarrer. » 1,45 s, rapide, sans effet gratuit.
 
-   Le monogramme est une IMAGE (le PNG de la planche de référence) et non un
-   tracé : il n'y a donc plus rien à dessiner au stroke-dashoffset, tout se
-   joue en opacity, transform et filter.
+     0,00 → 0,15  un trait rouge très fin apparaît
+     0,15 → 0,55  il file vers la droite et dévoile les parties ROUGES du RV
+     0,55 → 0,90  second passage, plus rapide : les masses claires arrivent
+     0,90 → 1,15  le RV est complet, un reflet blanc le traverse
+     1,15 → 1,35  palier
+     1,35 → 1,45  fondu, puis l'accueil
 
-   ── COÛT ──
-   opacity et transform sont composés par le GPU, donc gratuits. filter:blur
-   ne l'est pas : il est recalculé à chaque frame tant qu'il varie. Le halo
-   garde pour cette raison un flou CONSTANT (20px) pendant toute sa durée —
-   seuls son opacité et son échelle bougent. Animer le rayon de flou ferait
-   repasser le rastériseur sur une surface floutée à chaque image, ce qui est
-   exactement ce qu'il faut éviter sur mobile. */
+   ── COMMENT LE TRACÉ EST OBTENU ──
+   Le monogramme reste le PNG de la référence : rien n'est redessiné. Il est
+   servi en DEUX calques (rouge / clair), et chacun est dévoilé par un
+   clip-path inset() dont le bord droit recule. Le trait lumineux est un
+   élément distinct qui avance à la même vitesse : c'est lui qui donne
+   l'illusion que le trait dessine la lettre.
+
+   Le trait avance par translateX(100%) d'un conteneur pleine largeur, et non
+   par `left` : un pourcentage de translation se résout sur la largeur de
+   l'élément, donc rien n'a besoin de connaître la taille du monogramme en
+   CSS, et la propriété est composée par le GPU.
+
+   Deux traits distincts plutôt qu'un seul rejoué : une seule animation aurait
+   dû revenir à zéro entre les deux passages, et ce saut se voit. */
 
 .revs-splash {
   position: fixed;
   inset: 0;
   z-index: 9999;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: clamp(14px, 4vw, 24px);
-  /* Le fond suit le thème : figé à #0B0B0B, l'intro se terminait par un fondu
+  /* Le fond suit le thème : figé en noir, l'intro se terminait par un fondu
      noir → blanc sur tout appareil réglé en clair. */
   background: rgb(var(--color-bg));
-  color: rgb(var(--color-fg));
   pointer-events: none;
   will-change: opacity;
 }
 
 .revs-splash--out {
-  animation: revs-fade-out 200ms ease-in forwards;
+  animation: revs-fade-out 100ms ease-in forwards;
 }
 @keyframes revs-fade-out {
   to {
@@ -44,144 +49,148 @@
   }
 }
 
-/* ── 0,0 → 0,7 s · le halo ───────────────────────────────────────────── */
-/* Un feu arrière au loin : d'abord large et diffus, puis il se resserre
-   derrière le monogramme et y reste comme une lueur d'appui.
-   Il est centré sur la SCÈNE et non sur l'écran : le bloc monogramme + texte
-   est centré en tant que groupe, donc le monogramme est au-dessus du centre
-   de l'écran. Un halo calé sur le viewport atterrissait sous le monogramme. */
+/* La scène porte les proportions du monogramme (428 × 175 en natif), ce qui
+   permet d'empiler les deux calques en position absolue sans image tierce
+   pour donner la taille. */
 .revs-splash__stage {
   position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: block;
+  height: clamp(62px, 19vw, 104px);
+  aspect-ratio: 428 / 175;
 }
-.revs-splash__glow {
+
+.revs-splash__layer {
   position: absolute;
-  top: 50%;
-  left: 50%;
-  z-index: 0;
-  width: clamp(120px, 34vw, 190px);
-  aspect-ratio: 1;
-  border-radius: 50%;
-  background: radial-gradient(
-    circle,
-    rgba(232, 32, 58, 0.95) 0%,
-    rgba(232, 32, 58, 0.45) 45%,
-    transparent 72%
-  );
-  filter: blur(20px);
-  opacity: 0;
-  /* Le recentrage est DANS transform, pas dans la propriété `translate`
-     autonome : celle-ci est écrasée à `none` ici, et comme l'animation ne
-     pilote que `transform`, le halo se retrouvait décalé d'exactement la
-     moitié de sa taille — en bas à droite du monogramme. */
-  transform: translate(-50%, -50%) scale(3);
-  animation: revs-glow 700ms ease-in-out forwards;
-  will-change: opacity, transform;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  clip-path: inset(0 100% 0 0);
+  will-change: clip-path;
 }
-@keyframes revs-glow {
+.revs-splash__layer--red {
+  animation: revs-wipe 400ms cubic-bezier(0.3, 0, 0.2, 1) 150ms forwards;
+}
+.revs-splash__layer--mass {
+  animation: revs-wipe 350ms cubic-bezier(0.25, 0, 0.2, 1) 550ms forwards;
+}
+@keyframes revs-wipe {
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+/* ── Le trait ─────────────────────────────────────────────────────────── */
+.revs-splash__line {
+  position: absolute;
+  inset: 0;
+  transform: translateX(0);
+  will-change: transform, opacity;
+}
+.revs-splash__line::after {
+  content: '';
+  position: absolute;
+  top: -10%;
+  bottom: -10%;
+  left: 0;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--revs-red, #e8203a);
+  box-shadow:
+    0 0 6px 1px rgba(232, 32, 58, 0.9),
+    0 0 18px 4px rgba(232, 32, 58, 0.45);
+}
+/* Premier passage : le trait naît sur place, puis file avec le rouge. */
+.revs-splash__line--1 {
+  opacity: 0;
+  animation: revs-line-1 550ms cubic-bezier(0.3, 0, 0.2, 1) forwards;
+}
+@keyframes revs-line-1 {
   0% {
     opacity: 0;
-    transform: translate(-50%, -50%) scale(3);
+    transform: translateX(0) scaleY(0.4);
   }
-  43% {
-    /* fin de la phase « au loin » — le halo est à son plus diffus */
-    opacity: 0.6;
-    transform: translate(-50%, -50%) scale(3);
+  27% {
+    /* 0,15 s — le trait est posé, le dévoilement commence */
+    opacity: 1;
+    transform: translateX(0) scaleY(1);
+  }
+  92% {
+    opacity: 1;
   }
   100% {
-    opacity: 0.55;
-    transform: translate(-50%, -50%) scale(1);
+    /* Le trait s'éteint en arrivant à droite. Sans cela, `forwards` fige son
+       opacité à 1 et il reste planté au bord du monogramme jusqu'à la fin de
+       l'intro. */
+    opacity: 0;
+    transform: translateX(100%) scaleY(1);
+  }
+}
+/* Second passage, plus rapide : celui qui amène les masses claires. */
+.revs-splash__line--2 {
+  opacity: 0;
+  animation: revs-line-2 350ms cubic-bezier(0.25, 0, 0.2, 1) 550ms forwards;
+}
+@keyframes revs-line-2 {
+  0% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  88% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(100%);
   }
 }
 
-/* ── 0,3 → 0,7 s · le monogramme ─────────────────────────────────────── */
-.revs-splash__markwrap {
-  position: relative;
-  z-index: 1;
-  display: block;
+/* ── 0,90 → 1,15 s · reflet ───────────────────────────────────────────── */
+.revs-splash__shine {
+  position: absolute;
+  inset: 0;
   overflow: hidden;
 }
-.revs-splash__mark {
-  display: block;
-  height: clamp(58px, 17vw, 96px);
-  width: auto;
-  opacity: 0;
-  transform: scale(0.9);
-  animation: revs-reveal 400ms ease-in-out 300ms forwards;
-  will-change: opacity, transform;
-}
-@keyframes revs-reveal {
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-/* ── 0,7 → 1,0 s · reflet métallique ─────────────────────────────────── */
-.revs-splash__markwrap::after {
+.revs-splash__shine::after {
   content: '';
   position: absolute;
   top: 0;
   bottom: 0;
   left: 0;
-  width: 60%;
+  width: 45%;
   background: linear-gradient(
     90deg,
     transparent 0%,
-    rgba(255, 255, 255, 0.3) 50%,
+    rgba(255, 255, 255, 0.28) 50%,
     transparent 100%
   );
-  transform: translateX(-180%);
-  animation: revs-shine 300ms ease-in-out 700ms both;
+  transform: translateX(-160%);
+  animation: revs-shine 250ms ease-in-out 900ms both;
   will-change: transform;
 }
 @keyframes revs-shine {
   to {
-    transform: translateX(280%);
+    transform: translateX(320%);
   }
 }
 
-/* ── 1,0 → 1,5 s · le mot et la tagline ──────────────────────────────── */
-.revs-splash__word,
-.revs-splash__tag {
+/* ── Version courte (retour dans les 24 h) et mouvement réduit ────────── */
+/* Ni trait, ni reflet : le monogramme complet apparaît en fondu. */
+.revs-splash__still {
+  clip-path: none;
   opacity: 0;
-  transform: translateY(10px);
-  animation: revs-rise 300ms ease-in-out forwards;
-  will-change: opacity, transform;
+  animation: revs-appear 220ms ease-out forwards;
+  will-change: opacity;
 }
-.revs-splash__word {
-  animation-delay: 1000ms;
-}
-.revs-splash__tag {
-  animation-delay: 1300ms;
-}
-@keyframes revs-rise {
+@keyframes revs-appear {
   to {
     opacity: 1;
-    transform: translateY(0);
   }
 }
 
-/* ── Version courte (retour dans les 24 h) ───────────────────────────── */
-/* Ni halo, ni reflet, ni texte : le monogramme apparaît en fondu et l'écran
-   se retire. 0,5 s en tout. */
-.revs-splash--brief .revs-splash__mark {
-  animation: revs-reveal 220ms ease-out forwards;
-}
-
-/* ── Accessibilité ───────────────────────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
-  .revs-splash__glow,
-  .revs-splash__markwrap::after {
-    display: none;
-  }
-  .revs-splash__mark,
-  .revs-splash__word,
-  .revs-splash__tag {
+  .revs-splash__still {
     animation: none;
     opacity: 1;
-    transform: none;
   }
 }

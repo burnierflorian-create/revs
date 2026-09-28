@@ -160,6 +160,83 @@ if (!existsSync(MONO_SRC)) {
 const monoMeta = await sharp(MONO_SRC).metadata()
 console.log(`monogramme source : ${monoMeta.width}×${monoMeta.height} px natifs`)
 
+// ─────────────────── 4 · Monogramme et ses calques ───────────────────
+//
+// Deux traitements sont appliqués au découpage brut :
+//
+// 1. RECOLORATION DU ROUGE. Mesuré sur la référence : ses rouges tournent
+//    autour de #C80000–#D80008, un rouge pompier sans bleu, alors que
+//    l'accent de l'interface est #E8203A (bleu = 58). Posés côte à côte —
+//    intro, puis bouton SPOTTER — l'écart se voit. Le rouge est donc remappé
+//    sur l'accent EN CONSERVANT le modelé : la luminance d'origine pilote un
+//    dégradé entre une version assombrie et une version éclaircie de
+//    l'accent, si bien que les reflets du rendu 3D survivent.
+//
+// 2. SÉPARATION EN CALQUES. L'intro révèle d'abord les parties rouges, puis
+//    les blanches. Il faut donc pouvoir les afficher indépendamment.
+const ACCENT = [0xe8, 0x20, 0x3a]
+const isRed = (r, g, b) => r - g > 50 && r - b > 40
+
+/**
+ * @param mode  'full'   monogramme complet
+ *              'red'    calque rouge seul
+ *              'light'  calque clair seul
+ * @param lightColor couleur des masses claires (blanc, ou noir pour fond clair)
+ */
+async function monoLayer(height, dest, mode = 'full', lightColor = null) {
+  const { data, info } = await sharp(MONO_SRC)
+    .resize({ height, kernel: 'lanczos3' })
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true })
+
+  for (let i = 0; i < data.length; i += 4) {
+    if (data[i + 3] === 0) continue
+    const r = data[i], g = data[i + 1], b = data[i + 2]
+    if (isRed(r, g, b)) {
+      if (mode === 'light') {
+        data[i + 3] = 0
+        continue
+      }
+      // Le modelé d'origine (le canal rouge porte toute la dynamique) ne
+      // pilote QUE la luminosité : l'accent est multiplié, jamais mélangé
+      // vers le blanc. Un mélange vers le blanc remonte aussi le vert et le
+      // bleu, et délave le rouge en rose — c'est ce qu'avait donné la
+      // première tentative (#F07080 au lieu de #E8203A).
+      // r = 205 (teinte médiane de la référence) tombe exactement sur
+      // l'accent ; en dessous il s'assombrit, au-dessus il s'éclaircit.
+      const m = Math.min(1.25, Math.max(0.62, 1 + (r - 205) * 0.0045))
+      for (let c = 0; c < 3; c++)
+        data[i + c] = Math.min(255, Math.round(ACCENT[c] * m))
+    } else {
+      if (mode === 'red') {
+        data[i + 3] = 0
+        continue
+      }
+      if (lightColor) {
+        // Les masses claires sont reteintées en conservant leur modelé.
+        const v = Math.max(r, g, b) / 255
+        for (let c = 0; c < 3; c++)
+          data[i + c] = Math.min(255, Math.round(lightColor[c] * (0.5 + v)))
+      }
+    }
+  }
+  await sharp(data, { raw: { width: info.width, height: info.height, channels: 4 } })
+    .png({ compressionLevel: 9 })
+    .toFile(out(dest))
+  written.push(dest)
+}
+
+const BLACK_MASS = [0x0b, 0x0b, 0x0b]
+// Monogramme complet, thème sombre puis thème clair.
+await monoLayer(256, 'public/brand/revs-monogram.png')
+await monoLayer(256, 'public/brand/revs-monogram-dark.png', 'full', BLACK_MASS)
+await monoLayer(512, 'public/brand/revs-monogram-512.png')
+// Calques pour l'animation d'intro.
+await monoLayer(256, 'public/brand/revs-monogram-red.png', 'red')
+await monoLayer(256, 'public/brand/revs-monogram-mass.png', 'light')
+await monoLayer(256, 'public/brand/revs-monogram-mass-dark.png', 'light', BLACK_MASS)
+
 // ─────────────────── 3 · Icônes ───────────────────
 // Le monogramme découpé est reposé sur un carré #0B0B0B plein, plutôt que de
 // reprendre la découpe de la tuile telle quelle. Raison : la référence est une
@@ -171,8 +248,9 @@ console.log(`monogramme source : ${monoMeta.width}×${monoMeta.height} px natifs
 // lanceurs posent leur propre masque. Les dessiner donnerait un double arrondi,
 // et le canal alpha correspondant fait refuser le binaire à l'upload App Store.
 const BG = { r: 0x0b, g: 0x0b, b: 0x0b, alpha: 1 }
+const RECOLORED = () => resolve(ROOT, 'public/brand/revs-monogram-512.png')
 async function iconAt(size, dest, fill = 0.72) {
-  const mark = await sharp(MONO_SRC)
+  const mark = await sharp(RECOLORED())
     .resize({ width: Math.round(size * fill), kernel: 'lanczos3' })
     .png()
     .toBuffer()
@@ -190,31 +268,6 @@ for (const s of [1024, 512, 256, 128]) await iconAt(s, `public/brand/revs-icon-$
 // Icônes PWA et apple-touch-icon déjà référencées par index.html / le manifest.
 for (const s of [152, 167, 180, 192, 512])
   await iconAt(s, `public/icons/icon-${s}x${s}.png`)
-
-// ─────────────────── 4 · Monogramme seul ───────────────────
-// Version claire (telle quelle) et version sombre pour le thème clair : le
-// blanc est remplacé par le noir de charte, le rouge est conservé. C'est la
-// contrepartie du PNG — un SVG en currentColor n'aurait pas eu besoin de ça.
-async function monoAt(height, dest, dark = false) {
-  let img = sharp(MONO_SRC).resize({ height, kernel: 'lanczos3' })
-  if (dark) {
-    const { data, info } = await img.ensureAlpha().raw().toBuffer({ resolveWithObject: true })
-    for (let i = 0; i < data.length; i += 4) {
-      const r = data[i], g = data[i + 1], b = data[i + 2]
-      // Rouge REVS : forte dominante rouge → on garde. Sinon (blanc/argent)
-      // → noir de charte.
-      if (!(r - g > 50 && r - b > 40)) {
-        data[i] = 0x0b; data[i + 1] = 0x0b; data[i + 2] = 0x0b
-      }
-    }
-    img = sharp(data, { raw: { width: info.width, height: info.height, channels: 4 } })
-  }
-  await img.png({ compressionLevel: 9 }).toFile(out(dest))
-  written.push(dest)
-}
-await monoAt(256, 'public/brand/revs-monogram.png')
-await monoAt(256, 'public/brand/revs-monogram-dark.png', true)
-await monoAt(512, 'public/brand/revs-monogram-512.png')
 
 // ─────────────────── 5 · Favicons (monogramme seul, carré) ───────────────────
 // Le monogramme est nettement plus large que haut : centré dans un carré, il

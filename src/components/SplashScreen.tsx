@@ -1,36 +1,36 @@
 import { useEffect, useState } from 'react'
-import { RevsTagline, RevsWordmark } from './Logo'
 import { prefersReducedMotion } from '../lib/motion'
 import { useTheme } from '../lib/theme'
 import '../styles/splash-animation.css'
 
 // ═══════════════════════════════════════════════════════════════════════
-//  Animation d'intro REVS
+//  Animation d'intro REVS — « REVS vient de démarrer »
 // ═══════════════════════════════════════════════════════════════════════
 //
-//  0,00 → 0,30  un halo rouge diffus apparaît au centre — un feu arrière au loin
-//  0,30 → 0,70  le halo se resserre pendant que le monogramme se révèle
-//  0,70 → 1,00  un reflet métallique balaie le monogramme
-//  1,00 → 1,30  REVS se pose dessous
-//  1,30 → 1,50  la tagline suit
-//  1,50 → 1,80  palier stable
-//  1,80 → 2,00  fondu, puis démontage
+//  0,00 → 0,15  un trait rouge très fin apparaît
+//  0,15 → 0,55  il file vers la droite et dévoile les parties ROUGES du RV
+//  0,55 → 0,90  second passage, plus rapide : les masses claires arrivent
+//  0,90 → 1,15  le RV est complet, un reflet blanc le traverse
+//  1,15 → 1,35  palier
+//  1,35 → 1,45  fondu, puis l'accueil
 //
-// Le monogramme est le PNG de la planche de référence, affiché tel quel. Il
-// n'est plus tracé : la version précédente animait un stroke-dashoffset sur
-// des tracés SVG, ce qui n'a plus d'objet avec une image.
+// Le monogramme n'est pas redessiné : c'est le PNG de la référence, servi en
+// deux calques (rouge / clair) et dévoilé au clip-path. Toute la chorégraphie
+// vit dans splash-animation.css ; ce composant ne fait que choisir le mode et
+// démonter au bon moment.
 //
-// Ce composant est monté dans main.tsx À CÔTÉ de <App />, pas autour : React
-// monte l'application en parallèle, derrière le calque. Rien n'est retardé
-// par l'animation, et il n'y a pas d'écran blanc à la sortie.
+// Ni mot REVS ni tagline : l'état final est le monogramme seul, comme demandé.
+//
+// Monté dans main.tsx À CÔTÉ de <App />, pas autour : React monte
+// l'application en parallèle, derrière le calque. L'intro ne retarde rien et
+// il n'y a pas d'écran blanc à la sortie.
 
-const FULL_MS = 2000
-const BRIEF_MS = 500
-const FADE_MS = 200
+const FULL_MS = 1450
+const BRIEF_MS = 450
+const FADE_MS = 100
 
-// Une intro de 2 s est agréable une fois par jour, pénible à chaque
-// ouverture. Au-delà de 24 h on rejoue la version complète ; sinon simple
-// fondu de 0,5 s sur le monogramme.
+// Une intro complète est agréable une fois par jour, pénible à chaque
+// ouverture. Au-delà de 24 h on la rejoue ; sinon, simple fondu.
 const STORAGE_KEY = 'revs-last-splash-full'
 const FULL_EVERY_MS = 24 * 60 * 60 * 1000
 
@@ -48,7 +48,7 @@ function readMode(): Mode {
     if (!Number.isFinite(last) || Date.now() - last > FULL_EVERY_MS) return 'full'
   } catch {
     // Navigation privée, quota plein, stockage bloqué : version courte,
-    // plutôt que de rejouer 2 s à chaque ouverture.
+    // plutôt que de rejouer l'intro à chaque ouverture.
     return 'brief'
   }
   return 'brief'
@@ -88,18 +88,19 @@ export default function SplashScreen() {
   if (phase === 'gone') return null
 
   // Le monogramme de référence est blanc et rouge : illisible sur le thème
-  // clair, d'où la variante sombre. C'est la contrepartie d'une image — un
-  // tracé en currentColor n'aurait pas eu besoin de deux fichiers.
-  const mark =
-    theme === 'light'
-      ? '/brand/revs-monogram-dark.png'
-      : '/brand/revs-monogram.png'
+  // clair, d'où une seconde série de fichiers. C'est la contrepartie d'une
+  // image — un tracé en currentColor n'en aurait pas eu besoin.
+  const light = theme === 'light'
+  const mass = light
+    ? '/brand/revs-monogram-mass-dark.png'
+    : '/brand/revs-monogram-mass.png'
+  const whole = light
+    ? '/brand/revs-monogram-dark.png'
+    : '/brand/revs-monogram.png'
 
   return (
     <div
-      className={`revs-splash${full ? '' : ' revs-splash--brief'}${
-        phase === 'out' ? ' revs-splash--out' : ''
-      }`}
+      className={`revs-splash${phase === 'out' ? ' revs-splash--out' : ''}`}
       aria-hidden
       onAnimationEnd={(e) => {
         // Seule la sortie démonte ; les keyframes internes remontent aussi
@@ -108,22 +109,34 @@ export default function SplashScreen() {
       }}
     >
       <span className="revs-splash__stage">
-        {full && <span className="revs-splash__glow" />}
-        <span className="revs-splash__markwrap">
-          <img className="revs-splash__mark" src={mark} alt="" decoding="async" />
-        </span>
+        {full ? (
+          <>
+            {/* Le rouge se dévoile en premier, les masses claires suivent. */}
+            <img
+              className="revs-splash__layer revs-splash__layer--red"
+              src="/brand/revs-monogram-red.png"
+              alt=""
+              decoding="async"
+            />
+            <img
+              className="revs-splash__layer revs-splash__layer--mass"
+              src={mass}
+              alt=""
+              decoding="async"
+            />
+            <span className="revs-splash__line revs-splash__line--1" />
+            <span className="revs-splash__line revs-splash__line--2" />
+            <span className="revs-splash__shine" />
+          </>
+        ) : (
+          <img
+            className="revs-splash__layer revs-splash__still"
+            src={whole}
+            alt=""
+            decoding="async"
+          />
+        )}
       </span>
-
-      {full && (
-        <div className="flex flex-col items-center gap-2.5">
-          <span className="revs-splash__word">
-            <RevsWordmark height={30} />
-          </span>
-          <span className="revs-splash__tag">
-            <RevsTagline height={10} color="rgb(var(--color-fg-2))" />
-          </span>
-        </div>
-      )}
     </div>
   )
 }

@@ -22,6 +22,17 @@ conservée dans `brand-source/` pour que le script reste rejouable.
 | Thème | Un PNG ne suit pas `currentColor`. D'où **deux fichiers** : `revs-monogram.png` (blanc + rouge) et `revs-monogram-dark.png` (noir + rouge, pour fond clair). |
 | Éclairage | Le dégradé métallique et les reflets sont **cuits** dans l'image. Ils se retrouvent à toutes les tailles. |
 | Impression | Il n'existe plus de maître vectoriel du monogramme utilisé en production. Les SVG de `public/brand/` restent générés par `build-brand.mjs` mais ne sont plus la source de l'application. |
+| Rouge | **Recoloré.** Les rouges de la référence tournaient autour de `#C80000`–`#D80008`, un rouge pompier sans bleu, alors que l'accent de l'interface est `#E8203A`. Posés côte à côte — intro, puis bouton SPOTTER — l'écart se voyait. Le rouge est remappé sur l'accent **en conservant le modelé** : la luminance d'origine ne pilote que la luminosité, jamais un mélange vers le blanc (qui délaverait le rouge en rose). |
+
+### Calques
+
+L'intro a besoin d'afficher séparément le rouge et les masses claires, d'où :
+
+| Fichier | Contenu |
+|---|---|
+| `revs-monogram.png` / `-dark.png` | monogramme complet, thème sombre / clair |
+| `revs-monogram-red.png` | dalle + bras gauche du V |
+| `revs-monogram-mass.png` / `-mass-dark.png` | panse + jambage + bras droit du V |
 
 Le MOT « REVS » et la tagline restent, eux, en tracés : ils correspondent à
 la référence, et les recomposer avec une police système redonnerait une forme
