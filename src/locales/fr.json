@@ -319,7 +319,17 @@
       "hours": "Heures",
       "minutes": "Minutes"
     },
-    "onlineShort": "en ligne"
+    "onlineShort": "en ligne",
+    "ev": {
+      "in": "Dans",
+      "dates": "Dates",
+      "place": "Lieu",
+      "circuit": "Circuit",
+      "type": "Type",
+      "grandPrix": "Grand Prix",
+      "f1gp": "Grand Prix de Formule 1",
+      "seeDetail": "Voir le détail de l'événement"
+    }
   },
   "feedpage": {
     "slides": {

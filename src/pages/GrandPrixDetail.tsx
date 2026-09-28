@@ -14,7 +14,6 @@ import {
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import {
-  circuitImage,
   fmtGpDateTime,
   gpByRound,
   sessionsFor,
@@ -56,6 +55,34 @@ function useCountdown(targetIso: string) {
     m: Math.floor((diff % 3600000) / 60000),
     s: Math.floor((diff % 60000) / 1000),
   }
+}
+
+/** Week-end de course déduit du jour de course : « 2 – 4 oct. 2026 ». */
+function weekendLabel(iso: string): string {
+  const end = new Date(iso)
+  const start = new Date(end.getTime() - 2 * 86_400_000)
+  const my = new Intl.DateTimeFormat('fr-FR', { month: 'short', year: 'numeric' })
+  return `${start.getDate()} – ${end.getDate()} ${my.format(end)}`
+}
+
+/** « Ville, Pays » quand le circuit porte la ville, sinon le pays seul. */
+function placeOf(gp: { circuit: string; country: string }): string {
+  const city = gp.circuit.split(',')[1]?.trim()
+  return city ? `${city}, ${gp.country}` : gp.country
+}
+
+function GpInfo({ icon, label, value }: { icon: string; label: string; value: string }) {
+  return (
+    <div className="flex min-w-0 items-start gap-2">
+      <span className="mt-[1px] flex-none text-[14px]" aria-hidden>{icon}</span>
+      <div className="min-w-0">
+        <p className="label-up text-[9.5px] text-fg2">{label}</p>
+        <p className="mt-0.5 text-[12.5px] font-semibold leading-snug text-fg">
+          {value}
+        </p>
+      </div>
+    </div>
+  )
 }
 
 function Unit({ value, label }: { value: number; label: string }) {
@@ -175,14 +202,29 @@ export default function GrandPrixDetail() {
 
   return (
     <div className="min-h-screen bg-bg text-fg">
-      <div className="relative h-[38vh] w-full">
-        <img
-          src={circuitImage(gp.round)}
-          alt={gp.circuit}
-          fetchPriority="high"
-          decoding="async"
-          className="h-full w-full object-cover"
-        />
+      <div className="relative h-[42vh] min-h-[280px] w-full">
+        {/* Image locale et optimisée (WebP, 152/187 ko) au lieu de l'Unsplash
+            distant que renvoyait circuitImage() : une dépendance externe sur
+            le plus grand élément de la page, donc sur le LCP.
+            LIMITE À CONNAÎTRE : cette photo montre la tour de Bahreïn, elle est
+            donc juste pour ce Grand Prix et générique-approximative pour les
+            autres. Une image par circuit reste à fournir. */}
+        <picture>
+          <source
+            media="(max-width: 420px)"
+            srcSet="/images/events/f1-bahrain-640.webp"
+            type="image/webp"
+          />
+          <source srcSet="/images/events/f1-bahrain-850.webp" type="image/webp" />
+          <img
+            src="/images/events/f1-bahrain-850.webp"
+            alt={gp.circuit}
+            fetchPriority="high"
+            decoding="async"
+            className="h-full w-full object-cover"
+            style={{ objectPosition: 'center 40%' }}
+          />
+        </picture>
         <div className="absolute inset-0 bg-gradient-to-t from-bg via-bg/40 to-transparent" />
         <button
           onClick={() => navigate(-1)}
@@ -251,6 +293,19 @@ export default function GrandPrixDetail() {
             {t('f1gp.gpAlreadyHappened')}
           </div>
         )}
+
+        {/* Grille d'identité de l'épreuve. Les dates couvrent le week-end
+            déduit du jour de course (vendredi-dimanche), GP_2026 ne portant
+            que la date de la course. */}
+        <div
+          className="grid grid-cols-2 gap-x-4 gap-y-4 rounded-3xl bg-card p-4"
+          style={{ border: '1px solid var(--color-border)' }}
+        >
+          <GpInfo icon="📅" label={t('home.ev.dates')} value={weekendLabel(gp.date)} />
+          <GpInfo icon="📍" label={t('home.ev.place')} value={placeOf(gp)} />
+          <GpInfo icon="🏎" label={t('home.ev.circuit')} value={gp.circuit.split(',')[0].trim()} />
+          <GpInfo icon="🏁" label={t('home.ev.type')} value={t('home.ev.f1gp')} />
+        </div>
 
         <section>
           <h2 className="mb-3 flex items-center gap-2 font-display text-lg font-extrabold tracking-tighter text-fg">

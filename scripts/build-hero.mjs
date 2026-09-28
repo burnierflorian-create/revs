@@ -41,3 +41,33 @@ for (const f of ['hero-home.webp', 'hero-home-mobile.webp', 'hero-home.png']) {
   const m = await sharp(out(`public/images/${f}`)).metadata()
   console.log(`  ${f.padEnd(24)} ${m.width}×${m.height}  ${(statSync(out(`public/images/${f}`)).size / 1024).toFixed(0)} ko`)
 }
+
+// ── Fond d'événement F1 ────────────────────────────────────────────────
+//
+// La source est en portrait 850 × 1850. Le srcset demandé (640/960/1200 w)
+// dépasse donc la largeur native : au-delà de 850 px il n'y aurait plus de
+// détail à gagner, seulement des octets. On s'arrête à la résolution réelle.
+//
+// ATTENTION : cette photo montre la tour de Bahreïn, elle est donc SPÉCIFIQUE
+// à ce Grand Prix. Elle sert de fond F1 par défaut — c'est cohérent tant que
+// Bahreïn est la prochaine course, mais une image par GP sera nécessaire pour
+// que la page reste juste toute la saison.
+const EV =
+  process.env.EVENT_SRC ??
+  '/Users/florian/Downloads/ChatGPT Image 28 sept. 2026, 22_12_09.png'
+if (existsSync(EV)) {
+  const em = await sharp(EV).metadata()
+  console.log(`\névénement F1 source : ${em.width} × ${em.height}`)
+  for (const w of [640, 850]) {
+    await sharp(EV)
+      .resize({ width: w })
+      .webp({ quality: w > 700 ? 80 : 84 })
+      .toFile(out(`public/images/events/f1-bahrain-${w}.webp`))
+  }
+  const { statSync: st } = await import('node:fs')
+  for (const w of [640, 850]) {
+    const f = out(`public/images/events/f1-bahrain-${w}.webp`)
+    const m = await sharp(f).metadata()
+    console.log(`  f1-bahrain-${w}.webp`.padEnd(28) + `${m.width}×${m.height}  ${(st(f).size / 1024).toFixed(0)} ko`)
+  }
+}

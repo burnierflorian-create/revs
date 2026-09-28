@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { ChevronRight, Image as ImageIcon } from 'lucide-react'
+import { ChevronRight } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { setPendingPhoto } from '../lib/pendingPhoto'
 import { GP_2026 } from '../lib/f1'
@@ -29,6 +29,17 @@ import { fetchLiveEvents, type LiveEvent } from '../lib/liveEvents'
 // d'être figées. Elles l'étaient en valeurs sombres, si bien qu'en thème clair
 // les cartes restaient noires sur fond clair. --color-glass et --color-border
 // basculent, eux, avec le thème.
+// Bloc translucide posé SUR la photo de l'événement : il lui faut un noir
+// franc, pas le verre thématique des cartes de la page.
+const GLASS_BLOCK = {
+  background: 'rgb(0 0 0 / 0.55)',
+  backdropFilter: 'blur(8px)',
+  WebkitBackdropFilter: 'blur(8px)',
+  border: '1px solid rgb(255 255 255 / 0.10)',
+  borderRadius: '14px',
+  padding: '11px 12px',
+} as const
+
 const CARD_STYLE = {
   background: 'var(--color-glass-mid)',
   backdropFilter: 'blur(12px) saturate(150%)',
@@ -382,10 +393,7 @@ export default function Home() {
 
       {/* ══════════════════ 5 · ÉVÉNEMENT À VENIR ══════════════════ */}
       <section className="px-5 pt-8">
-        <SectionHead
-          title={t('home.upcomingEvent')}
-          onMore={() => navigate(liveEvents.length > 0 ? '/events' : '/f1')}
-        />
+        <SectionHead title={t('home.upcomingEvent')} />
         <UpcomingEvent
           live={liveEvents[0] ?? null}
           gp={nextGp}
@@ -411,20 +419,25 @@ export default function Home() {
 
 // ═══════════════════════════ EN-TÊTE DE SECTION ═══════════════════════════
 
-function SectionHead({ title, onMore }: { title: string; onMore: () => void }) {
+// `onMore` est facultatif : la section Événement n'a pas de « Voir tout »,
+// puisqu'un seul événement est mis en avant et qu'aucune liste n'existe
+// derrière. Celui des défis est conservé — /challenges existe bien.
+function SectionHead({ title, onMore }: { title: string; onMore?: () => void }) {
   const { t } = useTranslation()
   return (
     <div className="mb-3 flex items-baseline justify-between gap-3">
       <h2 className="font-display text-[17px] font-extrabold tracking-tight text-fg">
         {title}
       </h2>
-      <button
-        onClick={onMore}
-        className="tappable inline-flex items-center gap-0.5 text-[12.5px] font-semibold text-fg/50"
-      >
-        {t('home.seeAll')}
-        <ChevronRight className="h-3.5 w-3.5" />
-      </button>
+      {onMore && (
+        <button
+          onClick={onMore}
+          className="tappable inline-flex items-center gap-0.5 text-[12.5px] font-semibold text-fg/50"
+        >
+          {t('home.seeAll')}
+          <ChevronRight className="h-3.5 w-3.5" />
+        </button>
+      )}
     </div>
   )
 }
@@ -494,6 +507,66 @@ function QuickStats({
 //
 // Un événement en direct prime sur le Grand Prix à venir. Aucune donnée n'est
 // fabriquée : sans live ET sans GP au calendrier, on affiche un état vide.
+//
+// ── DEUX DÉRIVATIONS, ET LEURS LIMITES ──
+//
+// GP_2026 ne porte QU'UNE date : celle de la course. La carte affiche donc un
+// week-end déduit (course − 2 jours → course), ce qui correspond au format
+// vendredi-dimanche de la Formule 1. Ce n'est pas une donnée du système : le
+// jour où un GP sortira de ce format, l'affichage sera faux.
+//
+// Le lieu est extrait du champ `circuit`, qui suit partout la forme
+// « Circuit, Ville ». Quand la virgule manque, on retombe sur le pays.
+
+/** Week-end de course déduit : « 9 – 11 oct. 2026 ». */
+function raceWeekend(iso: string, lang: string): string {
+  const end = new Date(iso)
+  const start = new Date(end.getTime() - 2 * 86_400_000)
+  const d = (x: Date) => x.getDate()
+  const my = new Intl.DateTimeFormat(lang, { month: 'short', year: 'numeric' })
+  return `${d(start)} – ${d(end)} ${my.format(end)}`
+}
+
+function EventTag({ accent = false, children }: { accent?: boolean; children: React.ReactNode }) {
+  return (
+    <span
+      className="inline-flex items-center rounded-full px-2.5 py-[3px] text-[9.5px] font-bold uppercase tracking-[0.1em]"
+      style={
+        accent
+          ? {
+              color: 'rgb(var(--color-accent))',
+              border: '1px solid rgb(var(--color-accent) / 0.65)',
+              background: 'rgb(var(--color-accent) / 0.10)',
+            }
+          : {
+              color: 'rgb(255 255 255 / 0.72)',
+              border: '1px solid rgb(255 255 255 / 0.22)',
+            }
+      }
+    >
+      {children}
+    </span>
+  )
+}
+
+function InfoCell({ icon, label, value }: { icon: string; label: string; value: string }) {
+  return (
+    <div className="flex min-w-0 items-start gap-2">
+      <span className="mt-[1px] flex-none text-[13px]" aria-hidden>{icon}</span>
+      <div className="min-w-0">
+        <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-white/45">
+          {label}
+        </p>
+        {/* Deux lignes plutôt qu'une troncature : « Bahrain International
+            Circuit » et « Grand Prix de Formule 1 » ne tiennent pas sur une
+            demi-largeur à 390 px, et couper au milieu d'un mot se lit mal. */}
+        <p className="mt-0.5 line-clamp-2 text-[11.5px] font-semibold leading-snug text-white/90">
+          {value}
+        </p>
+      </div>
+    </div>
+  )
+}
 
 function UpcomingEvent({
   live,
@@ -506,7 +579,7 @@ function UpcomingEvent({
   msLeft: number
   onTap: () => void
 }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
 
   if (!live && !gp) {
     return (
@@ -523,71 +596,157 @@ function UpcomingEvent({
   const h = Math.floor((msLeft % 86_400_000) / 3_600_000)
   const m = Math.floor((msLeft % 3_600_000) / 60_000)
 
+  const title = live ? live.title : gp!.name
+  const [circuitName, city] = live
+    ? [live.location, '']
+    : (() => {
+        const parts = gp!.circuit.split(',').map((x) => x.trim())
+        return [parts[0], parts[1] ?? '']
+      })()
+  const place = live ? live.location : [city, gp!.country].filter(Boolean).join(', ')
+
   return (
     <button
       onClick={onTap}
-      className="tappable w-full overflow-hidden text-left transition-transform active:scale-[0.99]"
-      style={{ ...CARD_STYLE }}
+      className="tappable relative w-full overflow-hidden text-left transition-transform active:scale-[0.99]"
+      style={{
+        borderRadius: '22px',
+        border: '1px solid rgb(var(--color-accent) / 0.28)',
+        boxShadow: '0 6px 28px rgb(var(--color-accent) / 0.13)',
+      }}
     >
-      <div className="flex items-center gap-3.5 p-4">
-        <span
-          className="flex h-12 w-12 flex-none items-center justify-center rounded-xl text-2xl"
-          style={{
-            background: 'rgb(var(--color-accent) / 0.12)',
-            border: '1px solid rgb(var(--color-accent) / 0.28)',
-          }}
+      {/* Fond photo. `loading="lazy"` : la carte est sous la ligne de flottaison,
+          elle ne doit pas concurrencer le hero au premier rendu. */}
+      <picture>
+        <source
+          media="(max-width: 420px)"
+          srcSet="/images/events/f1-bahrain-640.webp"
+          type="image/webp"
+        />
+        <source srcSet="/images/events/f1-bahrain-850.webp" type="image/webp" />
+        <img
+          src="/images/events/f1-bahrain-850.webp"
+          alt=""
           aria-hidden
-        >
-          {live ? '🔴' : gp!.flag}
-        </span>
+          loading="lazy"
+          decoding="async"
+          className="absolute inset-0 h-full w-full object-cover"
+          style={{ objectPosition: 'center 38%' }}
+        />
+      </picture>
 
-        <div className="min-w-0 flex-1">
-          {live && (
+      {/* Voile dégradé : le texte occupe la gauche et le bas, la voiture reste
+          lisible en haut à droite. */}
+      <div
+        aria-hidden
+        className="absolute inset-0"
+        style={{
+          background:
+            'linear-gradient(to top, rgb(0 0 0 / 0.93) 0%, rgb(0 0 0 / 0.82) 34%,' +
+            ' rgb(0 0 0 / 0.55) 62%, rgb(0 0 0 / 0.30) 100%),' +
+            ' linear-gradient(to right, rgb(0 0 0 / 0.55) 0%, rgb(0 0 0 / 0) 68%)',
+        }}
+      />
+
+      <div className="relative p-4">
+        {/* Drapeau + marque. Le logo officiel de la Formule 1 est une marque
+            déposée : il n'est pas reproduit, un traitement typographique le
+            remplace. */}
+        <div className="flex items-center gap-2.5">
+          <span className="text-[22px] leading-none" aria-hidden>
+            {live ? '🔴' : gp!.flag}
+          </span>
+          {!live && (
             <span
-              className="mb-1 inline-block rounded-full px-2 py-0.5 text-[9.5px] font-bold tracking-wider text-white"
-              style={{ background: 'rgb(var(--color-accent))' }}
+              className="font-display text-[15px] font-black italic tracking-tighter"
+              style={{ color: 'rgb(var(--color-accent))' }}
             >
-              LIVE
+              F1
             </span>
           )}
-          <p className="truncate font-display text-[15.5px] font-bold text-fg">
-            {live ? live.title : gp!.name}
-          </p>
-          <p className="mt-0.5 truncate text-[12px] text-fg/50">
-            {live ? live.location : gp!.circuit}
-          </p>
         </div>
 
-        <ChevronRight className="h-4 w-4 flex-none text-fg/30" />
-      </div>
-
-      {!live && (
-        <div
-          className="flex"
-          style={{ borderTop: '1px solid rgb(255 255 255 / 0.06)' }}
+        <h3
+          className="mt-3 font-display font-black uppercase leading-[0.96] tracking-tight text-white"
+          style={{ fontSize: 'clamp(26px, 8vw, 34px)' }}
         >
-          {([[d, t('home.cd.days')], [h, t('home.cd.hours')], [m, t('home.cd.minutes')]] as [number, string][]).map(
-            ([v, l], i) => (
-              <div
-                key={l}
-                className="flex-1 py-2.5 text-center"
-                style={
-                  i > 0
-                    ? { borderLeft: '1px solid rgb(255 255 255 / 0.06)' }
-                    : undefined
-                }
-              >
-                <p className="font-display text-[17px] font-extrabold tabular-nums leading-none text-fg">
-                  {v}
-                </p>
-                <p className="mt-0.5 text-[9.5px] font-semibold uppercase tracking-wider text-fg/40">
-                  {l}
-                </p>
-              </div>
-            ),
+          {title}
+        </h3>
+        <p className="mt-1.5 text-[12.5px] font-medium leading-snug text-white/70">
+          {circuitName}
+          {place && (
+            <>
+              <br />
+              {place}
+            </>
+          )}
+        </p>
+
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {live ? (
+            <EventTag accent>LIVE</EventTag>
+          ) : (
+            <>
+              <EventTag accent>Formula 1</EventTag>
+              <EventTag>{t('home.ev.circuit')}</EventTag>
+              <EventTag>{t('home.ev.grandPrix')}</EventTag>
+            </>
           )}
         </div>
-      )}
+
+        {/* Compte à rebours — alimenté par le tick 1 Hz de la page. */}
+        {!live && (
+          <div className="mt-4" style={{ ...GLASS_BLOCK }}>
+            <p className="mb-1.5 flex items-center gap-1.5 text-[9.5px] font-bold uppercase tracking-[0.14em] text-white/55">
+              <span aria-hidden>⏱</span>
+              {t('home.ev.in')}
+            </p>
+            <div className="flex">
+              {([[d, t('home.cd.days')], [h, t('home.cd.hours')], [m, t('home.cd.minutes')]] as [number, string][]).map(
+                ([v, l], i) => (
+                  <div
+                    key={l}
+                    className="flex-1 text-center"
+                    style={i > 0 ? { borderLeft: '1px solid rgb(255 255 255 / 0.12)' } : undefined}
+                  >
+                    <p className="font-display text-[22px] font-black tabular-nums leading-none text-white">
+                      {v}
+                    </p>
+                    <p className="mt-1 text-[8.5px] font-bold uppercase tracking-[0.12em] text-white/45">
+                      {l}
+                    </p>
+                  </div>
+                ),
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Grille 2×2. Les dates sont DÉDUITES du jour de course — voir plus haut. */}
+        {!live && (
+          <div className="mt-2.5 grid grid-cols-2 gap-x-3 gap-y-3" style={{ ...GLASS_BLOCK }}>
+            <InfoCell icon="📅" label={t('home.ev.dates')} value={raceWeekend(gp!.date, i18n.language)} />
+            <InfoCell icon="📍" label={t('home.ev.place')} value={place || gp!.country} />
+            <InfoCell icon="🏎" label={t('home.ev.circuit')} value={circuitName} />
+            <InfoCell icon="🏁" label={t('home.ev.type')} value={t('home.ev.f1gp')} />
+          </div>
+        )}
+
+        <div
+          className="mt-2.5 flex items-center gap-2.5 px-3.5 py-3"
+          style={{
+            borderRadius: '14px',
+            border: '1px solid rgb(var(--color-accent) / 0.55)',
+            background: 'rgb(var(--color-accent) / 0.10)',
+          }}
+        >
+          <span className="text-[14px]" aria-hidden>🏎</span>
+          <span className="flex-1 text-[11.5px] font-bold uppercase tracking-[0.1em] text-white">
+            {t('home.ev.seeDetail')}
+          </span>
+          <ChevronRight className="h-4 w-4 flex-none text-white/60" />
+        </div>
+      </div>
     </button>
   )
 }
@@ -631,7 +790,7 @@ function ChallengeStrip({
           <button
             key={c.id}
             onClick={onTap}
-            className="tappable w-[168px] flex-none snap-start p-3.5 text-left transition-transform active:scale-[0.98]"
+            className="tappable flex w-[178px] flex-none snap-start flex-col p-3.5 text-left transition-transform active:scale-[0.98]"
             style={{ ...CARD_STYLE }}
           >
             {/* challengeIcon() renvoie une data-URI SVG, pas un emoji : elle
@@ -645,11 +804,19 @@ function ChallengeStrip({
               height={26}
               className="block"
             />
-            <p className="mt-2 line-clamp-2 min-h-[2.4em] text-[12.5px] font-semibold leading-snug text-fg">
+            {/* Hiérarchie : le nom du défi porte, l'objectif le précise.
+                `description` vient du système de défis — rien n'est écrit en
+                dur ici, et la ligne disparaît si le champ est vide. */}
+            <p className="mt-2 line-clamp-2 text-[12.5px] font-bold leading-snug text-fg">
               {c.title}
             </p>
+            {c.description && (
+              <p className="mt-0.5 line-clamp-2 text-[10.5px] font-medium leading-snug text-fg/50">
+                {c.description}
+              </p>
+            )}
 
-            <div className="mt-2.5 flex items-baseline justify-between">
+            <div className="mt-auto flex items-baseline justify-between pt-2.5">
               <span className="text-[11px] font-bold tabular-nums text-fg/70">
                 {Math.min(c.progress, c.target_value)}/{c.target_value}
               </span>
@@ -696,7 +863,6 @@ function SpotterAction() {
   const navigate = useNavigate()
   const { t } = useTranslation()
   const camRef = useRef<HTMLInputElement>(null)
-  const libRef = useRef<HTMLInputElement>(null)
 
   function onPick(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -707,7 +873,13 @@ function SpotterAction() {
   }
 
   return (
-    <div className="flex items-center gap-3">
+    <>
+      {/* `capture="environment"` ouvre DIRECTEMENT l'appareil photo arrière.
+          L'entrée galerie qui l'accompagnait a été retirée le 28/09/2026 :
+          un spot doit naître d'une photo prise sur le moment, pas d'une image
+          ancienne. Vérifié avant suppression — les autres captures de spot
+          (Map.tsx, NewSpot.tsx) portent déjà `capture`, et le seul sélecteur
+          de galerie restant dans l'application est l'avatar de Settings. */}
       <input
         ref={camRef}
         type="file"
@@ -716,17 +888,9 @@ function SpotterAction() {
         onChange={onPick}
         className="hidden"
       />
-      <input
-        ref={libRef}
-        type="file"
-        accept="image/*"
-        onChange={onPick}
-        className="hidden"
-      />
-
       <button
         onClick={() => camRef.current?.click()}
-        className="tappable flex flex-1 items-center justify-center gap-2.5 rounded-full transition-transform active:scale-[0.97]"
+        className="tappable flex w-full items-center justify-center gap-2.5 rounded-full transition-transform active:scale-[0.97]"
         style={{
           padding: '15px 24px',
           background: 'rgb(var(--color-accent))',
@@ -734,7 +898,7 @@ function SpotterAction() {
         }}
         aria-label={t('home.spotter.aria')}
       >
-        {/* Anneau de capture : deux ondes ambiantes et un cœur plein. */}
+        {/* Anneau de capture : une onde ambiante et un cœur plein. */}
         <span
           className="relative flex h-5 w-5 flex-none items-center justify-center"
           aria-hidden
@@ -758,15 +922,6 @@ function SpotterAction() {
           {t('home.spotter.label')}
         </span>
       </button>
-
-      <button
-        onClick={() => libRef.current?.click()}
-        className="tappable flex h-[52px] w-[52px] flex-none items-center justify-center rounded-full transition-transform active:scale-[0.94]"
-        style={{ ...CARD_STYLE, borderRadius: '999px' }}
-        aria-label={t('home.spotter.fromLibrary')}
-      >
-        <ImageIcon className="h-5 w-5 text-fg/70" />
-      </button>
-    </div>
+    </>
   )
 }

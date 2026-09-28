@@ -319,7 +319,17 @@
       "hours": "Hours",
       "minutes": "Minutes"
     },
-    "onlineShort": "online"
+    "onlineShort": "online",
+    "ev": {
+      "in": "In",
+      "dates": "Dates",
+      "place": "Location",
+      "circuit": "Circuit",
+      "type": "Type",
+      "grandPrix": "Grand Prix",
+      "f1gp": "Formula 1 Grand Prix",
+      "seeDetail": "See event details"
+    }
   },
   "feedpage": {
     "slides": {
