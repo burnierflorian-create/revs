@@ -1,0 +1,214 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   REVS — animation d'intro
+   ═══════════════════════════════════════════════════════════════════════
+
+   Un feu arrière rouge apparaît au loin, trace le monogramme R+V, un reflet
+   métallique balaie le mark, puis REVS et la tagline se posent dessous.
+   Durée totale 2 s. Tout est en @keyframes CSS ; le seul travail JavaScript
+   est la mesure de getTotalLength() sur les tracés (voir SplashScreen.tsx).
+
+   PROPRIÉTÉS ANIMÉES — uniquement opacity, transform et stroke-dashoffset.
+   Les deux premières sont composées par le GPU. stroke-dashoffset, non : il
+   repasse par le rastériseur à chaque frame. C'est acceptable ici parce que
+   la phase de tracé ne dure que 0,7 s et ne porte que cinq tracés, mais c'est
+   aussi pourquoi le glow est une valeur fixe et non une valeur animée —
+   animer un drop-shadow ferait recalculer le flou à chaque frame.
+
+   Les durées sont exprimées en variables pour que la version courte (retours
+   dans les 24 h) réutilise exactement les mêmes keyframes en accéléré. */
+
+.revs-splash {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(18px, 5vw, 30px);
+  background: #0b0b0b;
+  /* Le splash est un calque décoratif : il ne doit jamais intercepter un
+     geste destiné à l'application qui se charge derrière. */
+  pointer-events: none;
+  will-change: opacity;
+}
+
+/* Sortie — l'unmount est déclenché par onAnimationEnd côté React, donc la
+   durée réelle du fondu vit ici et nulle part ailleurs. */
+.revs-splash--out {
+  animation: revs-splash-out 200ms ease-in forwards;
+}
+@keyframes revs-splash-out {
+  to {
+    opacity: 0;
+  }
+}
+
+/* ── 0,0 → 0,3 s · le feu arrière au loin ────────────────────────────── */
+.revs-splash__spark {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 10px;
+  height: 10px;
+  margin: -5px 0 0 -5px;
+  border-radius: 50%;
+  background: var(--revs-red, #e8203a);
+  box-shadow:
+    0 0 12px 3px rgba(232, 32, 58, 0.85),
+    0 0 40px 10px rgba(232, 32, 58, 0.35);
+  opacity: 0;
+  animation: revs-spark 300ms ease-out forwards;
+  will-change: opacity, transform;
+}
+@keyframes revs-spark {
+  0% {
+    opacity: 0;
+    transform: scale(0.3);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.9);
+  }
+}
+
+/* ── 0,3 → 1,0 s · le tracé ──────────────────────────────────────────── */
+.revs-splash__mark {
+  position: relative;
+  display: block;
+  height: clamp(74px, 22vw, 122px);
+  width: auto;
+  overflow: visible;
+}
+
+/* Contours tracés. --len est posé par React (getTotalLength) ; sans lui,
+   rien n'est visible plutôt que tout — un tracé sans longueur connue doit
+   rester caché, pas apparaître d'un coup. */
+.revs-splash__trace {
+  fill: none;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: var(--len, 0);
+  stroke-dashoffset: var(--len, 0);
+  filter: drop-shadow(0 0 8px rgba(232, 32, 58, 0.6));
+  animation: revs-trace 400ms cubic-bezier(0.55, 0, 0.35, 1) forwards;
+  will-change: stroke-dashoffset;
+}
+/* Le R part à 0,3 s, le V enchaîne à 0,7 s. Les deux lettres partageant la
+   diagonale centrale, l'enchaînement se lit comme un seul geste continu. */
+.revs-splash__trace--r {
+  animation-delay: 300ms;
+}
+.revs-splash__trace--v {
+  animation-delay: 700ms;
+}
+@keyframes revs-trace {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* Remplissages — apparaissent juste derrière le contour qui vient de les
+   dessiner, ce qui donne l'impression que le trait « remplit » la lettre. */
+.revs-splash__fill {
+  opacity: 0;
+  animation: revs-fill 260ms ease-out forwards;
+  will-change: opacity;
+}
+.revs-splash__fill--r {
+  animation-delay: 560ms;
+}
+.revs-splash__fill--v {
+  animation-delay: 960ms;
+}
+@keyframes revs-fill {
+  to {
+    opacity: 1;
+  }
+}
+
+/* ── 1,0 → 1,3 s · reflet métallique ─────────────────────────────────── */
+.revs-splash__shine {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: inherit;
+}
+.revs-splash__shine::after {
+  content: '';
+  position: absolute;
+  top: -20%;
+  bottom: -20%;
+  left: 0;
+  width: 55%;
+  background: linear-gradient(
+    100deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.3) 50%,
+    transparent 100%
+  );
+  transform: translateX(-180%);
+  animation: revs-shine 300ms ease-in-out 1000ms both;
+  will-change: transform;
+}
+@keyframes revs-shine {
+  to {
+    transform: translateX(320%);
+  }
+}
+
+/* ── 1,3 → 1,6 s · le mot et la tagline ──────────────────────────────── */
+.revs-splash__word,
+.revs-splash__tag {
+  opacity: 0;
+  transform: translateY(10px);
+  animation: revs-rise 300ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  will-change: opacity, transform;
+}
+.revs-splash__word {
+  animation-delay: 1300ms;
+}
+.revs-splash__tag {
+  animation-delay: 1400ms;
+}
+@keyframes revs-rise {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ── Version courte (retour dans les 24 h) ───────────────────────────── */
+/* Le monogramme est déjà rempli : pas de tracé, pas d'étincelle, pas de
+   reflet. Un fondu de 500 ms et on rend la main. */
+.revs-splash--brief .revs-splash__fill {
+  animation: revs-fill 260ms ease-out forwards;
+  animation-delay: 0ms;
+}
+
+/* ── Accessibilité ───────────────────────────────────────────────────── */
+/* « Réduire les animations » : le logo est posé, immobile, et l'écran se
+   retire. Aucun tracé, aucun balayage, aucun déplacement. */
+@media (prefers-reduced-motion: reduce) {
+  .revs-splash__spark,
+  .revs-splash__shine {
+    display: none;
+  }
+  .revs-splash__trace {
+    animation: none;
+    stroke-dashoffset: 0;
+    opacity: 0;
+  }
+  .revs-splash__fill,
+  .revs-splash__word,
+  .revs-splash__tag {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+}

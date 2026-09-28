@@ -11,7 +11,13 @@
 // abandonnée : le mot dépendait d'une police système, donc il changeait de
 // forme d'un appareil à l'autre ; et le symbole n'avait aucun rapport avec le
 // monogramme R+V validé.
-import { LOCKUP, MONOGRAM, WORDMARK, type BrandPart } from '../lib/brand-paths'
+import {
+  LOCKUP,
+  MONOGRAM,
+  TAGLINE,
+  WORDMARK,
+  type BrandPart,
+} from '../lib/brand-paths'
 
 // Les deux couleurs par défaut passent par le design system plutôt que par
 // des hexadécimaux figés, pour deux raisons distinctes :
@@ -116,6 +122,46 @@ export function RevsWordmark({
       aria-label={title}
     >
       <Paths parts={WORDMARK.parts} light={color} accent={mono ? color : accent} />
+    </svg>
+  )
+}
+
+/**
+ * La tagline CARS. SPOTS. PASSION., en tracés.
+ *
+ * Dessinée au trait (et non en masse) : à cette taille un contour plein
+ * pèserait plus lourd que le logo lui-même. Comme le reste de la charte, elle
+ * ne dépend d'aucune police — la composer en HTML avec du letter-spacing
+ * donnerait une forme différente selon l'appareil.
+ */
+export function RevsTagline({
+  height = 12,
+  color = 'currentColor',
+}: {
+  height?: number
+  color?: string
+}) {
+  const w = (TAGLINE.w / TAGLINE.h) * height
+  return (
+    <svg
+      width={w}
+      height={height}
+      viewBox={`0 0 ${TAGLINE.w} ${TAGLINE.h}`}
+      xmlns="http://www.w3.org/2000/svg"
+      role="img"
+      aria-label="Cars. Spots. Passion."
+    >
+      <g
+        fill="none"
+        stroke={color}
+        strokeWidth={TAGLINE.strokeWidth}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        {TAGLINE.glyphs.map((g, i) => (
+          <path key={i} transform={g.t} d={g.d} />
+        ))}
+      </g>
     </svg>
   )
 }

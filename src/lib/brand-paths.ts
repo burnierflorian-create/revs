@@ -5,18 +5,24 @@
 // et les composants React : il n'existe qu'un seul dessin du logo REVS.
 
 /** 'light' = masses blanc/argent · 'accent' = la diagonale rouge partagée. */
-export type BrandPart = { role: 'light' | 'accent'; rule?: 'evenodd'; d: string }
+export type BrandPart = {
+  role: 'light' | 'accent'
+  /** 'R' ou 'V' — utilisé par l'animation d'intro, qui trace le R puis le V. */
+  group?: 'R' | 'V'
+  rule?: 'evenodd'
+  d: string
+}
 
 /** Monogramme R+V seul. */
 export const MONOGRAM = {
   w: 265.3,
   h: 144,
   parts: [
-  { role: 'accent', d: 'M37.2,76 L61.2,76 L36,132 L12,132 Z' },
-  { role: 'light', rule: 'evenodd' as const, d: 'M34.2,12 L128.2,12 L148.2,32 L148.2,56 L128.2,76 L66.2,76 Z M46.2,36 L116.2,36 L124.2,42 L124.2,46 L116.2,52 L54.2,52 Z' },
-  { role: 'light', d: 'M120.2,56 L144.2,56 L176.12,132 L152.12,132 Z' },
-  { role: 'accent', d: 'M135.72,12 L159.72,12 L193.31,91.98 L193.31,132 L186.12,132 Z' },
-  { role: 'light', d: 'M193.31,91.98 L229.3,12 L253.3,12 L199.3,132 L193.31,132 Z' },
+  { role: 'accent', group: 'R' as const, d: 'M37.2,76 L61.2,76 L36,132 L12,132 Z' },
+  { role: 'light', group: 'R' as const, rule: 'evenodd' as const, d: 'M34.2,12 L128.2,12 L148.2,32 L148.2,56 L128.2,76 L66.2,76 Z M46.2,36 L116.2,36 L124.2,42 L124.2,46 L116.2,52 L54.2,52 Z' },
+  { role: 'light', group: 'R' as const, d: 'M120.2,56 L144.2,56 L176.12,132 L152.12,132 Z' },
+  { role: 'accent', group: 'V' as const, d: 'M135.72,12 L159.72,12 L193.31,91.98 L193.31,132 L186.12,132 Z' },
+  { role: 'light', group: 'V' as const, d: 'M193.31,91.98 L229.3,12 L253.3,12 L199.3,132 L193.31,132 Z' },
   ] as BrandPart[],
 }
 
@@ -34,16 +40,47 @@ export const WORDMARK = {
   ] as BrandPart[],
 }
 
+/**
+ * Tagline CARS. SPOTS. PASSION., dessinée au trait.
+ * Coordonnées propres : hauteur de capitale 100, contour `strokeWidth`.
+ */
+export const TAGLINE = {
+  w: 1602.63,
+  h: 100,
+  strokeWidth: 11,
+  glyphs: [
+    { t: 'translate(23.13 0) skewX(-10)', d: 'M48,11.9 A28,44 0 1 0 48,88.1' },
+    { t: 'translate(111.13 0) skewX(-10)', d: 'M2,94 L30,6 L58,94 M12,66 L48,66' },
+    { t: 'translate(197.13 0) skewX(-10)', d: 'M6,94 L6,6 L38,6 A22,22 0 0 1 38,50 L6,50 M30,50 L58,94' },
+    { t: 'translate(285.13 0) skewX(-10)', d: 'M56,22 C56,11 46,6 32,6 C16,6 8,13 8,26 C8,38 18,43 34,47 C50,51 60,57 60,71 C60,86 50,94 32,94 C18,94 8,89 6,78' },
+    { t: 'translate(377.13 0) skewX(-10)', d: 'M6,94 L6,94' },
+    { t: 'translate(467.13 0) skewX(-10)', d: 'M56,22 C56,11 46,6 32,6 C16,6 8,13 8,26 C8,38 18,43 34,47 C50,51 60,57 60,71 C60,86 50,94 32,94 C18,94 8,89 6,78' },
+    { t: 'translate(559.13 0) skewX(-10)', d: 'M6,94 L6,6 L38,6 A24,24 0 0 1 38,54 L6,54' },
+    { t: 'translate(647.13 0) skewX(-10)', d: 'M6,50 A28,44 0 1 1 62,50 A28,44 0 1 1 6,50' },
+    { t: 'translate(741.13 0) skewX(-10)', d: 'M0,6 L56,6 M28,6 L28,94' },
+    { t: 'translate(823.13 0) skewX(-10)', d: 'M56,22 C56,11 46,6 32,6 C16,6 8,13 8,26 C8,38 18,43 34,47 C50,51 60,57 60,71 C60,86 50,94 32,94 C18,94 8,89 6,78' },
+    { t: 'translate(915.13 0) skewX(-10)', d: 'M6,94 L6,94' },
+    { t: 'translate(1005.13 0) skewX(-10)', d: 'M6,94 L6,6 L38,6 A24,24 0 0 1 38,54 L6,54' },
+    { t: 'translate(1093.13 0) skewX(-10)', d: 'M2,94 L30,6 L58,94 M12,66 L48,66' },
+    { t: 'translate(1179.13 0) skewX(-10)', d: 'M56,22 C56,11 46,6 32,6 C16,6 8,13 8,26 C8,38 18,43 34,47 C50,51 60,57 60,71 C60,86 50,94 32,94 C18,94 8,89 6,78' },
+    { t: 'translate(1271.13 0) skewX(-10)', d: 'M56,22 C56,11 46,6 32,6 C16,6 8,13 8,26 C8,38 18,43 34,47 C50,51 60,57 60,71 C60,86 50,94 32,94 C18,94 8,89 6,78' },
+    { t: 'translate(1363.13 0) skewX(-10)', d: 'M6,6 L6,94' },
+    { t: 'translate(1401.13 0) skewX(-10)', d: 'M6,50 A28,44 0 1 1 62,50 A28,44 0 1 1 6,50' },
+    { t: 'translate(1495.13 0) skewX(-10)', d: 'M6,94 L6,6 L58,94 L58,6' },
+    { t: 'translate(1585.13 0) skewX(-10)', d: 'M6,94 L6,94' },
+  ] as { t: string; d: string }[],
+}
+
 /** Verrou horizontal : monogramme + REVS, sans tagline. */
 export const LOCKUP = {
   w: 730.93,
   h: 144,
   parts: [
-  { role: 'accent', d: 'M37.2,76 L61.2,76 L36,132 L12,132 Z' },
-  { role: 'light', rule: 'evenodd' as const, d: 'M34.2,12 L128.2,12 L148.2,32 L148.2,56 L128.2,76 L66.2,76 Z M46.2,36 L116.2,36 L124.2,42 L124.2,46 L116.2,52 L54.2,52 Z' },
-  { role: 'light', d: 'M120.2,56 L144.2,56 L176.12,132 L152.12,132 Z' },
-  { role: 'accent', d: 'M135.72,12 L159.72,12 L193.31,91.98 L193.31,132 L186.12,132 Z' },
-  { role: 'light', d: 'M193.31,91.98 L229.3,12 L253.3,12 L199.3,132 L193.31,132 Z' },
+  { role: 'accent', group: 'R' as const, d: 'M37.2,76 L61.2,76 L36,132 L12,132 Z' },
+  { role: 'light', group: 'R' as const, rule: 'evenodd' as const, d: 'M34.2,12 L128.2,12 L148.2,32 L148.2,56 L128.2,76 L66.2,76 Z M46.2,36 L116.2,36 L124.2,42 L124.2,46 L116.2,52 L54.2,52 Z' },
+  { role: 'light', group: 'R' as const, d: 'M120.2,56 L144.2,56 L176.12,132 L152.12,132 Z' },
+  { role: 'accent', group: 'V' as const, d: 'M135.72,12 L159.72,12 L193.31,91.98 L193.31,132 L186.12,132 Z' },
+  { role: 'light', group: 'V' as const, d: 'M193.31,91.98 L229.3,12 L253.3,12 L199.3,132 L193.31,132 Z' },
   { role: 'light', rule: 'evenodd' as const, d: 'M316.93,22 L342.93,22 L325.3,122 L299.3,122 Z M342.93,22 L382.93,22 L401.05,44 L396.82,68 L370.94,90 L330.94,90 Z M338.35,48 L372.35,48 L374,50 L371.88,62 L369.53,64 L335.53,64 Z' },
   { role: 'light', d: 'M364.12,72 L390.12,72 L399.3,122 L373.3,122 Z' },
   { role: 'light', d: 'M428.93,22 L454.93,22 L437.3,122 L411.3,122 Z M454.93,22 L512.93,22 L496.35,48 L450.35,48 Z M448.41,59 L496.41,59 L479.82,85 L443.82,85 Z M441.88,96 L499.88,96 L483.3,122 L437.3,122 Z' },

@@ -189,16 +189,19 @@ const MONO_BOX = bbox([R_BOWL_OUT, R_LEG, RED_SLAB, V_LEFT, V_RIGHT])
 
 function monogramParts(dx, dy, k = 1) {
   const S = (pts) => pts.map(([x, y]) => [x * k, y * k])
+  // `group` sert à l'animation d'intro, qui trace le R puis le V. La dalle
+  // rouge appartient au R : elle occupe la place de sa hampe.
   return [
-    { role: 'accent', d: poly(S(RED_SLAB), dx, dy) },
+    { role: 'accent', group: 'R', d: poly(S(RED_SLAB), dx, dy) },
     {
       role: 'light',
+      group: 'R',
       rule: 'evenodd',
       d: `${poly(S(R_BOWL_OUT), dx, dy)} ${poly(S(R_BOWL_IN), dx, dy)}`,
     },
-    { role: 'light', d: poly(S(R_LEG), dx, dy) },
-    { role: 'accent', d: poly(S(V_LEFT), dx, dy) },
-    { role: 'light', d: poly(S(V_RIGHT), dx, dy) },
+    { role: 'light', group: 'R', d: poly(S(R_LEG), dx, dy) },
+    { role: 'accent', group: 'V', d: poly(S(V_LEFT), dx, dy) },
+    { role: 'light', group: 'V', d: poly(S(V_RIGHT), dx, dy) },
   ]
 }
 
@@ -417,6 +420,22 @@ const GLYPHS = {
 }
 const TAG_TEXT = 'CARS. SPOTS. PASSION.'
 const TAG_TRACK = 26
+
+/** Les glyphes de la tagline, en coordonnées locales, pour React. */
+function taglineGlyphExport() {
+  const off = WORD_SLANT * TAG_CAP + TAG_SW / 2
+  let x = 0
+  const rows = []
+  for (const ch of TAG_TEXT) {
+    const g = GLYPHS[ch]
+    if (g.d)
+      rows.push(
+        `    { t: 'translate(${r2(off + x)} 0) skewX(-${SLANT})', d: '${g.d}' },`,
+      )
+    x += g.w + TAG_TRACK
+  }
+  return rows.join('\n')
+}
 
 function taglineMetrics() {
   let w = 0
@@ -657,7 +676,7 @@ write('public/favicon.svg', FAVICON)
     parts
       .map(
         (p) =>
-          `  { role: '${p.role}'${p.rule ? `, rule: '${p.rule}' as const` : ''}, d: '${p.d}' },`,
+          `  { role: '${p.role}'${p.group ? `, group: '${p.group}' as const` : ''}${p.rule ? `, rule: '${p.rule}' as const` : ''}, d: '${p.d}' },`,
       )
       .join('\n')
 
@@ -670,7 +689,13 @@ write('public/favicon.svg', FAVICON)
 // et les composants React : il n'existe qu'un seul dessin du logo REVS.
 
 /** 'light' = masses blanc/argent · 'accent' = la diagonale rouge partagée. */
-export type BrandPart = { role: 'light' | 'accent'; rule?: 'evenodd'; d: string }
+export type BrandPart = {
+  role: 'light' | 'accent'
+  /** 'R' ou 'V' — utilisé par l'animation d'intro, qui trace le R puis le V. */
+  group?: 'R' | 'V'
+  rule?: 'evenodd'
+  d: string
+}
 
 /** Monogramme R+V seul. */
 export const MONOGRAM = {
@@ -688,6 +713,19 @@ export const WORDMARK = {
   parts: [
 ${fmt(wordmarkParts(PAD + WORD_SLANT * 100, PAD, WORD_SCALE))}
   ] as BrandPart[],
+}
+
+/**
+ * Tagline CARS. SPOTS. PASSION., dessinée au trait.
+ * Coordonnées propres : hauteur de capitale 100, contour \`strokeWidth\`.
+ */
+export const TAGLINE = {
+  w: ${r2(taglineMetrics().w + WORD_SLANT * TAG_CAP + TAG_SW)},
+  h: ${r2(TAG_CAP)},
+  strokeWidth: ${TAG_SW},
+  glyphs: [
+${taglineGlyphExport()}
+  ] as { t: string; d: string }[],
 }
 
 /** Verrou horizontal : monogramme + REVS, sans tagline. */
