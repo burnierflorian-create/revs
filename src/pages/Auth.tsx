@@ -10,6 +10,7 @@ import { useAuth } from '../hooks/useAuth'
 import { detectCountry, reverseGeocode, COUNTRY_NAMES } from '../lib/country'
 import { appConfig } from '../config/appConfig'
 import { RevsLogo } from '../components/Logo'
+import { useTheme } from '../lib/theme'
 
 // iOS autofill and copy/paste routinely inject invisible characters into
 // the email field — zero-width spaces, a BOM, or a non-breaking space —
@@ -68,6 +69,7 @@ function resetRedirectOrigin(): string {
 
 export default function Auth() {
   const { t } = useTranslation()
+  const { theme } = useTheme()
   const { passwordRecovery, setPasswordRecovery } = useAuth()
   const [searchParams] = useSearchParams()
   // Auto-switch into recover mode when either the URL hash carries the
@@ -293,7 +295,7 @@ export default function Auth() {
             aria-label="REVS", ce qui lui donne son nom accessible. */}
         <div className="mb-10 text-center">
           <h1 className="flex justify-center text-fg">
-            <RevsLogo height={52} />
+            <RevsLogo height={52} onLight={theme === 'light'} />
           </h1>
           <p className="mt-3 text-sm text-fg2">{t('auth.tagline')}</p>
         </div>

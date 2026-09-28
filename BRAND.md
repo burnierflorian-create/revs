@@ -7,7 +7,29 @@ Charte officielle, en vigueur depuis le 28/09/2026.
 
 ---
 
-## Le monogramme
+## ⚠️ Le monogramme est une IMAGE, pas un tracé
+
+Depuis le 28/09/2026, le monogramme R+V n'est plus redessiné en SVG : c'est
+le PNG découpé dans la planche de référence, par
+`scripts/extract-brand-png.mjs` (`npm run brand:png`). La découpe native est
+conservée dans `brand-source/` pour que le script reste rejouable.
+
+**Ce que ce choix coûte, et qu'il faut connaître avant de s'appuyer dessus :**
+
+| | |
+|---|---|
+| Résolution utile | **428 × 175 px**. Au-delà d'environ 400 px de large, l'agrandissement se voit. |
+| Thème | Un PNG ne suit pas `currentColor`. D'où **deux fichiers** : `revs-monogram.png` (blanc + rouge) et `revs-monogram-dark.png` (noir + rouge, pour fond clair). |
+| Éclairage | Le dégradé métallique et les reflets sont **cuits** dans l'image. Ils se retrouvent à toutes les tailles. |
+| Impression | Il n'existe plus de maître vectoriel du monogramme utilisé en production. Les SVG de `public/brand/` restent générés par `build-brand.mjs` mais ne sont plus la source de l'application. |
+
+Le MOT « REVS » et la tagline restent, eux, en tracés : ils correspondent à
+la référence, et les recomposer avec une police système redonnerait une forme
+différente d'un appareil à l'autre.
+
+---
+
+## Géométrie du tracé (historique)
 
 Un R et un V construits comme **un seul dessin**. Le mark repose sur deux
 familles d'obliques, et c'est ce qui le fait tenir :

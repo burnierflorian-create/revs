@@ -11,13 +11,10 @@
 // abandonnée : le mot dépendait d'une police système, donc il changeait de
 // forme d'un appareil à l'autre ; et le symbole n'avait aucun rapport avec le
 // monogramme R+V validé.
-import {
-  LOCKUP,
-  MONOGRAM,
-  TAGLINE,
-  WORDMARK,
-  type BrandPart,
-} from '../lib/brand-paths'
+// MONOGRAM et LOCKUP ne sont plus consommés ici : le monogramme vient
+// désormais du PNG de référence. Seuls le mot et la tagline restent en
+// tracés — voir RevsMark plus bas.
+import { TAGLINE, WORDMARK, type BrandPart } from '../lib/brand-paths'
 
 // Les deux couleurs par défaut passent par le design system plutôt que par
 // des hexadécimaux figés, pour deux raisons distinctes :
@@ -55,37 +52,45 @@ function Paths({
 }
 
 /**
- * Monogramme R+V seul — le symbole officiel de l'application.
+ * Monogramme R+V — l'image de référence, pas un tracé.
  *
- * `height` pilote la taille : le monogramme est nettement plus large que haut
- * (ratio ~1.9), donc caler sur la hauteur évite les surprises de mise en page.
- * `mono` force une seule couleur, pour les fonds complexes et l'impression.
+ * Sur demande explicite du 28/09/2026, le monogramme n'est plus redessiné en
+ * SVG : c'est le PNG découpé dans la planche de référence (voir
+ * scripts/extract-brand-png.mjs).
+ *
+ * CE QUE CE CHOIX IMPLIQUE, et qui n'existait pas avec le tracé :
+ *  · le dessin ne suit plus `currentColor`. Le monogramme de référence est
+ *    blanc et rouge, donc invisible sur fond clair — d'où les DEUX fichiers
+ *    et la bascule ci-dessous sur le thème ;
+ *  · il ne monte plus indéfiniment en taille : la source utile mesure
+ *    428 × 175 px. Au-delà d'environ 400 px de large, l'agrandissement se
+ *    voit.
+ *
+ * Le ratio est figé ici pour réserver la place avant le chargement de
+ * l'image : sans width/height, la mise en page saute au premier affichage.
  */
+const MARK_RATIO = 428 / 175
+
 export function RevsMark({
   height = 32,
-  color = SILVER,
-  accent = RED,
-  mono = false,
   title = 'REVS',
+  onLight,
 }: {
   height?: number
-  color?: string
-  accent?: string
-  mono?: boolean
+  /** Force la variante sombre (monogramme noir + rouge), pour fond clair. */
+  onLight?: boolean
   title?: string
 }) {
-  const w = (MONOGRAM.w / MONOGRAM.h) * height
+  const dark = onLight ?? false
   return (
-    <svg
-      width={w}
+    <img
+      src={dark ? '/brand/revs-monogram-dark.png' : '/brand/revs-monogram.png'}
+      width={Math.round(height * MARK_RATIO)}
       height={height}
-      viewBox={`0 0 ${MONOGRAM.w} ${MONOGRAM.h}`}
-      xmlns="http://www.w3.org/2000/svg"
-      role="img"
-      aria-label={title}
-    >
-      <Paths parts={MONOGRAM.parts} light={color} accent={mono ? color : accent} />
-    </svg>
+      alt={title}
+      decoding="async"
+      style={{ height, width: 'auto', display: 'block' }}
+    />
   )
 }
 
@@ -167,36 +172,34 @@ export function RevsTagline({
 }
 
 /**
- * Verrou horizontal officiel : monogramme + REVS.
+ * Verrou horizontal : monogramme (PNG de référence) + REVS.
  *
- * C'est la version destinée aux en-têtes. Pas de tagline ici — elle existe
- * uniquement dans public/brand/revs-logo-tagline.svg, pour les usages où le
- * logo dispose de place (réseaux sociaux, présentations, Open Graph).
+ * Le MOT reste en tracés. Ce n'est pas une entorse à « plus de SVG » : la
+ * demande visait le monogramme, qui ne ressemblait pas à la référence. Le mot,
+ * lui, correspond — et le recomposer avec une police système redonnerait une
+ * forme différente d'un appareil à l'autre, ce que la charte a corrigé.
  */
 export function RevsLogo({
   height = 28,
   color = SILVER,
   accent = RED,
-  mono = false,
+  onLight,
   title = 'REVS',
 }: {
   height?: number
   color?: string
   accent?: string
-  mono?: boolean
+  onLight?: boolean
   title?: string
 }) {
-  const w = (LOCKUP.w / LOCKUP.h) * height
   return (
-    <svg
-      width={w}
-      height={height}
-      viewBox={`0 0 ${LOCKUP.w} ${LOCKUP.h}`}
-      xmlns="http://www.w3.org/2000/svg"
+    <span
+      style={{ display: 'inline-flex', alignItems: 'center', gap: height * 0.42 }}
       role="img"
       aria-label={title}
     >
-      <Paths parts={LOCKUP.parts} light={color} accent={mono ? color : accent} />
-    </svg>
+      <RevsMark height={height * 1.2} onLight={onLight} title="" />
+      <RevsWordmark height={height} color={color} accent={accent} title="" />
+    </span>
   )
 }

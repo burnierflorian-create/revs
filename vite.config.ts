@@ -25,7 +25,7 @@ export default defineConfig({
         injectionPoint: 'self.__WB_MANIFEST',
         globPatterns: ['**/*.html'],
       },
-      includeAssets: ['favicon.svg', 'brand/favicon-32.png', 'brand/favicon-16.png'],
+      includeAssets: ['brand/favicon-32.png', 'brand/favicon-16.png'],
       manifest: {
         name: 'REVS',
         short_name: 'REVS',

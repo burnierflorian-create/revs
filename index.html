@@ -3,11 +3,11 @@
   <head>
     <meta charset="UTF-8" />
 
-    <!-- Favicon. Le SVG couvre tous les navigateurs modernes ; les deux PNG
-         sont là pour les contextes qui ne savent pas lire un favicon
-         vectoriel (anciens Safari, agrégateurs, aperçus de liens). Tous
-         sortent du même dessin — voir scripts/build-brand.mjs. -->
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <!-- Favicon — PNG uniquement. Le favicon vectoriel a été retiré le
+         28/09/2026 : le monogramme ne doit plus être un tracé SVG mais
+         l'image de référence, découpée par scripts/extract-brand-png.mjs.
+         Contrepartie assumée : un PNG ne se redimensionne pas aussi
+         proprement qu'un SVG sur les écrans à forte densité. -->
     <link rel="icon" type="image/png" sizes="32x32" href="/brand/favicon-32.png" />
     <link rel="icon" type="image/png" sizes="16x16" href="/brand/favicon-16.png" />
 

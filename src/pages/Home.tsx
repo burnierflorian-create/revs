@@ -38,6 +38,7 @@ import { checkLevelUp } from '../components/LevelUpOverlay'
 import LiquidXpBar from '../components/LiquidXpBar'
 import { triggerStreakBreak } from '../components/StreakBreak'
 import { RevsMark } from '../components/Logo'
+import { useTheme } from '../lib/theme'
 
 type CommunityStats = {
   spots_today: number
@@ -91,6 +92,7 @@ function computeStreak(isoDates: string[]): number {
 export default function Home() {
   const navigate = useNavigate()
   const { t } = useTranslation()
+  const { theme } = useTheme()
   const [loading, setLoading] = useState(true)
   const [name, setName] = useState('Spotter')
   const [xp, setXp] = useState(0)
@@ -319,7 +321,7 @@ export default function Home() {
               (MainLayout laisse chaque onglet gérer son haut de page), et
               ajouter une bande aurait décalé tout le contenu de l'accueil.
               `text-fg` le rend thématique — le mark hérite de currentColor. */}
-          <RevsMark height={15} title="REVS" />
+          <RevsMark height={15} title="REVS" onLight={theme === 'light'} />
           <span className="h-3 w-px flex-none bg-fg/15" aria-hidden />
           <span className="relative flex h-2 w-2 flex-none" aria-hidden>
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-70" />
