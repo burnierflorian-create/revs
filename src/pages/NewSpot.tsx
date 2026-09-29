@@ -636,6 +636,23 @@ export default function NewSpot() {
         .select('*')
         .single()
       if (insErr) {
+        // ── Rollback du fichier ──
+        // Le fichier est déposé AVANT l'insertion : sans ce nettoyage, tout
+        // échec laisse une image que plus rien ne référence. L'audit du 29/09
+        // en a trouvé trois, datées de mai et juin 2026.
+        //
+        // La suppression ne vise QUE le chemin créé par cette tentative
+        // (`path`, construit juste au-dessus). Elle est volontairement
+        // silencieuse en cas d'échec : le message utile est l'erreur
+        // d'insertion d'origine, pas celle du nettoyage — on ne veut pas la
+        // masquer derrière un second message.
+        await supabase.storage
+          .from('spots')
+          .remove([path])
+          .catch(() => {
+            /* le fichier restera orphelin ; l'erreur d'insertion prime */
+          })
+
         // Plafond de publication atteint côté base : message propre plutôt que
         // l'erreur SQL brute, et même traitement visuel que le garde client
         // (bandeau + lien Premium via limitReached).
