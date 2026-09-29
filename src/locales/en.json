@@ -340,7 +340,8 @@
     },
     "xp": {
       "level": "Level",
-      "max": "MAX"
+      "max": "MAX",
+      "prestige": "PRESTIGE {{n}}"
     },
     "board": {
       "title": "Leaderboards",

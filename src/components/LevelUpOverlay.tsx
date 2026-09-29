@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { prefersReducedMotion, vibrate } from '../lib/motion'
-import { XP_LADDER, xpLevel } from '../lib/xp'
+import { fetchProgress, xpLevel } from '../lib/xp'
 import { supabase } from '../lib/supabase'
 import type { Rarity, Spot } from '../lib/spots'
 import { rarityRank } from './CollectorCard'
@@ -40,7 +40,14 @@ async function offerBestCardShare(): Promise<void> {
     /* best-effort — never block */
   }
 }
-const LAST_LEVEL_KEY = 'revs_last_level'
+// ── CLÉ CHANGÉE À LA REFONTE DU 29/09/2026 ──
+// L'ancienne clé stockait un NOM de palier (« Maître Spotter »). La nouvelle
+// stocke un NUMÉRO de niveau. Changer de clé fait qu'au premier chargement
+// après la refonte, chacun repart d'une base neuve et RIEN ne se déclenche —
+// c'est exactement ce que demande la règle « ne pas jouer une animation par
+// niveau franchi lors de la migration ». Un joueur qui passe de l'ancien
+// palier 5/10 au nouveau niveau 9/100 ne verra aucune célébration rétroactive.
+const LAST_LEVEL_KEY = 'revs_last_level_n'
 const COLORS = ['#E8203A', '#C8A96E', '#ffffff']
 
 type LevelUpDetail = { from: string; to: string }
@@ -52,41 +59,47 @@ export function triggerLevelUp(from: string, to: string) {
   )
 }
 
-function ladderIndex(name: string): number {
-  return XP_LADDER.findIndex((l) => l.name === name)
-}
-
-/** Compare the user's current tier against the last one we saw (stored in
- *  localStorage) and fire the overlay if they advanced. Pass a known XP
- *  total to skip the network round-trip; otherwise it reads my_xp. The
- *  first call ever just seeds the baseline silently (no false positive). */
+/**
+ * Compare le niveau courant au dernier vu (localStorage) et déclenche
+ * l'overlay en cas d'avancement.
+ *
+ * La progression est demandée au SERVEUR (`my_progress`), qui connaît aussi le
+ * prestige : un client ne peut donc pas se célébrer un niveau qu'il n'a pas.
+ * `knownXp` reste accepté comme repli hors ligne, mais il ignore le prestige.
+ *
+ * Plusieurs niveaux franchis d'un coup → UNE seule animation, de l'ancien au
+ * nouveau. Le premier appel ne fait qu'amorcer la référence, sans rien jouer.
+ */
 export async function checkLevelUp(knownXp?: number): Promise<void> {
-  let xp = knownXp
-  if (xp == null) {
-    try {
-      const { data } = await supabase.rpc('my_xp')
-      xp = (data as number | null) ?? 0
-    } catch {
-      return
-    }
+  let level: number
+  let title: string
+  const prog = await fetchProgress()
+  if (prog) {
+    level = prog.level
+    title = prog.title
+  } else if (knownXp != null) {
+    const v = xpLevel(knownXp)
+    level = v.level
+    title = v.name
+  } else {
+    return
   }
-  const current = xpLevel(xp).name
-  let previous: string | null = null
+
+  let previous: number | null = null
   try {
-    previous = localStorage.getItem(LAST_LEVEL_KEY)
+    const raw = localStorage.getItem(LAST_LEVEL_KEY)
+    previous = raw == null ? null : Number(raw)
   } catch {
-    /* storage unavailable */
+    /* stockage indisponible */
   }
   try {
-    localStorage.setItem(LAST_LEVEL_KEY, current)
+    localStorage.setItem(LAST_LEVEL_KEY, String(level))
   } catch {
     /* ignore */
   }
-  // No baseline yet → seed only, never celebrate on first run.
-  if (!previous || previous === current) return
-  if (ladderIndex(current) > ladderIndex(previous)) {
-    triggerLevelUp(previous, current)
-  }
+
+  if (previous == null || !Number.isFinite(previous) || previous >= level) return
+  triggerLevelUp(`Niveau ${previous}`, `Niveau ${level} · ${title}`)
 }
 
 type Particle = {

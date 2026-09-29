@@ -340,7 +340,8 @@
     },
     "xp": {
       "level": "Niveau",
-      "max": "MAX"
+      "max": "MAX",
+      "prestige": "PRESTIGE {{n}}"
     },
     "board": {
       "title": "Classements",

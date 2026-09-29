@@ -36,7 +36,7 @@ import {
 import { supabase } from '../lib/supabase'
 import { setPendingPhoto } from '../lib/pendingPhoto'
 import { GP_2026 } from '../lib/f1'
-import { xpLevel, type XpLevel } from '../lib/xp'
+import { fetchProgress, type Progress } from '../lib/xp'
 import { challengeIcon } from '../lib/customIcons'
 import { Skeleton } from '../components/Skeleton'
 import {
@@ -119,7 +119,10 @@ export default function Home() {
   const { t } = useTranslation()
   const [loading, setLoading] = useState(true)
   const [name, setName] = useState('Spotter')
-  const [xp, setXp] = useState(0)
+  // Progression : lue au SERVEUR (my_progress), jamais recalculée ici. C'est
+  // ce qui garantit que l'accueil ne peut plus annoncer un niveau différent de
+  // celui que la base reconnaît.
+  const [prog, setProg] = useState<Progress | null>(null)
   const [challenges, setChallenges] = useState<Challenge[]>([])
   const [challengeImages, setChallengeImages] = useState<Map<string, string>>(
     () => new Map(),
@@ -195,7 +198,7 @@ export default function Home() {
           .select('pseudo, title, ville')
           .eq('user_id', user.id)
           .maybeSingle(),
-        supabase.rpc('my_xp'),
+        fetchProgress(),
       ])
       if (!active) return
 
@@ -204,12 +207,11 @@ export default function Home() {
         (user.email ? user.email.split('@')[0] : 'Spotter')
       setName(pseudo)
       setTitle((profRes.data?.title as string | undefined)?.trim() || null)
-      setXp((xpRes.data as number | null) ?? 0)
+      setProg(xpRes)
       setLoading(false)
 
-      // Passage de niveau : compare l'XP fraîche au dernier palier connu et
-      // déclenche l'overlay plein écran en cas d'avancement.
-      void checkLevelUp((xpRes.data as number | null) ?? 0)
+      // Passage de niveau : le serveur tranche, l'overlay se contente de jouer.
+      void checkLevelUp()
 
       // Chargements secondaires découplés — aucun ne bloque le premier rendu.
       fetchActiveChallenges().then((c) => {
@@ -273,7 +275,6 @@ export default function Home() {
     }
   }, [])
 
-  const lvl = xpLevel(xp)
 
   const goChallenges = useCallback(() => navigate('/challenges'), [navigate])
   const goEvents = useCallback(() => navigate('/events'), [navigate])
@@ -374,12 +375,12 @@ export default function Home() {
               {greetingFor(name, t)}
             </h1>
             <p className="home-rise--2 mt-1 truncate text-[13px] font-medium text-white/60">
-              {title ?? lvl.name}
+              {title ?? prog?.title ?? '—'}
             </p>
           </div>
 
           <div className="home-rise home-rise--2 flex-none">
-            <XpCard lvl={lvl} />
+            <XpCard prog={prog} />
           </div>
         </div>
       </section>
@@ -518,11 +519,18 @@ function HomeHeader({ online }: { online: number }) {
 // (« REVS OG », sans plafond), l'anneau est plein et le rapport « x / y »
 // laisse place au total, parce qu'il n'y a plus de cible.
 
-function XpCard({ lvl }: { lvl: XpLevel }) {
+function XpCard({ prog }: { prog: Progress | null }) {
   const { t } = useTranslation()
   const R = 25
   const C = 2 * Math.PI * R
-  const pct = Math.min(100, Math.max(0, lvl.pct))
+  const pct = Math.min(100, Math.max(0, prog?.pct ?? 0))
+  const level = prog?.level ?? 1
+  const isMax = prog?.isMax ?? false
+  // Sur 100 niveaux, afficher « 34 300 / 45 319 XP » serait illisible dans une
+  // carte de 104 px. On montre donc la progression DANS le niveau — ce que la
+  // barre représente réellement — plutôt que deux totaux cumulés.
+  const inLevel = prog?.levelXp ?? 0
+  const span = prog?.levelSpan ?? 1
 
   return (
     <div
@@ -543,6 +551,14 @@ function XpCard({ lvl }: { lvl: XpLevel }) {
         boxShadow: '0 12px 34px rgb(0 0 0 / 0.55)',
       }}
     >
+      {(prog?.prestige ?? 0) > 0 && (
+        <p
+          className="mb-1 text-[9px] font-black uppercase tracking-[0.14em]"
+          style={{ color: 'rgb(var(--color-accent))' }}
+        >
+          {t('home.xp.prestige', { n: prog?.prestige ?? 0 })}
+        </p>
+      )}
       <p className="flex items-center justify-center gap-1.5 text-[11px] font-semibold text-white/70">
         <span aria-hidden>👑</span>
         {t('home.xp.level')}
@@ -550,7 +566,7 @@ function XpCard({ lvl }: { lvl: XpLevel }) {
           className="font-display font-black tabular-nums"
           style={{ color: 'rgb(var(--color-accent))' }}
         >
-          {lvl.level}
+          {level}
         </span>
       </p>
 
@@ -579,15 +595,15 @@ function XpCard({ lvl }: { lvl: XpLevel }) {
         </svg>
         <span className="absolute inset-0 flex items-center justify-center">
           <span className="font-display text-[16px] font-black tabular-nums text-white">
-            {lvl.isMax ? t('home.xp.max') : `${pct}%`}
+            {isMax ? t('home.xp.max') : `${pct}%`}
           </span>
         </span>
       </div>
 
       <p className="mt-1.5 text-[10px] font-semibold tabular-nums text-white/65">
-        {lvl.isMax
-          ? `${nf.format(lvl.current)} XP`
-          : `${nf.format(lvl.current)} / ${nf.format(lvl.ceiling ?? 0)} XP`}
+        {isMax
+          ? `${nf.format(prog?.xpTotal ?? 0)} XP`
+          : `${nf.format(inLevel)} / ${nf.format(span)} XP`}
       </p>
     </div>
   )

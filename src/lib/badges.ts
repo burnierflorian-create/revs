@@ -11,6 +11,17 @@ export type BadgeCategory =
   | 'brands'
   | 'special'
 
+// ── LES BADGES NE DONNENT PLUS D'XP (29/09/2026) ──
+//
+// Le champ `xp` a disparu de ce catalogue. Il annonçait 675 XP au total, dont
+// PAS UN n'était jamais crédité : il n'existe ni table de badges, ni fonction,
+// ni déclencheur — les badges sont recalculés côté client à chaque affichage.
+// L'interface promettait donc une récompense inexistante.
+//
+// Décision de la refonte : les badges deviennent des récompenses de STATUT,
+// une progression parallèle et purement honorifique. Plus de promesse d'XP,
+// donc plus de promesse fausse.
+
 export type Badge = {
   slug: string
   emoji: string
@@ -18,7 +29,6 @@ export type Badge = {
   desc: string
   condition: string
   category: BadgeCategory
-  xp?: number
   gold?: boolean
   /** Display order within its category. Lower = first. */
   order?: number
@@ -115,7 +125,7 @@ export type BadgeContext = {
 
 export const BADGES: Badge[] = [
   // Spots
-  { slug: 'premier-spot',   emoji: '🚀', name: 'Premier Spot',   desc: 'Ton tout premier spot publié.', condition: 'Poste ton premier spot', xp: 5,  category: 'spots',  order: 1 },
+  { slug: 'premier-spot',   emoji: '🚀', name: 'Premier Spot',   desc: 'Ton tout premier spot publié.', condition: 'Poste ton premier spot',  category: 'spots',  order: 1 },
   { slug: 'serie-10',       emoji: '🔟', name: 'Série de 10',    desc: 'Tu prends le rythme.',          condition: 'Atteins 10 spots au total',                                category: 'spots',  order: 2 },
   { slug: 'centurion',      emoji: '💯', name: 'Centurion',      desc: 'Un vrai chasseur.',             condition: 'Atteins 100 spots au total',                               category: 'spots',  order: 3 },
   { slug: 'speed-spotter',  emoji: '⚡', name: 'Speed Spotter',  desc: 'Trois spots en une journée.',   condition: 'Poste 3 spots le même jour',                               category: 'spots',  order: 4 },
@@ -124,7 +134,7 @@ export const BADGES: Badge[] = [
 
   // Streak
   { slug: 'streak-7',       emoji: '🔥', name: 'Streak 7 jours',  desc: 'Une semaine sans rater un jour.', condition: 'Spotte 7 jours d’affilée',                          category: 'streak', order: 1 },
-  { slug: 'streak-30',      emoji: '🔥', name: 'Streak 30 jours', desc: 'Un mois sans rater un jour.',     condition: 'Spotte 30 jours d’affilée', xp: 50,                  category: 'streak', order: 2, gold: true },
+  { slug: 'streak-30',      emoji: '🔥', name: 'Streak 30 jours', desc: 'Un mois sans rater un jour.',     condition: 'Spotte 30 jours d’affilée',                  category: 'streak', order: 2, gold: true },
 
   // Discovery
   { slug: 'explorateur',    emoji: '📍', name: 'Explorateur',    desc: 'Spots dans 3 zones différentes.', condition: 'Spotte dans 3 endroits éloignés (>11 km)',                category: 'discovery', order: 1 },
@@ -138,19 +148,19 @@ export const BADGES: Badge[] = [
 
   // Community
   { slug: 'social-10',      emoji: '🤝', name: 'Social',         desc: '10 abonnés.',                  condition: 'Atteins 10 abonnés',                                        category: 'community', order: 1 },
-  { slug: 'influenceur',    emoji: '⭐', name: 'Influenceur',    desc: '50 abonnés.',                  condition: 'Atteins 50 abonnés', xp: 50,                                category: 'community', order: 2, gold: true },
+  { slug: 'influenceur',    emoji: '⭐', name: 'Influenceur',    desc: '50 abonnés.',                  condition: 'Atteins 50 abonnés',                                category: 'community', order: 2, gold: true },
   { slug: 'top-3',          emoji: '🏆', name: 'Top 3',          desc: 'Sur le podium global.',         condition: 'Atteins le top 3 du classement global',                    category: 'community', order: 3 },
-  { slug: 'numero-1',       emoji: '👑', name: 'Numéro 1',       desc: 'Le sommet.',                    condition: 'Prends la 1ʳᵉ place du classement global', xp: 100, category: 'community', order: 4, gold: true },
-  { slug: 'organisateur',   emoji: '📅', name: 'Organisateur',   desc: 'Tu fais vivre la communauté.',  condition: 'Crée un événement', xp: 20,                                category: 'community', order: 5 },
+  { slug: 'numero-1',       emoji: '👑', name: 'Numéro 1',       desc: 'Le sommet.',                    condition: 'Prends la 1ʳᵉ place du classement global', category: 'community', order: 4, gold: true },
+  { slug: 'organisateur',   emoji: '📅', name: 'Organisateur',   desc: 'Tu fais vivre la communauté.',  condition: 'Crée un événement',                                category: 'community', order: 5 },
 
   // Voitures rares / hautes
-  { slug: 'hypercar-first',   emoji: '⚡',   name: 'Hypercar',          desc: 'Tu vises haut de gamme.',         condition: 'Spotte une voiture à plus de 200 000 €', xp: 40, category: 'spots', order: 7 },
+  { slug: 'hypercar-first',   emoji: '⚡',   name: 'Hypercar',          desc: 'Tu vises haut de gamme.',         condition: 'Spotte une voiture à plus de 200 000 €', category: 'spots', order: 7 },
   { slug: 'supercar-spotter', emoji: '🔭',   name: 'Supercar Spotter',  desc: 'Œil de lynx.',                     condition: 'Spotte 10 voitures à plus de 80 000 €',          category: 'spots', order: 8 },
   { slug: 'hypercar-hunter',  emoji: '🦅',   name: 'Hypercar Hunter',   desc: 'Chasseur d’exception.',       condition: 'Spotte 5 voitures à plus de 200 000 €',          category: 'spots', order: 9 },
   { slug: 'speed-demon',      emoji: '🏎️',  name: 'Speed Demon',       desc: 'Une voiture à plus de 500 k€.', condition: 'Spotte une voiture à plus de 500 000 €',        category: 'spots', order: 10 },
   { slug: 'rare-find',        emoji: '💎',   name: 'Rare Find',         desc: 'Une perle rare.',                  condition: 'Édition limitée ou plus de 500 000 €',           category: 'spots', order: 11, gold: true },
-  { slug: 'million-club',     emoji: '🏆',   name: 'Million Club',      desc: 'Club très fermé du million.',      condition: 'Spotte une voiture à plus de 1 000 000 €', xp: 100, category: 'spots', order: 12, gold: true },
-  { slug: 'ultra-rare',       emoji: '🦄',   name: 'Ultra Rare',        desc: 'Production confidentielle.',       condition: 'Spotte une voiture produite à moins de 100 exemplaires', xp: 150, category: 'spots', order: 13, gold: true },
+  { slug: 'million-club',     emoji: '🏆',   name: 'Million Club',      desc: 'Club très fermé du million.',      condition: 'Spotte une voiture à plus de 1 000 000 €', category: 'spots', order: 12, gold: true },
+  { slug: 'ultra-rare',       emoji: '🦄',   name: 'Ultra Rare',        desc: 'Production confidentielle.',       condition: 'Spotte une voiture produite à moins de 100 exemplaires', category: 'spots', order: 13, gold: true },
   { slug: 'collectionneur',   emoji: '💎',   name: 'Collectionneur',    desc: 'Tu connais le marché.',           condition: 'Spotte 10 marques différentes',                       category: 'discovery', order: 7 },
 
   // Premium
@@ -163,12 +173,12 @@ export const BADGES: Badge[] = [
   { slug: 'legendaire',    emoji: '👑', name: 'Légendaire',    desc: 'Badge doré ultra rare.',     condition: 'Débloque le Million Club',         category: 'special', order: 2, gold: true },
 
   // REVS RACE
-  { slug: 'race-first-blood',     emoji: '🏁', name: 'First Blood',        desc: 'Première victoire en REVS RACE.',                condition: 'Gagne une course REVS RACE',                              xp: 20,  category: 'special', order: 10 },
-  { slug: 'race-perfect-10',      emoji: '🎯', name: 'Perfect Start',      desc: 'Timing parfait 10 fois.',                       condition: 'Réussis un départ PARFAIT 10 fois',                        xp: 40,  category: 'special', order: 11 },
+  { slug: 'race-first-blood',     emoji: '🏁', name: 'First Blood',        desc: 'Première victoire en REVS RACE.',                condition: 'Gagne une course REVS RACE',  category: 'special', order: 10 },
+  { slug: 'race-perfect-10',      emoji: '🎯', name: 'Perfect Start',      desc: 'Timing parfait 10 fois.',                       condition: 'Réussis un départ PARFAIT 10 fois',  category: 'special', order: 11 },
   // Phase 2 placeholders — locked until multiplayer + history land.
   { slug: 'race-underdog',        emoji: '⚡', name: 'Underdog',            desc: 'Gagner contre plus rare que toi.',              condition: 'Phase 2 — bat un adversaire de rareté supérieure',                  category: 'special', order: 12 },
   { slug: 'race-streak-5',        emoji: '🔥', name: 'Win Streak ×5',       desc: '5 victoires consécutives.',                     condition: 'Phase 2 — gagne 5 courses d’affilée',                              category: 'special', order: 13 },
-  { slug: 'race-champion',        emoji: '👑', name: 'Champion',            desc: '50 victoires totales.',                          condition: 'Gagne 50 courses REVS RACE',                              xp: 100, category: 'special', order: 14, gold: true },
+  { slug: 'race-champion',        emoji: '👑', name: 'Champion',            desc: '50 victoires totales.',                          condition: 'Gagne 50 courses REVS RACE', category: 'special', order: 14, gold: true },
   { slug: 'race-david-goliath',   emoji: '💀', name: 'David vs Goliath',    desc: 'Bat un score deux fois plus élevé.',            condition: 'Phase 2 — bat une voiture deux fois plus puissante en score',     category: 'special', order: 15 },
 ]
 

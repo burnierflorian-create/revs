@@ -180,19 +180,11 @@ export default function BadgeDetail() {
               </p>
             </div>
 
-            {badge.xp != null && (
-              <div
-                className="flex items-center justify-between rounded-3xl bg-card p-4"
-                style={{ border: '1px solid var(--color-border)' }}
-              >
-                <span className="label-up text-[10px] text-fg2">
-                  {t('gamif.xpReward')}
-                </span>
-                <span className="font-display text-2xl font-extrabold tracking-tighter text-accent">
-                  +{badge.xp}
-                </span>
-              </div>
-            )}
+            {/* Le bloc « Récompense XP » a été retiré le 29/09/2026. Il
+                affichait une valeur du catalogue qui n'était JAMAIS créditée :
+                ni table de badges, ni fonction, ni déclencheur côté serveur.
+                Les badges sont désormais assumés comme des récompenses de
+                statut — on ne promet plus une XP qui n'arrive pas. */}
 
             <div
               className="flex items-center justify-between rounded-3xl bg-card p-4"

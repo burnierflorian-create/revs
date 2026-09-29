@@ -77,29 +77,43 @@ export type Spot = {
 
 // Flat per-rarity XP ladder — mirrors the 6-tier table in
 // award_xp_spot() (migration 0040). Keep both numbers in sync.
-const XP_BY_RARITY: Record<Rarity, number> = {
-  standard: 10,
-  premium: 25,
-  performance: 50,
-  exclusif: 90,
-  supercar: 150,
-  hypercar: 250,
+// Bonus de rareté du nouveau barème (migration 0077). Miroir exact du SQL.
+// Il n'est versé QUE sur une carte inédite : la rareté récompense la
+// découverte, pas la répétition.
+const XP_RARITY_BONUS: Record<Rarity, number> = {
+  standard: 0,
+  premium: 2,
+  performance: 5,
+  exclusif: 10,
+  supercar: 15,
+  hypercar: 20,
+}
+/**
+ * Plancher d'XP d'un spot : base + bonus de rareté.
+ *
+ * ── POURQUOI UN PLANCHER ET PLUS UNE PROMESSE ──
+ * L'ancienne version renvoyait le montant plein par rareté et IGNORAIT la
+ * décote appliquée par le serveur : au 4ᵉ exemplaire d'une même voiture,
+ * l'interface annonçait « +150 XP » pendant que la base en créditait 15.
+ *
+ * Depuis la refonte du 29/09/2026, le client ne peut PAS connaître le total
+ * exact avant publication : les bonus de découverte (marque, modèle,
+ * catégorie inédits) dépendent de l'historique du joueur, que seule la base
+ * connaît. Cette fonction renvoie donc ce qui est GARANTI — la base et, quand
+ * la carte est inédite, le bonus de rareté — et l'interface l'affiche comme un
+ * minimum. Le montant réellement crédité est lu après coup dans le grand
+ * livre, par `source_id`.
+ */
+export function xpFloorForSpot(rarity: Rarity | null | undefined): number {
+  return 10 + (XP_RARITY_BONUS[(rarity ?? 'standard') as Rarity] ?? 0)
 }
 
-/** UI helper for the "+X XP" badges. Returns the flat per-rarity
- *  amount that the SQL trigger writes to xp_transactions. The legacy
- *  `price` argument is ignored — kept so callers don't break.  */
+/** Ancien nom, conservé pour les appelants existants. */
 export function xpForSpot(
   _price: number | null | undefined,
   rarity: Rarity | null | undefined,
 ): number {
-  return XP_BY_RARITY[(rarity ?? 'standard') as Rarity] ?? XP_BY_RARITY.standard
-}
-
-// Backwards-compat alias — some callers still pass price only. Treated
-// as `standard` rarity, which matches the SQL trigger's default.
-export function xpForPrice(price: number | null | undefined): number {
-  return xpForSpot(price, 'standard')
+  return xpFloorForSpot(rarity)
 }
 
 const RARITY_LABEL: Record<Rarity, string> = {

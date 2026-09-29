@@ -1,25 +1,13 @@
-import { effectiveTitle } from '../lib/titles'
+import { accountStatus, effectiveTitle } from '../lib/titles'
+import type { TitleStyle } from '../lib/titles'
 import { APP_STAGE } from '../lib/constants'
 
-/** Inline chip rendering a user's title (XP-derived or manual special).
- *  Pass the user's XP and their `profiles.title` value — the chip picks
- *  the right label, color and (gold) styling. The Fondateur label gets
- *  an extra animated gold-gradient border to read as the highest-prestige
- *  manual title (May 2026 polish pass). */
-export default function TitleChip({
-  xp,
-  title,
-  size = 'sm',
-}: {
-  xp: number
-  title?: string | null
-  size?: 'xs' | 'sm'
-}) {
-  const t = effectiveTitle(xp, title)
+/** Une pastille. Le traitement or animé est réservé au statut « Fondateur ». */
+function Chip({ t, size }: { t: TitleStyle; size: 'xs' | 'sm' }) {
   const pad = size === 'xs' ? 'px-2 py-0.5 text-[10px]' : 'px-2.5 py-1 text-xs'
   const isFounder = t.label === 'Fondateur'
-  // When the founder treatment kicks in, drop the default chipClass to
-  // avoid the Tailwind ring fighting the custom border / shadow stack.
+  // Sous le traitement Fondateur, on laisse tomber chipClass : le ring de
+  // Tailwind se battrait avec la bordure et l'ombre personnalisées.
   const chipExtra = isFounder ? t.textClass : `${t.chipClass} ${t.textClass}`
   return (
     <span
@@ -27,9 +15,6 @@ export default function TitleChip({
       style={
         isFounder
           ? {
-              // Gold gradient that drifts via founder-shimmer keyframe.
-              // Replaces the default chipClass background so the chip
-              // reads as polished metal rather than a flat tint.
               background:
                 'linear-gradient(120deg, rgba(224, 179, 65, 0.45) 0%, rgba(255, 215, 0, 0.28) 25%, rgba(255, 246, 200, 0.42) 50%, rgba(255, 215, 0, 0.28) 75%, rgba(184, 134, 11, 0.40) 100%)',
               backgroundSize: '200% 100%',
@@ -42,6 +27,40 @@ export default function TitleChip({
     >
       {t.emoji && <span aria-hidden>{t.emoji}</span>}
       {t.label}
+    </span>
+  )
+}
+
+/**
+ * Pastilles d'identité d'un utilisateur.
+ *
+ * ── DEUX PASTILLES, PLUS UNE SEULE (refonte du 29/09/2026) ──
+ * Avant, un `profiles.title` non vide ÉCRASAIT le titre de niveau : un
+ * « Fondateur » n'affichait plus jamais sa progression, son titre restait figé
+ * quel que soit son XP. Les deux notions sont désormais distinctes et
+ * cohabitent : le statut de compte d'abord (rare, attribué à la main), puis le
+ * titre de niveau (dérivé, qui bouge en jouant).
+ *
+ * Un compte sans statut n'affiche qu'une pastille — le cas courant.
+ */
+export default function TitleChip({
+  xp,
+  title,
+  size = 'sm',
+  prestigeBase = 0,
+}: {
+  xp: number
+  title?: string | null
+  size?: 'xs' | 'sm'
+  /** XP au dernier prestige, pour que le titre suive le cycle en cours. */
+  prestigeBase?: number
+}) {
+  const status = accountStatus(title)
+  const level = effectiveTitle(xp, null, prestigeBase)
+  return (
+    <span className="inline-flex flex-wrap items-center gap-1">
+      {status && <Chip t={status} size={size} />}
+      <Chip t={level} size={size} />
     </span>
   )
 }
