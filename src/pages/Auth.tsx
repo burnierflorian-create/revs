@@ -94,6 +94,9 @@ export default function Auth() {
   const [ville, setVille] = useState('')
   const [country, setCountry] = useState<string>(() => detectCountry())
   const [geoTried, setGeoTried] = useState(false)
+  // Déclaration d'âge (15 ans minimum). Aucune date de naissance n'est
+  // collectée : seul le franchissement du seuil est conservé.
+  const [ageOk, setAgeOk] = useState(false)
   const pseudoTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // OAuth (Apple / Google) — redirects to the provider then back to the
@@ -199,10 +202,12 @@ export default function Auth() {
         // Profile fields (pseudo/ville/pays) + referral are stashed in
         // user_metadata so they survive the email-confirm round-trip;
         // MainLayout hydrates them into `profiles` on first login.
+        if (!ageOk) throw new Error(t('auth.ageRequired'))
         const meta: Record<string, string> = {
           pseudo: cleanPseudo,
           ville: ville.trim(),
           country: country.trim(),
+          age_confirmed: '1',
         }
         if (cleanedCode.length === 6) meta.referral_code = cleanedCode
         const { error } = await withTimeout(
@@ -582,12 +587,32 @@ export default function Auth() {
             </p>
           )}
 
+          {/* Déclaration d'âge — 15 ans, seuil du consentement autonome d'un
+              mineur en France. Aucune date de naissance n'est demandée : seul
+              le franchissement du seuil est conservé. La case bloque l'envoi,
+              et le déclencheur trg_require_age_confirmed refuse côté serveur
+              tout profil créé sans elle. */}
+          {mode === 'signup' && (
+            <label className="flex cursor-pointer items-start gap-2.5 pt-1">
+              <input
+                type="checkbox"
+                checked={ageOk}
+                onChange={(e) => setAgeOk(e.target.checked)}
+                className="mt-0.5 h-4 w-4 flex-none accent-accent"
+              />
+              <span className="text-[12.5px] leading-snug text-fg2">
+                {t('auth.ageConfirm')}
+              </span>
+            </label>
+          )}
+
           <button
             type="submit"
             disabled={
               loading ||
               (mode === 'signup' &&
-                (pseudo.trim().length === 0 ||
+                (!ageOk ||
+                  pseudo.trim().length === 0 ||
                   pseudoStatus === 'invalid' ||
                   pseudoStatus === 'taken' ||
                   pseudoStatus === 'checking'))

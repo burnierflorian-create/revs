@@ -189,7 +189,12 @@ export default function MainLayout() {
         } = await supabase.auth.getUser()
         if (!active || !user) return
         const meta = user.user_metadata as
-          | { pseudo?: string; ville?: string; country?: string }
+          | {
+            pseudo?: string
+            ville?: string
+            country?: string
+            age_confirmed?: string
+          }
           | undefined
         const metaPseudo = (meta?.pseudo ?? '').trim()
         if (!metaPseudo) return
@@ -206,6 +211,11 @@ export default function MainLayout() {
             pseudo: metaPseudo,
             ville: (meta?.ville ?? '').trim() || null,
             country: (meta?.country ?? '').trim() || null,
+            // Déclaration « 15 ans ou plus », recueillie à l'inscription et
+            // transportée dans user_metadata le temps de la confirmation d'e-mail.
+            // Le déclencheur trg_require_age_confirmed (migration 0072) refuse
+            // l'insertion sans elle : ce n'est pas une formalité côté client.
+            age_confirmed: meta?.age_confirmed === '1',
           },
           { onConflict: 'user_id' },
         )
