@@ -71,7 +71,9 @@
     "legalLogin": "By continuing, you accept the terms and privacy policy.",
     "legalSignup": "By creating an account, you accept the terms and privacy policy.",
     "showPassword": "Show password",
-    "hidePassword": "Hide password"
+    "hidePassword": "Hide password",
+    "ageConfirm": "I confirm I am 15 or older.",
+    "ageRequired": "You must be 15 or older to create an account."
   },
   "onboarding": {
     "ui": {
@@ -599,7 +601,7 @@
       },
       "rights": {
         "heading": "Your rights",
-        "body": "In accordance with the GDPR: rights of access, rectification, erasure, portability, restriction and objection. You can delete your account and all your data from Settings → Danger zone, and change your consent at any time. To exercise your rights: [email à renseigner]. You can also lodge a complaint with the CNIL (cnil.fr)."
+        "body": "In accordance with the GDPR: rights of access, rectification, erasure, portability, restriction and objection. You can delete your account from Settings → Danger zone: this permanently erases your profile, spots, photos and comments. Technical logs held by our hosting providers (Supabase, Vercel) follow their own retention periods. To exercise your rights: [email à renseigner]. You can also lodge a complaint with the CNIL (cnil.fr)."
       }
     },
     "mentions": {
@@ -857,7 +859,7 @@
     "signOutAllDevicesSub": "End all active sessions",
     "signOut": "Sign out",
     "deleteAccount": "Delete my account",
-    "deleteConfirmText": "Are you sure? This action is permanent and deletes all your data.",
+    "deleteConfirmText": "Are you sure? This is permanent. Your account, spots, photos, comments and avatar are deleted and cannot be recovered.",
     "yesDelete": "Yes, delete",
     "crop": {
       "title": "Crop your photo",
@@ -912,7 +914,12 @@
     "notAuthenticated": "Not authenticated",
     "searchFailed": "Search failed",
     "pushTitle": "💬 New comment",
-    "pushBody": "{{who}} commented on your {{brand}} {{model}} spot"
+    "pushBody": "{{who}} commented on your {{brand}} {{model}} spot",
+    "ariaDelete": "Delete this spot",
+    "deleteTitle": "Delete this Spot?",
+    "deleteBody": "This will delete the Spot and its photo. It cannot be undone. XP already earned is kept.",
+    "deleteCta": "Delete",
+    "deleting": "Deleting…"
   },
   "brandspage": {
     "brandNotFound": "Brand not found.",

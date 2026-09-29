@@ -71,7 +71,9 @@
     "legalLogin": "En continuant, tu acceptes les conditions et la politique de confidentialité.",
     "legalSignup": "En créant un compte, tu acceptes les conditions et la politique de confidentialité.",
     "showPassword": "Afficher le mot de passe",
-    "hidePassword": "Masquer le mot de passe"
+    "hidePassword": "Masquer le mot de passe",
+    "ageConfirm": "Je certifie avoir 15 ans ou plus.",
+    "ageRequired": "Tu dois avoir 15 ans ou plus pour créer un compte."
   },
   "onboarding": {
     "ui": {
@@ -599,7 +601,7 @@
       },
       "rights": {
         "heading": "Tes droits",
-        "body": "Conformément au RGPD : droit d'accès, de rectification, d'effacement, de portabilité, de limitation et d'opposition. Tu peux supprimer ton compte et toutes tes données depuis Paramètres → Danger zone, et modifier tes consentements à tout moment. Pour exercer tes droits : [email à renseigner]. Tu peux aussi introduire une réclamation auprès de la CNIL (cnil.fr)."
+        "body": "Conformément au RGPD : droit d'accès, de rectification, d'effacement, de portabilité, de limitation et d'opposition. Tu peux supprimer ton compte depuis Réglages → Zone de danger : cela efface définitivement ton profil, tes spots, tes photos et tes commentaires. Les journaux techniques de nos hébergeurs (Supabase, Vercel) suivent leurs propres durées de conservation. Pour exercer tes droits : [email à renseigner]. Tu peux aussi introduire une réclamation auprès de la CNIL (cnil.fr)."
       }
     },
     "mentions": {
@@ -857,7 +859,7 @@
     "signOutAllDevicesSub": "Termine toutes les sessions actives",
     "signOut": "Se déconnecter",
     "deleteAccount": "Supprimer mon compte",
-    "deleteConfirmText": "Êtes-vous sûr ? Cette action est définitive et supprime toutes tes données.",
+    "deleteConfirmText": "Es-tu sûr ? Cette action est définitive. Ton compte, tes spots, tes photos, tes commentaires et ton avatar sont supprimés et ne peuvent pas être récupérés.",
     "yesDelete": "Oui, supprimer",
     "crop": {
       "title": "Recadre ta photo",
@@ -912,7 +914,12 @@
     "notAuthenticated": "Non authentifié",
     "searchFailed": "Échec de la recherche",
     "pushTitle": "💬 Nouveau commentaire",
-    "pushBody": "{{who}} a commenté ton spot {{brand}} {{model}}"
+    "pushBody": "{{who}} a commenté ton spot {{brand}} {{model}}",
+    "ariaDelete": "Supprimer ce spot",
+    "deleteTitle": "Supprimer ce Spot ?",
+    "deleteBody": "Cette action supprimera le Spot et sa photo. Elle est irréversible. Les XP déjà gagnés sont conservés.",
+    "deleteCta": "Supprimer",
+    "deleting": "Suppression…"
   },
   "brandspage": {
     "brandNotFound": "Marque introuvable.",

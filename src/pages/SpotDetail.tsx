@@ -15,6 +15,7 @@ import {
   Navigation,
   Zap,
   Share2,
+  Trash2,
   Send,
   ChevronRight,
   ChevronDown,
@@ -67,6 +68,14 @@ export default function SpotDetail() {
   const { t } = useTranslation()
 
   const [spot, setSpot] = useState<Spot | null>(null)
+  // Identité courante : sert uniquement à décider si l'action « supprimer »
+  // s'affiche. Ce n'est PAS le contrôle d'accès — celui-ci est appliqué par
+  // les politiques RLS de Postgres et du stockage, côté serveur. Masquer le
+  // bouton est une commodité ; forger la requête ne donnerait rien.
+  const [meId, setMeId] = useState<string | null>(null)
+  const [askDelete, setAskDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteErr, setDeleteErr] = useState<string | null>(null)
   const [notFound, setNotFound] = useState(false)
   const [level, setLevel] = useState<string | null>(null)
   const [owner, setOwner] = useState<{
@@ -76,6 +85,16 @@ export default function SpotDetail() {
     tier: 'premium' | 'vip' | null
   } | null>(null)
   const [funFact, setFunFact] = useState<string | null>(null)
+  useEffect(() => {
+    let active = true
+    void supabase.auth.getUser().then(({ data }) => {
+      if (active) setMeId(data.user?.id ?? null)
+    })
+    return () => {
+      active = false
+    }
+  }, [])
+
   // Swipe-down-to-close drag offset (px).
   const [dragY, setDragY] = useState(0)
   const dragStartRef = useRef<number | null>(null)
@@ -373,6 +392,57 @@ export default function SpotDetail() {
     }
   }, [id])
 
+  /**
+   * Supprime le spot et sa photo.
+   *
+   * ORDRE : le FICHIER d'abord, la ligne ensuite. L'inverse laisserait, en cas
+   * d'échec, une image que plus rien ne référence — donc introuvable et
+   * impossible à nettoyer. Dans ce sens-ci, un échec laisse une ligne qui
+   * pointe vers une image morte : visible, et l'utilisateur peut relancer.
+   *
+   * Le contrôle d'appartenance n'est PAS fait ici : la politique RLS
+   * `spots delete own` et celle du stockage (migration 0071) le font toutes
+   * deux côté serveur. Une requête forgée pour le spot d'un autre est rejetée
+   * par Postgres, pas par ce code.
+   *
+   * CE QUI SURVIT VOLONTAIREMENT : les XP déjà crédités. `xp_transactions` est
+   * un journal historique, et aucun déclencheur ne les reprend à la
+   * suppression. Le compteur de spots de l'accueil, lui, est recalculé depuis
+   * la table : il baissera. Les likes et commentaires, eux, disparaissent —
+   * leurs clés étrangères sont en ON DELETE CASCADE.
+   */
+  async function deleteSpot() {
+    if (!spot || deleting) return
+    setDeleting(true)
+    setDeleteErr(null)
+    try {
+      // Chemin reconstruit depuis l'URL publique : `…/spots/{uid}/{fichier}`.
+      // `photo_url` est nullable au typage : un spot sans photo se supprime
+      // sans toucher au stockage.
+      const marker = '/spots/'
+      const url = spot.photo_url ?? ''
+      const i = url.indexOf(marker)
+      if (i >= 0) {
+        const path = decodeURIComponent(url.slice(i + marker.length).split('?')[0])
+        const { error: rmErr } = await supabase.storage
+          .from('spots')
+          .remove([path])
+        if (rmErr) throw rmErr
+      }
+
+      const { error: delErr } = await supabase
+        .from('spots')
+        .delete()
+        .eq('id', spot.id)
+      if (delErr) throw delErr
+
+      navigate(-1)
+    } catch (e) {
+      setDeleteErr(translateError(e))
+      setDeleting(false)
+    }
+  }
+
   // Swipe-down-to-close — single-finger drag starting on the hero photo.
   function onDragStart(e: TouchEvent) {
     if (e.touches.length === 1) dragStartRef.current = e.touches[0].clientY
@@ -525,6 +595,16 @@ export default function SpotDetail() {
         >
           <Share2 className="h-5 w-5 text-fg" />
         </button>
+        {meId && spot.user_id === meId && (
+          <button
+            onClick={() => setAskDelete(true)}
+            aria-label={t('spotdetail.ariaDelete')}
+            className="tappable absolute right-[4.25rem] top-[max(1rem,env(safe-area-inset-top))] flex h-11 w-11 items-center justify-center rounded-full bg-black/55 backdrop-blur"
+            style={{ border: '1px solid rgba(255,255,255,0.14)' }}
+          >
+            <Trash2 className="h-5 w-5 text-fg" />
+          </button>
+        )}
         {shareMsg && (
           <span className="absolute right-4 top-[max(4rem,calc(env(safe-area-inset-top)+3rem))] rounded-full bg-black/75 px-3 py-1 text-xs text-fg backdrop-blur">
             {shareMsg}
@@ -877,6 +957,51 @@ export default function SpotDetail() {
           </p>
         </section>
       </div>
+
+      {/* Confirmation. Volontairement explicite sur ce qui part — photo
+          comprise — et sur le caractère définitif. */}
+      {askDelete && (
+        <div
+          className="fixed inset-0 z-[120] flex items-end justify-center bg-black/70 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          onClick={() => !deleting && setAskDelete(false)}
+        >
+          <div
+            className="w-full max-w-sm rounded-3xl bg-card p-5"
+            style={{ border: '1px solid var(--color-border)' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="font-display text-lg font-extrabold tracking-tight text-fg">
+              {t('spotdetail.deleteTitle')}
+            </h2>
+            <p className="mt-2 text-sm leading-relaxed text-fg2">
+              {t('spotdetail.deleteBody')}
+            </p>
+            {deleteErr && (
+              <p className="mt-3 text-sm text-accent">{deleteErr}</p>
+            )}
+            <div className="mt-5 flex gap-3">
+              <button
+                onClick={() => setAskDelete(false)}
+                disabled={deleting}
+                className="tappable flex-1 rounded-full py-3 text-sm font-semibold text-fg disabled:opacity-50"
+                style={{ border: '1px solid var(--color-border)' }}
+              >
+                {t('common.cancel')}
+              </button>
+              <button
+                onClick={deleteSpot}
+                disabled={deleting}
+                className="tappable flex-1 rounded-full py-3 text-sm font-bold text-white disabled:opacity-60"
+                style={{ background: 'rgb(var(--color-accent))' }}
+              >
+                {deleting ? t('spotdetail.deleting') : t('spotdetail.deleteCta')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
