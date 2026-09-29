@@ -396,8 +396,11 @@ export default function Onboarding() {
         return (
           <StepShell title={t('onboarding.florian.title')}>
             <div className="flex flex-col items-center text-center">
+              {/* Portrait réduit de 112 à 88 px sur CE seul écran : le mot du
+                  créateur est le texte le plus long du parcours, et les 24 px
+                  récupérés sont autant de lignes lues sans défiler. */}
               <div
-                className="mb-6 h-28 w-28 overflow-hidden rounded-full"
+                className="mb-5 h-[88px] w-[88px] shrink-0 overflow-hidden rounded-full"
                 style={{
                   border: '2px solid rgba(232,32,58,0.6)',
                   boxShadow: '0 0 34px rgba(232,32,58,0.35)',
@@ -422,8 +425,13 @@ export default function Onboarding() {
                   </div>
                 )}
               </div>
-              <p
-                className="rounded-3xl px-5 py-4 text-[14.5px] leading-relaxed text-white/80"
+              {/* Le mot du créateur fait désormais plusieurs paragraphes. Un
+                  seul bloc de texte de cette longueur devient un mur illisible
+                  sur 375 px : on découpe sur les sauts de ligne de la
+                  traduction plutôt que de figer les paragraphes dans le code,
+                  pour que FR et EN restent modifiables sans toucher au JSX. */}
+              <div
+                className="flex flex-col gap-2.5 rounded-3xl px-5 py-4 text-left text-[13.5px] leading-[1.55] text-white/80"
                 style={{
                   background: 'rgba(255,255,255,0.04)',
                   border: '1px solid rgba(255,255,255,0.1)',
@@ -431,9 +439,22 @@ export default function Onboarding() {
                   WebkitBackdropFilter: 'blur(12px)',
                 }}
               >
-                {t('onboarding.florian.body')}
-              </p>
-              <p className="mt-4 text-[13px] font-semibold" style={{ color: RED }}>
+                {t('onboarding.florian.body')
+                  .split('\n\n')
+                  .map((para) => (
+                    <p key={para.slice(0, 24)}>{para}</p>
+                  ))}
+                <p className="pt-1 font-semibold text-white">
+                  {t('onboarding.florian.closing')}
+                </p>
+              </div>
+              {/* pb : la zone de défilement partagée n'a pas de marge basse —
+                  les autres étapes tiennent à l'écran, celle-ci non. Sans elle
+                  la dernière ligne mourait collée sous le bouton. */}
+              <p
+                className="mt-4 pb-2 text-[13px] font-extrabold uppercase"
+                style={{ color: RED, letterSpacing: '0.16em' }}
+              >
                 {t('onboarding.florian.signature')}
               </p>
             </div>
