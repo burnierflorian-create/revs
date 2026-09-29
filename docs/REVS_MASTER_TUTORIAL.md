@@ -1,7 +1,7 @@
 # REVS MASTER TUTORIAL
 
 <!-- meta
-version: 1.1
+version: 1.2
 referenceCommit: 0ba9337
 referenceDate: 29 septembre 2026
 lastVerified: 29 septembre 2026
@@ -976,6 +976,7 @@ Côté F1, les trois garde-fous existaient déjà ; ce qui manquait était leur 
 | **Mapbox** | ✅ | Coordonnées arrondies avant l'appel, `types=place` |
 | **Âge minimum** | ✅ | 15 ans, déclaration booléenne, imposée par déclencheur |
 | **Journal d'abus** | ✅ | `api_abuse_attempts`, IP salée, inaccessible aux clients |
+| **Endpoints de cron** | ✅ | `CRON_SECRET` exigé sur `fetch-news`, `f1`, `cron-notify` — fail-closed sur `fetch-news` depuis le 29/09/2026 |
 | **Région des données** | ✅ | eu-west-3 (Paris) — UE |
 
 ### Ce qui n'existe pas — dit sans le adoucir
@@ -1068,6 +1069,18 @@ npx vercel@latest --prod --yes               # déploiement production
 ## 14. ZONES SENSIBLES
 
 > Huit endroits où une modification apparemment anodine casse quelque chose d'important.
+
+### 0 · Les portes des endpoints de cron
+
+- **Pourquoi c'est sensible** : ces endpoints dépensent de l'API Anthropic et, pour
+  `fetch-news`, savent effacer une table entière.
+- **Le piège concret, rencontré le 29/09/2026** : la porte de `fetch-news` listait ses
+  exceptions — `if (!isCron && !force && purge !== '1' && …)`. Les leviers de maintenance
+  étaient donc des **exemptions** à l'authentification, et n'importe qui pouvait franchir la
+  porte en ajoutant un paramètre : `?force=1` déclenchait le pipeline Sonnet, `?purge=1`
+  supprimait toute la table `news`.
+- **La règle** : le jeton d'abord, les options ensuite. Jamais un levier qui contourne le
+  contrôle. Et fail-closed : un secret absent refuse, il n'ouvre pas.
 
 ### 1 · Le portail IA — `server/ai-gate.js`
 
@@ -1476,16 +1489,17 @@ Plus `schema.sql`, `seed-phase1.sql`, `fix-spots-rls.sql`.
 - **Câblé** : onboarding, navigation, authentification, réglages. **Pas** l'ensemble de l'application.
 - **Ce tutoriel n'est pas traduit** — c'est un outil interne, en français, assumé comme tel.
 
-### O. Zones sensibles — rappel
+### O. Zones sensibles — rappel (9)
 
-1. `server/ai-gate.js` — le portail IA
-2. Les politiques RLS
-3. La signature du webhook Stripe (`bodyParser: false` + `constructEvent`)
-4. L'arrondi GPS (client **et** base)
-5. Les contrôles anti-fraude EXIF (5 min / 300 m)
-6. Le quota fondé sur `spot_count_daily`, fuseau Paris
-7. L'ordre Storage → base dans les suppressions
-8. Le service worker `injectManifest` sans precache
+1. Les portes des endpoints de cron (`CRON_SECRET`, fail-closed)
+2. `server/ai-gate.js` — le portail IA
+3. Les politiques RLS
+4. La signature du webhook Stripe (`bodyParser: false` + `constructEvent`)
+5. L'arrondi GPS (client **et** base)
+6. Les contrôles anti-fraude EXIF (5 min / 300 m)
+7. Le quota fondé sur `spot_count_daily`, fuseau Paris
+8. L'ordre Storage → base dans les suppressions
+9. Le service worker `injectManifest` sans precache
 
 **Plus deux contraintes de plateforme** : le plafond de 12 fonctions Node Vercel (atteint), et le schéma strict de `vercel.json`.
 
@@ -1496,6 +1510,14 @@ Détail et conséquences au chapitre 14.
 ## 18. CHANGELOG
 
 > Historique des versions de ce document.
+
+### Version 1.2 — 29 septembre 2026
+
+Faille corrigée sur `/api/fetch-news`.
+
+- Chapitres 12 et 14 : la porte « cron uniquement » de `fetch-news` listait ses exceptions (`force`, `purge`, `purge_en`), qui contournaient donc l'authentification. `?purge=1` supprimait **toute la table `news`** sans aucun jeton. Le contrôle passe en tête de handler et devient fail-closed.
+- L'annexe O passe de 8 à 9 zones sensibles.
+- Le collecteur a été exécuté une fois en production pour validation : **14 appels IA, 14 candidats écartés sans payer, 5 articles publiés** — et la clé Anthropic répond, ce qui lève le blocage soupçonné.
 
 ### Version 1.1 — 29 septembre 2026
 

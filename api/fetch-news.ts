@@ -542,12 +542,40 @@ async function summarize(
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // The Vercel cron is identified by CRON_SECRET (auto-sent as a bearer)
-  // and always runs. Without that header it's a public/client trigger:
-  // allowed, but rate-limited below so it can't run up Claude costs.
+  // ── FAILLE CORRIGÉE le 29/09/2026 ──
+  //
+  // La porte « cron uniquement » listait ses propres exceptions :
+  //
+  //   if (!isCron && !force && purge !== '1' && purge_en !== '1') → refus
+  //
+  // Autrement dit, n'importe qui pouvait la franchir en ajoutant un
+  // paramètre. Conséquences réelles, sans aucune authentification :
+  //   · `?force=1`    → exécution complète du pipeline Sonnet, donc dépense
+  //                     d'API Anthropic à la demande d'un inconnu ;
+  //   · `?purge=1`    → SUPPRESSION DE TOUTE LA TABLE `news` ;
+  //   · `?purge_en=1` → suppression de toutes les lignes jugées anglaises.
+  //
+  // Les leviers de maintenance étaient traités comme des exemptions à
+  // l'authentification alors qu'ils sont précisément ce qu'il faut protéger
+  // LE PLUS. On inverse : le jeton est exigé d'abord, les leviers ne sont que
+  // des options offertes à un appelant déjà authentifié.
+  //
+  // FAIL-CLOSED : un CRON_SECRET absent refuse tout, au lieu d'ouvrir
+  // l'endpoint à la terre entière comme le faisait `!cronSecret || …`. Si la
+  // variable disparaît, le fil d'actualités cesse de se mettre à jour — panne
+  // visible, et sans facture.
+  //
+  // Vercel envoie `Authorization: Bearer $CRON_SECRET` sur ses crons ;
+  // `x-cron-key` est accepté en plus, comme le fait déjà api/cron-notify.ts.
   const cronSecret = process.env.CRON_SECRET
   const isCron =
-    !cronSecret || req.headers.authorization === `Bearer ${cronSecret}`
+    !!cronSecret &&
+    (req.headers.authorization === `Bearer ${cronSecret}` ||
+      req.headers['x-cron-key'] === cronSecret)
+  if (!isCron) {
+    res.status(401).json({ error: 'Non autorisé.' })
+    return
+  }
   const force = req.query.force === '1'
 
   if (!SUPABASE_URL || !SERVICE_ROLE || !process.env.ANTHROPIC_API_KEY) {
@@ -569,14 +597,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // shape compatibility.
   const expired = 0
 
-  // Cron-only. News is fetched exclusively by the daily server cron
-  // (vercel.json → 06:00 UTC). Any non-cron caller is rejected so the
-  // client can never trigger a fetch. `force`/`purge` stay open for manual
-  // admin maintenance (authenticated out-of-band).
-  if (!isCron && !force && req.query.purge !== '1' && req.query.purge_en !== '1') {
-    res.status(200).json({ skipped: true, reason: 'cron_only' })
-    return
-  }
+  // (La porte « cron uniquement » vit désormais tout en haut du handler, avant
+  // le moindre travail — voir le commentaire sur la faille corrigée.)
 
   // ── Une exécution réelle par JOUR PARISIEN (29/09/2026) ──
   //
@@ -601,7 +623,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       day: '2-digit',
     }).format(d)
 
-  if (isCron && !force && req.query.purge !== '1' && req.query.purge_en !== '1') {
+  // `isCron` n'est plus testé ici : on n'arrive à cette ligne qu'authentifié.
+  if (!force && req.query.purge !== '1' && req.query.purge_en !== '1') {
     const { data: meta } = await admin
       .from('news_meta')
       .select('last_fetched_at')

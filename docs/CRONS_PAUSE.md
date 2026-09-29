@@ -178,9 +178,35 @@ d'importance : la porte journalière garantit une exécution réelle par jour pa
 `f1?refresh=1` tourne tous les jours mais ne dépense que pendant les week-ends de Grand
 Prix, grâce au portail calendrier.
 
-Les deux endpoints sont protégés par `CRON_SECRET` — vérifié en production le 29/09 :
-`/api/f1?refresh=1` sans en-tête renvoie **401**, `/api/fetch-news` renvoie
-`{"skipped":true,"reason":"cron_only"}`.
+### 4.1 · Faille trouvée et corrigée au passage
+
+En rebranchant, la porte d'accès de `/api/fetch-news` s'est révélée **contournable par un
+simple paramètre d'URL**. Elle était écrite ainsi :
+
+```js
+if (!isCron && !force && purge !== '1' && purge_en !== '1') → refus
+```
+
+Les leviers de maintenance figuraient donc parmi les **exemptions** à l'authentification,
+alors qu'ils sont précisément ce qu'il faut protéger le plus. Sans aucun jeton :
+
+| Appel | Effet |
+|---|---|
+| `?force=1` | exécution complète du pipeline Sonnet — dépense d'API à la demande d'un inconnu |
+| `?purge=1` | **suppression de TOUTE la table `news`** |
+| `?purge_en=1` | suppression de toutes les lignes jugées anglaises |
+
+**Corrigé le 29/09/2026** : le jeton est exigé en tête de handler, avant le moindre travail.
+Les leviers ne sont plus que des options offertes à un appelant déjà authentifié. Et le
+contrôle est **fail-closed** — un `CRON_SECRET` absent refuse tout, là où l'ancien
+`!cronSecret || …` ouvrait l'endpoint à la terre entière. Si la variable disparaît, le fil
+cesse de se mettre à jour : panne visible, et sans facture.
+
+`api/f1.ts` et `api/cron-notify.ts` n'avaient pas ce défaut — leurs leviers (`?force=1`,
+`?action=`) sont placés APRÈS le contrôle d'authentification.
+
+Vérifié en production le 29/09 : `/api/f1?refresh=1` sans en-tête renvoie **401**,
+`/api/fetch-news` également depuis le correctif.
 
 > **Note sur `vercel.json`** : le fichier est du JSON strict validé contre
 > `https://openapi.vercel.sh/vercel.json`, avec `additionalProperties: false`. Il n'accepte
