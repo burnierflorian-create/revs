@@ -541,7 +541,69 @@ async function summarize(
   }
 }
 
+/** Jour parisien au format YYYY-MM-DD. */
+const parisDay = (d: Date) =>
+  new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/Paris',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(d)
+
+/**
+ * Heure parisienne (0–23). `hourCycle: 'h23'` est explicite : sans lui, minuit
+ * ressort « 24 » dans certaines versions d'ICU, et la porte laisserait passer
+ * une exécution nocturne.
+ */
+const parisHour = (d: Date) =>
+  Number(
+    new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Europe/Paris',
+      hour: '2-digit',
+      hourCycle: 'h23',
+    }).format(d),
+  )
+
+/**
+ * L'heure de publication des actus, en heure de PARIS — pas en UTC.
+ *
+ * Vercel ne planifie qu'en UTC et ignore les changements d'heure. `vercel.json`
+ * déclare donc DEUX passages, 05:00 et 06:00 UTC, dont un seul tombe sur 07:00
+ * à Paris selon la saison :
+ *
+ *   · heure d'été (CEST, UTC+2) : 05:00 UTC = 07:00 Paris ✓ / 06:00 UTC = 08:00 ✗
+ *   · heure d'hiver (CET, UTC+1) : 05:00 UTC = 06:00 Paris ✗ / 06:00 UTC = 07:00 ✓
+ *
+ * L'autre passage se présente, lit l'heure de Paris, et repart. C'est ce test
+ * qui rend le dispositif juste toute l'année : changer de saison ne demande
+ * aucune intervention, et changer d'horaire ne demande que cette constante.
+ */
+const RUN_HOUR_PARIS = 7
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  // La journée réservée, s'il y en a une. Partagée avec le garde-fou ci-dessous
+  // pour qu'un passage qui meurt en cours de route rende la journée au lieu de
+  // condamner les actus jusqu'au lendemain.
+  const claim: { day: string | null } = { day: null }
+  try {
+    await runNews(req, res, claim)
+  } catch (err) {
+    if (claim.day) {
+      const admin = createClient(SUPABASE_URL!, SERVICE_ROLE!, {
+        auth: { persistSession: false },
+      })
+      await admin.rpc('release_news_day', { p_day: claim.day })
+      console.error(`[news] journée ${claim.day} rendue après échec`)
+    }
+    throw err
+  }
+}
+
+async function runNews(
+  req: VercelRequest,
+  res: VercelResponse,
+  claim: { day: string | null },
+) {
   // ── FAILLE CORRIGÉE le 29/09/2026 ──
   //
   // La porte « cron uniquement » listait ses propres exceptions :
@@ -600,44 +662,56 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // (La porte « cron uniquement » vit désormais tout en haut du handler, avant
   // le moindre travail — voir le commentaire sur la faille corrigée.)
 
-  // ── Une exécution réelle par JOUR PARISIEN (29/09/2026) ──
+  // ── DEUX PORTES : L'HEURE, PUIS LA JOURNÉE (30/09/2026) ──
   //
-  // Avant : la porte exigeait exactement 06:00 heure de Paris, ce qui obligeait
-  // `vercel.json` à déclarer DEUX entrées (04:00 et 05:00 UTC) pour couvrir le
-  // changement d'heure — une seule travaillait, l'autre ne faisait rien. Deux
-  // créneaux de cron consommés pour une exécution, et un horaire impossible à
-  // changer sans toucher au code.
+  // CE QUI N'ALLAIT PAS
+  // 1. Aucun contrôle d'heure. Le cron était planifié « 05:00 UTC », présenté
+  //    comme 07:00 Paris — ce qui n'est vrai qu'en heure d'ÉTÉ. À partir du
+  //    25 octobre, le même schedule serait tombé à 06:00 Paris. L'horaire
+  //    annoncé et l'horaire réel divergeaient une moitié de l'année.
+  // 2. Le verrou journalier LISAIT `last_fetched_at`, puis générait, puis
+  //    écrivait. Entre la lecture et l'écriture : tout le pipeline IA. Deux
+  //    appels rapprochés lisaient tous les deux « pas encore aujourd'hui » et
+  //    payaient tous les deux l'analyse.
   //
-  // Maintenant : la porte compare le JOUR parisien du dernier passage réussi
-  // (`news_meta.last_fetched_at`, déjà écrit en fin d'exécution) au jour
-  // courant. Une seule entrée cron suffit, à n'importe quelle heure, et un
-  // double déclenchement accidentel ne repaie pas l'analyse.
-  //
-  // L'horodatage n'est posé qu'en FIN d'exécution réussie : un passage qui
-  // échoue à mi-chemin ne bloque donc pas celui du lendemain.
-  const parisDay = (d: Date) =>
-    new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'Europe/Paris',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    }).format(d)
+  // Les deux portes sont désormais franchies AVANT la moindre dépense.
+  const now = new Date()
+  const today = parisDay(now)
+  const maintenance = req.query.purge === '1' || req.query.purge_en === '1'
 
-  // `isCron` n'est plus testé ici : on n'arrive à cette ligne qu'authentifié.
-  if (!force && req.query.purge !== '1' && req.query.purge_en !== '1') {
-    const { data: meta } = await admin
-      .from('news_meta')
-      .select('last_fetched_at')
-      .eq('id', 'singleton')
-      .maybeSingle()
-    const last = (meta as { last_fetched_at?: string } | null)?.last_fetched_at
-    const today = parisDay(new Date())
-    if (last && parisDay(new Date(last)) === today) {
+  if (!force && !maintenance) {
+    const hour = parisHour(now)
+    if (hour !== RUN_HOUR_PARIS) {
+      res.status(200).json({
+        skipped: true,
+        reason: 'not_the_paris_hour',
+        parisHour: hour,
+        expected: RUN_HOUR_PARIS,
+      })
+      return
+    }
+
+    // Réservation ATOMIQUE de la journée : une seule instruction SQL, donc
+    // aucune fenêtre entre « vérifier » et « poser le verrou ». Le perdant d'une
+    // course repart avec `false` — voir supabase/0085-news-day-lock.sql.
+    const { data: claimed, error: claimError } = await admin.rpc(
+      'claim_news_day',
+      { p_day: today },
+    )
+    if (claimError) {
+      // Fail-closed : un verrou qu'on ne sait pas poser est un verrou ouvert.
+      // Mieux vaut sauter une journée d'actus que payer deux fois l'IA.
+      console.error('claim_news_day failed:', claimError)
+      res.status(500).json({ error: 'Verrou indisponible.' })
+      return
+    }
+    if (claimed !== true) {
       res
         .status(200)
         .json({ skipped: true, reason: 'already_fetched_today', day: today })
       return
     }
+    claim.day = today
   }
 
   // Manual maintenance levers (cron path stays non-destructive):
