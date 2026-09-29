@@ -620,12 +620,12 @@ function UpcomingEvent({
       <picture>
         <source
           media="(max-width: 420px)"
-          srcSet="/images/events/f1-bahrain-640.webp"
+          srcSet="/images/events/f1-track-640.webp"
           type="image/webp"
         />
-        <source srcSet="/images/events/f1-bahrain-850.webp" type="image/webp" />
+        <source srcSet="/images/events/f1-track-850.webp" type="image/webp" />
         <img
-          src="/images/events/f1-bahrain-850.webp"
+          src="/images/events/f1-track-850.webp"
           alt=""
           aria-hidden
           loading="lazy"

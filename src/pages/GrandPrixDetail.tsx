@@ -206,18 +206,18 @@ export default function GrandPrixDetail() {
         {/* Image locale et optimisée (WebP, 152/187 ko) au lieu de l'Unsplash
             distant que renvoyait circuitImage() : une dépendance externe sur
             le plus grand élément de la page, donc sur le LCP.
-            LIMITE À CONNAÎTRE : cette photo montre la tour de Bahreïn, elle est
-            donc juste pour ce Grand Prix et générique-approximative pour les
-            autres. Une image par circuit reste à fournir. */}
+            L'image est volontairement GÉNÉRIQUE : recadrée sous la tour de
+            Bahreïn et sous les tribunes, elle ne désigne aucun circuit — elle
+            reste donc juste quel que soit le Grand Prix affiché. */}
         <picture>
           <source
             media="(max-width: 420px)"
-            srcSet="/images/events/f1-bahrain-640.webp"
+            srcSet="/images/events/f1-track-640.webp"
             type="image/webp"
           />
-          <source srcSet="/images/events/f1-bahrain-850.webp" type="image/webp" />
+          <source srcSet="/images/events/f1-track-850.webp" type="image/webp" />
           <img
-            src="/images/events/f1-bahrain-850.webp"
+            src="/images/events/f1-track-850.webp"
             alt={gp.circuit}
             fetchPriority="high"
             decoding="async"
