@@ -1266,5 +1266,22 @@
       "errMismatch": "The two passwords don't match.",
       "submit": "SAVE THE NEW PASSWORD"
     }
+  },
+  "prestige": {
+    "eyebrow": "Level 100 reached",
+    "title": "Claim Prestige {{n}}",
+    "short": "Prestige",
+    "doneTitle": "Prestige {{n}} 🏆",
+    "doneBody": "You are back at level {{level}}. Your collection, cards, badges and total XP are untouched.",
+    "keepTitle": "You keep everything.",
+    "keepBody": "Spots, collection, cards, brands, models, badges, stats and total XP — nothing is deleted.",
+    "resetTitle": "The curve restarts.",
+    "resetBody": "Your level goes back to 1 and climbs to 100 again. XP earned past level 100 carries over, it is not lost.",
+    "confirm": "Claim Prestige {{n}}",
+    "continue": "Continue",
+    "close": "Close",
+    "refused": "The server declined: level 100 is required. Try again once the bar is full.",
+    "noRush": "No rush — your XP keeps growing if you wait.",
+    "available": "Prestige available"
   }
 }

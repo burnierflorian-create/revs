@@ -1266,5 +1266,22 @@
       "errMismatch": "Les deux mots de passe ne correspondent pas.",
       "submit": "ENREGISTRER LE NOUVEAU MOT DE PASSE"
     }
+  },
+  "prestige": {
+    "eyebrow": "Niveau 100 atteint",
+    "title": "Passer Prestige {{n}}",
+    "short": "Prestige",
+    "doneTitle": "Prestige {{n}} 🏆",
+    "doneBody": "Te voilà reparti au niveau {{level}}. Ta collection, tes cartes, tes badges et ton XP total sont intacts.",
+    "keepTitle": "Tu gardes tout.",
+    "keepBody": "Spots, collection, cartes, marques, modèles, badges, statistiques et XP total — rien n'est supprimé.",
+    "resetTitle": "Tu recommences la courbe.",
+    "resetBody": "Ton niveau repart à 1 et remonte jusqu'à 100. L'XP gagnée au-delà du niveau 100 est reportée, pas perdue.",
+    "confirm": "Passer Prestige {{n}}",
+    "continue": "Continuer",
+    "close": "Fermer",
+    "refused": "Le serveur a refusé : il faut être niveau 100. Réessaie une fois la barre pleine.",
+    "noRush": "Rien ne presse — ton XP continue de monter si tu attends.",
+    "available": "Prestige disponible"
   }
 }

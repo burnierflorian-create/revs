@@ -36,7 +36,7 @@ import {
 import { supabase } from '../lib/supabase'
 import { setPendingPhoto } from '../lib/pendingPhoto'
 import { GP_2026 } from '../lib/f1'
-import { fetchProgress, type Progress } from '../lib/xp'
+import { fetchProgress, openPrestige, romanPrestige, type Progress } from '../lib/xp'
 import { challengeIcon } from '../lib/customIcons'
 import { Skeleton } from '../components/Skeleton'
 import {
@@ -521,6 +521,9 @@ function HomeHeader({ online }: { online: number }) {
 
 function XpCard({ prog }: { prog: Progress | null }) {
   const { t } = useTranslation()
+  // Au niveau 100, la carte devient un bouton : c'est le seul point d'entrée
+  // du prestige, et il doit se trouver là où le joueur regarde sa progression
+  // — pas dans un écran séparé qu'il faudrait découvrir.
   const R = 25
   const C = 2 * Math.PI * R
   const pct = Math.min(100, Math.max(0, prog?.pct ?? 0))
@@ -532,13 +535,24 @@ function XpCard({ prog }: { prog: Progress | null }) {
   const inLevel = prog?.levelXp ?? 0
   const span = prog?.levelSpan ?? 1
 
+  const Shell = isMax ? 'button' : 'div'
+
   return (
-    <div
+    <Shell
+      {...(isMax
+        ? {
+            onClick: openPrestige,
+            type: 'button' as const,
+            'aria-label': t('prestige.available'),
+          }
+        : {})}
       // Largeur FLUIDE : la carte partage désormais sa rangée avec le prénom.
       // À 320 px elle descend à ~104 px pour laisser respirer « Bon après-midi
       // Flo » ; au-delà de 430 px elle se fige à 136 px et cesse de grandir —
       // une carte XP plus large que ça déséquilibrerait le hero.
-      className="rounded-[18px] px-2.5 pb-2.5 pt-2 text-center"
+      className={`rounded-[18px] px-2.5 pb-2.5 pt-2 text-center${
+        isMax ? ' tappable transition-transform active:scale-[0.96]' : ''
+      }`}
       style={{
         width: 'clamp(104px, 32vw, 136px)',
         // Fond nettement plus dense que les autres blocs posés sur la photo :
@@ -547,8 +561,14 @@ function XpCard({ prog }: { prog: Progress | null }) {
         background: 'rgb(8 8 10 / 0.74)',
         backdropFilter: 'blur(16px) saturate(140%)',
         WebkitBackdropFilter: 'blur(16px) saturate(140%)',
-        border: '1px solid rgb(255 255 255 / 0.16)',
-        boxShadow: '0 12px 34px rgb(0 0 0 / 0.55)',
+        // Au niveau 100, la carte s'annonce : liseré rouge et halo, pour que
+        // « il se passe quelque chose ici » se lise sans texte.
+        border: isMax
+          ? '1px solid rgb(var(--color-accent) / 0.65)'
+          : '1px solid rgb(255 255 255 / 0.16)',
+        boxShadow: isMax
+          ? '0 12px 34px rgb(0 0 0 / 0.55), 0 0 22px rgb(var(--color-accent) / 0.35)'
+          : '0 12px 34px rgb(0 0 0 / 0.55)',
       }}
     >
       {(prog?.prestige ?? 0) > 0 && (
@@ -556,7 +576,7 @@ function XpCard({ prog }: { prog: Progress | null }) {
           className="mb-1 text-[9px] font-black uppercase tracking-[0.14em]"
           style={{ color: 'rgb(var(--color-accent))' }}
         >
-          {t('home.xp.prestige', { n: prog?.prestige ?? 0 })}
+          {t('home.xp.prestige', { n: romanPrestige(prog?.prestige ?? 0) })}
         </p>
       )}
       <p className="flex items-center justify-center gap-1.5 text-[11px] font-semibold text-white/70">
@@ -602,10 +622,10 @@ function XpCard({ prog }: { prog: Progress | null }) {
 
       <p className="mt-1.5 text-[10px] font-semibold tabular-nums text-white/65">
         {isMax
-          ? `${nf.format(prog?.xpTotal ?? 0)} XP`
+          ? t('prestige.available')
           : `${nf.format(inLevel)} / ${nf.format(span)} XP`}
       </p>
-    </div>
+    </Shell>
   )
 }
 

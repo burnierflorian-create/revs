@@ -187,3 +187,26 @@ export async function claimPrestige(): Promise<{ ok: boolean; prestige: number; 
     level: Number(r.level ?? 1),
   }
 }
+
+// ─────────────────────── Prestige — ouverture et libellé ───────────────────────
+//
+// Ces deux helpers vivent ici plutôt que dans PrestigeSheet.tsx pour que le
+// composant n'exporte QU'un composant : c'est ce que demande le rafraîchissement
+// à chaud de Vite, et les autres overlays du projet paient encore ce défaut.
+
+const PRESTIGE_CHANNEL = 'revs:prestige'
+
+/** Ouvre la feuille de prestige depuis n'importe où dans l'application. */
+export function openPrestige(): void {
+  window.dispatchEvent(new CustomEvent(PRESTIGE_CHANNEL))
+}
+
+/** Canal écouté par PrestigeSheet. */
+export const PRESTIGE_EVENT = PRESTIGE_CHANNEL
+
+/** Chiffre romain jusqu'à X, puis repli sur le nombre. Un prestige se lit
+ *  mieux en romain — c'est une distinction, pas une quantité. */
+export function romanPrestige(n: number): string {
+  const R = ['', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X']
+  return n >= 1 && n <= 10 ? R[n] : String(n)
+}
