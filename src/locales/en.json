@@ -695,7 +695,8 @@
     "later": "Later",
     "retry": "RETRY",
     "lowConfidenceBadge": "⚠️ Distant target — Low recognition",
-    "cooldown": "Easy! Wait {{seconds}}s before the next scan."
+    "cooldown": "Easy! Wait {{seconds}}s before the next scan.",
+    "plateGuardFailed": "Automatic licence-plate protection could not run on this photo. I confirm no plate is readable on it."
   },
   "racepage": {
     "back": "Back",

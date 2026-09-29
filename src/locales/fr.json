@@ -695,7 +695,8 @@
     "later": "Plus tard",
     "retry": "RÉESSAYER",
     "lowConfidenceBadge": "⚠️ Cible éloignée — Reconnaissance basse",
-    "cooldown": "Doucement ! Attends {{seconds}} s avant le prochain scan."
+    "cooldown": "Doucement ! Attends {{seconds}} s avant le prochain scan.",
+    "plateGuardFailed": "La protection automatique des plaques n'a pas pu s'exécuter sur cette photo. Je confirme qu'aucune plaque d'immatriculation n'y est lisible."
   },
   "racepage": {
     "back": "Retour",

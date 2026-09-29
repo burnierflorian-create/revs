@@ -123,6 +123,12 @@ export default function NewSpot() {
 
   const [step, setStep] = useState<Step>(1)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  // Résultat de la protection automatique des plaques.
+  //   'ok'      la détection a tourné (qu'elle ait trouvé une plaque ou non)
+  //   'failed'  elle n'a PAS tourné — appel en échec, ou floutage impossible
+  // 'failed' n'autorise plus la publication silencieuse : voir plateAck.
+  const [plateGuard, setPlateGuard] = useState<'ok' | 'failed'>('ok')
+  const [plateAck, setPlateAck] = useState(false)
   const [image, setImage] = useState<{ blob: Blob; base64: string } | null>(
     null,
   )
@@ -235,6 +241,9 @@ export default function NewSpot() {
     try {
       const resized = await resizeImageToJpeg(file)
       setImage(resized)
+      // Nouvelle photo → la protection repart de zéro.
+      setPlateGuard('ok')
+      setPlateAck(false)
       // AI-only downscale (768px / q0.85). Image tokens scale with pixel
       // area (≈ w×h/750), so 768px is ~2× cheaper than 1200px; the higher
       // JPEG quality keeps badges/logos legible for the vision model.
@@ -381,7 +390,7 @@ export default function NewSpot() {
       const [carRes, plateJson] = await Promise.all([
         doFetch('/api/identify-car'),
         (fetchJson('/api/detect-plate') as Promise<{ plates: BBox[] }>).catch(
-          () => ({ plates: [] as BBox[] }),
+          () => ({ plates: null as BBox[] | null }),
         ),
       ])
       clearTimeout(timer)
@@ -408,20 +417,29 @@ export default function NewSpot() {
       }
       const carJson = (await carRes.json()) as IdentifyResult
 
-      // Apply the plate blur to the in-memory blob BEFORE moving to the
-      // edit step. By the time the user reaches publish(), image.blob
-      // already carries the anonymised version — no race, no extra wait.
-      const plates = plateJson.plates ?? []
-      if (plates.length > 0) {
+      // Le floutage est appliqué au blob en mémoire AVANT l'étape d'édition :
+      // quand l'utilisateur atteint publish(), image.blob porte déjà la
+      // version anonymisée — pas de course, pas d'attente supplémentaire.
+      //
+      // `plates === null` signifie que la détection n'a PAS tourné (appel en
+      // échec). C'est différent d'un tableau vide, qui signifie « aucune plaque
+      // trouvée ». La version précédente confondait les deux et publiait
+      // silencieusement : une panne de l'API suffisait à mettre en ligne une
+      // plaque parfaitement lisible.
+      const plates = plateJson.plates
+      if (plates === null) setPlateGuard('failed')
+      if (plates && plates.length > 0) {
         try {
           const blurred = await blurRegions(image.blob, plates)
           setImage(blurred)
           if (previewUrl) URL.revokeObjectURL(previewUrl)
           setPreviewUrl(URL.createObjectURL(blurred.blob))
         } catch (e) {
-          // Canvas error → fall through with the original image. Better
-          // a missed plate than blocking the whole publish flow.
+          // Erreur canvas : l'image reste non floutée. On ne laisse plus
+          // passer en silence — l'utilisateur devra confirmer explicitement
+          // qu'aucune plaque n'est lisible avant de publier.
           console.error('[plate blur] failed:', e)
+          setPlateGuard('failed')
         }
       }
 
@@ -1155,9 +1173,39 @@ export default function NewSpot() {
             {savedToGallery ? t('newspot.savedToGallery') : t('newspot.saveToGallery')}
           </button>
 
+          {/* Protection des plaques : la publication n'est plus silencieuse
+              quand la détection automatique n'a pas tourné. L'utilisateur doit
+              confirmer lui-même qu'aucune plaque n'est lisible.
+              Bloquer purement et simplement aurait puni une panne d'API alors
+              que la plupart des photos n'ont aucune plaque visible ; laisser
+              passer en silence, c'était publier une plaque lisible. */}
+          {plateGuard === 'failed' && (
+            <label
+              className="flex cursor-pointer items-start gap-2.5 rounded-2xl p-3.5"
+              style={{
+                background: 'rgb(var(--color-accent) / 0.08)',
+                border: '1px solid rgb(var(--color-accent) / 0.35)',
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={plateAck}
+                onChange={(e) => setPlateAck(e.target.checked)}
+                className="mt-0.5 h-4 w-4 flex-none accent-accent"
+              />
+              <span className="text-[12.5px] leading-snug text-fg">
+                {t('newspot.plateGuardFailed')}
+              </span>
+            </label>
+          )}
+
           <button
             onClick={() => setStep(4)}
-            disabled={!brand.trim() || !model.trim()}
+            disabled={
+              !brand.trim() ||
+              !model.trim() ||
+              (plateGuard === 'failed' && !plateAck)
+            }
             className="tappable w-full rounded-full bg-accent py-4 text-sm font-extrabold tracking-wider text-fg disabled:opacity-50"
             style={{ boxShadow: '0 8px 24px rgba(232,32,58,0.45)' }}
           >
