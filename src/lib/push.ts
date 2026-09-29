@@ -65,25 +65,6 @@ export async function enablePush(): Promise<boolean> {
   }
 }
 
-/**
- * Cet appareil reçoit-il DÉJÀ les notifications ? Vrai seulement si la
- * permission est accordée ET qu'un abonnement push existe côté navigateur.
- *
- * Volontairement muet : ne demande aucune permission et n'écrit rien. Sert à
- * décider d'un état d'affichage (la pastille rouge de la cloche, sur
- * l'accueil) — jamais à gêner l'utilisateur au chargement d'une page.
- */
-export async function pushEnabled(): Promise<boolean> {
-  if (!pushSupported()) return false
-  try {
-    if (Notification.permission !== 'granted') return false
-    const reg = await navigator.serviceWorker.ready
-    return (await reg.pushManager.getSubscription()) !== null
-  } catch {
-    return false
-  }
-}
-
 // Prompt after the first spot. Only lock the "done" flag once the
 // outcome is final (subscribed OK, or permission explicitly denied) —
 // a transient failure (e.g. SW not ready yet) must be retryable.

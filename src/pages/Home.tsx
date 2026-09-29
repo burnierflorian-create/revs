@@ -25,7 +25,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import {
-  Bell,
   Camera,
   Car,
   ChevronRight,
@@ -39,7 +38,6 @@ import { setPendingPhoto } from '../lib/pendingPhoto'
 import { GP_2026 } from '../lib/f1'
 import { xpLevel, type XpLevel } from '../lib/xp'
 import { challengeIcon } from '../lib/customIcons'
-import { enablePush, pushEnabled, pushSupported } from '../lib/push'
 import { Skeleton } from '../components/Skeleton'
 import {
   challengePct as computeChallengePct,
@@ -356,24 +354,33 @@ export default function Home() {
 
         <HomeHeader online={community?.online_now ?? 0} />
 
-        {/* Carte XP — flottante en haut à droite, elle chevauche le hero.
-            Positionnée sous le header, jamais au-dessus du visage de la
-            voiture au centre. */}
-        <div className="home-rise home-rise--2 absolute right-4 top-[calc(max(0.9rem,env(safe-area-inset-top))+46px)] z-10">
-          <XpCard lvl={lvl} />
-        </div>
+        {/* ── Bloc identité — IDENTITÉ À GAUCHE, XP À DROITE ──
+            La carte XP flottait auparavant en haut à droite, juste sous le
+            header : elle y lisait comme un troisième bouton de barre plutôt
+            que comme une information de profil. Elle descend ici, sur la même
+            rangée que le prénom, là où elle appartient.
 
-        {/* Identité, calée en bas du hero. */}
-        <div className="absolute inset-x-0 bottom-0 px-5 pb-4">
-          <h1
-            className="home-rise font-display font-black leading-[1.04] tracking-tight text-white"
-            style={{ fontSize: 'clamp(26px, 7.6vw, 36px)' }}
-          >
-            {greetingFor(name, t)}
-          </h1>
-          <p className="home-rise home-rise--2 mt-1 text-[13.5px] font-medium text-white/60">
-            {title ?? lvl.name}
-          </p>
+            `items-end` aligne les DEUX blocs sur la même ligne de base basse :
+            la carte est plus haute que le texte, donc c'est le seul alignement
+            qui ne laisse ni l'un ni l'autre flotter. `min-w-0` sur la colonne
+            de gauche l'autorise à se replier — sans lui, un prénom long
+            pousserait la carte hors de l'écran au lieu de passer à la ligne. */}
+        <div className="absolute inset-x-0 bottom-0 flex items-end gap-3 px-4 pb-4">
+          <div className="home-rise min-w-0 flex-1">
+            <h1
+              className="font-display font-black leading-[1.06] tracking-tight text-white"
+              style={{ fontSize: 'clamp(22px, 6.4vw, 34px)' }}
+            >
+              {greetingFor(name, t)}
+            </h1>
+            <p className="home-rise--2 mt-1 truncate text-[13px] font-medium text-white/60">
+              {title ?? lvl.name}
+            </p>
+          </div>
+
+          <div className="home-rise home-rise--2 flex-none">
+            <XpCard lvl={lvl} />
+          </div>
         </div>
       </section>
 
@@ -425,28 +432,41 @@ export default function Home() {
 
 // ═══════════════════════════ HEADER ═══════════════════════════
 //
-// Volontairement bas : logo, présence, et deux boutons de même gabarit.
+// Volontairement bas : logo, présence, et l'accès aux réglages.
 //
-// ── La cloche, et ce qu'elle peut honnêtement faire ──
-// REVS n'a PAS de centre de notifications : il n'existe ni boîte de réception,
-// ni compteur de non-lus. Le seul système réel est le Web Push, avec ses
-// préférences dans Réglages. La cloche reflète donc l'état de ce système :
-//   · push actif            → ouvre Réglages
-//   · push possible mais off → pastille rouge, le tap ACTIVE les notifications
-//   · push non supporté      → ouvre Réglages
-// La pastille signale une action à faire, pas un message non lu — inventer un
-// compteur aurait été inventer une donnée.
+// ── POURQUOI IL N'Y A PLUS DE CLOCHE (29/09/2026) ──
+//
+// Inspection du système de notifications avant de trancher :
+//
+//   CE QUI EXISTE  ·  Web Push réel. Des événements sont bien émis pour les
+//     likes (LikeButton), les commentaires (CommentsSheet), les nouveaux
+//     abonnés (PublicProfile), les spots à proximité (NewSpot), plus deux
+//     rappels par cron (série en danger, Grand Prix dans 24 h). Les
+//     préférences par type vivent dans `notification_prefs` et se règlent
+//     déjà dans Réglages. Les appareils sont dans `push_subscriptions`.
+//
+//   CE QUI N'EXISTE PAS  ·  aucune table de notifications, aucune notion de
+//     « lu / non lu », aucune page, aucune route, aucun composant. Le push est
+//     émis puis oublié : une fois la notification système balayée, l'événement
+//     n'existe plus nulle part.
+//
+// Une cloche a donc deux choses à offrir qu'elle ne peut pas tenir : une
+// destination (il n'y a pas d'écran à ouvrir) et une pastille de non-lus (il
+// n'y a rien à compter). L'ancienne version basculait l'activation du push —
+// utile, mais ce n'est pas ce qu'une cloche promet, et un bouton qui ne fait
+// pas ce qu'il annonce vaut moins que pas de bouton.
+//
+// Elle reviendra quand il y aura une boîte de réception à ouvrir. D'ici là,
+// les notifications se règlent dans Réglages, à un tap d'ici.
 
 function HeaderButton({
   label,
   onClick,
   children,
-  dot = false,
 }: {
   label: string
   onClick: () => void
   children: React.ReactNode
-  dot?: boolean
 }) {
   return (
     <button
@@ -456,16 +476,6 @@ function HeaderButton({
       style={{ ...ON_PHOTO, backdropFilter: 'blur(10px)' }}
     >
       {children}
-      {dot && (
-        <span
-          aria-hidden
-          className="absolute right-[7px] top-[7px] h-2 w-2 rounded-full"
-          style={{
-            background: 'rgb(var(--color-accent))',
-            boxShadow: '0 0 0 2px rgb(0 0 0 / 0.55)',
-          }}
-        />
-      )}
     </button>
   )
 }
@@ -473,28 +483,6 @@ function HeaderButton({
 function HomeHeader({ online }: { online: number }) {
   const navigate = useNavigate()
   const { t } = useTranslation()
-  // `null` tant qu'on ne sait pas : on n'affiche pas de pastille par défaut,
-  // pour ne pas faire clignoter une alerte au chargement.
-  const [notifOn, setNotifOn] = useState<boolean | null>(null)
-
-  useEffect(() => {
-    let active = true
-    void pushEnabled().then((v) => {
-      if (active) setNotifOn(v)
-    })
-    return () => {
-      active = false
-    }
-  }, [])
-
-  async function onBell() {
-    if (notifOn === false && pushSupported()) {
-      const ok = await enablePush()
-      setNotifOn(ok)
-      if (ok) return // activé sur place : inutile d'ouvrir Réglages
-    }
-    navigate('/settings')
-  }
 
   return (
     <header className="relative z-10 flex items-center gap-2.5 px-4 pt-[max(0.9rem,calc(env(safe-area-inset-top)+0.4rem))]">
@@ -512,17 +500,6 @@ function HomeHeader({ online }: { online: number }) {
       </span>
 
       <div className="ml-auto flex flex-none items-center gap-2">
-        <HeaderButton
-          label={
-            notifOn === false
-              ? t('home.header.enableNotifications')
-              : t('home.header.notifications')
-          }
-          onClick={() => void onBell()}
-          dot={notifOn === false}
-        >
-          <Bell className="h-[18px] w-[18px]" strokeWidth={1.9} />
-        </HeaderButton>
         <HeaderButton
           label={t('home.header.settings')}
           onClick={() => navigate('/settings')}
@@ -549,8 +526,13 @@ function XpCard({ lvl }: { lvl: XpLevel }) {
 
   return (
     <div
-      className="w-[132px] rounded-[18px] px-3 pb-2.5 pt-2 text-center"
+      // Largeur FLUIDE : la carte partage désormais sa rangée avec le prénom.
+      // À 320 px elle descend à ~104 px pour laisser respirer « Bon après-midi
+      // Flo » ; au-delà de 430 px elle se fige à 136 px et cesse de grandir —
+      // une carte XP plus large que ça déséquilibrerait le hero.
+      className="rounded-[18px] px-2.5 pb-2.5 pt-2 text-center"
       style={{
+        width: 'clamp(104px, 32vw, 136px)',
         // Fond nettement plus dense que les autres blocs posés sur la photo :
         // la carte est lue de loin, par-dessus un ciel clair ET une carrosserie
         // sombre. À 0,55 d'opacité elle se dissolvait dans le coucher de soleil.
