@@ -445,22 +445,30 @@
       "label": "Dream car"
     },
     "stats": {
-      "spots": "spots",
-      "brands": "brands",
-      "rank": "rank",
+      "spots": "Spots",
+      "brands": "Brands",
+      "rank": "Rank",
       "followers": "follower",
       "followers_other": "followers",
-      "followers_one": "follower"
+      "followers_one": "follower",
+      "models": "Models",
+      "followersShort": "Followers",
+      "open": "View {{label}} — {{count}}"
     },
     "badges": {
       "seeAll": "See all badges →",
       "heading": "Badges",
-      "unlockedCount": "{{unlocked}} / {{total}} unlocked"
+      "unlockedCount": "{{unlocked}} / {{total}} unlocked",
+      "summary": "{{unlocked}} of {{total}} unlocked",
+      "obtained": "Unlocked",
+      "toUnlock": "To unlock"
     },
     "tabs": {
       "collection": "Collection",
       "garage": "Garage",
-      "rewards": "Rewards"
+      "rewards": "Rewards",
+      "aria": "Profile sections",
+      "badges": "Badges"
     },
     "collectionLock": {
       "title": "Coming soon",
@@ -468,7 +476,10 @@
     },
     "garage": {
       "empty": "Your garage is empty, go hunt your first supercar",
-      "spot": "Spot"
+      "spot": "Spot",
+      "heading": "My garage",
+      "count": "{{count}} car",
+      "count_plural": "{{count}} cars"
     },
     "rewardsLock": {
       "title": "Coming soon",
@@ -537,6 +548,27 @@
       "allClaimed": "All challenges already claimed. Well done 🏁",
       "claim": "Claim",
       "inProgress": "In progress"
+    },
+    "verified": "Verified account",
+    "shareApp": {
+      "cta": "Share REVS",
+      "text": "Join me on REVS 🚗 — the app for car enthusiasts.",
+      "copied": "Link copied"
+    },
+    "collection": {
+      "heading": "My collection",
+      "count": "{{count}} card",
+      "count_plural": "{{count}} cards"
+    },
+    "referral": {
+      "title": "Invite your friends",
+      "body": "Introduce REVS to the enthusiasts around you. Your code links them to you automatically.",
+      "codeLabel": "Your code",
+      "copyAria": "Copy my referral code",
+      "activeCount": "{{count}} active referral",
+      "activeCount_plural": "{{count}} active referrals",
+      "signedCount": "{{count}} signed up",
+      "signedCount_plural": "{{count}} signed up"
     }
   },
   "discoverpage": {

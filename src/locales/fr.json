@@ -445,22 +445,30 @@
       "label": "Voiture de rêve"
     },
     "stats": {
-      "spots": "spots",
-      "brands": "marques",
-      "rank": "rang",
+      "spots": "Spots",
+      "brands": "Marques",
+      "rank": "Rang",
       "followers": "abonné",
       "followers_other": "abonnés",
-      "followers_one": "abonné"
+      "followers_one": "abonné",
+      "models": "Modèles",
+      "followersShort": "Abonnés",
+      "open": "Voir {{label}} — {{count}}"
     },
     "badges": {
       "seeAll": "Voir tous les badges →",
       "heading": "Badges",
-      "unlockedCount": "{{unlocked}} / {{total}} débloqués"
+      "unlockedCount": "{{unlocked}} / {{total}} débloqués",
+      "summary": "{{unlocked}} sur {{total}} débloqués",
+      "obtained": "Obtenus",
+      "toUnlock": "À débloquer"
     },
     "tabs": {
       "collection": "Collection",
       "garage": "Garage",
-      "rewards": "Récompenses"
+      "rewards": "Récompenses",
+      "aria": "Sections du profil",
+      "badges": "Badges"
     },
     "collectionLock": {
       "title": "Bientôt disponible",
@@ -468,7 +476,10 @@
     },
     "garage": {
       "empty": "Ton garage est vide, pars chasser ta première supercar",
-      "spot": "Spotter"
+      "spot": "Spotter",
+      "heading": "Mon garage",
+      "count": "{{count}} voiture",
+      "count_plural": "{{count}} voitures"
     },
     "rewardsLock": {
       "title": "Bientôt disponible",
@@ -537,6 +548,27 @@
       "allClaimed": "Tous les défis sont déjà réclamés. Bravo 🏁",
       "claim": "Réclamer",
       "inProgress": "En cours"
+    },
+    "verified": "Compte vérifié",
+    "shareApp": {
+      "cta": "Partager REVS",
+      "text": "Rejoins-moi sur REVS 🚗 — l'app des passionnés d'automobile.",
+      "copied": "Lien copié"
+    },
+    "collection": {
+      "heading": "Ma collection",
+      "count": "{{count}} carte",
+      "count_plural": "{{count}} cartes"
+    },
+    "referral": {
+      "title": "Invite tes amis",
+      "body": "Fais découvrir REVS aux passionnés autour de toi. Ton code les rattache à toi automatiquement.",
+      "codeLabel": "Ton code",
+      "copyAria": "Copier mon code de parrainage",
+      "activeCount": "{{count}} filleul actif",
+      "activeCount_plural": "{{count}} filleuls actifs",
+      "signedCount": "{{count}} inscrit",
+      "signedCount_plural": "{{count}} inscrits"
     }
   },
   "discoverpage": {

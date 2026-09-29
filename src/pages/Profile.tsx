@@ -3,17 +3,7 @@ import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
-import {
-  ArrowLeft,
-  Check,
-  ChevronRight,
-  Copy,
-  Lock,
-  Settings,
-  Share,
-  Warehouse,
-  X,
-} from 'lucide-react'
+import { ArrowLeft, ChevronRight, Lock, Warehouse, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { type Rarity, type Spot } from '../lib/spots'
 import { cardKey } from '../lib/cardLevels'
@@ -22,14 +12,12 @@ import { allBadges, computeUnlocks, type Badge } from '../lib/badges'
 import { badgeIcon } from '../lib/customIcons'
 import Showroom from '../components/Showroom'
 import { fetchRaceStats } from '../lib/race'
-import { xpLevel } from '../lib/xp'
+import { fetchProgress, type Progress } from '../lib/xp'
 import { useMyTier } from '../lib/tier'
 import { appConfig } from '../config/appConfig'
 import { Skeleton } from '../components/Skeleton'
 import MyCollection from '../components/MyCollection'
-import LiquidXpBar from '../components/LiquidXpBar'
 import { BadgeUnlockWatcher } from '../components/BadgeUnlocked'
-import { prefersReducedMotion } from '../lib/motion'
 import { rarityBadge } from '../lib/rarityStyle'
 import {
   COLLECTIONS,
@@ -39,6 +27,19 @@ import {
   type CollectionProgress,
 } from '../lib/collections'
 import { floatXp } from '../components/XpFloater'
+import {
+  fetchMyReferralStats,
+  shareRevsApp,
+  type ReferralStats,
+} from '../lib/referrals'
+import ProfileHero from '../components/profile/ProfileHero'
+import ProfileStats from '../components/profile/ProfileStats'
+import ProfileProgress from '../components/profile/ProfileProgress'
+import ProfileTabs from '../components/profile/ProfileTabs'
+import type { ProfileStat, ProfileTabKey } from '../components/profile/types'
+import BadgeShowcase from '../components/profile/BadgeShowcase'
+import ReferralCard from '../components/profile/ReferralCard'
+import SectionHead from '../components/profile/SectionHead'
 
 
 export default function Profile() {
@@ -56,7 +57,11 @@ export default function Profile() {
   const [uniqueBrands, setUniqueBrands] = useState(0)
   const [rank, setRank] = useState<number | null>(null)
   const [hasEvent, setHasEvent] = useState(false)
-  const [xp, setXp] = useState(0)
+  // Progression : lue au SERVEUR (my_progress). Aucun calcul de niveau ne vit
+  // deux fois — règle posée par la refonte XP du 29/09.
+  const [prog, setProg] = useState<Progress | null>(null)
+  const [referral, setReferral] = useState<ReferralStats | null>(null)
+  const [shareCopied, setShareCopied] = useState(false)
   const [plan, setPlan] = useState<string | null>(null)
   const [earlyAdopter, setEarlyAdopter] = useState(false)
   const [meId, setMeId] = useState<string | null>(null)
@@ -67,7 +72,6 @@ export default function Profile() {
   // stay always-visible; this gate controls the slide-up sheet that
   // surfaces the remaining N-4 trophies.
   const [badgesSheetOpen, setBadgesSheetOpen] = useState(false)
-  const [shareOpen, setShareOpen] = useState(false)
   const [xpHistory, setXpHistory] = useState<
     { amount: number; reason: string; created_at: string }[]
   >([])
@@ -83,12 +87,10 @@ export default function Profile() {
   // statistique « Modèles » ouvre la Collection, pas le haut du profil. Lu une
   // seule fois, à l'initialisation : ensuite l'onglet redevient un état local,
   // et changer d'onglet ne réécrit pas l'URL.
-  const [profileTab, setProfileTab] = useState<
-    'collection' | 'garage' | 'rewards'
-  >(() => {
+  const [profileTab, setProfileTab] = useState<ProfileTabKey>(() => {
     if (typeof window === 'undefined') return 'garage'
     const p = new URLSearchParams(window.location.search).get('tab')
-    return p === 'collection' || p === 'rewards' ? p : 'garage'
+    return p === 'collection' || p === 'rewards' || p === 'badges' ? p : 'garage'
   })
   // REVS RACE counters drive the race-* badges. Fetched once per
   // mount; absent until the call returns (badges just stay locked).
@@ -109,9 +111,8 @@ export default function Profile() {
 
       const [
         spotsRes,
-        allUidsRes,
+        rankRes,
         eventsRes,
-        xpRes,
         profRes,
         subRes,
         followersRes,
@@ -121,12 +122,15 @@ export default function Profile() {
             .select('*')
             .eq('user_id', user.id)
             .order('created_at', { ascending: false }),
-          supabase.from('spots').select('user_id'),
+          // Rang : une comparaison indexée sur profiles.xp_total (migration
+          // 0084) au lieu d'un tirage de TOUTE la table `spots` vers le
+          // navigateur. Et c'est désormais le MÊME rang que /classement, vers
+          // lequel la statistique renvoie.
+          supabase.rpc('my_rank'),
           supabase
             .from('events')
             .select('id', { count: 'exact', head: true })
             .eq('organizer_id', user.id),
-          supabase.rpc('my_xp'),
           supabase
             .from('profiles')
             .select('pseudo, ville, avatar, created_at, title, dream_car')
@@ -158,18 +162,8 @@ export default function Profile() {
       if (!active) return
 
       const mySpots = (spotsRes.data ?? []) as Spot[]
-      const total = mySpots.length
 
-      let rk: number | null = null
-      if (allUidsRes.data && total > 0) {
-        const counts = new globalThis.Map<string, number>()
-        for (const r of allUidsRes.data as { user_id: string }[]) {
-          counts.set(r.user_id, (counts.get(r.user_id) ?? 0) + 1)
-        }
-        const sorted = [...counts.entries()].sort((a, b) => b[1] - a[1])
-        const idx = sorted.findIndex(([uid]) => uid === user.id)
-        rk = idx >= 0 ? idx + 1 : null
-      }
+      const rk = (rankRes.data as number | null) ?? null
 
       const email = user.email ?? ''
       setPseudo(
@@ -190,7 +184,6 @@ export default function Profile() {
       )
       setRank(rk)
       setHasEvent((eventsRes.count ?? 0) > 0)
-      setXp(typeof xpRes.data === 'number' ? xpRes.data : 0)
       const s = subRes.data as {
         plan?: string
         status?: string
@@ -203,6 +196,14 @@ export default function Profile() {
       setMeId(user.id)
       setFollowers(followersRes.count ?? 0)
       setLoading(false)
+
+      // Progression serveur + parrainage — découplés, aucun ne bloque le rendu.
+      void fetchProgress().then((p) => {
+        if (active) setProg(p)
+      })
+      void fetchMyReferralStats().then((r) => {
+        if (active) setReferral(r)
+      })
 
       // REVS RACE stats — fire-and-forget, no blocking on render.
       fetchRaceStats(user.id).then((rs) => {
@@ -230,27 +231,11 @@ export default function Profile() {
     }
   }, [])
 
-  const level = xpLevel(xp)
-
-  // Single furtive identity line: status • level • ville (e.g.
-  // "FONDATEUR • EXPERT • ANNECY") — replaces the stacked gold/red badges.
-  const statusLabel =
-    title ||
-    (planTier(plan) === 'vip'
-      ? 'VIP'
-      : planTier(plan) === 'premium'
-        ? t('profilepage.status.premium')
-        : null)
-  const idLine = [statusLabel, level.name, ville]
-    .filter(Boolean)
-    .map((s) => (s as string).toUpperCase())
-    .join('  •  ')
-
   useEffect(() => {
     if (loading) return
-    const id = requestAnimationFrame(() => setAnimPct(level.pct))
+    const id = requestAnimationFrame(() => setAnimPct(prog?.pct ?? 0))
     return () => cancelAnimationFrame(id)
-  }, [loading, level.pct])
+  }, [loading, prog?.pct])
 
   // Last 10 XP transactions for the Récompenses history list.
   useEffect(() => {
@@ -280,6 +265,28 @@ export default function Profile() {
     }
   }, [])
 
+  // ── Dérivés mémoïsés, AVANT le retour anticipé de chargement ──
+  // Un hook placé après `if (loading) return` change l'ordre des hooks entre
+  // deux rendus : React lève « Rendered fewer hooks than expected » à la
+  // transition. Les deux blocs ci-dessous vivaient là et cassaient donc le
+  // passage chargement → contenu.
+  const uniqueModels = useMemo(
+    () =>
+      new Set(
+        spots
+          .filter((s) => s.brand && s.model)
+          .map((s) => `${s.brand}|${s.model}`.toLowerCase()),
+      ).size,
+    [spots],
+  )
+  const garageCount = useMemo(
+    () => new Set(spots.map((s) => cardKey(s.brand ?? '', s.model ?? '', s.color))).size,
+    [spots],
+  )
+  // Collection = même clé. Garage et Collection comptent le même ensemble mais
+  // le montrent autrement : le Garage les expose, la Collection les classe.
+  const cardCount = garageCount
+
   if (loading) {
     return (
       <div className="min-h-screen bg-bg">
@@ -306,7 +313,6 @@ export default function Profile() {
     )
   }
 
-  const total = spots.length
   const daysWithSpot = new Set(spots.map((s) => s.created_at.slice(0, 10)))
   // Current daily streak — consecutive UTC days with a spot, counting
   // back from today (or yesterday if today has none yet).
@@ -335,6 +341,45 @@ export default function Profile() {
     earlyAdopter,
     raceStats: raceStats ?? undefined,
   }
+  // Statut de COMPTE (« Fondateur », « VIP ») — distinct du titre de niveau.
+  // Les deux s'affichent côte à côte : depuis la refonte XP, le statut
+  // n'écrase plus la progression.
+  const accountStatusLabel =
+    title ||
+    (planTier(plan) === 'vip'
+      ? 'VIP'
+      : planTier(plan) === 'premium'
+        ? t('profilepage.status.premium')
+        : null)
+
+  // Modèles distincts — dérivé des spots DÉJÀ chargés, aucune requête de plus.
+
+  // Garage = voitures distinctes (marque + modèle + teinte) — pas le nombre
+  // brut de spots, sinon dix photos de la même voiture compteraient dix fois.
+
+  const profileStats: ProfileStat[] = [
+    { key: 'spots', value: spots.length, label: t('profilepage.stats.spots'), to: '/ma-galerie' },
+    { key: 'brands', value: uniqueBrands, label: t('profilepage.stats.brands'), to: '/mes-marques' },
+    // « Modèles » n'a pas de page dédiée : elle bascule sur l'onglet
+    // Collection, qui EST la liste des modèles collectionnés.
+    { key: 'models', value: uniqueModels, label: t('profilepage.stats.models'), onPress: () => setProfileTab('collection') },
+    { key: 'rank', value: rank ?? 0, prefix: '#', empty: !rank, label: t('profilepage.stats.rank'), to: '/classement' },
+    { key: 'followers', value: followers, label: t('profilepage.stats.followersShort'), ...(meId ? { to: `/u/${meId}` } : {}) },
+  ]
+
+  /** Partage l'APPLICATION avec le code de parrainage — plus le lien de
+   *  profil, qui était une impasse d'acquisition. */
+  async function doShare() {
+    const copied = await shareRevsApp(
+      referral?.invite_code ?? null,
+      t('profilepage.shareApp.text'),
+    )
+    if (copied) {
+      setShareCopied(true)
+      window.setTimeout(() => setShareCopied(false), 1800)
+    }
+  }
+
   const badgeCatalogue = allBadges(badgeCtx)
   const unlocks = computeUnlocks(badgeCtx)
   // Top row: prefer unlocked badges (most-impressive feel); pad with the
@@ -352,347 +397,66 @@ export default function Profile() {
           showing off, we use its photo as the immersive backdrop
           (heavy blur + dim overlay). Falls back to the brand red
           gradient when the garage is empty. */}
-      <div className="relative">
-        {/* Plain gradient header (no cover photo) so the avatar can never
-            be clipped by an immersive backdrop. */}
-        <div
-          className="w-full"
-          style={{
-            height: '120px',
-            background: 'linear-gradient(180deg, #0a0a0a 0%, #141414 100%)',
-          }}
-        />
-        {/* Share profile — round button left of the settings gear. */}
-        <button
-          onClick={() => setShareOpen(true)}
-          aria-label={t('profilepage.header.shareProfileAria')}
-          className="tappable absolute top-[max(1rem,env(safe-area-inset-top))] flex h-9 w-9 items-center justify-center rounded-full text-white/80 backdrop-blur transition-colors hover:text-white"
-          style={{
-            right: '60px',
-            background: '#222',
-            border: '1px solid rgb(var(--color-fg) / 0.10)',
-          }}
-        >
-          <Share className="h-[18px] w-[18px]" />
-        </button>
-        <button
-          onClick={() => navigate('/settings')}
-          aria-label={t('profilepage.header.settingsAria')}
-          className="tappable absolute right-4 top-[max(1rem,env(safe-area-inset-top))] flex h-10 w-10 items-center justify-center rounded-full bg-black/40 text-fg/80 backdrop-blur transition-colors hover:text-fg"
-          style={{ border: '1px solid rgb(var(--color-fg) / 0.10)' }}
-        >
-          <Settings className="h-5 w-5" />
-        </button>
-        <div
-          className="absolute left-1/2 z-10 -translate-x-1/2"
-          style={{ bottom: '-44px' }}
-        >
-          {/* Avatar with thin white liseré — replaces the conic-gradient
-              ring per the immersive header polish. VIP / Premium tier
-              still gets its overlay badge at the corner so paid status
-              stays unmissable. */}
-          <div className="relative">
-            {/* Diffuse radial halo behind the avatar — soft warm-neutral
-                glow that lifts the disc off the immersive cover
-                backdrop without competing with the VIP gold ring.
-                pointer-events:none so it never intercepts taps. */}
+      <ProfileHero
+        pseudo={pseudo}
+        avatar={avatar}
+        accountTitle={accountStatusLabel}
+        levelTitle={prog?.title ?? null}
+        ville={ville}
+        dreamCar={dreamCar}
+        verified={!!title || tier === 'vip'}
+        spots={spots}
+        inviteCode={referral?.invite_code ?? null}
+        onShare={() => void doShare()}
+      />
+
+      {/* Bloc identité. PAS de pb-40 ici : la marge de sécurité au-dessus de
+          la barre de navigation appartient au conteneur le plus EXTERNE. Elle
+          était appliquée aux deux, ce qui creusait 160 px morts entre les
+          onglets et leur propre contenu. */}
+      <div className="space-y-6 px-4 pb-5 pt-4">
+        {/* Série en cours — une seule pastille, sous l'identité. */}
+        {streak > 0 && (
+          <div className="-mt-1 flex justify-center">
             <span
-              aria-hidden
-              className="pointer-events-none absolute z-0 rounded-full"
+              className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[12px] font-bold"
               style={{
-                inset: '-22px',
-                background:
-                  'radial-gradient(circle at center, rgba(64, 64, 64, 0.45) 0%, rgba(64, 64, 64, 0.18) 45%, transparent 75%)',
-                filter: 'blur(18px)',
-              }}
-            />
-            <div
-              className="relative z-20 flex items-center justify-center overflow-hidden rounded-full bg-card"
-              style={{
-                width: '88px',
-                height: '88px',
-                border:
-                  tier === 'vip'
-                    ? '3px solid rgba(255, 215, 0, 0.6)'
-                    : '3px solid #E8203A',
-                boxShadow:
-                  tier === 'vip'
-                    ? '0 18px 38px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 215, 0, 0.18)'
-                    : '0 18px 38px rgba(0, 0, 0, 0.55), 0 0 0 1px rgb(var(--color-fg) / 0.06)',
+                background: 'rgb(var(--color-accent) / 0.16)',
+                color: '#FF7080',
+                border: '1px solid rgb(var(--color-accent) / 0.40)',
               }}
             >
-              <div className="flex h-full w-full items-center justify-center overflow-hidden rounded-full font-display text-4xl font-extrabold tracking-tighter text-fg">
-                {avatar ? (
-                  <img
-                    src={avatar}
-                    alt=""
-                    // Above-the-fold avatar — keep eager + high priority
-                    // so it doesn't flicker in after the cover.
-                    fetchPriority="high"
-                    decoding="async"
-                    className="h-full w-full object-cover"
-                    style={{ objectPosition: 'top' }}
-                  />
-                ) : (
-                  pseudo.charAt(0).toUpperCase()
-                )}
-              </div>
-            </div>
-            {/* Tier badge — gold ⚡ for premium, gold 👑 (slow pulse)
-                for VIP. Discreet enough not to fight the avatar but
-                impossible to miss. */}
-            {tier === 'premium' && (
-              <span
-                className="absolute -bottom-1 -right-1 flex h-9 w-9 items-center justify-center rounded-full text-lg"
-                style={{
-                  background:
-                    'linear-gradient(135deg, #FFD700 0%, #E8B225 50%, #B8860B 100%)',
-                  border: '2px solid rgb(var(--color-card))',
-                  boxShadow: '0 4px 14px rgba(255,200,50,0.45)',
-                }}
-                aria-label={t('profilepage.tier.premiumAria')}
-              >
-                ⚡
-              </span>
-            )}
-            {tier === 'vip' && (
-              <span
-                className="lvl-glow absolute -bottom-1 -right-1 flex h-9 w-9 items-center justify-center rounded-full text-lg"
-                style={{
-                  background:
-                    'linear-gradient(135deg, #FFE066 0%, #FFD700 45%, #B8860B 100%)',
-                  border: '2px solid rgb(var(--color-card))',
-                  boxShadow: '0 6px 18px rgba(255,200,50,0.55)',
-                }}
-                aria-label={t('profilepage.tier.vipAria')}
-              >
-                👑
-              </span>
-            )}
+              🔥 {t('profilepage.streak.days', { count: streak })}
+            </span>
           </div>
-        </div>
+        )}
+
+        <ProfileStats stats={profileStats} />
+
+        <ProfileProgress prog={prog} animPct={animPct} />
+
+        <ProfileTabs active={profileTab} onChange={setProfileTab} />
       </div>
 
-      {/* Inner pb-40 per the 2026-06-02 collision-fix spec — extra 16
-          px on top of .tab-pane's calc(9rem + safe-area) so the
-          Collection grid / Garage cover flow / Récompenses drawer
-          never slide under the tab bar even on the longest profiles
-          (early-adopters with 100+ cards). */}
-      {/* Plus de px-4 global ici : la gouttière 16px est re-appliquée
-          section par section (identité + card Premium) pour que la section
-          des onglets soit nativement pleine largeur, sans marge latérale. */}
-      <div className="space-y-7 pb-40 pt-[54px]">
-        {/* Identité */}
-        <div className="px-4 text-center">
-          <h1
-            className="font-display font-extrabold tracking-tight text-fg"
-            style={{ fontSize: '24px' }}
-          >
-            {pseudo}
-          </h1>
-          {/* Furtive identity line — status • level • ville. */}
-          {idLine && (
-            <p
-              className="mt-1.5 text-[11px] font-normal text-fg2"
-              style={{ letterSpacing: '0.18em' }}
-            >
-              {idLine}
-            </p>
-          )}
-          {/* Streak — visible red pill right under the title. */}
-          {streak > 0 && (
-            <div className="mt-2.5 flex justify-center">
-              <span
-                className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[12px] font-bold"
-                style={{
-                  background: 'rgba(232,32,58,0.16)',
-                  color: '#FF7080',
-                  border: '1px solid rgba(232,32,58,0.40)',
-                }}
-              >
-                🔥 {t('profilepage.streak.days', { count: streak })}
-              </span>
-            </div>
-          )}
-
-          {/* Dream car — the model chosen at onboarding (profiles.dream_car). */}
-          {dreamCar && (
-            <div className="mt-2.5 flex justify-center">
-              <span
-                className="inline-flex max-w-[86%] items-center gap-1.5 rounded-full px-3 py-1 text-[12px]"
-                style={{
-                  background: 'rgb(var(--color-fg) / 0.05)',
-                  border: '1px solid rgb(var(--color-fg) / 0.12)',
-                }}
-              >
-                <span aria-hidden>🏁</span>
-                <span className="text-fg2">{t('profilepage.dreamCar.label')}</span>
-                <span className="truncate font-bold text-fg">{dreamCar}</span>
-              </span>
-            </div>
-          )}
-
-          {/* Stats — four big animated counters; tap deep-links each. */}
-          <div className="mx-auto mt-5 flex max-w-[320px] items-stretch">
-            <StatCounter
-              value={total}
-              label={t('profilepage.stats.spots')}
-              delay={0}
-              onClick={() => navigate('/ma-galerie')}
-            />
-            <span className="w-px self-center bg-fg/10" style={{ height: 28 }} />
-            <StatCounter
-              value={uniqueBrands}
-              label={t('profilepage.stats.brands')}
-              delay={100}
-              onClick={() => navigate('/mes-marques')}
-            />
-            <span className="w-px self-center bg-fg/10" style={{ height: 28 }} />
-            <StatCounter
-              value={rank ?? 0}
-              prefix="#"
-              empty={!rank}
-              label={t('profilepage.stats.rank')}
-              delay={200}
-              countdown
-              onClick={() => navigate('/classement')}
-            />
-            {meId && (
-              <>
-                <span
-                  className="w-px self-center bg-fg/10"
-                  style={{ height: 28 }}
-                />
-                <StatCounter
-                  value={followers}
-                  label={t('profilepage.stats.followers', { count: followers })}
-                  delay={300}
-                  onClick={() => navigate(`/u/${meId}`)}
-                />
-              </>
-            )}
-          </div>
-
-          {/* Premium XP bar — #222 track, red→#ff4d4d gradient fill. */}
-          <div className="mx-auto mt-5 max-w-[300px]">
-            <div className="mb-1.5 grid grid-cols-3 items-baseline text-[11px]">
-              <span className="text-left font-bold" style={{ color: '#E8203A' }}>
-                {level.name}
-              </span>
-              <span className="text-center font-bold text-fg">
-                {new Intl.NumberFormat('fr-FR').format(xp)} XP
-              </span>
-              <span className="text-right font-normal text-fg2">
-                {level.isMax ? 'MAX' : level.next}
-              </span>
-            </div>
-            <LiquidXpBar pct={animPct} />
-          </div>
-
-          {/* Badge preview — 3 badges (prefer unlocked). Tapping any of
-              them, or the "Voir tous" link below, opens the full
-              /badges page. */}
-          {badgeCatalogue.length > 0 && (
-            <div className="mt-5 flex flex-col items-center gap-2">
-              <div className="flex items-center justify-center gap-2.5">
-                {[...unlocked, ...locked].slice(0, 3).map((b) => {
-                  const isU = unlocks.has(b.slug)
-                  return (
-                    <button
-                      key={b.slug}
-                      onClick={() => navigate('/badges')}
-                      className="tappable flex h-10 w-10 items-center justify-center rounded-full text-lg"
-                      style={{
-                        background: isU
-                          ? b.gold
-                            ? 'rgba(224,179,65,0.14)'
-                            : 'rgba(232,32,58,0.12)'
-                          : 'rgba(255,255,255,0.04)',
-                        border: isU
-                          ? b.gold
-                            ? '1px solid rgba(224,179,65,0.45)'
-                            : '1px solid rgba(232,32,58,0.35)'
-                          : '1px solid rgb(var(--color-fg) / 0.06)',
-                        opacity: isU ? 1 : 0.5,
-                      }}
-                      aria-label={b.name}
-                    >
-                      {isU ? (
-                        badgeIcon(b.slug) ? (
-                          <img
-                            src={badgeIcon(b.slug)}
-                            alt=""
-                            loading="lazy"
-                            decoding="async"
-                            className="h-9 w-9 rounded-full object-cover"
-                          />
-                        ) : (
-                          b.emoji
-                        )
-                      ) : (
-                        <Lock className="h-4 w-4 text-fg2/50" />
-                      )}
-                    </button>
-                  )
-                })}
-              </div>
-              <button
-                onClick={() => navigate('/badges')}
-                className="tappable text-[12px] font-semibold text-fg2 hover:text-fg"
-              >
-                {t('profilepage.badges.seeAll')}
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* PREMIUM BANNER moved to the very bottom of the profile
-            page per the 2026-06-01 cleanup so the stats pill flows
-            directly into the segmented control without a paid CTA
-            wedge. See <PremiumTopBanner /> at the end of this block. */}
-
+      <div className="pb-40">
         {/* TAB NAV — three plain words spaced horizontally (Apple text
             nav): active in pure white under a 1px underline, inactive in
             muted grey. No pills, no gradient fills, no emoji. */}
         <section className="w-full">
-          <div className="flex gap-6 px-4" role="tablist">
-            {(
-              [
-                { key: 'collection', label: t('profilepage.tabs.collection') },
-                { key: 'garage', label: t('profilepage.tabs.garage') },
-                { key: 'rewards', label: t('profilepage.tabs.rewards') },
-              ] as const
-            ).map((t) => {
-              const active = profileTab === t.key
-              return (
-                <button
-                  key={t.key}
-                  role="tab"
-                  aria-selected={active}
-                  onClick={() => setProfileTab(t.key)}
-                  className="tappable relative pb-2 text-sm transition-colors"
-                >
-                  <span
-                    className={
-                      active ? 'font-medium text-fg' : 'font-normal text-fg2'
-                    }
-                  >
-                    {t.label}
-                  </span>
-                  {active && (
-                    <span className="absolute inset-x-0 -bottom-px h-px bg-fg" />
-                  )}
-                </button>
-              )
-            })}
-          </div>
-
           {/* Tab content wrapper — full width, ZERO horizontal padding/margin
               (the parent no longer carries px-4). Collection grid + garage
               scroll go truly edge-to-edge; inner blocks that need breathing
               room (deck list, empty states, unlocked rewards) re-add their
               own px-4. */}
           <div className="mt-5 w-full">
+            {profileTab === 'collection' && (
+              <div className="mb-3 px-4">
+                <SectionHead
+                  title={t('profilepage.collection.heading')}
+                  count={t('profilepage.collection.count', { count: cardCount })}
+                />
+              </div>
+            )}
             {profileTab === 'collection' &&
               (appConfig.SHOW_CARD_COLLECTION ? (
                 <CollectionDecks spots={spots} />
@@ -745,8 +509,17 @@ export default function Profile() {
                 </div>
               ))}
 
+            {profileTab === 'garage' && (
+              <div className="mb-3 px-4">
+                <SectionHead
+                  title={t('profilepage.garage.heading')}
+                  count={t('profilepage.garage.count', { count: garageCount })}
+                  onMore={garageCount > 0 ? () => navigate('/ma-galerie') : undefined}
+                />
+              </div>
+            )}
             {profileTab === 'garage' &&
-              (total === 0 ? (
+              (spots.length === 0 ? (
                 <div className="mx-4 flex flex-col items-center rounded-2xl border border-fg/5 bg-card px-6 py-12 text-center">
                   <div className="flex h-16 w-16 items-center justify-center rounded-full bg-accent/10">
                     <Warehouse className="h-8 w-8 text-accent/70" />
@@ -767,6 +540,10 @@ export default function Profile() {
                   onOpen={(id) => navigate(`/spot/${id}`)}
                 />
               ))}
+
+            {profileTab === 'badges' && (
+              <BadgeShowcase badges={badgeCatalogue} unlocks={unlocks} />
+            )}
 
             {/* Récompenses — locked "coming soon" until Phase 2
                 (SHOW_COLLECTIONS_TO_COMPLETE). The tab stays visible and
@@ -986,9 +763,15 @@ export default function Profile() {
           </div>
         </section>
 
-        {/* PREMIUM CARD — upsell for free users, active-status for
-            subscribers. Re-pads the 16px gutter dropped from the parent. */}
-        <div className="px-4">
+        {/* PARRAINAGE — l'acquisition passe avant l'upsell : inviter un ami
+            est gratuit pour le joueur et utile au produit, l'abonnement ne
+            l'est que pour le produit. */}
+        <div className="mt-8 px-4">
+          <ReferralCard stats={referral} onShare={() => void doShare()} />
+        </div>
+
+        {/* PREMIUM — discret, tout en bas, après le contenu réel du profil. */}
+        <div className="mt-6 px-4">
           <PremiumTopBanner
             onTap={() => navigate('/premium')}
             plan={plan}
@@ -1004,123 +787,26 @@ export default function Profile() {
         unlocks={unlocks}
       />
 
-      <ShareSheet
-        open={shareOpen}
-        onClose={() => setShareOpen(false)}
-        pseudo={pseudo}
-        userId={meId}
-      />
+      {/* Retour visuel quand le partage natif n'existe pas (navigateur de
+          bureau) et que le contenu a été copié à la place. */}
+      {shareCopied && (
+        <div
+          className="pointer-events-none fixed inset-x-0 bottom-28 z-50 flex justify-center"
+          role="status"
+        >
+          <span
+            className="rounded-full px-4 py-2 text-[13px] font-bold text-white"
+            style={{ background: 'rgb(var(--color-accent))' }}
+          >
+            {t('profilepage.shareApp.copied')}
+          </span>
+        </div>
+      )}
     </div>
   )
 }
 
 // ────────────────────────── SHARE SHEET ─────────────────────────
-
-/** Slide-up sheet to share the profile: the vanity link to copy + the
- *  native iOS/Android share sheet. The link points at the public profile
- *  route that already exists (/u/:id). */
-function ShareSheet({
-  open,
-  onClose,
-  pseudo,
-  userId,
-}: {
-  open: boolean
-  onClose: () => void
-  pseudo: string
-  userId: string | null
-}) {
-  const { t } = useTranslation()
-  const [copied, setCopied] = useState(false)
-  if (!open) return null
-
-  const handle = `revs.app/@${pseudo.toLowerCase().replace(/\s+/g, '')}`
-  const url = userId
-    ? `${window.location.origin}/u/${userId}`
-    : window.location.origin
-
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(url)
-      setCopied(true)
-      window.setTimeout(() => setCopied(false), 1600)
-    } catch {
-      /* clipboard blocked */
-    }
-  }
-  const share = async () => {
-    try {
-      if (navigator.share) {
-        await navigator.share({
-          title: t('profilepage.share.nativeTitle', { name: pseudo }),
-          url,
-        })
-      } else {
-        void copy()
-      }
-    } catch {
-      /* user cancelled */
-    }
-  }
-
-  return createPortal(
-    <div
-      className="fixed inset-0 z-50 flex items-end justify-center"
-      role="dialog"
-      aria-modal="true"
-      onClick={onClose}
-    >
-      <div
-        className="absolute inset-0"
-        style={{ background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(6px)' }}
-      />
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className="relative w-full max-w-md rounded-t-3xl p-5 pb-[max(1.5rem,env(safe-area-inset-bottom))]"
-        style={{ background: '#141414', border: '1px solid rgba(255,255,255,0.06)' }}
-      >
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-bold text-white">{t('profilepage.share.title')}</h2>
-          <button onClick={onClose} aria-label={t('profilepage.share.closeAria')} className="text-white/50 hover:text-white">
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-
-        {/* Link to copy */}
-        <button
-          onClick={copy}
-          className="tappable flex w-full items-center gap-3 rounded-2xl px-4 py-3.5 text-left"
-          style={{ background: '#0d0d0d', border: '1px solid rgba(255,255,255,0.06)' }}
-        >
-          <span className="min-w-0 flex-1 truncate text-[13px] text-white/80">
-            {handle}
-          </span>
-          {copied ? (
-            <Check className="h-5 w-5 flex-none" style={{ color: '#22C55E' }} />
-          ) : (
-            <Copy className="h-5 w-5 flex-none text-white/45" />
-          )}
-        </button>
-        <p className="mt-1.5 px-1 text-[11px] text-white/35">
-          {copied ? t('profilepage.share.copied') : t('profilepage.share.copyHint')}
-        </p>
-
-        {/* Native share */}
-        <button
-          onClick={share}
-          className="tappable mt-4 flex w-full items-center justify-center gap-2 rounded-full py-3.5 text-sm font-extrabold text-white"
-          style={{ background: '#E8203A', boxShadow: '0 8px 24px rgba(232,32,58,0.45)' }}
-        >
-          <Share className="h-[18px] w-[18px]" />
-          {t('profilepage.share.shareButton')}
-        </button>
-      </div>
-    </div>,
-    document.body,
-  )
-}
-
-// ─────────────────────── Profile helpers (post-restructure) ───────────────────────
 
 /** Human-readable label + emoji for an xp_transactions.reason. */
 function xpReasonLabel(
@@ -1146,76 +832,6 @@ function xpReasonLabel(
   if (reason === 'reconcile')
     return { emoji: '⚙️', label: t('profilepage.xpReason.reconcile') }
   return { emoji: '✨', label: reason }
-}
-
-/** Tappable stat with a count-up animation: the number tweens from 0 to
- *  its value over ~1s (easeOutCubic) the first time the profile renders.
- *  `prefix` is prepended (e.g. "#" for rank); `empty` shows "—" instead. */
-function StatCounter({
-  value,
-  label,
-  prefix = '',
-  empty = false,
-  delay = 0,
-  countdown = false,
-  onClick,
-}: {
-  value: number
-  label: string
-  prefix?: string
-  empty?: boolean
-  /** Stagger the count animation start (cascade effect). */
-  delay?: number
-  /** Count DOWN from a larger number to `value` (used for rank). */
-  countdown?: boolean
-  onClick: () => void
-}) {
-  // Countdown starts from a visibly larger number; count-up starts at 0.
-  const from = countdown ? value + 30 : 0
-  const [disp, setDisp] = useState(() =>
-    prefersReducedMotion() ? value : from,
-  )
-  useEffect(() => {
-    if (empty) return
-    if (prefersReducedMotion()) {
-      setDisp(value)
-      return
-    }
-    const dur = 800
-    let raf = 0
-    let startTime: number | null = null
-    // easeOutExpo
-    const ease = (k: number) => (k >= 1 ? 1 : 1 - Math.pow(2, -10 * k))
-    const tick = (now: number) => {
-      if (startTime === null) startTime = now
-      const k = Math.min(1, (now - startTime) / dur)
-      const e = ease(k)
-      setDisp(Math.round(from + (value - from) * e))
-      if (k < 1) raf = requestAnimationFrame(tick)
-    }
-    // Cascade: hold the start value until `delay` ms have passed.
-    const timer = window.setTimeout(() => {
-      raf = requestAnimationFrame(tick)
-    }, delay)
-    return () => {
-      window.clearTimeout(timer)
-      cancelAnimationFrame(raf)
-    }
-  }, [value, empty, delay, from])
-  return (
-    <button
-      onClick={onClick}
-      className="tappable flex flex-1 flex-col items-center justify-center"
-    >
-      <span
-        className="font-display font-extrabold tabular-nums text-fg"
-        style={{ fontSize: '22px', lineHeight: 1 }}
-      >
-        {empty ? '—' : `${prefix}${disp}`}
-      </span>
-      <span className="mt-1 text-[11px] text-fg2">{label}</span>
-    </button>
-  )
 }
 
 /** Premium card — a real dark-red gradient card (logo + REVS PREMIUM +
