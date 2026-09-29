@@ -1,3 +1,5 @@
+import { roundCoord } from './geo'
+
 // Detect the user's country as a French display name, for the "Mon Pays"
 // leaderboard scope. Cheap + offline (browser locale region); defaults to
 // France — the app's home market. Persisted onto the profile so the
@@ -81,8 +83,20 @@ export async function reverseGeocode(
   const token = import.meta.env.VITE_MAPBOX_TOKEN as string | undefined
   if (!token) return null
   try {
+    // Coordonnées ARRONDIES avant de quitter l'application.
+    //
+    // L'arrondi à 3 décimales (~110 m) protégeait la base et la carte, mais
+    // cet appel partait encore en pleine précision : c'était le dernier
+    // endroit d'où une position exacte sortait de REVS. L'arrondi est fait
+    // ICI, dans la fonction, et non chez l'appelant — ainsi aucun appelant
+    // futur ne peut réintroduire la fuite.
+    //
+    // Sans effet sur le résultat : `types=place` renvoie une ville, dont
+    // l'étendue se compte en kilomètres. 110 m ne change pas laquelle.
+    const qLng = roundCoord(lng)
+    const qLat = roundCoord(lat)
     const url =
-      `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json` +
+      `https://api.mapbox.com/geocoding/v5/mapbox.places/${qLng},${qLat}.json` +
       `?types=place&language=fr&limit=1&access_token=${token}`
     const res = await fetch(url)
     if (!res.ok) return null
