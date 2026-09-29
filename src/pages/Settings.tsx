@@ -30,9 +30,11 @@ import {
   UserPlus,
   Users,
   Globe,
+  BookOpen,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { APP_VERSION } from '../lib/constants'
+import { hasTutorialAccess } from '../lib/tutorial'
 import { useTheme } from '../lib/theme'
 import { hapticSuccess } from '../lib/haptic'
 import AvatarCropModal from '../components/AvatarCropModal'
@@ -203,6 +205,11 @@ export default function Settings() {
   const { t, i18n } = useTranslation()
 
   const [loading, setLoading] = useState(true)
+  // Documentation interne — le lien n'apparaît que pour le compte autorisé.
+  // Le verdict vient du serveur (/api/tutorial?probe=1) : cacher le lien est
+  // un confort d'affichage, la vraie barrière est côté serveur.
+  // ⚠️ Réservé au créateur pour la V1 — voir server/tutorial-access.js.
+  const [tutorialOk, setTutorialOk] = useState(false)
   const [userId, setUserId] = useState<string | null>(null)
   const [email, setEmail] = useState('')
   const [pseudo, setPseudo] = useState('')
@@ -245,6 +252,19 @@ export default function Settings() {
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
   const [err, setErr] = useState<string | null>(null)
+
+  // Verdict d'accès au tutoriel interne. Une seule requête par chargement de
+  // page (le résultat est mémorisé dans src/lib/tutorial.ts). En cas d'échec
+  // réseau, la sonde renvoie false : le lien reste simplement masqué.
+  useEffect(() => {
+    let alive = true
+    void hasTutorialAccess().then((ok) => {
+      if (alive) setTutorialOk(ok)
+    })
+    return () => {
+      alive = false
+    }
+  }, [])
 
   // Global session signout — invalidates every session token for the
   // user across ALL devices via Supabase's scope:'global' option. The
@@ -1933,6 +1953,18 @@ export default function Settings() {
               onClick={resetOnboarding}
               wrap
             />
+            {/* Documentation interne — visible uniquement pour le compte
+                administrateur. Volontairement non traduit : outil interne.
+                ⚠️ V1 — à remplacer par un vrai système de rôles si besoin. */}
+            {tutorialOk && (
+              <Row
+                icon={<BookOpen className="h-4 w-4" />}
+                label="REVS Master Tutorial"
+                sub="Documentation interne de l'application"
+                onClick={() => navigate('/tutorial')}
+                wrap
+              />
+            )}
           </Section>
 
           {/* 7 — ZONE SENSIBLE */}

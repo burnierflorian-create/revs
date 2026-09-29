@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "node scripts/build-tutorial.mjs && tsc -b && vite build",
+    "tutorial": "node scripts/build-tutorial.mjs",
     "lint": "eslint .",
     "preview": "vite preview",
     "cap:build": "npm run build && npx cap sync",

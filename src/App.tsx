@@ -45,6 +45,12 @@ const F1DriverDetail = lazy(() => import('./pages/F1DriverDetail'))
 const PublicProfile = lazy(() => import('./pages/PublicProfile'))
 // TEMP — card redesign preview (remove after direction sign-off).
 const CardPreview = lazy(() => import('./pages/CardPreview'))
+// Documentation interne. La route vit DANS le bloc authentifié, mais ce n'est
+// pas ce qui la protège : le contenu vient de /api/tutorial, qui vérifie la
+// session côté serveur et refuse tout compte autre que l'administrateur.
+// Une URL tapée à la main mène donc à un écran « Introuvable ».
+// ⚠️ Accès réservé au créateur pour la V1 — voir server/tutorial-access.js.
+const Tutorial = lazy(() => import('./pages/Tutorial'))
 
 // Elegant lazy-route placeholder — a soft skeleton of the page chrome (back
 // button, title, hero, text lines) instead of a blank flash. Pulse animates
@@ -186,6 +192,7 @@ export default function App() {
           <Route path="/ma-galerie" element={lazyRoute(<MyGallery />)} />
           <Route path="/u/:id" element={lazyRoute(<PublicProfile />)} />
           <Route path="/settings" element={lazyRoute(<Settings />)} />
+          <Route path="/tutorial" element={lazyRoute(<Tutorial />)} />
           <Route
             path="/legal/mentions"
             element={lazyRoute(<LegalMentions />)}
