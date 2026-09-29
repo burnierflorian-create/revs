@@ -1303,7 +1303,20 @@ export default function MapPage() {
 
       const { data } = await supabase
         .from('spots')
-        .select('*')
+        // Colonnes STRICTEMENT nécessaires à la carte. Relevé exhaustif de ce
+        // que consomment le GeoJSON (l. ~1155), les filtres
+        // (matchesCategoryFilter, matchesBrandFilter, recherche texte) et
+        // isAlive(). Map.tsx ne passe aucun Spot à un composant enfant, et
+        // ouvrir un spot recharge sa fiche complète — rien d'autre n'est utile
+        // ici.
+        //
+        // Écartées volontairement : car_info (jsonb, la plus lourde),
+        // description, color, confidence, estimated_price, event_id,
+        // garage_image_url, production, realistic_render_url, thumbnail_url,
+        // ai_confidence.
+        .select(
+          'id, user_id, brand, model, year, category, photo_url, lat, lng, rarity, created_at, expires_at',
+        )
         .gt('expires_at', new Date().toISOString())
         .gte('lat', minLat)
         .lte('lat', maxLat)
