@@ -3,19 +3,27 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { hasF1SessionNear } from '../server/f1-calendar.js'
 
-// PAUSE 25/09/2026 — rebrancher en version optimisée avant beta
-// F1 : ajouter contrôle de fraîcheur generated_at dans refreshEntity()
+// ─────────────── REBRANCHÉ le 29/09/2026 ───────────────
 //
-// Le cron `/api/f1?refresh=1` (0 4 */2 * *) est EN PAUSE, pas supprimé : il
-// coûtait ~27 $/mois en Sonnet + web_search sans utilisateurs actifs. Son
-// entrée exacte et la procédure de rebranchement sont dans docs/CRONS_PAUSE.md
-// — vercel.json est du JSON strict validé contre un schéma en
-// `additionalProperties: false`, donc il n'accepte ni commentaire ni clé
-// maison pour y garder la ligne en veille.
+// Ce cron a été débranché le 25/09/2026 : il coûtait ~27 $/mois en Sonnet +
+// web_search, sans utilisateurs actifs et SANS aucun garde-fou — chaque
+// passage relançait les 30 entités quelle que soit la fraîcheur des données.
 //
-// Le contrôle de fraîcheur ci-dessous (refreshEntity) est DÉJÀ en place. Il
-// sert de filet pour les relances manuelles ; il ne remplace pas la décision
-// de laisser le cron débranché.
+// Il repart avec trois garde-fous qui se composent, du moins cher au plus cher.
+// Les trois étaient déjà écrits au moment de la pause ; ce qui manquait, c'est
+// la vérification qu'ils tiennent. Faite le 29/09 :
+//
+//   1. Portail calendrier (`hasF1SessionNear`, GRATUIT, aucun appel IA) —
+//      n'ouvre que de 30 h avant à 48 h après une session F1. Testé ce jour :
+//      hors fenêtre → `{skipped:true, reason:'no_f1_session'}`.
+//   2. Fraîcheur 7 jours par entité — `skipped:fresh`, sans appel.
+//   3. Plafond de 15 appels IA par exécution.
+//
+// Le calendrier codé en dur `GP_2026_CAL` était FAUX au moment de la pause
+// (rounds décalés, 24 entrées pour 23 courses) : les invites demandaient des
+// informations sur le mauvais Grand Prix. Vérifié le 29/09 contre l'API
+// Jolpica : les 23 rounds et les 23 dates correspondent désormais exactement.
+// C'était la condition bloquante du rebranchement.
 //
 // Unified F1 fact-sheet endpoint. Three modes dispatched by query string:
 //   GET  /api/f1?refresh=1                → cron / manual batch refresh

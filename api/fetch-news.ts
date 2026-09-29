@@ -3,18 +3,26 @@ import { createClient } from '@supabase/supabase-js'
 import { XMLParser } from 'fast-xml-parser'
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 
-// PAUSE 25/09/2026 — rebrancher en version optimisée avant beta
-// News : ajouter tri Haiku avant Sonnet (voir diagnostic §05)
+// ─────────────── REBRANCHÉ le 29/09/2026, après optimisation ───────────────
 //
-// Les deux entrées cron (tz=cest 0 4 * * * / tz=cet 0 5 * * *) sont EN PAUSE,
-// pas supprimées : ~700 appels Sonnet pour 7 articles publiés en 25 jours,
-// sans lecteurs. Leur JSON exact et la procédure de rebranchement sont dans
-// docs/CRONS_PAUSE.md — vercel.json est du JSON strict validé contre un schéma
-// en `additionalProperties: false`, donc il n'accepte ni commentaire ni clé
-// maison pour y garder les lignes en veille.
+// Ce collecteur a été débranché le 25/09/2026 : ~700 appels Sonnet pour
+// 7 articles publiés en 25 jours, soit environ 100 appels par article publié.
+// Trois gaspillages précis ont été corrigés avant de le rallumer ; chacun est
+// commenté à l'endroit où il vivait.
 //
-// Le code ci-dessous est INCHANGÉ. L'endpoint reste atteignable manuellement
-// (?force=1) et le contenu déjà en base reste servi à l'app.
+//   1. `makeFallback()` était appelé sur le chemin de SUCCÈS, alors que son
+//      résultat ne sert que si le résumé est vide. Comme il teste le titre et
+//      la description D'ORIGINE — en anglais dans 20 flux sur 24 — il lançait
+//      une traduction Sonnet quasi systématique, aussitôt jetée.
+//   2. Les filtres GRATUITS (pas d'image, titre commercial) s'exécutaient
+//      APRÈS l'appel IA. Tout article condamné payait donc son analyse.
+//   3. Aucune mémoire des articles rejetés : la fenêtre de candidature est de
+//      7 jours et `news` est écrêtée à 50 lignes, donc un même article pouvait
+//      repasser par Claude chaque jour. → table `news_seen` (migration 0075).
+//
+// RESTE À FAIRE, et ce n'est pas fait ici : séparer le tri de la rédaction —
+// un passage Haiku à sortie structurée pour décider pertinence + catégorie,
+// puis Sonnet uniquement sur les articles retenus. Voir docs/CRONS_PAUSE.md.
 //
 // Requested model claude-sonnet-4-20250514 is deprecated (retires
 // 2026-06-15); using its current drop-in replacement.
@@ -518,13 +526,16 @@ async function summarize(
     }
     if (parsed.relevant === false)
       return { relevant: false, category, title: frTitle, summary: '' }
+    // ── Gaspillage nº 1, corrigé le 29/09/2026 ──
+    // `makeFallback()` était appelé ICI, inconditionnellement, alors que son
+    // résultat ne sert QUE si `summary` est vide. Or il teste `title` et
+    // `description` D'ORIGINE (anglais dans 20 flux sur 24) : il déclenchait
+    // donc un `translateToFrench` — jusqu'à deux appels Sonnet — sur
+    // pratiquement chaque article, pour jeter le résultat à la ligne suivante.
+    // Le chemin nominal ne coûte plus rien de plus que son propre appel.
+    if (summary) return { relevant: true, category, title: frTitle, summary }
     const fb = await makeFallback()
-    return {
-      relevant: true,
-      category,
-      title: frTitle,
-      summary: summary || fb.summary,
-    }
+    return { relevant: true, category, title: frTitle, summary: fb.summary }
   } catch {
     return await makeFallback()
   }
@@ -567,22 +578,41 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return
   }
 
-  // Exactly once a day at 06:00 Europe/Paris. Vercel crons are UTC-only and
-  // can't express a DST-shifting local time, so vercel.json fires this at BOTH
-  // 04:00 and 05:00 UTC; only the fire that is 06:00 in Paris does real work
-  // (04:00 UTC in summer / CEST, 05:00 UTC in winter / CET). The other fire
-  // no-ops here. `force`/`purge` bypass the gate for manual maintenance.
+  // ── Une exécution réelle par JOUR PARISIEN (29/09/2026) ──
+  //
+  // Avant : la porte exigeait exactement 06:00 heure de Paris, ce qui obligeait
+  // `vercel.json` à déclarer DEUX entrées (04:00 et 05:00 UTC) pour couvrir le
+  // changement d'heure — une seule travaillait, l'autre ne faisait rien. Deux
+  // créneaux de cron consommés pour une exécution, et un horaire impossible à
+  // changer sans toucher au code.
+  //
+  // Maintenant : la porte compare le JOUR parisien du dernier passage réussi
+  // (`news_meta.last_fetched_at`, déjà écrit en fin d'exécution) au jour
+  // courant. Une seule entrée cron suffit, à n'importe quelle heure, et un
+  // double déclenchement accidentel ne repaie pas l'analyse.
+  //
+  // L'horodatage n'est posé qu'en FIN d'exécution réussie : un passage qui
+  // échoue à mi-chemin ne bloque donc pas celui du lendemain.
+  const parisDay = (d: Date) =>
+    new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Europe/Paris',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(d)
+
   if (isCron && !force && req.query.purge !== '1' && req.query.purge_en !== '1') {
-    const parisHour =
-      Number(
-        new Intl.DateTimeFormat('en-GB', {
-          timeZone: 'Europe/Paris',
-          hour: '2-digit',
-          hour12: false,
-        }).format(new Date()),
-      ) % 24
-    if (parisHour !== 6) {
-      res.status(200).json({ skipped: true, reason: 'not_0600_paris', parisHour })
+    const { data: meta } = await admin
+      .from('news_meta')
+      .select('last_fetched_at')
+      .eq('id', 'singleton')
+      .maybeSingle()
+    const last = (meta as { last_fetched_at?: string } | null)?.last_fetched_at
+    const today = parisDay(new Date())
+    if (last && parisDay(new Date(last)) === today) {
+      res
+        .status(200)
+        .json({ skipped: true, reason: 'already_fetched_today', day: today })
       return
     }
   }
@@ -638,6 +668,37 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     summary: string | null
   }[]
   const known = new Set(existingRows.map((r) => r.url))
+
+  // ── Gaspillage nº 3, corrigé le 29/09/2026 : la mémoire des rejets ──
+  //
+  // `known` ne venait que de la table `news`, écrêtée à 50 lignes, alors que
+  // la fenêtre de candidature des flux est de 7 jours. Un article analysé puis
+  // rejeté n'était consigné nulle part et repassait par Claude chaque jour,
+  // jusqu'à sept fois pour le même verdict.
+  //
+  // `news_seen` (migration 0075) est cette mémoire. Purge à 30 jours d'abord,
+  // pour que la table ne grossisse pas indéfiniment — une mémoire plus longue
+  // que la fenêtre de candidature ne sert à rien.
+  const seenPurgeCutoff = new Date(Date.now() - 30 * 86_400_000).toISOString()
+  await admin.from('news_seen').delete().lt('seen_at', seenPurgeCutoff)
+  const { data: seenRows } = await admin.from('news_seen').select('url')
+  for (const r of (seenRows ?? []) as { url: string }[]) known.add(r.url)
+
+  /** Consigne un verdict. Échec silencieux : rater une mémorisation coûte un
+   *  ré-examen demain, jamais un article perdu. */
+  const remember = async (
+    urls: string[],
+    verdict: 'kept' | 'rejected' | 'prefilter',
+  ) => {
+    if (urls.length === 0) return
+    const { error } = await admin
+      .from('news_seen')
+      .upsert(
+        urls.map((url) => ({ url, verdict })),
+        { onConflict: 'url', ignoreDuplicates: true },
+      )
+    if (error) console.warn('[fetch-news] news_seen:', error.message)
+  }
 
   const perFeed: Record<string, number> = {}
   type Candidate = {
@@ -712,12 +773,42 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // per-run cost ~5×. The url-dedup above means each article is only ever
   // translated once across runs; the hourly cadence drains the backlog.
   const cutoff = Date.now() - MAX_AGE_MS
-  const candidates = candidateLists
+  const fresh = candidateLists
     .flat()
     .filter(
       (c) =>
         !c.published_at || new Date(c.published_at).getTime() >= cutoff,
     )
+
+  // ── Gaspillage nº 2, corrigé le 29/09/2026 : les filtres gratuits d'abord ──
+  //
+  // Ces deux tests sont locaux et instantanés, et ils s'exécutaient APRÈS
+  // `summarize()`. Un article sans image ou au titre commercial payait donc un
+  // appel Sonnet complet avant d'être jeté à coup sûr. Ils remontent ici,
+  // AVANT le plafond `MAX_TRANSLATE` — ce qui a un second effet, aussi
+  // important que l'économie : les 14 places payantes vont désormais à des
+  // candidats réellement publiables, au lieu d'être gaspillées par des
+  // condamnés d'avance.
+  //
+  // Le test commercial reste DOUBLÉ après l'IA : ici il ne voit que le titre
+  // d'origine, là-bas il voit aussi le titre traduit. C'est un pré-filtre, pas
+  // un remplacement — et il ne s'applique pas aux flux motorsport, où « prix »
+  // ou « cote » n'ont pas le sens commercial qu'on cherche à écarter.
+  const prefiltered: string[] = []
+  const eligible = fresh.filter((c) => {
+    if (!c.image_url) {
+      prefiltered.push(c.url)
+      return false
+    }
+    if (c.category !== 'F1' && COMMERCIAL_RE.test(c.title)) {
+      prefiltered.push(c.url)
+      return false
+    }
+    return true
+  })
+  await remember(prefiltered, 'prefilter')
+
+  const candidates = eligible
     .sort(
       (a, b) =>
         new Date(b.published_at ?? 0).getTime() -
@@ -730,6 +821,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       c,
       ...(await summarize(anthropic, c.title, c.description, c.category)),
     })),
+  )
+  // Tout candidat passé par Claude est mémorisé, quel que soit son sort : il ne
+  // repayera jamais une seconde analyse. Les acceptés sont repassés en 'kept'
+  // plus bas, une fois l'insertion connue.
+  await remember(
+    candidates.map((c) => c.url),
+    'rejected',
   )
 
   // Quality + dedup pass.
@@ -906,6 +1004,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       upsertError = `${error.code ?? ''} ${error.message} ${error.details ?? ''} ${error.hint ?? ''}`.trim()
       console.error('news upsert failed:', error)
     }
+    // Requalification des retenus. Purement diagnostique : `news_seen` sert à
+    // ne pas repayer une analyse, et ces URL y sont déjà. Mais un verdict
+    // 'rejected' sur un article publié rendrait la table trompeuse à lire.
+    const { error: vErr } = await admin
+      .from('news_seen')
+      .update({ verdict: 'kept' })
+      .in(
+        'url',
+        rows.map((r) => r.url),
+      )
+    if (vErr) console.warn('[fetch-news] news_seen verdict:', vErr.message)
   }
 
   // Cap the table at 50 freshest articles, but PER UNIVERSE so the
@@ -956,6 +1065,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     dedupSkipped,
     qualitySkipped,
     englishDropped,
+    // Observabilité du coût : `aiCalls` est le nombre d'articles réellement
+    // envoyés à Claude, `prefilterSkipped` ceux écartés avant de payer.
+    // C'est le rapport entre les deux qui dira si le rebranchement tient ses
+    // promesses, sans avoir à ouvrir la console Anthropic.
+    aiCalls: candidates.length,
+    prefilterSkipped: prefiltered.length,
     replaced,
     trimmed,
     lateTranslated,

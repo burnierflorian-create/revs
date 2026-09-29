@@ -1,7 +1,7 @@
 # REVS MASTER TUTORIAL
 
 <!-- meta
-version: 1.0
+version: 1.1
 referenceCommit: 0ba9337
 referenceDate: 29 septembre 2026
 lastVerified: 29 septembre 2026
@@ -22,7 +22,7 @@ lastVerified: 29 septembre 2026
 
 ### Pourquoi ce tutoriel existe
 
-REVS a dépassé la taille qu'une tête retient. 37 873 lignes de TypeScript côté application, 6 249 côté serveur, 41 tables, 66 fonctions SQL, 74 migrations. La conséquence n'est pas théorique : elle s'est déjà matérialisée plusieurs fois, sous la forme d'un système reconstruit alors qu'il existait déjà ailleurs, ou d'une correction appliquée à un endroit pendant que la vraie cause vivait à un autre.
+REVS a dépassé la taille qu'une tête retient. 37 873 lignes de TypeScript côté application, 6 249 côté serveur, 42 tables, 66 fonctions SQL, 75 migrations. La conséquence n'est pas théorique : elle s'est déjà matérialisée plusieurs fois, sous la forme d'un système reconstruit alors qu'il existait déjà ailleurs, ou d'une correction appliquée à un endroit pendant que la vraie cause vivait à un autre.
 
 Ce document sert trois lecteurs :
 
@@ -114,7 +114,7 @@ SPOT  →  IDENTIFY  →  COLLECT  →  PROGRESS  →  SHARE  →  DISCOVER
 │                           │   │                                   │
 │  Auth · PostgreSQL 17     │◄──┤  12 Node + 2 edge                 │
 │  Storage · Realtime       │   │  IA · Stripe · push · crons · OG  │
-│  41 tables · 70 RLS       │   │  server/ — modules partagés       │
+│  42 tables · 70 RLS       │   │  server/ — modules partagés       │
 │  66 fonctions · 11 trig.  │   └──────────────┬────────────────────┘
 └───────────────────────────┘                  │
                                   ┌────────────▼───────────────┐
@@ -174,9 +174,9 @@ Code serveur importé par les fonctions, délibérément à l'extérieur d'`api/
 
 Chaque `.js` a un `.d.ts` à côté pour que les fonctions TypeScript le consomment proprement.
 
-#### `supabase/` — 74 migrations numérotées
+#### `supabase/` — 75 migrations numérotées
 
-`0001-…` à `0074-…`, plus `schema.sql`, `seed-phase1.sql`, `fix-spots-rls.sql`.
+`0001-…` à `0075-…`, plus `schema.sql`, `seed-phase1.sql`, `fix-spots-rls.sql`.
 
 - **Règle** : on n'édite jamais une migration déjà appliquée. On en ajoute une.
 - Application : `node scripts/apply-rls.mjs supabase/00XX-….sql` avec un jeton d'accès personnel Supabase. La clé `service_role` **ne peut pas** exécuter de DDL — c'est une limite de la plateforme, pas un oubli.
@@ -193,11 +193,11 @@ Icônes, manifeste PWA, images de marque générées par `scripts/build-brand.mj
 | Composants | 43 | **43** | — |
 | Modules `lib/` | 48 | **48** | — |
 | Endpoints `api/` | 14 | **14** | +1 (tutoriel), −0 : voir note |
-| Tables | 41 | **41** | — |
+| Tables | 41 | **42** | +`news_seen` (0075) |
 | Fonctions SQL | 66 | **66** | — |
 | Déclencheurs | 11 | **11** | — |
 | Politiques RLS | 70 | **70** | — |
-| Migrations numérotées | 72 | **74** | +0073, +0074 |
+| Migrations numérotées | 72 | **75** | +0073, +0074, +0075 |
 | Clés i18n | 1 013 × 2 | **1 013 × 2** | — |
 | Tests automatisés | 0 | **0** | — |
 
@@ -444,17 +444,17 @@ Ce n'est pas de la frilosité. Le cron d'actualités a longtemps payé un appel 
 
 ## 5. SUPABASE / BASE DE DONNÉES
 
-> 41 tables, 70 politiques, 11 déclencheurs, et ce qui se passe réellement quand on insère un spot.
+> 42 tables, 70 politiques, 11 déclencheurs, et ce qui se passe réellement quand on insère un spot.
 
 ### Ce que Supabase fournit à REVS
 
 | Brique | Usage dans REVS |
 |---|---|
 | **Auth** | Sessions, e-mail + mot de passe, Google OAuth, récupération de mot de passe |
-| **PostgreSQL 17** | 41 tables, région **eu-west-3 (Paris)** |
+| **PostgreSQL 17** | 42 tables, région **eu-west-3 (Paris)** |
 | **Storage** | 3 buckets : `spots`, `avatars`, `car-renders` |
 | **Realtime** | Publication `supabase_realtime` — **1 table : `spots`** |
-| **RLS** | 70 politiques ; **RLS activée sur les 41 tables** |
+| **RLS** | 70 politiques ; **RLS activée sur les 42 tables** |
 | **Functions** | 66 fonctions, dont la plupart en `SECURITY DEFINER` |
 | **Triggers** | 11 déclencheurs |
 | **Migrations** | 74 fichiers numérotés dans `supabase/` |
@@ -809,19 +809,21 @@ La route réellement sans lien depuis l'interface est **`/radar`** — conservé
 
 ### Alimentation automatique — l'état réel
 
-| Source | Cadence déclarée | État réel |
+| Source | Cadence | État réel |
 |---|---|---|
-| `/api/f1?refresh=1` (Vercel cron) | — | **EN PAUSE** — retiré de `vercel.json` le 25/09/2026 |
-| `.github/workflows/f1-sync.yml` | 06:00 UTC | **NE S'EXÉCUTE PAS** — voir ci-dessous |
+| `/api/f1?refresh=1` (Vercel cron) | `0 6 * * *` | **ACTIVE** — rebranché le 29/09/2026 |
+| `.github/workflows/f1-sync.yml` | 06:00 UTC | **NE S'EXÉCUTE PAS** — et ce n'est plus gênant |
 
-> **Point vérifié le 29/09/2026 et contraire à ce qui était supposé.**
-> `.gitignore` ligne 31 ignore **tout le répertoire `.github/workflows/`**. Le fichier `f1-sync.yml` existe en local mais n'est ni suivi ni poussé. L'API GitHub confirme : le dépôt `burnierflorian-create/revs` déclare **0 workflow** et **0 exécution**.
+> **Point vérifié le 29/09/2026.**
+> `.gitignore` ligne 31 ignore **tout le répertoire `.github/workflows/`**. Le fichier `f1-sync.yml` existe en local mais n'est ni suivi ni poussé, et l'API GitHub confirme : le dépôt déclare **0 workflow**. La cause est connue — le jeton `gh` de la machine porte les portées `gist`, `read:org`, `repo` mais **pas `workflow`**, donc il ne peut pas pousser de fichier de workflow. Le répertoire a été ignoré pour contourner ce blocage.
 >
-> **Conséquence** : la grille F1 n'est plus synchronisée. Les données affichées sont celles figées en base.
+> Depuis le rebranchement du cron Vercel, cette voie n'est plus nécessaire : la grille F1 est de nouveau alimentée. Pour rétablir les GitHub Actions un jour, il faudra une authentification `gh` avec la portée `workflow`.
 
-Le cron F1 dispose pourtant de trois garde-fous déjà construits (`server/f1-calendar.js`) : portail calendrier (30 h avant à 48 h après une session), fraîcheur 7 jours, plafond de 15 appels IA par exécution. Coût attendu après rebranchement : ≈ 3,4 $/mois contre ≈ 27 $/mois sans garde-fou.
+Le cron dispose de trois garde-fous qui se composent (`server/f1-calendar.js`) : portail calendrier (30 h avant à 48 h après une session), fraîcheur 7 jours, plafond de 15 appels IA par exécution. **Vérifiés le 29/09** : hors week-end de GP, le handler renvoie `{skipped:true, reason:'no_f1_session'}` sans aucun appel IA. Coût attendu : ≈ 3,4 $/mois contre ≈ 27 $/mois sans garde-fou.
 
-**Bug connu, non corrigé** : `GP_2026_CAL`, calendrier codé en dur dans `api/f1.ts`, est décalé par rapport aux données Jolpica et compte 24 entrées pour 23 courses réelles. Les invites F1 demandent donc des informations sur **le mauvais Grand Prix**. À traiter **avant** tout rebranchement.
+**`GP_2026_CAL` — corrigé.** Ce calendrier codé en dur, injecté dans les invites, était décalé au moment de la pause : les invites demandaient des informations sur le mauvais Grand Prix. Vérifié le 29/09 contre l'API Jolpica : **23 rounds, 23 dates, correspondance exacte**. C'était la condition bloquante du rebranchement.
+
+**Imprécision restante**, sans effet sur le coût : le round 16 est le « Bahrain Grand Prix in Malaysia », disputé **en Malaisie**. `GP_2026_CAL` et `src/lib/f1.ts` le situent tous deux à Bahreïn — c'est ce que l'accueil affiche aujourd'hui.
 
 ---
 
@@ -910,11 +912,11 @@ server/ai-gate.js → quota journalier
 | `/api/cron-notify` | 17:00 UTC, quotidien | **ACTIVE** — push, aucune IA |
 | `/api/cron-notify?action=stats` | 03:30 UTC, quotidien | **ACTIVE** — rafraîchit la vue matérialisée du classement |
 | `/api/cron-notify?action=refresh-prices` | 04:00 UTC, le 1ᵉʳ du mois | **ACTIVE** — 1 appel Haiku par spot, ≈ 0,01 $/mois |
-| `/api/fetch-news` | quotidienne à l'origine | **EN PAUSE** depuis le 25/09/2026 |
-| `/api/f1?refresh=1` | tous les 2 jours à l'origine | **EN PAUSE** depuis le 25/09/2026 |
+| `/api/fetch-news` | 05:00 UTC, quotidien | **ACTIVE** — rebranchée le 29/09/2026 après optimisation |
+| `/api/f1?refresh=1` | 06:00 UTC, quotidien | **ACTIVE** — ne dépense que pendant les week-ends de GP |
 | `.github/workflows/f1-sync.yml` | 06:00 UTC | **LEGACY / inopérant** — voir ci-dessous |
 
-### Pourquoi les deux crons IA sont en pause
+### Pourquoi ils avaient été mis en pause, et ce qui a changé
 
 Au 25/09/2026 : 5 comptes en base (dont ~3 de test), 29 spots, dernier spot le 12/08, 3 identifications enregistrées en deux mois. Aucune activité réelle — mais deux crons dépensaient tous les jours.
 
@@ -923,7 +925,22 @@ Au 25/09/2026 : 5 comptes en base (dont ~3 de test), 29 spots, dernier spot le 1
 | `/api/fetch-news` | ≈ 4,80 $/mois | ≈ 700 appels Sonnet pour **7 articles publiés** en 25 jours |
 | `/api/f1?refresh=1` | ≈ 27 $/mois | 30 appels Sonnet par passage, **sans contrôle de fraîcheur** |
 
-**Économie : ≈ 32 $/mois**, plus de 99 % de la dépense IA du projet. Détail complet et procédure de rebranchement : `docs/CRONS_PAUSE.md`.
+**Économie de la pause : ≈ 32 $/mois**, plus de 99 % de la dépense IA du projet.
+
+**Rebranchés le 29/09/2026**, après correction des gaspillages qui les avaient condamnés :
+
+| Correction | Mesure |
+|---|---|
+| `makeFallback()` n'est plus appelé sur le chemin de succès | **1,00 appel Claude par article** (contre 2 à 3) |
+| Filtres gratuits remontés avant l'appel IA | **52 %** des candidats écartés sans payer |
+| Table `news_seen` (migration 0075) — mémoire des articles déjà jugés | deux passages consécutifs analysent **14 articles différents**, zéro ré-analyse |
+| Porte « une exécution par jour parisien » au lieu de « exactement 06:00 » | une seule entrée cron au lieu de deux |
+
+Côté F1, les trois garde-fous existaient déjà ; ce qui manquait était leur vérification. Faite : portail calendrier fermé hors week-end de GP (**zéro appel**), fraîcheur 7 jours, plafond de 15 appels par exécution. Et le calendrier codé en dur `GP_2026_CAL`, qui était décalé, **correspond désormais exactement** aux 23 rounds de l'API Jolpica.
+
+**Coût attendu : ~5 $/mois** contre ~32 $ avant la pause. Détail complet : `docs/CRONS_PAUSE.md`.
+
+**Reste à faire** : séparer le tri de la rédaction côté actualités — un passage Haiku pour la pertinence, Sonnet uniquement sur les retenus. Encore −50 à −70 % sur ce poste.
 
 > **Pourquoi les entrées ne sont pas simplement commentées dans `vercel.json`** : le fichier est validé contre un schéma JSON strict (`additionalProperties: false`). Un commentaire `//` casse le parsing, une clé maison est rejetée — **les deux cassent le déploiement**. Les entrées sont donc conservées dans `docs/CRONS_PAUSE.md`, prêtes à recoller.
 
@@ -948,7 +965,7 @@ Au 25/09/2026 : 5 comptes en base (dont ~3 de test), 29 spots, dernier spot le 1
 | Protection | État | Détail |
 |---|---|---|
 | **Supabase Auth** | ✅ | E-mail + mot de passe, Google OAuth, récupération, déconnexion de tous les appareils |
-| **RLS** | ✅ | Activée sur **les 41 tables**, 70 politiques |
+| **RLS** | ✅ | Activée sur **les 42 tables**, 70 politiques |
 | **Portail IA** | ✅ | Fail-closed : auth obligatoire, cooldown 3 s, quota atomique, plafond 10 Mo |
 | **Webhook Stripe** | ✅ | Signature vérifiée, corps brut préservé |
 | **Storage — écriture** | ✅ | Chemin imposé `{user_id}/…` |
@@ -1143,8 +1160,8 @@ npx vercel@latest --prod --yes               # déploiement production
 |---|---|
 | ⚠️ **Crédits Anthropic** | La clé de production est à court de crédits. `identify-car` est hors service — le quota et le cooldown fonctionnent, mais l'appel échoue. **Sans cela, la boucle principale ne fonctionne pas.** |
 | ⚠️ **Stripe est en LIVE** | La production encaisse pour de vrai, alors que payer ne débloque ni le quota IA annoncé ni une partie des avantages listés. |
-| **Alimentation automatique** | Ni le fil d'actualités ni la grille F1 ne sont alimentés (chapitre 11). |
-| **`GP_2026_CAL` faux** | Calendrier codé en dur décalé — les invites F1 portent sur le mauvais GP. |
+| ~~Alimentation automatique~~ | **Réglé le 29/09/2026** — les deux crons IA sont rebranchés après optimisation (chapitre 11). |
+| ~~`GP_2026_CAL` faux~~ | **Réglé** — vérifié contre Jolpica, 23 rounds exacts. |
 | **Régularisation `age_confirmed`** | 6 comptes à `false`, décision produit à prendre. |
 | **Politique de confidentialité** | À publier, désormais adossée à un état des lieux vérifié. |
 
@@ -1154,7 +1171,7 @@ npx vercel@latest --prod --yes               # déploiement production
 - Second filet sur les plaques manquées
 - Quelques tests automatisés sur les chemins critiques (quota, RLS, webhook)
 - Portail client Stripe (résiliation dans l'app)
-- Rebranchement des crons IA après les optimisations de `docs/CRONS_PAUSE.md`
+- Tri Haiku avant Sonnet sur le collecteur d'actualités (−50 à −70 % de plus sur ce poste)
 - Traitement des 158 problèmes ESLint
 
 ### BACKLOG
@@ -1175,6 +1192,7 @@ npx vercel@latest --prod --yes               # déploiement production
 | Quota gratuit aligné à 5 (IA et publication) | 26/09/2026 |
 | Premium ramené de 100 à 30 appels IA | 26/09/2026 |
 | Crons IA en pause jusqu'à optimisation | 25/09/2026 |
+| Crons IA rebranchés après correction de trois gaspillages | 29/09/2026 |
 | Service worker sans precache, définitivement | — |
 | Supprimer un spot ne rend pas le crédit | 29/09/2026 |
 
@@ -1325,7 +1343,7 @@ Montés une seule fois dans `MainLayout` (overlays globaux) : `XpFloater`, `Spot
 
 **12 fonctions Node** — exactement la contrainte documentée dans le dépôt (plafond du plan Hobby). Toute nouvelle fonction doit être **edge**, ou se greffer sur une fonction existante via un paramètre `?action=…`, comme le fait déjà `cron-notify.ts`.
 
-### E. Tables — 41
+### E. Tables — 42
 
 Toutes avec RLS **activée**. Le nombre entre parenthèses est le nombre de politiques.
 
@@ -1339,7 +1357,7 @@ Toutes avec RLS **activée**. Le nombre entre parenthèses est le nombre de poli
 
 **F1** — `f1_grid` (1) · `f1_grid_teams` (1) · `f1_teams` (1) · `f1_drivers` (1) · `f1_results` (1) · `f1_race_results` (1) · `f1_circuit_images` (1)
 
-**Infrastructure** — `ai_usage` (**0**) · `api_abuse_attempts` (**0**) — RLS activée sans politique : accessibles uniquement à `service_role`.
+**Infrastructure** — `ai_usage` (**0**) · `api_abuse_attempts` (**0**) · `news_seen` (**0**) — RLS activée sans politique : accessibles uniquement à `service_role`.
 
 ### F. Fonctions SQL — 66
 
@@ -1375,7 +1393,7 @@ Répartition notable : `events` 7 · `spot_likes` 6 · `spots` 4 · `profiles` 3
 
 Politiques détaillées au chapitre 5.
 
-### I. Migrations — 74 numérotées
+### I. Migrations — 75 numérotées
 
 Les plus structurantes :
 
@@ -1396,6 +1414,7 @@ Les plus structurantes :
 | `0072` | `age_confirmed` + déclencheur |
 | `0073` | Publication Realtime de `spots` |
 | `0074` | Quota non rendu à la suppression + fuseau Paris |
+| `0075` | `news_seen` — mémoire des articles déjà analysés |
 
 Plus `schema.sql`, `seed-phase1.sql`, `fix-spots-rls.sql`.
 
@@ -1445,8 +1464,8 @@ Plus `schema.sql`, `seed-phase1.sql`, `fix-spots-rls.sql`.
 | `/api/cron-notify` | `0 17 * * *` | **ACTIVE** |
 | `/api/cron-notify?action=stats` | `30 3 * * *` | **ACTIVE** |
 | `/api/cron-notify?action=refresh-prices` | `0 4 1 * *` | **ACTIVE** |
-| `/api/fetch-news` | — | **EN PAUSE** (25/09/2026) |
-| `/api/f1?refresh=1` | — | **EN PAUSE** (25/09/2026) |
+| `/api/fetch-news` | `0 5 * * *` | **ACTIVE** (rebranchée 29/09/2026) |
+| `/api/f1?refresh=1` | `0 6 * * *` | **ACTIVE** (rebranchée 29/09/2026) |
 | `.github/workflows/f1-sync.yml` | `0 6 * * *` | **LEGACY** — ignoré par git, absent de GitHub, **ne s'exécute pas** |
 
 ### N. i18n
@@ -1478,6 +1497,15 @@ Détail et conséquences au chapitre 14.
 
 > Historique des versions de ce document.
 
+### Version 1.1 — 29 septembre 2026
+
+Rebranchement des crons IA.
+
+- Chapitres 9, 11 et 15, annexe M : les crons `fetch-news` et `f1?refresh=1` passent de **EN PAUSE** à **ACTIVE**, après correction de trois gaspillages mesurés (1,00 appel Claude par article contre 2 à 3 ; 52 % des candidats écartés avant l'IA ; mémoire `news_seen` contre la ré-analyse).
+- `GP_2026_CAL` n'est plus signalé comme faux : vérifié contre l'API Jolpica, 23 rounds et 23 dates exacts.
+- La cause de l'absence de GitHub Actions est identifiée : le jeton `gh` n'a pas la portée `workflow`.
+- Comptes : 41 → **42 tables** (`news_seen`), 74 → **75 migrations**.
+
 ### Version 1.0 — 29 septembre 2026
 
 Première version.
@@ -1495,7 +1523,7 @@ Première version.
 4. Requête carte : `select('*')` → 12 colonnes explicites
 5. Coordonnées arrondies avant l'appel Mapbox
 6. 3 fichiers orphelins supprimés + rollback à l'échec d'insertion
-7. Migrations numérotées : 72 → 74
+7. Migrations numérotées : 72 → 75
 
 **Découvertes faites pendant la rédaction, non présentes dans la cartographie de référence** :
 
