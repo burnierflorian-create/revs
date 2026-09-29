@@ -314,7 +314,8 @@
       "spots": "Spots",
       "brands": "Brands",
       "models": "Models",
-      "streak": "Streak"
+      "streak": "Streak",
+      "open": "View my {{label}} — {{count}}"
     },
     "cd": {
       "days": "Days",
@@ -330,7 +331,32 @@
       "type": "Type",
       "grandPrix": "Grand Prix",
       "f1gp": "Formula 1 Grand Prix",
-      "seeDetail": "See event details"
+      "seeDetail": "See event details",
+      "countdown": "{{d}}d {{h}}h {{m}}min",
+      "liveNow": "LIVE"
+    },
+    "header": {
+      "notifications": "Notifications",
+      "enableNotifications": "Turn on notifications",
+      "settings": "Settings"
+    },
+    "xp": {
+      "level": "Level",
+      "max": "MAX"
+    },
+    "board": {
+      "title": "Leaderboards",
+      "global": "Global",
+      "country": "Country",
+      "city": "City",
+      "friends": "Friends",
+      "anonymous": "Spotter",
+      "emptyGlobal": "Nobody on the leaderboard yet.",
+      "emptyCountry": "No country ranked yet.",
+      "emptyCity": "Nobody in your city yet.",
+      "noCity": "Add your city in settings to see this leaderboard.",
+      "emptyFriends": "Follow other spotters to see them here.",
+      "yourRank": "You · #{{rank}} with {{xp}} XP"
     }
   },
   "feedpage": {

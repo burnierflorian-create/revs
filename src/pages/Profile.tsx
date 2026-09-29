@@ -79,9 +79,17 @@ export default function Profile() {
   // Garage is the default active tab for the Phase 1 launch — the raw
   // chronological spot history. Collection (stylised cards) is locked
   // behind SHOW_CARD_COLLECTION until Phase 2.
+  // `?tab=` permet à l'accueil d'atterrir directement sur le bon bloc — la
+  // statistique « Modèles » ouvre la Collection, pas le haut du profil. Lu une
+  // seule fois, à l'initialisation : ensuite l'onglet redevient un état local,
+  // et changer d'onglet ne réécrit pas l'URL.
   const [profileTab, setProfileTab] = useState<
     'collection' | 'garage' | 'rewards'
-  >('garage')
+  >(() => {
+    if (typeof window === 'undefined') return 'garage'
+    const p = new URLSearchParams(window.location.search).get('tab')
+    return p === 'collection' || p === 'rewards' ? p : 'garage'
+  })
   // REVS RACE counters drive the race-* badges. Fetched once per
   // mount; absent until the call returns (badges just stay locked).
   const [raceStats, setRaceStats] = useState<{

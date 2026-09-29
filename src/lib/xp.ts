@@ -20,6 +20,19 @@ export type XpLevel = {
   toNext: number // XP remaining to the next tier (0 if max)
   isMax: boolean
   next: string | null
+  // ── Ajouts du 29/09/2026, pour la carte XP de l'accueil (Home V2) ──
+  // L'échelle est nommée, pas numérotée ; or la maquette affiche « Niveau 12 ».
+  // Le numéro est donc le RANG du palier dans TIERS, 1-indexé — dérivé, jamais
+  // stocké. Les trois autres champs évitent que chaque appelant recalcule les
+  // bornes du palier (et finisse par les recalculer différemment).
+  /** Rang du palier, 1-indexé. Rookie = 1, REVS OG = 10. */
+  level: number
+  /** XP total du joueur, borné à ≥ 0 et entier. */
+  current: number
+  /** Seuil d'entrée du palier courant. */
+  floor: number
+  /** Seuil du palier suivant, ou `null` au sommet de l'échelle. */
+  ceiling: number | null
 }
 
 export function xpLevel(xp: number): XpLevel {
@@ -27,7 +40,17 @@ export function xpLevel(xp: number): XpLevel {
   const idx = TIERS.findIndex((t) => t.max === null || safe < t.max)
   const tier = TIERS[idx]
   if (tier.max === null) {
-    return { name: tier.name, pct: 100, toNext: 0, isMax: true, next: null }
+    return {
+      name: tier.name,
+      pct: 100,
+      toNext: 0,
+      isMax: true,
+      next: null,
+      level: idx + 1,
+      current: safe,
+      floor: tier.min,
+      ceiling: null,
+    }
   }
   const span = tier.max - tier.min
   const pct = Math.min(100, Math.max(0, Math.round(((safe - tier.min) / span) * 100)))
@@ -37,6 +60,10 @@ export function xpLevel(xp: number): XpLevel {
     toNext: tier.max - safe,
     isMax: false,
     next: TIERS[idx + 1]?.name ?? null,
+    level: idx + 1,
+    current: safe,
+    floor: tier.min,
+    ceiling: tier.max,
   }
 }
 
