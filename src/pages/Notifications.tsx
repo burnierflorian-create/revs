@@ -124,7 +124,10 @@ export default function NotificationsPage() {
     items.some((n) => !n.read_at) || updates.some((u) => u.unread)
 
   return (
-    <div className="px-4 pb-10 pt-[calc(max(0.75rem,env(safe-area-inset-top))+4px)]">
+    // `pb-32` : la barre de navigation flotte au-dessus du contenu (z-40). Avec
+    // une marge plus courte, la dernière nouveauté passait dessous et son texte
+    // devenait illisible — constaté en production le 30/09.
+    <div className="px-4 pb-32 pt-[calc(max(0.75rem,env(safe-area-inset-top))+4px)]">
       {/* ── En-tête ── */}
       <div className="flex items-center gap-2">
         <button

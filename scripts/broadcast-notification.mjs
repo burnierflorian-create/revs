@@ -12,13 +12,22 @@
 // fois le même message, y compris s'il a plusieurs appareils — la notification
 // appartient au COMPTE, pas à l'appareil.
 //
-// Le push, lui, est envoyé une fois par abonnement (un utilisateur à deux
-// téléphones reçoit deux bannières système, ce qui est le comportement
-// attendu), mais UNE seule ligne dans son fil.
+// Le push suit la même règle : UN envoi par UTILISATEUR, pas par abonnement.
+// `/api/send-push` arrose tous les appareils d'une personne, ce qui est juste
+// pour un événement ponctuel (« Lucas a aimé ton spot » doit arriver sur le
+// téléphone qu'on tient), mais pas ici : un message d'annonce affiché deux
+// fois se lit comme un bug. On ne garde donc que l'abonnement le plus récent
+// de chaque compte.
 //
 // USAGE
 //   node scripts/broadcast-notification.mjs --dry-run
-//   node scripts/broadcast-notification.mjs --apply
+//   node scripts/broadcast-notification.mjs --apply           (in-app seul)
+//   node scripts/broadcast-notification.mjs --apply --push    (in-app + push)
+//
+// Le push exige VAPID_PUBLIC_KEY et VAPID_PRIVATE_KEY dans .env.local. Elles
+// ne vivent aujourd'hui que dans l'environnement Vercel : sans elles, le
+// script fait l'in-app et dit clairement que le push n'a pas été tenté,
+// plutôt que d'échouer à moitié en silence.
 
 import { readFileSync } from 'node:fs'
 import { createClient } from '@supabase/supabase-js'
@@ -87,3 +96,71 @@ const { count: total } = await db
 
 console.log(`\ninsérées maintenant : ${inserted?.length ?? 0}`)
 console.log(`total en base       : ${total ?? 0} / ${users.length} destinataires`)
+
+// ─────────────────────────── PUSH ───────────────────────────
+if (!process.argv.includes('--push')) {
+  console.log('\npush : non demandé (ajoute --push)')
+  process.exit(0)
+}
+
+const VAPID_PUBLIC = pick('VAPID_PUBLIC_KEY', '[^\\s]+')
+const VAPID_PRIVATE = pick('VAPID_PRIVATE_KEY', '[^\\s]+')
+if (!VAPID_PUBLIC || !VAPID_PRIVATE) {
+  console.log(
+    '\npush : IMPOSSIBLE — VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY absentes de\n' +
+      '       .env.local (elles ne vivent que dans l’environnement Vercel).\n' +
+      '       La notification in-app, elle, est bien partie.',
+  )
+  process.exit(0)
+}
+
+const { default: webpush } = await import('web-push')
+webpush.setVapidDetails('mailto:contact@revs.app', VAPID_PUBLIC, VAPID_PRIVATE)
+
+const { data: subs } = await db
+  .from('push_subscriptions')
+  .select('id, user_id, endpoint, p256dh, auth, created_at')
+  .in('user_id', users)
+
+// UN abonnement par compte — le plus récent. C'est la déduplication demandée :
+// deux téléphones ne doivent pas produire deux fois la même annonce.
+const byUser = new Map()
+for (const s of subs ?? []) {
+  const kept = byUser.get(s.user_id)
+  if (!kept || String(s.created_at) > String(kept.created_at)) byUser.set(s.user_id, s)
+}
+const chosen = [...byUser.values()]
+console.log(`\nabonnements en base : ${(subs ?? []).length}`)
+console.log(`après déduplication : ${chosen.length} (un appareil par compte)`)
+console.log(`sans abonnement     : ${users.length - chosen.length} (in-app uniquement — aucun échec)`)
+
+const payload = JSON.stringify({
+  title: MESSAGE.title,
+  body: MESSAGE.body,
+  url: MESSAGE.link,
+})
+let sent = 0
+const dead = []
+const failed = []
+await Promise.all(
+  chosen.map(async (s) => {
+    try {
+      await webpush.sendNotification(
+        { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
+        payload,
+      )
+      sent += 1
+    } catch (e) {
+      const code = e?.statusCode
+      // 404/410 = l'abonnement n'existe plus côté navigateur. On le retire,
+      // sinon chaque envoi ultérieur repaiera le même échec.
+      if (code === 404 || code === 410) dead.push(s.id)
+      else failed.push(`${s.user_id.slice(0, 8)} → ${code ?? ''} ${e?.body || e?.message || e}`)
+    }
+  }),
+)
+if (dead.length) await db.from('push_subscriptions').delete().in('id', dead)
+
+console.log(`\npush envoyés        : ${sent}`)
+console.log(`abonnements périmés : ${dead.length} (supprimés)`)
+console.log(`échecs              : ${failed.length}${failed.length ? '\n  · ' + failed.join('\n  · ') : ''}`)
