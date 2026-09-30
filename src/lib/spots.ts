@@ -73,6 +73,10 @@ export type Spot = {
   /** Optional realistic render for the Showroom; falls back to photo_url.
    *  Enriched progressively (per-spot or via the car_renders library). */
   realistic_render_url?: string | null
+  /** Photo de l'utilisateur, détourée hors ligne (migration 0087). Fond
+   *  transparent → la voiture se pose sur le sol du Showroom. NULL tant que
+   *  le détourage n'a pas tourné : on retombe alors sur `photo_url`. */
+  garage_render_url?: string | null
 }
 
 // Flat per-rarity XP ladder — mirrors the 6-tier table in

@@ -1,8 +1,9 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { supabase } from '../lib/supabase'
 import { fetchCardSpecs, type CardSpecs } from '../lib/cardSpecs'
 import { cardBadge, cardKey, fetchMyCardProgress, type CardProgress } from '../lib/cardLevels'
 import type { Spot } from '../lib/spots'
+import { useTranslation } from 'react-i18next'
+import { rarityFrame } from '../lib/rarityStyle'
 import showroomBg from '../assets/showroom.webp'
 
 // ─────────────────────────────────────────────────────────────────────
@@ -14,7 +15,8 @@ import showroomBg from '../assets/showroom.webp'
 // light. Gyroscope micro-parallax on the decor. Everything is GPU-driven
 // (transform / opacity only) so it stays at 120fps on ProMotion.
 //
-// Image system: realistic_render_url (per-spot) → car_renders library
+// Image system : la photo de l'utilisateur, détourée si disponible
+// (garage_render_url), sinon telle quelle. Plus aucun rendu catalogue.
 // (shared, by make/model, detoured PNG) → the user's raw photo. See 0056.
 //
 // TUNABLES: the constants below.
@@ -26,7 +28,6 @@ const FLOOR_FROM_BOTTOM = '36%' // floor line = 64% from the top — cars sit a 
 const CAR_WIDTH = '90%' // bigger, imposing centrepiece
 const CAR_MAX_WIDTH = 640
 
-type RenderRow = { make: string; toks: string[]; url: string }
 
 // Normalise for matching despite case / accents ("Huracán" ≡ "huracan").
 const norm = (s: string) =>
@@ -36,13 +37,7 @@ const norm = (s: string) =>
     .normalize('NFD')
     .replace(/[̀-ͯ]/g, '')
 
-// Aggressive match key: alphanumeric only, so separators don't matter —
-// "Mercedes-AMG" ≡ "Mercedes AMG", "GT-R R35" ≡ "GTR R35". Used for the make.
-const mkey = (s: string) => norm(s).replace(/[^a-z0-9]+/g, '')
 
-// Split a name into normalised tokens: "Fabia Mk3 Monte Carlo" →
-// ["fabia","mk3","monte","carlo"]. Used for token-subset model matching.
-const toks = (s: string) => norm(s).split(/[^a-z0-9]+/).filter(Boolean)
 
 const specsKey = (s: Spot) => `${norm(s.brand)}|${norm(s.model)}|${s.year ?? ''}`
 
@@ -53,6 +48,7 @@ export default function Showroom({
   spots: Spot[]
   onOpen: (id: string) => void
 }) {
+  const { t } = useTranslation()
   const containerRef = useRef<HTMLDivElement>(null)
   const bgRef = useRef<HTMLImageElement>(null)
   const stageRef = useRef<HTMLDivElement>(null)
@@ -113,56 +109,38 @@ export default function Showroom({
   const aw = wrap(active)
   const side = Math.min(MAX_VISIBLE, Math.floor((n - 1) / 2))
 
-  // ── Shared render library (detoured realistic renders, by make/model) ──
-  const [renders, setRenders] = useState<RenderRow[]>([])
-  useEffect(() => {
-    let alive = true
-    supabase
-      .from('car_renders')
-      .select('make, model, render_url')
-      .then(({ data }) => {
-        if (!alive || !data) return
-        setRenders(
-          (data as { make: string; model: string; render_url: string }[]).map((r) => ({
-            make: mkey(r.make),
-            toks: toks(r.model),
-            url: r.render_url,
-          })),
-        )
-      })
-    return () => {
-      alive = false
-    }
-  }, [])
+  // La bibliothèque partagée `car_renders` n'est plus lue : elle servait un
+  // rendu catalogue commun à tous ceux qui avaient spotté le même modèle. La
+  // table et le bucket restent en place — rien n'est supprimé — ils ne sont
+  // simplement plus sur le chemin d'affichage du Garage.
 
-  // Match a spot to a library render. Same make, then token-subset: every
-  // token of the render's model must appear in the spot's model, so a canonical
-  // render ("Cayman S", "Fabia Monte Carlo", "911 GT3") covers verbose spots
-  // ("718 Cayman S", "Fabia Mk3 Monte Carlo", "911 GT3 …") without a bare
-  // "911 GT3" render ever stealing a "911 GT3 RS" spot. Most-specific (most
-  // tokens) wins.
-  function resolveRender(brand: string, model: string): string | null {
-    const b = mkey(brand)
-    const spotToks = new Set(toks(model))
-    let best: string | null = null
-    let bestScore = -1
-    for (const r of renders) {
-      if (r.make !== b || r.toks.length === 0) continue
-      if (!r.toks.every((tk) => spotToks.has(tk))) continue
-      if (r.toks.length > bestScore) {
-        best = r.url
-        bestScore = r.toks.length
-      }
-    }
-    return best
-  }
 
-  // isRender = detoured render (transparent PNG) → rests on the floor;
-  // otherwise a rectangular photo → framed exhibit.
+  /**
+   * L'image d'une voiture du garage.
+   *
+   * ── CE QUI A CHANGÉ LE 30/09/2026 ──
+   * Deux niveaux ont été retirés de cette échelle :
+   *
+   *   · `realistic_render_url` — lu partout, écrit NULLE PART. 0 ligne sur 32
+   *     en base. Du code mort qui donnait l'illusion d'un système.
+   *   · `car_renders` — une bibliothèque de 51 rendus indexés par marque et
+   *     modèle. C'est le vrai problème : deux personnes ayant spotté la même
+   *     911 voyaient la MÊME image, et ce n'était la voiture ni de l'une ni de
+   *     l'autre. Le Garage est censé montrer les voitures réellement
+   *     photographiées ; il montrait un catalogue.
+   *
+   * Il ne reste donc que la voiture de l'utilisateur, sous deux formes :
+   *
+   *   1. `garage_render_url` — SA photo, détourée hors ligne (migration 0087,
+   *      scripts/detour-spot-photos.mjs). Fond transparent : la voiture pose
+   *      ses roues sur le sol du studio.
+   *   2. `photo_url` — SA photo telle quelle, présentée en pièce encadrée.
+   *
+   * Aucun repli sur une image inventée : si les deux manquent, la carte reste
+   * vide plutôt que de montrer la voiture de quelqu'un d'autre.
+   */
   function imageFor(s: Spot): { url: string; isRender: boolean } {
-    if (s.realistic_render_url) return { url: s.realistic_render_url, isRender: true }
-    const r = resolveRender(s.brand, s.model)
-    if (r) return { url: r, isRender: true }
+    if (s.garage_render_url) return { url: s.garage_render_url, isRender: true }
     return { url: s.photo_url || '', isRender: false }
   }
 
@@ -172,8 +150,9 @@ export default function Showroom({
     const m = new Map<string, { url: string; isRender: boolean }>()
     for (const s of cars) m.set(s.id, imageFor(s))
     return m
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cars, renders])
+    // `imageFor` ne lit plus que le spot lui-même depuis que la bibliothèque
+    // partagée est sortie du chemin : `cars` suffit comme dépendance.
+  }, [cars])
 
   // ── Specs for the info panel (lazy, cached in car_specs server-side) ──
   // specsMap: loaded results (CardSpecs or null=failed). requestedRef: keys
@@ -199,6 +178,9 @@ export default function Showroom({
     return () => {
       alive = false
     }
+    // `cars`, `n` et `wrap` dérivent tous de `spots` : les lister explicitement
+    // satisfait la règle sans changer la cadence réelle des appels.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active, spots])
 
   // Measure the container so the spacing is in real px.
@@ -386,6 +368,8 @@ export default function Showroom({
             url: '',
             isRender: false,
           }
+          // Accent lumineux de la voiture, tiré de sa rareté réelle.
+          const look = rarityFrame(s.rarity)
           return (
             <div
               key={s.id}
@@ -510,17 +494,42 @@ export default function Showroom({
                     </div>
                   </div>
                 ) : (
-                  /* Raw photo — framed exhibit standing on the floor */
+                  /* Photo réelle — pièce encadrée, posée sur le sol du studio.
+                     C'est ce que voit TOUT LE MONDE tant que le détourage n'a
+                     pas tourné : elle mérite donc le même soin que la voiture
+                     détourée, pas un repli au rabais. */
                   <div style={{ position: 'relative', width: '100%' }}>
+                    {/* Ombre de contact sous le cadre : sans elle, la photo
+                        flotte au lieu de reposer sur le sol. */}
+                    <div
+                      aria-hidden
+                      style={{
+                        position: 'absolute',
+                        left: '8%',
+                        right: '8%',
+                        bottom: '-2%',
+                        height: '7%',
+                        borderRadius: '50%',
+                        background:
+                          'radial-gradient(ellipse at center, rgba(0,0,0,0.6), rgba(0,0,0,0.25) 48%, transparent 74%)',
+                        filter: 'blur(8px)',
+                        zIndex: 0,
+                      }}
+                    />
                     <div
                       style={{
+                        position: 'relative',
+                        zIndex: 1,
                         width: '100%',
                         aspectRatio: '16 / 10',
                         borderRadius: 12,
                         overflow: 'hidden',
+                        // Filet de rareté : l'accent lumineux du §3, tiré de la
+                        // source unique (src/lib/rarityStyle.ts) pour que le
+                        // Garage, le fil et les cartes parlent le même langage.
                         boxShadow: isCenter
-                          ? '0 24px 60px rgba(0,0,0,0.7), 0 0 40px rgba(255,255,255,0.10)'
-                          : '0 16px 40px rgba(0,0,0,0.6)',
+                          ? `0 24px 60px rgba(0,0,0,0.7), 0 0 0 1px ${look.edge}, ${look.glow}`
+                          : `0 16px 40px rgba(0,0,0,0.6), 0 0 0 1px ${look.edge}`,
                       }}
                     >
                       {img ? (
@@ -530,11 +539,34 @@ export default function Showroom({
                           draggable={false}
         loading="lazy"
         decoding="async"
-                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                          style={{
+                            width: '100%',
+                            height: '100%',
+                            objectFit: 'cover',
+                            // Étalonnage : les photos viennent de téléphones,
+                            // d'heures et de météos différentes. Un contraste
+                            // et une saturation légèrement relevés, une
+                            // luminosité légèrement baissée, suffisent à les
+                            // faire cohabiter comme des pièces d'une même
+                            // collection — sans jamais altérer la couleur
+                            // réelle de la voiture au point de la trahir.
+                            filter: 'contrast(1.08) saturate(1.06) brightness(0.96)',
+                          }}
                         />
                       ) : (
                         <div style={{ width: '100%', height: '100%', background: '#141418' }} />
                       )}
+                      {/* Vignetage interne : creuse la profondeur et ramène le
+                          regard au centre, où se trouve la voiture. */}
+                      <div
+                        aria-hidden
+                        style={{
+                          position: 'absolute',
+                          inset: 0,
+                          background:
+                            'radial-gradient(ellipse at 50% 45%, transparent 42%, rgba(4,4,6,0.42) 100%)',
+                        }}
+                      />
                     </div>
                     <div
                       aria-hidden
@@ -704,9 +736,9 @@ export default function Showroom({
                 paddingTop: 8,
               }}
             >
-              <StatCell label="PUISSANCE" value={activeSpecs?.horsepower} loading={activeSpecs === undefined} />
-              <StatCell label="0–100" value={activeSpecs?.zero_to_100} loading={activeSpecs === undefined} />
-              <StatCell label="V.MAX" value={activeSpecs?.top_speed} loading={activeSpecs === undefined} />
+              <StatCell label={t('garage.power')} value={activeSpecs?.horsepower} loading={activeSpecs === undefined} />
+              <StatCell label={t('garage.accel')} value={activeSpecs?.zero_to_100} loading={activeSpecs === undefined} />
+              <StatCell label={t('garage.topSpeed')} value={activeSpecs?.top_speed} loading={activeSpecs === undefined} />
             </div>
           </div>
           {/* Screen underglow spilling onto the car */}
@@ -757,6 +789,14 @@ export default function Showroom({
 
 // One spec on the digital panel. Shows a subtle skeleton while the specs
 // request is in flight, "—" if unavailable.
+/**
+ * Une cellule de spec du panneau d'affichage.
+ *
+ * Renvoie `null` quand la donnée n'existe pas : le tiret « — » qu'on affichait
+ * jusqu'ici occupait la place d'une information sans en être une, et laissait
+ * croire à une panne plutôt qu'à une donnée simplement inconnue. Même règle que
+ * sur le dos des cartes de collection : un champ absent ne s'affiche pas.
+ */
 function StatCell({
   label,
   value,
@@ -766,6 +806,7 @@ function StatCell({
   value?: string
   loading: boolean
 }) {
+  if (!loading && !value) return null
   return (
     <div style={{ textAlign: 'center', minWidth: 0 }}>
       <div
@@ -780,7 +821,7 @@ function StatCell({
           opacity: loading ? 0.5 : 1,
         }}
       >
-        {loading ? '···' : value || '—'}
+        {loading ? '···' : value}
       </div>
       <div
         style={{

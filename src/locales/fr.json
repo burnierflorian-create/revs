@@ -264,12 +264,12 @@
     "onlineNow": "passionnés en ligne",
     "viewProfile": "Voir mon profil",
     "streak": {
-      "days": "{{count}} jour de streak",
-      "days_plural": "{{count}} jours de streak"
+      "days_one": "{{count}} jour de streak",
+      "days_other": "{{count}} jours de streak"
     },
     "live": {
-      "spots": "{{count}} spot",
-      "spots_plural": "{{count}} spots"
+      "spots_one": "{{count}} spot",
+      "spots_other": "{{count}} spots"
     },
     "spotter": {
       "aria": "Spotter une voiture — ouvrir la caméra",
@@ -282,24 +282,24 @@
       "minutes": "MINUTES",
       "aria": "Grand Prix — {{name}}",
       "live": "En cours !",
-      "raceIn": "Course dans {{count}} jour",
-      "raceIn_plural": "Course dans {{count}} jours",
+      "raceIn_one": "Course dans {{count}} jour",
+      "raceIn_other": "Course dans {{count}} jours",
       "lastWinner": " · Dernier vainqueur : {{winner}}"
     },
     "city": {
       "addCity": "Ajoute ta ville pour voir ton classement",
       "ranking": "Classement",
       "youDominate": "Tu domines {{city}} !",
-      "nextGp": "Prochain GP dans {{count}} jour · ",
-      "nextGp_plural": "Prochain GP dans {{count}} jours · ",
-      "spotsThisWeek": "{{count}} spot cette semaine",
-      "spotsThisWeek_plural": "{{count}} spots cette semaine",
+      "nextGp_one": "Prochain GP dans {{count}} jour · ",
+      "nextGp_other": "Prochain GP dans {{count}} jours · ",
+      "spotsThisWeek_one": "{{count}} spot cette semaine",
+      "spotsThisWeek_other": "{{count}} spots cette semaine",
       "stillNeed": "encore",
       "xpAmount": "{{count}} XP",
       "toPass": "pour dépasser",
       "spotToEnter": "Spotte pour entrer dans le classement de {{city}}.",
-      "spotters": "{{count}} spotter",
-      "spotters_plural": "{{count}} spotters"
+      "spotters_one": "{{count}} spotter",
+      "spotters_other": "{{count}} spotters"
     },
     "latestSpots": {
       "title": "Derniers spots"
@@ -479,8 +479,8 @@
       "empty": "Ton garage est vide, pars chasser ta première supercar",
       "spot": "Spotter",
       "heading": "Mon garage",
-      "count": "{{count}} voiture",
-      "count_plural": "{{count}} voitures"
+      "count_one": "{{count}} voiture",
+      "count_other": "{{count}} voitures"
     },
     "rewardsLock": {
       "title": "Bientôt disponible",
@@ -558,18 +558,18 @@
     },
     "collection": {
       "heading": "Ma collection",
-      "count": "{{count}} carte",
-      "count_plural": "{{count}} cartes"
+      "count_one": "{{count}} carte",
+      "count_other": "{{count}} cartes"
     },
     "referral": {
       "title": "Invite tes amis",
       "body": "Fais découvrir REVS aux passionnés autour de toi. Ton code les rattache à toi automatiquement.",
       "codeLabel": "Ton code",
       "copyAria": "Copier mon code de parrainage",
-      "activeCount": "{{count}} filleul actif",
-      "activeCount_plural": "{{count}} filleuls actifs",
-      "signedCount": "{{count}} inscrit",
-      "signedCount_plural": "{{count}} inscrits"
+      "activeCount_one": "{{count}} filleul actif",
+      "activeCount_other": "{{count}} filleuls actifs",
+      "signedCount_one": "{{count}} inscrit",
+      "signedCount_other": "{{count}} inscrits"
     }
   },
   "discoverpage": {
@@ -1344,5 +1344,10 @@
     "photo": "Photo",
     "emptyCollection": "Poste ton premier spot pour obtenir ta première carte !",
     "emptyCta": "Spotter"
+  },
+  "garage": {
+    "power": "PUISSANCE",
+    "accel": "0–100",
+    "topSpeed": "V. MAX"
   }
 }

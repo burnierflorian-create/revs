@@ -790,10 +790,23 @@ export default function NewSpot() {
         if (newSpotId) {
           const { triggerRadarFanout } = await import('../lib/radar')
           void triggerRadarFanout(newSpotId)
-          // CarImages PNG resolution runs async on the server. The
-          // garage falls back to a silhouette until the URL lands.
-          const { triggerGarageImage } = await import('../lib/garage')
-          void triggerGarageImage(newSpotId)
+          // ── SUPPRIMÉ le 30/09/2026 : la résolution d'image de garage ──
+          //
+          // `triggerGarageImage()` demandait au serveur d'aller chercher sur
+          // INTERNET une photo presse/constructeur du modèle (CarImages, puis
+          // Claude web_search), et de la stocker dans `garage_image_url`. Le
+          // Garage affichait ensuite cette image à la place de la voiture
+          // réellement photographiée. En base : 30 lignes sur 32 pointant vers
+          // wikimedia.org.
+          //
+          // Trois raisons de couper, et pas seulement l'esthétique :
+          //   · ce n'est pas la voiture de l'utilisateur ;
+          //   · ces images n'ont jamais traversé le floutage de plaques REVS ;
+          //   · leur licence n'est pas maîtrisée et elles sont chargées à
+          //     chaud depuis un domaine tiers.
+          //
+          // Le Garage part désormais de SA photo : détourée hors ligne quand
+          // le rendu existe (migration 0087), telle quelle sinon.
         }
       })()
 

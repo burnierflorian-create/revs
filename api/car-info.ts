@@ -81,13 +81,6 @@ function normalize(raw: unknown): CarInfo {
 // validates it, and persists the result. Failure path writes '' so we
 // never retry the same spot.
 
-// Calls carimagesapi.com signed-url endpoint with a brand/model/year
-// triplet. Returns the signed image URL or null when the API can't
-// find a match. `api_secret` (when set in env) opts into server-side
-// mode that bypasses the domain whitelist — useful for the backfill
-// script and the Vercel function alike.
-async function carImagesSignedUrl(
-  apiKey: string,
   apiSecret: string | null,
   params: { make: string; model?: string; year?: number | null },
 ): Promise<string | null> {
@@ -113,12 +106,6 @@ async function carImagesSignedUrl(
   }
 }
 
-// Fallback path: Claude + web_search to find a press / manufacturer
-// photo for the car. Used either when CARIMAGES_API_KEY isn't set or
-// when the CarImages ladder turned up nothing. Returns null if Claude
-// doesn't yield a HEAD-validated image URL.
-async function claudePressPhoto(
-  brand: string,
   model: string,
   year: number | null,
 ): Promise<string | null> {
@@ -160,8 +147,6 @@ async function claudePressPhoto(
   }
 }
 
-async function handleGarageImage(
-  req: VercelRequest,
   res: VercelResponse,
   // Loose generics — overload of createClient infers a different shape
   // at call time than ReturnType does at function-type time.
@@ -852,8 +837,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return
   }
 
+  // ── RETIRÉ DU SERVICE le 30/09/2026 ──
+  // Cette action allait chercher une photo du modèle sur Internet (CarImages,
+  // puis Claude web_search sur des photos presse/constructeur) et l'écrivait
+  // dans `spots.garage_image_url`, que le Garage affichait À LA PLACE de la
+  // voiture réellement photographiée. Plus aucun appelant ne l'invoque
+  // (NewSpot ne la déclenche plus) ; elle répond désormais 410 pour qu'un
+  // client resté en cache ne puisse pas la réactiver.
+  //
+  // Le code en aval est conservé volontairement : il documente ce qui existait,
+  // et `garage_image_url` reste en base — rien n'est détruit.
+  // ── RETIRÉ DU SERVICE le 30/09/2026 ──
+  // Cette action allait chercher une photo du modèle sur Internet (CarImages,
+  // puis Claude web_search sur des photos presse/constructeur) et l'écrivait
+  // dans `spots.garage_image_url`, que le Garage affichait À LA PLACE de la
+  // voiture réellement photographiée — 30 lignes sur 32 pointaient vers
+  // wikimedia.org.
+  //
+  // Le worker et ses deux collecteurs ont été SUPPRIMÉS, pas seulement
+  // débranchés : du code mort qui télécharge des images tierces est un passif,
+  // il suffit d'un branchement pour le réveiller. L'historique git le conserve.
+  // La colonne `garage_image_url` reste en base : rien n'est détruit.
   if (req.query.action === 'garage-image') {
-    return handleGarageImage(req, res, admin)
+    res.status(410).json({
+      error: 'gone',
+      message:
+        "Les images de garage ne proviennent plus d'Internet : le Garage part de la photo du spot.",
+    })
+    return
   }
   if (req.query.action === 'predict-spotting') {
     return handlePredictSpotting(req, res, admin, u.user.id)
