@@ -234,9 +234,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // passage est rare, donc le coût moyen suit celui de Haiku. Tout ce qui
   // reste illisible retombe sur []. Journalisé pour auditer les cas vides
   // via les logs Vercel.
+  // ── SONNET EN PREMIER (30/09/2026) ──
+  //
+  // Haiku ouvrait la marche. Il renvoyait un JSON parfaitement valide, donc
+  // l'escalade vers Sonnet — déclenchée uniquement par une réponse ILLISIBLE —
+  // ne se produisait jamais. Or ses coordonnées étaient fausses : vérifié sur
+  // une photo réelle, il a encadré une enseigne « Buffalo Grill » à
+  // l'arrière-plan et une portion vide de carrosserie, en laissant la vraie
+  // plaque parfaitement lisible. Le floutage s'appliquait fidèlement au mauvais
+  // endroit, et chaque couche du système rapportait un succès.
+  //
+  // Une boîte plausible mais fausse est le pire des cas : elle ne déclenche
+  // aucune alarme. On paie donc le modèle qui vise juste. L'écart de coût
+  // (~0,01 $ contre ~0,003 $) est sans commune mesure avec la publication
+  // d'une plaque lisible, et la détection ne compte plus dans le quota produit.
   const attempts: { prompt: string; model: string }[] = [
-    { prompt: SYSTEM, model: HAIKU_MODEL },
+    { prompt: SYSTEM, model: SONNET_MODEL },
     { prompt: SYSTEM_RETRY, model: SONNET_MODEL },
+    { prompt: SYSTEM_RETRY, model: HAIKU_MODEL },
   ]
   for (const { prompt, model } of attempts) {
     try {
@@ -259,6 +274,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       console.error('[detect-plate] call failed:', e)
     }
   }
-  // Final fail-open after all retries.
-  sendJson(res, { plates: [] })
+  // ── FAIL-CLOSED (30/09/2026) ──
+  //
+  // Ici se trouvait `sendJson(res, { plates: [] })` — un fail-OPEN. Quand la
+  // détection échouait de bout en bout, le serveur répondait « aucune plaque »,
+  // ce que le client ne peut pas distinguer d'une photo réellement sans plaque.
+  // Il publiait donc l'original.
+  //
+  // On renvoie désormais un échec EXPLICITE. Le client bascule sur son garde
+  // (`plateGuard('failed')`) et retient la publication jusqu'à confirmation.
+  // Un tableau vide ne doit signifier qu'une chose : on a regardé, il n'y avait
+  // rien.
+  console.error('[detect-plate] toutes les tentatives ont échoué — fail-closed')
+  res.status(502).json({
+    error: 'detection_failed',
+    message:
+      "Impossible de vérifier les plaques sur cette photo. Réessaie ou reprends la photo.",
+  })
 }
