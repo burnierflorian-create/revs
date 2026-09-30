@@ -1368,5 +1368,79 @@
     "confirm": "Mask and continue",
     "none": "No readable plate",
     "applying": "Applying blur…"
+  },
+  "tour": {
+    "skip": "Skip",
+    "next": "Next",
+    "back": "Back",
+    "start": "Start spotting",
+    "step": "{{current}} / {{total}}",
+    "s1": {
+      "title": "Welcome to REVS.",
+      "body": "The app for car enthusiasts. Spot the cars around you, collect them, level up, and share your passion.",
+      "tag": "CARS. SPOTS. PASSION."
+    },
+    "s2": {
+      "title": "Spotting is the heart of REVS",
+      "body": "Seen an interesting car? Take a photo. REVS can identify it for you — or you fill it in yourself.",
+      "b1": "Photograph the car",
+      "b2": "AI suggests an identification",
+      "b3": "Correct it if needed",
+      "b4": "Publish your Spot",
+      "note": "AI analysis is a help, never a requirement: you can always enter the details manually."
+    },
+    "s3": {
+      "title": "Your collection grows",
+      "body": "Every car you spot becomes a card. The rarer it is, the more it counts.",
+      "b1": "Your Garage holds your cars",
+      "b2": "Your Collection holds your cards",
+      "b3": "Six rarity tiers, from Common to Legendary",
+      "b4": "Every Spot earns you XP"
+    },
+    "s4": {
+      "title": "The map",
+      "body": "Discover cars spotted around you. New Spots appear on the map for one hour, then make way for the next ones.",
+      "note": "The displayed position is deliberately approximate."
+    },
+    "s5": {
+      "title": "The community",
+      "body": "The Feed gathers other enthusiasts' Spots. See their finds, react, and share your own.",
+      "b1": "The community Spot feed",
+      "b2": "A spotter leaderboard",
+      "b3": "Challenges to take on"
+    },
+    "s6": {
+      "title": "Formula 1",
+      "body": "REVS follows the season: the Grand Prix calendar, the teams, the drivers and paddock news.",
+      "b1": "Calendar and Grands Prix",
+      "b2": "Teams and drivers",
+      "b3": "F1 news"
+    },
+    "s7": {
+      "title": "News and events",
+      "body": "Stay connected to the car world. News is refreshed every morning, and meets near you are listed.",
+      "b1": "Car news, every day",
+      "b2": "Events and meets"
+    },
+    "s8": {
+      "title": "The brands",
+      "body": "Explore manufacturers, their models and their world. Every brand has its page.",
+      "b1": "A page per manufacturer",
+      "b2": "The models you've come across",
+      "b3": "Your favourite brands"
+    },
+    "s9": {
+      "title": "Your profile",
+      "body": "Your profile brings together all your progress: your level, your XP, your Garage, your Collection and your badges.",
+      "b1": "Level and XP",
+      "b2": "Garage: the cars YOU spotted",
+      "b3": "Collection: your cards and progress",
+      "b4": "Badges unlocked"
+    },
+    "s10": {
+      "title": "Over to you.",
+      "body": "Go find new cars, complete your collection and join the REVS community.",
+      "tag": "CARS. SPOTS. PASSION."
+    }
   }
 }

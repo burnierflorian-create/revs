@@ -1368,5 +1368,79 @@
     "confirm": "Masquer et continuer",
     "none": "Aucune plaque lisible",
     "applying": "Application du floutage…"
+  },
+  "tour": {
+    "skip": "Passer",
+    "next": "Suivant",
+    "back": "Retour",
+    "start": "Commencer à spotter",
+    "step": "{{current}} / {{total}}",
+    "s1": {
+      "title": "Bienvenue sur REVS.",
+      "body": "L’application des passionnés d’automobile. Repère les voitures qui t’entourent, collectionne-les, progresse, et partage ta passion.",
+      "tag": "CARS. SPOTS. PASSION."
+    },
+    "s2": {
+      "title": "Spotter, le cœur de REVS",
+      "body": "Tu croises une voiture intéressante ? Prends-la en photo. REVS peut l’identifier pour toi — ou tu remplis toi-même.",
+      "b1": "Photographie la voiture",
+      "b2": "L’IA propose une identification",
+      "b3": "Tu corriges si besoin",
+      "b4": "Tu publies ton Spot",
+      "note": "L’analyse IA est une aide, jamais une obligation : tu peux toujours remplir les informations à la main."
+    },
+    "s3": {
+      "title": "Ta collection grandit",
+      "body": "Chaque voiture spottée devient une carte. Plus elle est rare, plus elle compte.",
+      "b1": "Ton Garage rassemble tes voitures",
+      "b2": "Ta Collection réunit tes cartes",
+      "b3": "Six niveaux de rareté, du Commun au Légendaire",
+      "b4": "Chaque Spot te rapporte de l’XP"
+    },
+    "s4": {
+      "title": "La carte",
+      "body": "Découvre les voitures repérées autour de toi. Les nouveaux Spots apparaissent sur la carte pendant une heure, puis laissent place aux suivants.",
+      "note": "La position affichée est volontairement approximative."
+    },
+    "s5": {
+      "title": "La communauté",
+      "body": "Le Fil rassemble les Spots des autres passionnés. Regarde leurs trouvailles, réagis, et fais découvrir les tiennes.",
+      "b1": "Le Fil des Spots de la communauté",
+      "b2": "Un classement des spotteurs",
+      "b3": "Des défis à relever"
+    },
+    "s6": {
+      "title": "La Formule 1",
+      "body": "REVS suit la saison : le calendrier des Grands Prix, les écuries, les pilotes et l’actualité du paddock.",
+      "b1": "Calendrier et Grands Prix",
+      "b2": "Écuries et pilotes",
+      "b3": "Actualité F1"
+    },
+    "s7": {
+      "title": "Actualités et événements",
+      "body": "Reste connecté à l’univers automobile. L’actualité est mise à jour chaque matin, et les rassemblements près de chez toi sont répertoriés.",
+      "b1": "L’actu automobile, chaque jour",
+      "b2": "Les événements et rassemblements"
+    },
+    "s8": {
+      "title": "Les marques",
+      "body": "Explore les constructeurs, leurs modèles et leur univers. Chaque marque a sa page.",
+      "b1": "Des pages par constructeur",
+      "b2": "Les modèles que tu as croisés",
+      "b3": "Tes marques favorites"
+    },
+    "s9": {
+      "title": "Ton profil",
+      "body": "Ton profil rassemble toute ta progression automobile : ton niveau, ton XP, ton Garage, ta Collection et tes badges.",
+      "b1": "Niveau et XP",
+      "b2": "Garage : les voitures que TU as spottées",
+      "b3": "Collection : tes cartes et ta progression",
+      "b4": "Badges débloqués"
+    },
+    "s10": {
+      "title": "À toi de jouer.",
+      "body": "Pars à la recherche de nouvelles voitures, complète ta collection et rejoins la communauté REVS.",
+      "tag": "CARS. SPOTS. PASSION."
+    }
   }
 }

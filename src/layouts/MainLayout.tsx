@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef } from 'react'
 import { useSwipeBack } from '../hooks/useSwipeBack'
+import TutorialTour from '../components/TutorialTour'
 import {
   NavLink,
   Outlet,
@@ -343,6 +344,7 @@ export default function MainLayout() {
       <BadgeUnlocked />
       <ShareCardSheet />
       <PrestigeSheet />
+      <TutorialTour />
       <UpdateNotification />
       <InstallBanner />
 

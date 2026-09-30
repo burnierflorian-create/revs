@@ -261,7 +261,10 @@ export default function Onboarding() {
       }
     })()
     setShow(false)
-    navigate('/map')
+    // Vers la HOME, et non la carte : le tutoriel de découverte se lance là,
+    // et il se termine sur la Home. Envoyer l'utilisateur sur la carte le
+    // faisait atterrir dans une fonctionnalité avant de l'avoir comprise.
+    navigate('/')
   }
 
   if (!show) return null
