@@ -190,8 +190,13 @@ export default function TutorialTour() {
           ))}
         </div>
 
+        {/* « Passer » disparaît au dernier écran : arrivé là, il fait la même
+            chose que « Commencer » tout en laissant croire qu'on rate quelque
+            chose. `visibility` plutôt qu'un démontage, pour que la barre de
+            progression garde exactement la même largeur sur les dix écrans. */}
         <button
           onClick={close}
+          style={{ visibility: last ? 'hidden' : 'visible' }}
           className="tappable -mr-1 whitespace-nowrap px-2 py-2 text-[12.5px] font-semibold text-white/45"
         >
           {t('tour.skip')}
