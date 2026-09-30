@@ -22,6 +22,7 @@ import {
   RotateCcw,
   Scale,
   Search,
+  Info,
   Shield,
   Car,
   Smartphone,
@@ -1848,6 +1849,16 @@ export default function Settings() {
               icon={<Scale className="h-4 w-4" />}
               label={t('settingspage.legalNotice')}
               onClick={() => navigate('/legal/mentions')}
+            />
+            {/* « À propos de REVS » — le deuxième accès aux nouveautés, celui
+                qu'on retrouve quand on ne se souvient plus d'où venait la
+                cloche. Il porte la version, ce qui en fait aussi la réponse à
+                « quelle version j'ai ? ». */}
+            <Row
+              icon={<Info className="h-4 w-4" />}
+              label={t('notif.about')}
+              sub={t('notif.aboutSub', { version: APP_VERSION })}
+              onClick={() => navigate('/notifications?tab=updates')}
             />
             <Row
               icon={<Shield className="h-4 w-4" />}

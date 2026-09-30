@@ -1442,5 +1442,26 @@
       "body": "Pars à la recherche de nouvelles voitures, complète ta collection et rejoins la communauté REVS.",
       "tag": "CARS. SPOTS. PASSION."
     }
+  },
+  "notif": {
+    "title": "Notifications",
+    "markAll": "Tout marquer comme lu",
+    "tabActivity": "Activité",
+    "tabUpdates": "Nouveautés REVS",
+    "emptyTitle": "Rien de nouveau pour le moment",
+    "emptyBody": "Tes likes, tes badges et l’activité de la communauté apparaîtront ici.",
+    "emptyUpdates": "Aucune nouveauté pour l’instant.",
+    "new": "NOUVEAU",
+    "seeAll": "Voir tout",
+    "bell": "Notifications",
+    "unread_one": "{{count}} non lue",
+    "unread_other": "{{count}} non lues",
+    "about": "À propos de REVS",
+    "aboutSub": "Version {{version}} · Nouveautés",
+    "version": "Version",
+    "updates": "Nouveautés",
+    "updatesSub": "Les dernières mises à jour de REVS",
+    "badgeUnlocked": "Badge débloqué !",
+    "badgeEyebrow": "Badge débloqué"
   }
 }

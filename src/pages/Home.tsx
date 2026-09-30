@@ -23,6 +23,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { fetchUnreadCount, onUnreadChanged } from '../lib/notifications'
 import { useTranslation } from 'react-i18next'
 import {
   Camera,
@@ -30,6 +31,7 @@ import {
   ChevronRight,
   Flame,
   LifeBuoy,
+  Bell as BellIcon,
   Settings as SettingsIcon,
   Shield,
 } from 'lucide-react'
@@ -485,6 +487,25 @@ function HomeHeader({ online }: { online: number }) {
   const navigate = useNavigate()
   const { t } = useTranslation()
 
+  // Compteur de la cloche. Relu à chaque montage ET sur l'événement local
+  // émis par l'écran de notifications : sans lui, « tout marquer comme lu »
+  // laissait la pastille allumée jusqu'au prochain retour sur l'accueil.
+  const [unread, setUnread] = useState(0)
+  useEffect(() => {
+    let alive = true
+    const refresh = () => {
+      void fetchUnreadCount().then((n) => {
+        if (alive) setUnread(n)
+      })
+    }
+    refresh()
+    const off = onUnreadChanged(refresh)
+    return () => {
+      alive = false
+      off()
+    }
+  }, [])
+
   return (
     <header className="relative z-10 flex items-center gap-2.5 px-4 pt-[max(0.9rem,calc(env(safe-area-inset-top)+0.4rem))]">
       <RevsMark height={17} title="REVS" />
@@ -501,6 +522,31 @@ function HomeHeader({ online }: { online: number }) {
       </span>
 
       <div className="ml-auto flex flex-none items-center gap-2">
+        {/* ── LA CLOCHE REVIENT (30/09/2026) ──
+            Elle avait été retirée le 29/09, et à raison : il n'existait
+            AUCUNE notification consultable dans l'application, seulement du
+            push. Un bouton qui ne mène nulle part vaut moins que pas de
+            bouton. Maintenant qu'un vrai fil existe (migration 0090), elle
+            reprend sa place. */}
+        <HeaderButton
+          label={t('notif.bell')}
+          onClick={() => navigate('/notifications')}
+        >
+          <BellIcon className="h-[18px] w-[18px]" strokeWidth={1.9} />
+          {unread > 0 && (
+            <span
+              aria-hidden
+              className="absolute -right-0.5 -top-0.5 flex min-w-[17px] items-center justify-center rounded-full px-1 text-[9.5px] font-extrabold leading-[17px] text-white"
+              style={{
+                height: 17,
+                background: 'rgb(var(--color-accent))',
+                boxShadow: '0 0 0 2px rgba(0,0,0,0.55)',
+              }}
+            >
+              {unread > 9 ? '9+' : unread}
+            </span>
+          )}
+        </HeaderButton>
         <HeaderButton
           label={t('home.header.settings')}
           onClick={() => navigate('/settings')}

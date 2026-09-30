@@ -22,6 +22,7 @@ const GrandPrixDetail = lazy(() => import('./pages/GrandPrixDetail'))
 const Leaderboard = lazy(() => import('./pages/Leaderboard'))
 const Challenges = lazy(() => import('./pages/Challenges'))
 const Badges = lazy(() => import('./pages/Badges'))
+const NotificationsPage = lazy(() => import('./pages/Notifications'))
 const BadgeDetail = lazy(() => import('./pages/BadgeDetail'))
 const Referral = lazy(() => import('./pages/Referral'))
 // Radar — retiré de l'UI le 27/09/2026, le temps que la densité
@@ -171,6 +172,7 @@ export default function App() {
           <Route path="/new-event" element={lazyRoute(<NewEvent />)} />
           <Route path="/classement" element={lazyRoute(<Leaderboard />)} />
           <Route path="/challenges" element={lazyRoute(<Challenges />)} />
+          <Route path="/notifications" element={lazyRoute(<NotificationsPage />)} />
           <Route path="/badges" element={lazyRoute(<Badges />)} />
           <Route path="/badges/:slug" element={lazyRoute(<BadgeDetail />)} />
           <Route path="/referral" element={lazyRoute(<Referral />)} />
