@@ -1520,3 +1520,31 @@ html.light .brand-logo-mono {
 @media (prefers-reduced-motion: reduce) {
   .home-rise { animation: none; }
 }
+
+/* ── Zone tactile des flèches de retour ──────────────────────────────────
+   Les 28 pages secondaires utilisent toutes le même motif : un <button>
+   contenant une icône ArrowLeft de 24 px, sans rembourrage. La cible tactile
+   faisait donc 24 × 24 — bien en dessous des 44 px recommandés, et la
+   différence se sent : on rate la flèche, on réessaie, on finit par croire
+   que le bouton ne répond pas.
+
+   Plutôt que de retoucher 28 fichiers (et de risquer 28 régressions de mise
+   en page), UNE règle agrandit la cible par un pseudo-élément : la zone
+   sensible passe à 44 × 44, centrée sur l'icône, sans déplacer d'un pixel ce
+   qui est affiché. `:has()` est disponible sur toutes les cibles de REVS
+   (Safari 15.4+, Chrome 105+) ; là où il ne le serait pas, la flèche garde
+   simplement son ancien comportement. */
+button:has(> svg.lucide-arrow-left) {
+  position: relative;
+}
+button:has(> svg.lucide-arrow-left)::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 44px;
+  height: 44px;
+  transform: translate(-50%, -50%);
+  /* Purement tactile : invisible, et sans effet sur le flux. */
+  pointer-events: auto;
+}

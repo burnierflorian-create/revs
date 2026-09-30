@@ -521,6 +521,7 @@ function SelectCarousel({
           width: '100%',
           touchAction: 'pan-y',
         }}
+        data-swipe-x=""
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}

@@ -150,6 +150,7 @@ export default function Brands({ embedded = false }: { embedded?: boolean }) {
         <div
           className="fixed right-0.5 top-1/2 z-20 flex -translate-y-1/2 select-none flex-col items-center py-2"
           style={{ touchAction: 'none' }}
+          data-swipe-x=""
           onTouchStart={onRailTouch}
           onTouchMove={onRailTouch}
         >

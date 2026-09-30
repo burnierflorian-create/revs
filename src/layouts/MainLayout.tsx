@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef } from 'react'
+import { useSwipeBack } from '../hooks/useSwipeBack'
 import {
   NavLink,
   Outlet,
@@ -82,6 +83,12 @@ export default function MainLayout() {
 
   // ── Liquid nav: sliding indicator + finger-follow ──
   const navRef = useRef<HTMLElement>(null)
+
+  // Retour par glissement — actif UNIQUEMENT sur les pages secondaires
+  // (`onStack`). Sur un onglet il n'y a rien derrière : glisser n'y aurait
+  // aucun sens, et surtout ne doit PAS changer d'onglet.
+  const stackRef = useRef<HTMLDivElement>(null)
+  const stackPageRef = useRef<HTMLDivElement>(null)
   const draggingRef = useRef(false)
   const movedRef = useRef(false)
   const startXRef = useRef(0)
@@ -140,6 +147,7 @@ export default function MainLayout() {
     navigate(NAV_ROUTES[nearest])
   }
   const onStack = tab === null
+  useSwipeBack(stackRef, stackPageRef, onStack)
 
 
   // Force-relogin sweep: when an admin flips profiles.force_relogin = true
@@ -313,11 +321,15 @@ export default function MainLayout() {
         />
 
         {onStack && (
-          <div className="stack-overlay">
+          <div className="stack-overlay" ref={stackRef}>
             {/* Key by pathname so each stack-route navigation remounts
                 this wrapper and fires a fresh transition (push from the
                 right on forward, pop from the left on back). */}
-            <div key={pathname} className={`stack-page ${stackDirection}`}>
+            <div
+              key={pathname}
+              ref={stackPageRef}
+              className={`stack-page ${stackDirection}`}
+            >
               <Outlet />
             </div>
           </div>

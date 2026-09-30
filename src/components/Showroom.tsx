@@ -273,6 +273,9 @@ export default function Showroom({
         touchAction: 'pan-y',
         animation: 'showroom-enter 0.7s cubic-bezier(0.22,1,0.36,1) both',
       }}
+      // Le showroom pilote lui-même le geste horizontal : `data-swipe-x` dit
+      // au retour par glissement de ne pas s'en mêler (useSwipeBack.ts).
+      data-swipe-x=""
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}

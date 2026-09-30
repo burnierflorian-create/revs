@@ -552,6 +552,8 @@ export default function SpotDetail() {
           Glassmorphism close + share buttons float on a top gradient. */}
       <div
         className="relative h-[60vh] w-full overflow-hidden bg-card"
+        // Galerie de photos : le glissement horizontal lui appartient.
+        data-swipe-x=""
         onTouchStart={onDragStart}
         onTouchMove={onDragMove}
         onTouchEnd={onDragEnd}
@@ -1041,6 +1043,7 @@ function ZoomablePhoto({ src, alt }: { src: string; alt: string }) {
       fetchPriority="high"
       decoding="async"
       draggable={false}
+      data-swipe-x=""
       onTouchStart={onTouchStart}
       onTouchMove={onTouchMove}
       onTouchEnd={onTouchEnd}
