@@ -412,10 +412,30 @@ export default function Showroom({
                 }}
               >
                 {isRender ? (
-                  /* Detoured render — RESTS on the floor. The <img> keeps its
-                     natural ratio (height:auto) so the tightly-trimmed PNG has
-                     its wheels exactly on the wrapper's bottom = the floor. */
-                  <div style={{ position: 'relative', width: '100%' }}>
+                  /* Voiture détourée — POSÉE sur le sol. L'image garde son
+                     rapport naturel pour que les roues touchent exactement le
+                     bas du conteneur, c'est-à-dire la ligne de sol.
+                     ── HAUTEUR BORNÉE (30/09/2026) ──
+                     Le détourage recadre au plus juste : une photo de face
+                     donne un PNG presque carré, qu'un `width: 100%` étirait sur
+                     toute la largeur du showroom. Résultat, une Nissan Juke
+                     haute de tout l'écran, rognée en haut et passant derrière
+                     le panneau d'affichage. On plafonne donc la hauteur et on
+                     laisse la largeur suivre — une voiture de trois quarts
+                     reste large, une voiture de face reste à sa taille. */
+                  <div
+                    style={{
+                      position: 'relative',
+                      width: '100%',
+                      maxHeight: '34vh',
+                      display: 'flex',
+                      justifyContent: 'center',
+                      // Les roues doivent toucher la ligne de sol : sans cet
+                      // alignement, l'image contenue laissait la voiture
+                      // flotter au-dessus de son propre reflet.
+                      alignItems: 'flex-end',
+                    }}
+                  >
                     {/* Ambient + contact shadow, right under the wheels */}
                     <div
                       aria-hidden
@@ -460,6 +480,9 @@ export default function Showroom({
                           display: 'block',
                           width: '100%',
                           height: 'auto',
+                          // Sans ce plafond, une photo de face remplit l'écran.
+                          maxHeight: '32vh',
+                          objectFit: 'contain',
                           filter: isCenter
                             ? 'drop-shadow(0 4px 6px rgba(0,0,0,0.4))'
                             : 'drop-shadow(0 3px 5px rgba(0,0,0,0.35))',
