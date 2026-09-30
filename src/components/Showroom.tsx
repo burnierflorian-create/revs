@@ -427,7 +427,7 @@ export default function Showroom({
                     style={{
                       position: 'relative',
                       width: '100%',
-                      maxHeight: '34vh',
+                      maxHeight: '24vh',
                       display: 'flex',
                       justifyContent: 'center',
                       // Les roues doivent toucher la ligne de sol : sans cet
@@ -478,14 +478,36 @@ export default function Showroom({
                           position: 'relative',
                           zIndex: 1,
                           display: 'block',
-                          width: '100%',
-                          height: 'auto',
-                          // Sans ce plafond, une photo de face remplit l'écran.
-                          maxHeight: '32vh',
+                          // ── ÉCHELLE NORMALISÉE (30/09/2026) ──
+                          // C'est la HAUTEUR qui commande, plus la largeur.
+                          //
+                          // Mesuré sur les 32 rendus : les rapports vont de
+                          // 0,75 (voiture de face, presque carrée) à 2,71
+                          // (voiture de profil, longue et plate) — un écart de
+                          // ×3,6. Avec `width: 100%`, la voiture de profil
+                          // remplissait la largeur et paraissait minuscule en
+                          // hauteur, tandis que la voiture de face touchait le
+                          // plafond et paraissait étroite. Deux voitures de
+                          // taille réelle comparable n'avaient plus rien de
+                          // comparable à l'écran.
+                          //
+                          // Une voiture fait à peu près la même hauteur qu'une
+                          // autre dans la réalité. Fixer la hauteur revient donc
+                          // à fixer la distance de la caméra : toutes les
+                          // voitures semblent photographiées du même endroit.
+                          // Les longues sont simplement plus larges, comme il
+                          // se doit.
+                          height: '22vh',
+                          width: 'auto',
+                          maxWidth: '100%',
                           objectFit: 'contain',
-                          filter: isCenter
-                            ? 'drop-shadow(0 4px 6px rgba(0,0,0,0.4))'
-                            : 'drop-shadow(0 3px 5px rgba(0,0,0,0.35))',
+                          // Étalonnage commun : les photos viennent d'heures et
+                          // de météos différentes. Un contraste et une
+                          // saturation légèrement relevés suffisent à les faire
+                          // cohabiter sous la même lumière de studio.
+                          // L'ombre portée reste plus marquée sur la voiture
+                          // centrale : c'est ce qui la détache des voisines.
+                          filter: `contrast(1.06) saturate(1.04) brightness(0.97) drop-shadow(0 ${isCenter ? 6 : 4}px ${isCenter ? 10 : 7}px rgba(0,0,0,${isCenter ? 0.5 : 0.38}))`,
                         }}
                       />
                     ) : (
