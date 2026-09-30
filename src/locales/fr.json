@@ -1322,5 +1322,27 @@
     "refused": "Le serveur a refusé : il faut être niveau 100. Réessaie une fois la barre pleine.",
     "noRush": "Rien ne presse — ton XP continue de monter si tu attends.",
     "available": "Prestige disponible"
+  },
+  "card": {
+    "tagline": "CARS. SPOTS. PASSION.",
+    "specsHeading": "Spécifications",
+    "collectionHeading": "Collection",
+    "power": "Puissance",
+    "accel": "0–100",
+    "topSpeed": "V. max",
+    "torque": "Couple",
+    "spotted": "Spotté",
+    "spottedTimes": "×{{count}}",
+    "rarity": "Rareté",
+    "discovered": "Découverte",
+    "lastSeen": "Dernière capture",
+    "cumulativeXp": "XP cumulé",
+    "locked": "Carte verrouillée",
+    "lockedHint": "Spotte ce modèle pour la débloquer.",
+    "flipHint": "Touche la carte pour la retourner",
+    "mySpots": "Mes spots",
+    "photo": "Photo",
+    "emptyCollection": "Poste ton premier spot pour obtenir ta première carte !",
+    "emptyCta": "Spotter"
   }
 }

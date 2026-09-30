@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { ImageOff } from 'lucide-react'
 import { supabase } from '../lib/supabase'
@@ -27,6 +28,7 @@ type Card = {
 }
 
 export default function MyCollection({ spots }: { spots: Spot[] }) {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const [meta, setMeta] = useState<Map<string, CardMeta>>(new Map())
   const [progress, setProgress] = useState<Map<string, CardProgress>>(new Map())
@@ -152,13 +154,13 @@ export default function MyCollection({ spots }: { spots: Spot[] }) {
           <ImageOff className="h-8 w-8 text-accent/70" />
         </div>
         <p className="mt-4 max-w-[16rem] font-medium">
-          Poste ton premier spot pour obtenir ta première carte !
+          {t('card.emptyCollection')}
         </p>
         <button
           onClick={() => navigate('/new-spot')}
           className="tappable mt-5 rounded-full bg-accent px-6 py-3 text-sm font-semibold"
         >
-          Spotter
+          {t('card.emptyCta')}
         </button>
       </div>
     )

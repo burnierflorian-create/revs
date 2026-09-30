@@ -1322,5 +1322,27 @@
     "refused": "The server declined: level 100 is required. Try again once the bar is full.",
     "noRush": "No rush — your XP keeps growing if you wait.",
     "available": "Prestige available"
+  },
+  "card": {
+    "tagline": "CARS. SPOTS. PASSION.",
+    "specsHeading": "Specifications",
+    "collectionHeading": "Collection",
+    "power": "Power",
+    "accel": "0–60",
+    "topSpeed": "Top speed",
+    "torque": "Torque",
+    "spotted": "Spotted",
+    "spottedTimes": "×{{count}}",
+    "rarity": "Rarity",
+    "discovered": "Discovered",
+    "lastSeen": "Last capture",
+    "cumulativeXp": "Total XP",
+    "locked": "Locked card",
+    "lockedHint": "Spot this model to unlock it.",
+    "flipHint": "Tap the card to flip it",
+    "mySpots": "My spots",
+    "photo": "Photo",
+    "emptyCollection": "Post your first spot to earn your first card!",
+    "emptyCta": "Spot a car"
   }
 }

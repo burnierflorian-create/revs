@@ -49,6 +49,7 @@ export default function CardPreview() {
           {CARDS.map((c) => (
             <CollectorCardV2
               key={c.rarity}
+              locked={c.rarity === 'supercar'}
               photo={c.photo}
               brand={c.brand}
               model={c.model}
@@ -57,6 +58,24 @@ export default function CardPreview() {
               rarity={c.rarity}
               serial={c.serial}
               serialTotal={c.total}
+              // Les specs étaient déclarées dans CARDS mais jamais transmises :
+              // le dos partait donc chercher des données inexistantes en dev et
+              // s'affichait vide, ce qui masquait le vrai rendu.
+              specs={{
+                horsepower: c.stats.power,
+                zero_to_100: c.stats.accel,
+                top_speed: c.stats.vmax,
+                torque: c.stats.torque,
+                architecture: '',
+                fun_fact: '',
+              }}
+              evolution={{
+                level: 1,
+                count: 3,
+                firstSpotAt: '2026-03-12T10:00:00Z',
+                lastSpotAt: '2026-09-20T10:00:00Z',
+                cumulativeXp: 120,
+              }}
             />
           ))}
         </div>

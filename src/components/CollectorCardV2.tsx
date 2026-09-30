@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import { Car, Crosshair, Crown, Eye, Flame, Images, ImagePlus, Loader2, Share2, Trophy } from 'lucide-react'
+import { Car, Crosshair, Crown, Eye, Flame, Images, ImagePlus, Loader2, Lock, Share2, Trophy } from 'lucide-react'
 import type { Rarity } from '../lib/spots'
+import { useTranslation } from 'react-i18next'
+import { prefersReducedMotion } from '../lib/motion'
+import { rarityFrame } from '../lib/rarityStyle'
 import { timeAgo } from '../lib/spots'
 import { fetchCardSpecs, type CardSpecs } from '../lib/cardSpecs'
 
@@ -45,96 +48,10 @@ const LEVEL_FX: Record<number, LevelFx> = {
 // (--cv-float, --cv-holo, --cv-shine-dur, --cv-w).
 // ─────────────────────────────────────────────────────────────────────
 
-type FrameLook = {
-  label: string
-  frame: string
-  edge: string
-  glow: string
-  chipBg: string
-  chipFg: string
-  chipBorder: string
-  holo: boolean
-  aura: boolean
-  shine: boolean
-}
-
-// Common = flat steel, no effect → Legendary = gold/red, full holo + aura.
-const RARITY_FRAME: Record<Rarity, FrameLook> = {
-  standard: {
-    label: 'COMMUN',
-    frame: 'linear-gradient(145deg, #3a3d42, #6b6e74 45%, #26282c)',
-    edge: 'rgba(255,255,255,0.10)',
-    glow: '0 16px 34px rgba(0,0,0,0.55)',
-    chipBg: 'rgba(150,153,158,0.22)',
-    chipFg: '#E5E7EB',
-    chipBorder: 'rgba(200,203,208,0.35)',
-    holo: false,
-    aura: false,
-    shine: false,
-  },
-  premium: {
-    label: 'PEU COMMUN',
-    frame: 'linear-gradient(145deg, #1f5a4a, #3fa588 45%, #123a30)',
-    edge: 'rgba(120,255,210,0.18)',
-    glow: '0 16px 36px rgba(45,180,140,0.30)',
-    chipBg: 'rgba(45,180,140,0.22)',
-    chipFg: '#C9F5E6',
-    chipBorder: 'rgba(63,165,136,0.6)',
-    holo: false,
-    aura: false,
-    shine: true,
-  },
-  performance: {
-    label: 'RARE',
-    frame: 'linear-gradient(145deg, #274a86, #9fc3ee 45%, #16294d)',
-    edge: 'rgba(180,220,255,0.28)',
-    glow: '0 16px 40px rgba(80,150,255,0.40)',
-    chipBg: 'rgba(80,150,255,0.24)',
-    chipFg: '#DBEAFE',
-    chipBorder: 'rgba(120,180,255,0.75)',
-    holo: false,
-    aura: false,
-    shine: true,
-  },
-  exclusif: {
-    label: 'ÉPIQUE',
-    frame: 'linear-gradient(145deg, #8a5a20, #E0A845 45%, #5c3a12)',
-    edge: 'rgba(255,220,150,0.30)',
-    glow: '0 18px 44px rgba(224,168,69,0.44)',
-    chipBg: 'rgba(224,168,69,0.24)',
-    chipFg: '#F7E4C0',
-    chipBorder: 'rgba(224,168,69,0.8)',
-    holo: false,
-    aura: false,
-    shine: true,
-  },
-  supercar: {
-    label: 'ULTRA RARE',
-    frame:
-      'linear-gradient(145deg, #6d28a8, #b06be6 40%, #e05aa0 70%, #4a1d78)',
-    edge: 'rgba(240,200,255,0.40)',
-    glow: '0 18px 48px rgba(170,90,220,0.52)',
-    chipBg: 'rgba(170,90,220,0.30)',
-    chipFg: '#F0E0FF',
-    chipBorder: 'rgba(200,130,240,0.85)',
-    holo: true,
-    aura: false,
-    shine: true,
-  },
-  hypercar: {
-    label: 'LÉGENDAIRE',
-    frame:
-      'linear-gradient(145deg, #E0B341, #FFF6C8 30%, #FFD700 50%, #E8203A 78%, #B8860B)',
-    edge: 'rgba(255,240,190,0.6)',
-    glow: '0 20px 60px rgba(255,190,60,0.6)',
-    chipBg: 'linear-gradient(120deg,#E0B341,#FFD700 45%,#E8203A)',
-    chipFg: '#1a1306',
-    chipBorder: 'rgba(255,215,0,0.9)',
-    holo: true,
-    aura: true,
-    shine: true,
-  },
-}
+// Le cadre, les couleurs ET le libellé de chaque rareté vivent désormais dans
+// src/lib/rarityStyle.ts — le même fichier que la pastille du fil. Ils y ont
+// été réunis le 30/09/2026 : la carte annonçait « RARE » là où le fil disait
+// « PERFORMANCE », avec des couleurs différentes par-dessus le marché.
 
 const PARTICLE_COUNT = 12
 
@@ -143,8 +60,8 @@ export default function CollectorCardV2({
   brand,
   model,
   year,
-  category,
   rarity,
+  locked = false,
   serial,
   serialTotal,
   specs,
@@ -161,8 +78,16 @@ export default function CollectorCardV2({
   brand: string
   model: string
   year: number | null
-  category: string
+  /** Accepté pour compatibilité d'API : la catégorie ne figure plus sur le
+   *  recto (elle doublonnait avec la rareté). Les appelants continuent de la
+   *  passer sans effet — elle reste exploitée par la fiche détaillée. */
+  category?: string
   rarity: Rarity
+  /** Carte repérée dans le catalogue mais pas encore spottée par l'utilisateur.
+   *  La rareté reste lisible — c'est elle qui donne envie — mais le véhicule
+   *  est masqué. Aucune donnée inventée : si on ne connaît pas la voiture, on
+   *  ne l'invente pas, on montre une silhouette. */
+  locked?: boolean
   serial: number
   serialTotal: number
   specs?: CardSpecs | null
@@ -176,7 +101,24 @@ export default function CollectorCardV2({
   onChangePhoto?: () => void
   width?: number | string
 }) {
-  const look = RARITY_FRAME[rarity] ?? RARITY_FRAME.standard
+  const { t } = useTranslation()
+  const look = rarityFrame(rarity)
+
+  // ── Mouvement réduit ──
+  // Le retournement et le tilt sont posés en styles INLINE : le garde
+  // `@media (prefers-reduced-motion)` de design-system.css, qui ne cible que
+  // des classes, ne pouvait rien contre eux. La carte continuait donc de
+  // pivoter en 3D pour quelqu'un qui a explicitement demandé à son système
+  // d'arrêter les animations. On lit la préférence ici, et on la SUIT : elle
+  // peut changer sans rechargement.
+  const [reduceMotion, setReduceMotion] = useState(prefersReducedMotion)
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)')
+    const onChange = () => setReduceMotion(mq.matches)
+    mq.addEventListener?.('change', onChange)
+    return () => mq.removeEventListener?.('change', onChange)
+  }, [])
   const lvl = evolution?.level ?? 1
   const count = evolution?.count ?? 1
   const fx = LEVEL_FX[lvl] ?? null // null at L1 (base card)
@@ -227,8 +169,11 @@ export default function CollectorCardV2({
   useEffect(() => {
     const root = rootRef.current
     if (!root) return
+    // Aucun suivi du pointeur ni du gyroscope en mouvement réduit : la carte
+    // reste parfaitement plane.
+    if (reduceMotion) return
     const apply = (nx: number, ny: number) => {
-      if (look.holo) {
+      if (look.sheen) {
         root.style.setProperty('--hx', nx.toFixed(3))
         root.style.setProperty('--hy', ny.toFixed(3))
       }
@@ -250,7 +195,7 @@ export default function CollectorCardV2({
       }
     }
     const onOrient = (e: DeviceOrientationEvent) => {
-      if (!look.holo) return
+      if (!look.sheen) return
       const g = Math.max(-45, Math.min(45, e.gamma ?? 0)) / 45
       const b = Math.max(-45, Math.min(45, (e.beta ?? 0) - 45)) / 45
       apply(g * 0.5, b * 0.5)
@@ -263,20 +208,67 @@ export default function CollectorCardV2({
       root.removeEventListener('pointerleave', onLeave)
       window.removeEventListener('deviceorientation', onOrient)
     }
-  }, [look.holo])
+  }, [look.sheen, reduceMotion])
 
-  const catLabel = category && category !== 'other' ? category.toUpperCase() : ''
   const rootWidth = typeof width === 'number' ? `${width}px` : width
+
   // Level intensifies the treatment on top of rarity: shine ≥ L2, gold bloom
   // + reveal particles at the top levels — even for a low-rarity card.
-  const effShine = look.shine || lvl >= 2
+  const effShine = look.sheen || lvl >= 2
   const goldBloom = look.aura || lvl >= 5
-  const particles = reveal && (look.holo || look.aura || lvl >= 4)
+  const particles = reveal && (look.sheen || look.aura || lvl >= 4)
   const firstDate = evolution?.firstSpotAt
     ? new Date(evolution.firstSpotAt).toLocaleDateString('fr-FR')
     : null
   const lastAgo = evolution?.lastSpotAt ? timeAgo(evolution.lastSpotAt) : null
   const cumXp = evolution?.cumulativeXp ?? 0
+
+  // ── Les lignes du dos ──
+  // Construites en amont du rendu pour qu'une section entière disparaisse
+  // quand elle n'a rien à dire. `Boolean(v) && v !== '0'` écarte aussi bien la
+  // valeur absente que le zéro que renvoie parfois le catalogue : « 0 ch »
+  // n'est pas une information, c'est une donnée manquante déguisée.
+  const keep = (v: string | null | undefined) =>
+    typeof v === 'string' && v.trim() !== '' && v.trim() !== '0'
+
+  const specRows = eff
+    ? (
+        [
+          { k: t('card.power'), v: keep(eff.horsepower) ? `${eff.horsepower} ch` : '' },
+          { k: t('card.accel'), v: keep(eff.zero_to_100) ? eff.zero_to_100 : '' },
+          { k: t('card.topSpeed'), v: keep(eff.top_speed) ? `${eff.top_speed} km/h` : '' },
+          { k: t('card.torque'), v: keep(eff.torque) ? `${eff.torque} Nm` : '' },
+        ] as { k: string; v: string }[]
+      )
+        .filter((r) => r.v !== '')
+        // Trois lignes au maximum. Sur une carte de 235 px de haut, la
+        // quatrième se faisait couper en deux dès que le nom du modèle passait
+        // sur deux lignes — « Couple 1600 Nm » tranché au milieu. Le dos est un
+        // objet de collection, pas une fiche technique : puissance, 0-100 et
+        // vitesse de pointe sont ce qu'un spotteur regarde.
+        .slice(0, 3)
+    : []
+
+  // Deux lignes au maximum, même raison que pour les specs.
+  const COLLECTION_MAX = 2
+  const collectionRows: { k: string; v: string; accent?: boolean }[] = []
+  if (evolution) {
+    if (count > 1)
+      collectionRows.push({
+        k: t('card.spotted'),
+        v: t('card.spottedTimes', { count }),
+      })
+    if (firstDate) collectionRows.push({ k: t('card.discovered'), v: firstDate })
+    if (lastAgo) collectionRows.push({ k: t('card.lastSeen'), v: lastAgo })
+    if (cumXp > 0)
+      collectionRows.push({
+        k: t('card.cumulativeXp'),
+        v: `${cumXp} XP`,
+        accent: true,
+      })
+  }
+
+  collectionRows.length = Math.min(collectionRows.length, COLLECTION_MAX)
 
   return (
     <div style={{ width: rootWidth }}>
@@ -350,21 +342,48 @@ export default function CollectorCardV2({
             transformStyle: 'preserve-3d',
           }}
         >
-          {goldBloom && (
+          {/* Le halo n'existe que face visible. Retourné, il continuait de
+              peindre un coin doré au travers du dos — bataille de profondeur
+              perdue d'avance dans un contexte `preserve-3d`. Et sur le fond,
+              il n'avait rien à y faire : l'aura signale une pièce rare quand on
+              la REGARDE, pas quand on lit sa fiche. */}
+          {goldBloom && !flipped && (
+            /* Le halo est enveloppé pour une raison précise : `cardv2-aura`
+               anime `transform`, donc toute profondeur posée sur l'élément
+               lui-même est écrasée à la première image. Sans ce parent, le halo
+               restait à z=0 dans le contexte `preserve-3d` et, carte retournée,
+               passait DEVANT le dos — une traînée dorée en diagonale au travers
+               des spécifications. Le parent porte la profondeur, l'enfant garde
+               son animation. */
             <div
               aria-hidden
               style={{
+                // `inset: 0` et non `-10%` : le halo débordait de 10 % de
+                // chaque côté. Une carte Légendaire en colonne de droite
+                // élargissait donc la page et provoquait un défilement
+                // horizontal sur toute la collection. Le halo EXTÉRIEUR est
+                // déjà assuré par `look.glow` (box-shadow), qui n'agrandit
+                // jamais la zone défilable ; celui-ci ne fait plus que
+                // réchauffer l'intérieur du cadre.
                 position: 'absolute',
-                inset: '-10%',
-                borderRadius: '28px',
-                background:
-                  'radial-gradient(closest-side, rgba(255,190,60,0.5), rgba(232,32,58,0.18) 60%, transparent 72%)',
-                filter: 'blur(14px)',
-                animation: 'cardv2-aura 3.4s ease-in-out infinite',
+                inset: 0,
+                transform: 'translateZ(-4px)',
                 zIndex: 0,
                 pointerEvents: 'none',
               }}
-            />
+            >
+              <div
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  borderRadius: '28px',
+                  background:
+                    'radial-gradient(closest-side, rgba(255,190,60,0.5), rgba(232,32,58,0.18) 60%, transparent 72%)',
+                  filter: 'blur(14px)',
+                  animation: 'cardv2-aura 3.4s ease-in-out infinite',
+                }}
+              />
+            </div>
           )}
 
           <div
@@ -392,7 +411,9 @@ export default function CollectorCardV2({
             }}
           />
           <button
-            onClick={() => setFlipped((f) => !f)}
+            // Une carte verrouillée ne se retourne pas : son dos n'aurait rien
+            // à montrer, et un flip sur du vide se lit comme une panne.
+            onClick={() => !locked && setFlipped((f) => !f)}
             aria-label={`${brand} ${model}`}
             style={{
               position: 'relative',
@@ -407,12 +428,17 @@ export default function CollectorCardV2({
               transformStyle: 'preserve-3d',
               WebkitTransformStyle: 'preserve-3d',
               willChange: 'transform',
-              transition: 'transform 0.55s cubic-bezier(0.34,1.35,0.45,1)',
+              // Mouvement réduit : la carte BASCULE quand même — elle change
+              // simplement de face instantanément. Supprimer l'animation ne
+              // doit jamais supprimer la fonction.
+              transition: reduceMotion
+                ? 'none'
+                : 'transform 0.55s cubic-bezier(0.34,1.35,0.45,1)',
               transform: flipped ? 'rotateY(180deg)' : 'rotateY(0deg)',
             }}
           >
             {/* ── FRONT ── */}
-            <div style={faceStyle(look.holo)}>
+            <div style={faceStyle(look.sheen)}>
               <div style={innerStyle()}>
                 {photo ? (
                   <img
@@ -454,17 +480,81 @@ export default function CollectorCardV2({
 
                 {/* No holo film on the surface — the rainbow lives ONLY in the
                     card border (faceStyle). The photo stays a clean photo. */}
-                {effShine && <div aria-hidden style={shineStyle()} />}
+                {effShine && !locked && <div aria-hidden style={shineStyle()} />}
+
+                {/* ── CARTE VERROUILLÉE ──
+                    La photo est désaturée et assombrie jusqu'à la silhouette :
+                    on devine une voiture, on ne l'identifie pas. La rareté,
+                    elle, reste parfaitement lisible en haut — c'est le seul
+                    élément qui doit donner envie d'aller la chercher. */}
+                {locked && (
+                  <>
+                    <div
+                      aria-hidden
+                      style={{
+                        position: 'absolute',
+                        inset: 0,
+                        backdropFilter: 'grayscale(1) brightness(0.32) blur(2px)',
+                        WebkitBackdropFilter:
+                          'grayscale(1) brightness(0.32) blur(2px)',
+                        background: 'rgba(6,6,9,0.55)',
+                      }}
+                    />
+                    <div
+                      style={{
+                        position: 'absolute',
+                        inset: 0,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 7,
+                        padding: '0 14px',
+                        textAlign: 'center',
+                      }}
+                    >
+                      <Lock
+                        style={{
+                          width: 20,
+                          height: 20,
+                          color: 'rgba(255,255,255,0.72)',
+                        }}
+                      />
+                      <span
+                        style={{
+                          fontSize: 8.5,
+                          fontWeight: 800,
+                          letterSpacing: '0.1em',
+                          textTransform: 'uppercase',
+                          color: 'rgba(255,255,255,0.55)',
+                        }}
+                      >
+                        {t('card.locked')}
+                      </span>
+                    </div>
+                  </>
+                )}
 
                 {/* Top row: rarity + serial */}
                 <div style={topRowStyle()}>
+                  {/* « ULTRA RARE » et « PERFORMANCE » passaient sur deux
+                      lignes : la pastille doublait de hauteur et poussait le
+                      numéro hors de la carte. Une seule ligne, taille qui suit
+                      la largeur réelle, et troncature en dernier recours. */}
                   <span
                     style={{
-                      padding: '4px 9px',
+                      minWidth: 0,
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      padding: '4px 8px',
                       borderRadius: 9,
-                      fontSize: 10,
+                      // « PERFORMANCE » (11 signes) sortait en « PERFOR… ».
+                      // Un libellé de rareté tronqué ne se lit plus : il fallait
+                      // descendre le plancher et resserrer la chasse.
+                      fontSize: 'clamp(6.8px, 1.95vw, 10px)',
                       fontWeight: 800,
-                      letterSpacing: '0.08em',
+                      letterSpacing: '0.04em',
                       color: look.chipFg,
                       background: look.chipBg,
                       border: `1px solid ${look.chipBorder}`,
@@ -474,8 +564,12 @@ export default function CollectorCardV2({
                   >
                     {look.label}
                   </span>
+                  {/* Le recto ne porte que le NUMÉRO, pas le tirage.
+                      « #051/2000 » mangeait la moitié de la rangée et écrasait
+                      la pastille de rareté en « PERFORM… ». Le tirage complet
+                      reste au dos, où il a la place et où il se lit vraiment. */}
                   <span style={serialStyle()}>
-                    #{String(serial).padStart(3, '0')}/{serialTotal}
+                    #{String(serial).padStart(3, '0')}
                   </span>
                 </div>
 
@@ -503,7 +597,9 @@ export default function CollectorCardV2({
 
                 {/* Bottom block */}
                 <div style={{ position: 'absolute', inset: 'auto 12px 12px 12px', color: '#fff' }}>
-                  {(fx || count > 1) && (
+                  {/* Rien de tout cela sur une carte verrouillée : elle n'a
+                      jamais été spottée, afficher « Spotté ×3 » y serait faux. */}
+                  {!locked && (fx || count > 1) && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 7 }}>
                       {fx && (
                         <span
@@ -538,16 +634,29 @@ export default function CollectorCardV2({
                             textShadow: '0 1px 3px rgba(0,0,0,0.75)',
                           }}
                         >
-                          <Eye style={{ width: 10, height: 10 }} /> Spotté ×{count}
+                          <Eye style={{ width: 11, height: 11 }} />{' '}
+                          {t('card.spotted')} {t('card.spottedTimes', { count })}
                         </span>
                       )}
                     </div>
                   )}
+                  {/* « MERCEDES-AMG · 2023 » se repliait sur deux lignes et
+                      décalait le modèle vers le bas : dans une grille, deux
+                      cartes voisines n'avaient plus la même ligne de base. */}
+                  {/* Marque, année et modèle disparaissent quand la carte est
+                      verrouillée : une silhouette légendée « Lamborghini Huracán
+                      EVO » n'a plus rien de mystérieux, et c'est le mystère qui
+                      donne envie d'aller la chercher. La rareté, elle, reste
+                      affichée en haut — c'est le seul appât utile. */}
                   <div
                     style={{
-                      fontSize: 11,
+                      visibility: locked ? 'hidden' : 'visible',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      fontSize: 'clamp(9px, 2.3vw, 11px)',
                       fontWeight: 800,
-                      letterSpacing: '0.07em',
+                      letterSpacing: '0.06em',
                       color: 'rgba(255,255,255,0.78)',
                       textShadow: '0 1px 3px rgba(0,0,0,0.7)',
                     }}
@@ -558,7 +667,10 @@ export default function CollectorCardV2({
                   <div
                     style={{
                       fontFamily: 'var(--font-display, inherit)',
-                      fontSize: 20,
+                      // « 718 Cayman GTS » et « Chiron Super Sport » étaient
+                      // tronqués à 20 px fixes dans une carte de 168 px.
+                      visibility: locked ? 'hidden' : 'visible',
+                      fontSize: 'clamp(14px, 4.4vw, 20px)',
                       fontWeight: 800,
                       lineHeight: 1.05,
                       letterSpacing: '-0.02em',
@@ -591,112 +703,160 @@ export default function CollectorCardV2({
                       <span style={{ color: '#E8203A' }}>R</span>
                       <span style={{ color: '#fff' }}>EVS</span>
                     </span>
-                    {catLabel && (
-                      <span
-                        style={{
-                          fontSize: 9,
-                          fontWeight: 800,
-                          letterSpacing: '0.1em',
-                          color: 'rgba(255,255,255,0.5)',
-                        }}
-                      >
-                        {catLabel}
-                      </span>
-                    )}
+                    {/* La catégorie a quitté le recto (30/09/2026). Elle
+                        affichait « PERFORMANCE » en bas d'une carte dont la
+                        rareté était « EXCLUSIF » : deux échelles côte à côte,
+                        dont l'une emprunte les mots de l'autre. Le recto porte
+                        désormais l'essentiel — photo, marque, modèle, rareté,
+                        numéro — et rien de plus. La catégorie reste sur la
+                        fiche détaillée, à sa place. */}
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* ── BACK ── */}
-            <div style={{ ...faceStyle(look.holo), transform: 'rotateY(180deg)' }}>
-              <div style={{ ...innerStyle(), background: '#0c0c0f' }}>
-                <div style={{ padding: '20px 18px', height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
-                  {/* Name + year, centered. Rarity / serial / badge live on the
-                      front only — never repeated here. */}
-                  <div
-                    style={{
-                      textAlign: 'center',
-                      fontFamily: 'var(--font-display, inherit)',
-                      fontSize: 17,
-                      fontWeight: 800,
-                      letterSpacing: '-0.02em',
-                      lineHeight: 1.15,
-                    }}
-                  >
-                    {brand} {model}
-                    {year ? (
-                      <span style={{ color: 'rgba(255,255,255,0.5)', fontWeight: 700 }}> · {year}</span>
-                    ) : (
-                      ''
-                    )}
+            {/* ── DOS ──
+                Refait le 30/09/2026. L'ancien dos affichait le nom, un filet
+                rouge, puis « Description bientôt disponible » — un texte
+                d'attente occupant tout l'espace. Pendant ce temps la puissance,
+                le 0-100, la vitesse de pointe et le couple étaient DÉJÀ chargés
+                et n'étaient nulle part.
+
+                Règle de remplissage : une ligne n'apparaît que si sa donnée
+                existe. Jamais de tiret, jamais de « 0 », jamais de « bientôt ».
+                Un dos court est honnête ; un dos rempli de vide ne l'est pas. */}
+            {/* `isolation: isolate` + fond opaque : sans cela, le halo doré du
+                Légendaire (rendu DERRIÈRE la carte) transparaissait en diagonale
+                au travers du dos, comme une trace de brûlure. */}
+            <div
+              style={{
+                ...faceStyle(look.sheen),
+                transform: 'rotateY(180deg) translateZ(0.5px)',
+                isolation: 'isolate',
+              }}
+            >
+              <div
+                style={{ ...innerStyle(), background: '#0C0C0F', opacity: 1 }}
+              >
+                <div
+                  style={{
+                    padding: '14px 14px 12px',
+                    height: '100%',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    overflow: 'hidden',
+                    minHeight: 0,
+                  }}
+                >
+                  {/* En-tête officiel : le dos doit dire « carte REVS » avant
+                      de dire quoi que ce soit sur la voiture. */}
+                  <div style={{ textAlign: 'center' }}>
+                    <span
+                      style={{
+                        fontFamily: 'var(--font-display, inherit)',
+                        fontWeight: 900,
+                        fontSize: 15,
+                        letterSpacing: '-0.03em',
+                      }}
+                    >
+                      <span style={{ color: '#E8203A' }}>R</span>
+                      <span style={{ color: '#fff' }}>EVS</span>
+                    </span>
+                    <div
+                      style={{
+                        marginTop: 2,
+                        fontSize: 6.5,
+                        fontWeight: 800,
+                        letterSpacing: '0.22em',
+                        color: 'rgba(255,255,255,0.34)',
+                      }}
+                    >
+                      {t('card.tagline')}
+                    </div>
                   </div>
                   <div
                     aria-hidden
                     style={{
-                      width: 40,
-                      height: 2,
-                      margin: '12px auto 0',
+                      width: 46,
+                      height: 1.5,
+                      margin: '8px auto 9px',
                       borderRadius: 2,
-                      background: 'linear-gradient(90deg, transparent, #E8203A, transparent)',
+                      background:
+                        'linear-gradient(90deg, transparent, #E8203A, transparent)',
                     }}
                   />
 
-                  {/* Description in full, centered, filling the rest of the back. */}
-                  <div style={{ flex: 1, minHeight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    {loading ? (
-                      <Loader2 className="h-5 w-5 animate-spin" style={{ color: 'rgba(255,255,255,0.5)' }} />
-                    ) : eff?.fun_fact ? (
-                      <p
-                        style={{
-                          margin: 0,
-                          textAlign: 'center',
-                          fontSize: 13.5,
-                          fontStyle: 'italic',
-                          lineHeight: 1.55,
-                          color: 'rgba(255,255,255,0.82)',
-                        }}
-                      >
-                        «&nbsp;{eff.fun_fact}&nbsp;»
-                      </p>
-                    ) : (
-                      <p style={{ margin: 0, textAlign: 'center', fontSize: 12, color: 'rgba(255,255,255,0.35)' }}>
-                        Description bientôt disponible
-                      </p>
+                  {/* Le véhicule */}
+                  <div
+                    style={{
+                      textAlign: 'center',
+                      fontFamily: 'var(--font-display, inherit)',
+                      fontSize: 'clamp(10px, 3vw, 13.5px)',
+                      fontWeight: 800,
+                      letterSpacing: '-0.02em',
+                      lineHeight: 1.15,
+                      display: '-webkit-box',
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: 'vertical',
+                      overflow: 'hidden',
+                    }}
+                  >
+                    {brand} {model}
+                  </div>
+                  {year && (
+                    <div
+                      style={{
+                        textAlign: 'center',
+                        marginTop: 1,
+                        fontSize: 10,
+                        fontWeight: 700,
+                        color: 'rgba(255,255,255,0.45)',
+                      }}
+                    >
+                      {year}
+                    </div>
+                  )}
+
+                  {/* Corps : specs puis collection, chacune omise si vide. */}
+                  <div
+                    style={{
+                      flex: 1,
+                      minHeight: 0,
+                      overflow: 'hidden',
+                      marginTop: 10,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 9,
+                    }}
+                  >
+                    {loading && !specRows.length ? (
+                      <div style={{ flex: 1, display: 'grid', placeItems: 'center' }}>
+                        <Loader2
+                          className="h-4 w-4 animate-spin"
+                          style={{ color: 'rgba(255,255,255,0.4)' }}
+                        />
+                      </div>
+                    ) : null}
+
+                    {specRows.length > 0 && (
+                      <section>
+                        <SectionLabel>{t('card.specsHeading')}</SectionLabel>
+                        {specRows.map((r) => (
+                          <SpecRow key={r.k} label={r.k} value={r.v} />
+                        ))}
+                      </section>
+                    )}
+
+                    {collectionRows.length > 0 && (
+                      <section>
+                        <SectionLabel>{t('card.collectionHeading')}</SectionLabel>
+                        {collectionRows.map((r) => (
+                          <SpecRow key={r.k} label={r.k} value={r.v} accent={r.accent} />
+                        ))}
+                      </section>
                     )}
                   </div>
 
-                  {/* Evolution footer: discovery / last capture / cumulative XP. */}
-                  {evolution && (
-                    <div
-                      style={{
-                        marginTop: 12,
-                        paddingTop: 10,
-                        borderTop: '1px solid rgba(255,255,255,0.08)',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: 5,
-                        fontSize: 10.5,
-                      }}
-                    >
-                      {firstDate && (
-                        <div style={{ display: 'flex', justifyContent: 'space-between', color: 'rgba(255,255,255,0.55)' }}>
-                          <span>Découverte</span>
-                          <span style={{ color: 'rgba(255,255,255,0.85)', fontWeight: 700 }}>{firstDate}</span>
-                        </div>
-                      )}
-                      {lastAgo && (
-                        <div style={{ display: 'flex', justifyContent: 'space-between', color: 'rgba(255,255,255,0.55)' }}>
-                          <span>Dernière capture</span>
-                          <span style={{ color: 'rgba(255,255,255,0.85)', fontWeight: 700 }}>{lastAgo}</span>
-                        </div>
-                      )}
-                      <div style={{ display: 'flex', justifyContent: 'space-between', color: 'rgba(255,255,255,0.55)' }}>
-                        <span>XP cumulé{count > 1 ? ` · spotté ×${count}` : ''}</span>
-                        <span style={{ color: '#E8203A', fontWeight: 800 }}>{cumXp} XP</span>
-                      </div>
-                    </div>
-                  )}
 
                   {/* Back actions (collection only): history + hero-photo picker.
                       Divs (not buttons) + stopPropagation so they don't nest
@@ -714,7 +874,7 @@ export default function CollectorCardV2({
                           style={backBtnStyle()}
                         >
                           <Images style={{ width: 13, height: 13 }} />
-                          {count > 1 ? `${count} spots` : 'Mes spots'}
+                          {count > 1 ? `${count} spots` : t('card.mySpots')}
                         </div>
                       )}
                       {onChangePhoto && (
@@ -728,11 +888,54 @@ export default function CollectorCardV2({
                           style={backBtnStyle()}
                         >
                           <ImagePlus style={{ width: 13, height: 13 }} />
-                          Photo
+                          {t('card.photo')}
                         </div>
                       )}
                     </div>
                   )}
+                  {/* Pied : architecture moteur si connue, puis le numéro
+                      d'édition — la signature de l'objet. */}
+                  {eff?.architecture && (
+                    <div
+                      style={{
+                        marginTop: 6,
+                        fontSize: 7.5,
+                        letterSpacing: '0.04em',
+                        textAlign: 'center',
+                        color: 'rgba(255,255,255,0.32)',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                      }}
+                    >
+                      {eff.architecture}
+                    </div>
+                  )}
+                  <div
+                    style={{
+                      marginTop: 6,
+                      paddingTop: 7,
+                      borderTop: '1px solid rgba(255,255,255,0.07)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      fontSize: 8,
+                      fontWeight: 800,
+                      letterSpacing: '0.08em',
+                    }}
+                  >
+                    <span style={{ color: look.chipFg === '#1A1306' ? '#E0B341' : look.chipFg }}>
+                      {look.label}
+                    </span>
+                    <span
+                      style={{
+                        color: 'rgba(255,255,255,0.5)',
+                        fontVariantNumeric: 'tabular-nums',
+                      }}
+                    >
+                      #{String(serial).padStart(3, '0')}/{serialTotal}
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -779,19 +982,35 @@ export default function CollectorCardV2({
 // (both faces render, back text shows mirrored). The border stays static so
 // the 3D flip is rock-solid. Each face also carries an explicit rotateY so
 // Safari reliably engages backface-visibility.
-function faceStyle(holo?: boolean): React.CSSProperties {
+/**
+ * Le liseré de la carte.
+ *
+ * `sheen` ne change plus la COULEUR du cadre, seulement sa matière : le
+ * dégradé de la rareté est agrandi et déplacé au tilt, ce qui donne un reflet
+ * de métal poli. Avant, il basculait sur un arc-en-ciel néon identique pour
+ * toutes les hautes raretés — on ne distinguait plus Ultra Rare de Légendaire,
+ * et l'objet évoquait la borne d'arcade plutôt que la pièce de collection.
+ */
+function faceStyle(sheen?: boolean): React.CSSProperties {
   return {
     position: 'absolute',
     inset: 0,
     backfaceVisibility: 'hidden',
     WebkitBackfaceVisibility: 'hidden',
-    transform: 'rotateY(0deg)',
+    // `translateZ` : les deux faces vivaient exactement dans le même plan
+    // (z = 0). Chromium départageait alors les pixels au petit bonheur, d'où
+    // ce coin du recto qui transparaissait à travers le dos. Chacune avance
+    // d'un demi-pixel dans son propre repère : elles ne se disputent plus rien.
+    transform: 'rotateY(0deg) translateZ(0.5px)',
     borderRadius: 20,
-    padding: holo ? 4 : 3,
-    background: holo
-      ? 'repeating-linear-gradient(115deg, rgba(255,0,150,1) 0%, rgba(0,225,255,1) 13%, rgba(180,90,255,1) 26%, rgba(255,230,70,1) 39%, rgba(255,0,150,1) 52%)'
-      : 'var(--frame)',
-    backgroundSize: holo ? '260% 100%' : undefined,
+    padding: sheen ? 3.5 : 3,
+    background: 'var(--frame)',
+    backgroundSize: sheen ? '200% 200%' : undefined,
+    // --hx/--hy sont alimentés par le tilt (pointeur ou gyroscope) : le reflet
+    // suit la main au lieu de tourner tout seul en boucle.
+    backgroundPosition: sheen
+      ? 'calc(50% + var(--hx, 0) * 60%) calc(50% + var(--hy, 0) * 60%)'
+      : undefined,
   }
 }
 function innerStyle(): React.CSSProperties {
@@ -816,14 +1035,18 @@ function shineStyle(): React.CSSProperties {
     pointerEvents: 'none',
   }
 }
+// Rangée haute : rareté à gauche, numéro de série à droite.
+// `alignItems: center` et non `flex-start` — les deux pastilles font la même
+// hauteur, les aligner en haut ne servait qu'à décaler visuellement celle qui
+// passait sur deux lignes.
 function topRowStyle(): React.CSSProperties {
   return {
     position: 'absolute',
     inset: '10px 10px auto 10px',
     display: 'flex',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 8,
+    gap: 6,
   }
 }
 function backBtnStyle(): React.CSSProperties {
@@ -844,11 +1067,16 @@ function backBtnStyle(): React.CSSProperties {
     userSelect: 'none',
   }
 }
+// `flexShrink: 0` : « #012/100 » se faisait couper en « #012/10 » dès que le
+// libellé de rareté était long. Un numéro d'édition tronqué ne se remarque pas
+// — il se lit comme un autre numéro, ce qui est pire qu'un affichage manquant.
 function serialStyle(): React.CSSProperties {
   return {
-    padding: '4px 8px',
+    flexShrink: 0,
+    whiteSpace: 'nowrap',
+    padding: '4px 7px',
     borderRadius: 9,
-    fontSize: 10,
+    fontSize: 9.5,
     fontWeight: 800,
     fontVariantNumeric: 'tabular-nums',
     color: '#fff',
@@ -857,4 +1085,65 @@ function serialStyle(): React.CSSProperties {
     backdropFilter: 'blur(6px)',
     WebkitBackdropFilter: 'blur(6px)',
   }
+}
+
+
+// ── Petits composants du dos ──
+// Extraits pour que le JSX du dos reste lisible : deux sections, des lignes
+// libellé/valeur, rien d'autre.
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      style={{
+        fontSize: 7,
+        fontWeight: 900,
+        letterSpacing: '0.18em',
+        textTransform: 'uppercase',
+        color: 'rgba(255,255,255,0.3)',
+        marginBottom: 4,
+      }}
+    >
+      {children}
+    </div>
+  )
+}
+
+function SpecRow({
+  label,
+  value,
+  accent,
+}: {
+  label: string
+  value: string
+  accent?: boolean
+}) {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'baseline',
+        justifyContent: 'space-between',
+        gap: 8,
+        fontSize: 9.5,
+        lineHeight: 1.6,
+      }}
+    >
+      <span style={{ color: 'rgba(255,255,255,0.5)', whiteSpace: 'nowrap' }}>
+        {label}
+      </span>
+      <span
+        style={{
+          fontWeight: 800,
+          fontVariantNumeric: 'tabular-nums',
+          color: accent ? '#E8203A' : 'rgba(255,255,255,0.9)',
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+        }}
+      >
+        {value}
+      </span>
+    </div>
+  )
 }
