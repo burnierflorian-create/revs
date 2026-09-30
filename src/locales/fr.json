@@ -1358,5 +1358,15 @@
     "power": "PUISSANCE",
     "accel": "0–100",
     "topSpeed": "V. MAX"
+  },
+  "plate": {
+    "title": "Masque les plaques",
+    "help": "Trace un rectangle sur chaque plaque, ou touche-la simplement. Touche une zone rouge pour l’enlever.",
+    "marked_one": "{{count}} plaque marquée",
+    "marked_other": "{{count}} plaques marquées",
+    "clear": "Tout effacer",
+    "confirm": "Masquer et continuer",
+    "none": "Aucune plaque lisible",
+    "applying": "Application du floutage…"
   }
 }

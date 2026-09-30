@@ -1358,5 +1358,15 @@
     "power": "POWER",
     "accel": "0–60",
     "topSpeed": "TOP SPEED"
+  },
+  "plate": {
+    "title": "Mask the plates",
+    "help": "Draw a rectangle over each plate, or just tap it. Tap a red area to remove it.",
+    "marked_one": "{{count}} plate marked",
+    "marked_other": "{{count}} plates marked",
+    "clear": "Clear all",
+    "confirm": "Mask and continue",
+    "none": "No readable plate",
+    "applying": "Applying blur…"
   }
 }

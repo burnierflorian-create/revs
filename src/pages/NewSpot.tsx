@@ -28,6 +28,7 @@ import { brandSlugFor, getBrand } from '../lib/brands'
 import { searchCars, searchMakes, modelsForMake, findMake } from '../lib/cars'
 import { Skeleton } from '../components/Skeleton'
 import CollectorCard from '../components/CollectorCard'
+import PlateMarker from '../components/PlateMarker'
 import type { Spot } from '../lib/spots'
 
 type Step = 1 | 2 | 3 | 4
@@ -133,6 +134,17 @@ export default function NewSpot() {
   const [plateAck, setPlateAck] = useState(false)
   /** Vrai pendant la détection : la publication est retenue le temps du contrôle. */
   const [plateChecking, setPlateChecking] = useState(false)
+  /**
+   * Étape de masquage manuel des plaques.
+   *
+   * Elle s'intercale entre la photo et le choix IA/manuel, parce que c'est là
+   * sa place : le floutage est une obligation, l'identification un service. On
+   * ne demande pas à quelqu'un comment il veut identifier sa voiture avant de
+   * s'être assuré qu'aucune plaque ne partira en ligne.
+   *
+   * `null` = pas encore atteinte. `true` = en cours.
+   */
+  const [plateStep, setPlateStep] = useState(false)
   const [image, setImage] = useState<{ blob: Blob; base64: string } | null>(
     null,
   )
@@ -260,9 +272,12 @@ export default function NewSpot() {
     try {
       const resized = await resizeImageToJpeg(file)
       setImage(resized)
-      // Nouvelle photo → la protection repart de zéro.
+      // Nouvelle photo → la protection repart de zéro, et l'écran de masquage
+      // s'impose AVANT tout le reste. C'est la première chose qu'on fait d'une
+      // photo, avant même de demander comment identifier la voiture.
       setPlateGuard('ok')
       setPlateAck(false)
+      setPlateStep(true)
       // AI-only downscale (768px / q0.85). Image tokens scale with pixel
       // area (≈ w×h/750), so 768px is ~2× cheaper than 1200px; the higher
       // JPEG quality keeps badges/logos legible for the vision model.
@@ -570,6 +585,33 @@ export default function NewSpot() {
    * donc `publish()` téléverse toujours la version anonymisée — l'original ne
    * quitte jamais l'appareil.
    */
+  /**
+   * Applique le floutage sur les zones désignées par l'utilisateur.
+   *
+   * `blurRegions` travaille sur le blob EN MÉMOIRE : quand `publish()` arrive,
+   * `image.blob` porte déjà la version anonymisée. L'original ne quitte jamais
+   * l'appareil — il n'y a pas d'original côté serveur à protéger.
+   */
+  async function applyPlateBoxes(boxes: BBox[]) {
+    if (!image || boxes.length === 0) return
+    setPlateChecking(true)
+    try {
+      const blurred = await blurRegions(image.blob, boxes)
+      setImage(blurred)
+      if (previewUrl) URL.revokeObjectURL(previewUrl)
+      setPreviewUrl(URL.createObjectURL(blurred.blob))
+      setPlateGuard('ok')
+      setPlateStep(false)
+    } catch (e) {
+      // Le floutage lui-même a échoué (canvas indisponible) : on NE passe pas.
+      console.error('[plaques] floutage impossible :', e)
+      setPlateGuard('failed')
+      setPlateStep(false)
+    } finally {
+      setPlateChecking(false)
+    }
+  }
+
   async function runPlateGuard() {
     if (!image) return
     setPlateChecking(true)
@@ -1032,8 +1074,25 @@ export default function NewSpot() {
         </div>
       </div>
 
+      {/* ÉTAPE 1bis — MASQUAGE DES PLAQUES (obligatoire, avant tout le reste) */}
+      {step === 1 && plateStep && image && previewUrl && (
+        <div className="pb-8">
+          <PlateMarker
+            photoUrl={previewUrl}
+            onConfirm={applyPlateBoxes}
+            onNone={() => {
+              // Déclaration explicite : on la consigne comme un contrôle PASSÉ,
+              // pas comme un échec. La différence compte — un échec technique
+              // doit rester distinguable d'une photo réellement sans plaque.
+              setPlateGuard('ok')
+              setPlateStep(false)
+            }}
+          />
+        </div>
+      )}
+
       {/* ÉTAPE 1 — PHOTO */}
-      {step === 1 && (
+      {step === 1 && !plateStep && (
         <div className="space-y-6 pb-8">
           <h1 className="display-xl text-fg">{t('newspot.newSpotTitle')}</h1>
 
