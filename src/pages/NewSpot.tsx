@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import i18n from '../i18n'
@@ -16,8 +16,8 @@ import {
   type PhotoMeta,
   type Rarity,
   type SpotCategory,
-  parisDayStart,
 } from '../lib/spots'
+import { fetchAiQuota, type AiQuota } from '../lib/aiQuota'
 import { takePendingPhoto } from '../lib/pendingPhoto'
 import { useTheme } from '../lib/theme'
 import { emitNewSpot } from '../lib/feedSync'
@@ -82,8 +82,10 @@ function supaError(label: string, e: unknown): Error {
  *  apparent. On reconnaît le hint, qui est stable et ne dépend pas de la langue
  *  du message, pour afficher le texte du serveur seul.
  *
- *  Ce chemin est rare : le portail IA bloque déjà le scan en amont. Il ne
- *  s'atteint qu'en publiant sans scanner.
+ *  Depuis le 30/09/2026 ce plafond n'est plus un quota commercial mais un
+ *  garde anti-abus très haut (200/jour, migration 0086) : un usage humain ne
+ *  l'atteint jamais. Le message reste géré proprement au cas où un flot
+ *  automatisé le déclenche.
  *
  *  On teste le HINT SEUL, jamais le code 23514 : `spots_rarity_check` porte le
  *  même code, et une rareté invalide aurait alors affiché un message de quota
@@ -161,6 +163,21 @@ export default function NewSpot() {
   const [gpErr, setGpErr] = useState<string | null>(null)
   // Horodatage du dernier scan lancé — alimente le garde de cooldown.
   const lastScanRef = useRef(0)
+
+  // Quota d'ANALYSE IA du jour. `null` = inconnu (hors ligne, RPC en échec) :
+  // on masque alors le compteur au lieu d'afficher un chiffre inventé.
+  // Purement informatif — server/ai-gate.js décide, pas cet état.
+  const [aiQuota, setAiQuota] = useState<AiQuota | null>(null)
+  // Explication affichée en tête de l'étape 3 quand on y arrive SANS analyse :
+  // quota épuisé, ou saisie manuelle demandée. `null` = on vient de l'IA.
+  const [manualNotice, setManualNotice] = useState<string | null>(null)
+  const aiExhausted = aiQuota !== null && aiQuota.remaining <= 0
+  const refreshAiQuota = useCallback(() => {
+    void fetchAiQuota().then(setAiQuota)
+  }, [])
+  useEffect(() => {
+    refreshAiQuota()
+  }, [refreshAiQuota])
 
   useEffect(() => {
     return () => {
@@ -407,6 +424,40 @@ export default function NewSpot() {
       ) {
         const q = await carRes.json().catch(() => ({}))
         cancelHeartbeat()
+
+        // ── QUOTA IA ÉPUISÉ : on CONTINUE, on ne renvoie pas à la case
+        // départ (30/09/2026) ──
+        //
+        // Avant, ce cas repartait à l'étape photo : l'utilisateur avait sa
+        // voiture sous les yeux, sa photo dans la main, et REVS lui répondait
+        // « reviens demain ». Or publier ne coûte rien — seule l'analyse
+        // coûte. Le quota doit fermer l'IA, pas l'application.
+        //
+        // On rejoint donc exactement le chemin déjà emprunté quand l'IA tombe
+        // en panne : formulaire vierge, saisie à la main, publication. Aucun
+        // système parallèle, aucun écran de plus.
+        if (q?.error === 'quota_exceeded') {
+          setAiQuota((prev) =>
+            prev ? { ...prev, used: prev.limit, remaining: 0 } : prev,
+          )
+          // Le floutage des plaques n'a PAS tourné : on n'a pas lu la réponse
+          // de detect-plate, et de toute façon le quota vaut pour lui aussi.
+          // Laisser `plateGuard` à 'ok' publierait une photo non anonymisée en
+          // laissant croire qu'elle a été vérifiée. On bascule donc sur le
+          // garde explicite déjà prévu pour les pannes de détection :
+          // l'utilisateur devra confirmer lui-même qu'aucune plaque n'est
+          // lisible. Économiser un appel IA ne doit pas coûter une plaque
+          // d'immatriculation en clair.
+          setPlateGuard('failed')
+          applyResult(EMPTY_RESULT)
+          setManualNotice(
+            q?.message ||
+              t('newspot.aiQuotaExhausted', { limit: aiQuota?.limit ?? 10 }),
+          )
+          setStep(3)
+          return
+        }
+
         rejectAndRestart(
           q?.message ||
             (carRes.status === 401
@@ -452,6 +503,10 @@ export default function NewSpot() {
       }
       applyResult(data)
       cancelHeartbeat()
+      // Un crédit vient d'être consommé côté serveur : on relit le compteur
+      // plutôt que de le décrémenter à l'aveugle, pour que l'écran affiche
+      // exactement ce que la base connaît.
+      refreshAiQuota()
       // Success buzz lands at the exact moment the 3D card reveals.
       hapticSuccess()
       setStep(3)
@@ -462,6 +517,33 @@ export default function NewSpot() {
       applyResult(EMPTY_RESULT)
       setStep(3)
     }
+  }
+
+  /**
+   * Ouvre le formulaire SANS lancer d'analyse.
+   *
+   * Emprunte le chemin déjà utilisé quand l'IA échoue — résultat vide, étape 3 —
+   * plutôt que d'ajouter un écran. Deux usages :
+   *   · quota épuisé (le bouton principal devient « Saisir à la main ») ;
+   *   · choix délibéré alors qu'il reste des analyses.
+   *
+   * Aucun appel réseau n'est émis, donc aucun crédit consommé. C'est ce qui
+   * garantit qu'atteindre le plafond ne déclenche plus de tentative inutile.
+   */
+  function startManual() {
+    if (!image) return
+    // Aucune analyse ne tourne, donc aucune détection de plaque non plus :
+    // même raisonnement que pour le quota épuisé, l'utilisateur confirme.
+    setPlateGuard('failed')
+    applyResult(EMPTY_RESULT)
+    setManualNotice(
+      aiExhausted
+        ? t('newspot.aiQuotaExhausted', { limit: aiQuota?.limit ?? 10 })
+        : t('newspot.manualEntryHint'),
+    )
+    setRejection(null)
+    setPubError(null)
+    setStep(3)
   }
 
   function pickAlternative(alt: { brand: string; model: string; year: number | null }) {
@@ -477,6 +559,7 @@ export default function NewSpot() {
   function retryPublish(): void {
     setPubError(null)
     setLimitReached(false)
+    setManualNotice(null)
     setPubStatus('')
     publish()
   }
@@ -518,6 +601,7 @@ export default function NewSpot() {
     if (!image) return
     setPubError(null)
     setLimitReached(false)
+    setManualNotice(null)
     try {
       setPubStatus(t('newspot.statusLocating'))
       const pos = await getPosition()
@@ -554,37 +638,17 @@ export default function NewSpot() {
       } = await supabase.auth.getUser()
       if (!user) throw new Error(t('newspot.notAuthenticatedThrow'))
 
-      // Limite quotidienne : 5 spots/jour pour les comptes gratuits.
+      // ── SUPPRIMÉ le 30/09/2026 : le comptage « 5 spots/jour » vivait ici ──
       //
-      // Contrôle d'AGRÉMENT uniquement — l'autorité est côté serveur, dans
-      // server/ai-gate.js, qui refuse déjà le scan quand le quota de
-      // publication est atteint. Celui-ci évite juste un upload inutile.
+      // Cet écran interrogeait `subscriptions`, comptait les spots du jour et
+      // refusait la publication au-delà de 5. C'était la première des trois
+      // couches qui rationnaient une action GRATUITE — publier ne déclenche
+      // aucun appel IA. La publication n'a plus de quota commercial ; seul le
+      // trigger `enforce_spot_daily_quota` subsiste en base, comme garde
+      // anti-abus très haut, et `quotaMessage()` sait encore le reconnaître si
+      // un flot automatisé venait à le déclencher.
       //
-      // 26/09/2026 : la borne de journée passe de minuit UTC à minuit heure de
-      // Paris, et le comptage lit `spots` au lieu de `spot_count_daily` — dont
-      // la colonne `date` est alimentée par un trigger en `current_date`, donc
-      // en UTC. Les deux compteurs étaient désynchronisés une à deux heures par
-      // nuit selon la saison.
-      const { data: sub } = await supabase
-        .from('subscriptions')
-        .select('status')
-        .eq('user_id', user.id)
-        .maybeSingle()
-      const subscribed =
-        sub?.status === 'active' || sub?.status === 'trialing'
-      if (!subscribed) {
-        const { count } = await supabase
-          .from('spots')
-          .select('id', { count: 'exact', head: true })
-          .eq('user_id', user.id)
-          .gte('created_at', parisDayStart().toISOString())
-        if ((count ?? 0) >= 5) {
-          setLimitReached(true)
-          setPubError(t('newspot.limitReached'))
-          setPubStatus('')
-          return
-        }
-      }
+      // Ce qui reste plafonné, et uniquement cela : les ANALYSES IA.
 
       setPubStatus(t('newspot.statusUploading'))
       const path = `${user.id}/${Date.now()}.jpg`
@@ -934,14 +998,47 @@ export default function NewSpot() {
                   {t('newspot.retake')}
                 </button>
                 <button
-                  onClick={analyze}
+                  onClick={aiExhausted ? startManual : analyze}
                   disabled={!image}
                   className="tappable flex-[2] rounded-full bg-accent py-3 text-sm font-extrabold tracking-wider text-fg disabled:opacity-50"
                   style={{ boxShadow: '0 8px 24px rgba(232,32,58,0.45)' }}
                 >
-                  {t('newspot.analyze')}
+                  {/* Quota épuisé : le bouton principal n'appelle plus l'IA —
+                      il ouvre directement le formulaire. Aucun appel réseau
+                      n'est tenté, donc aucun 429 inutile. */}
+                  {aiExhausted ? t('newspot.manualEntry') : t('newspot.analyze')}
                 </button>
               </div>
+
+              {/* Compteur d'analyses IA. Masqué tant que le quota est inconnu :
+                  un chiffre par défaut vaudrait une promesse non tenue. */}
+              {aiQuota && (
+                <div className="mt-3 space-y-2 text-center">
+                  {aiExhausted ? (
+                    <p className="text-[12.5px] leading-snug text-fg2">
+                      {t('newspot.aiQuotaExhausted', { limit: aiQuota.limit })}
+                    </p>
+                  ) : (
+                    <>
+                      <p className="text-[12px] font-semibold text-fg2">
+                        {t('newspot.aiQuotaLeft', {
+                          remaining: aiQuota.remaining,
+                          limit: aiQuota.limit,
+                        })}
+                      </p>
+                      {/* CAS 3 — saisir à la main alors qu'il reste du quota.
+                          Discret : l'analyse reste le chemin par défaut. */}
+                      <button
+                        onClick={startManual}
+                        disabled={!image}
+                        className="tappable text-[12px] font-semibold text-fg2 underline underline-offset-4 disabled:opacity-40"
+                      >
+                        {t('newspot.manualEntry')}
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
             </div>
           ) : (
             <div className="space-y-4">
@@ -1039,9 +1136,24 @@ export default function NewSpot() {
         </div>
       )}
 
-      {/* ÉTAPE 3 — CONFIRMATION */}
+      {/* ÉTAPE 3 — CONFIRMATION (et saisie manuelle : c'est le même écran,
+          simplement pré-rempli ou vide selon qu'une analyse a eu lieu) */}
       {step === 3 && (
         <div className="space-y-6 pb-8">
+          {/* Pourquoi le formulaire est vide. Sans cette phrase, arriver sur
+              des champs vierges ressemble à un bug plutôt qu'à une porte
+              ouverte. */}
+          {manualNotice && (
+            <div
+              className="rounded-2xl px-4 py-3 text-[12.5px] leading-snug text-fg2"
+              style={{
+                background: 'var(--color-glass-mid)',
+                border: '1px solid var(--color-border)',
+              }}
+            >
+              {manualNotice}
+            </div>
+          )}
           {result.brand === 'Voiture' && result.model === 'Modèle indéterminé' ? (
             <div
               className="rounded-3xl bg-card px-4 py-3 text-sm text-fg2"
@@ -1070,16 +1182,27 @@ export default function NewSpot() {
                   />
                 </div>
               </div>
-              <p
-                className="text-center font-medium uppercase text-fg2"
-                style={{ fontSize: '10px', letterSpacing: '0.18em' }}
-              >
-                {t('newspot.confidenceLine', { confidence: result.confidence })}
-              </p>
-              {/* Low-confidence warning — a far / obscured shot makes the
-                  model guess unreliable. Surfaced under the card so the
-                  user double-checks the brand/model before publishing. */}
-              {result.confidence < 50 && <LowConfidenceBadge />}
+              {/* Indice de confiance — uniquement quand une analyse a
+                  RÉELLEMENT eu lieu. En saisie manuelle, `result` est
+                  EMPTY_RESULT : afficher « IA · 0 % de confiance » et un
+                  avertissement de reconnaissance reviendrait à reprocher à
+                  l'IA un travail qu'on ne lui a jamais demandé. */}
+              {!manualNotice && (
+                <>
+                  <p
+                    className="text-center font-medium uppercase text-fg2"
+                    style={{ fontSize: '10px', letterSpacing: '0.18em' }}
+                  >
+                    {t('newspot.confidenceLine', {
+                      confidence: result.confidence,
+                    })}
+                  </p>
+                  {/* Low-confidence warning — a far / obscured shot makes the
+                      model guess unreliable. Surfaced under the card so the
+                      user double-checks the brand/model before publishing. */}
+                  {result.confidence < 50 && <LowConfidenceBadge />}
+                </>
+              )}
               <span aria-hidden className="card-reveal-flash" />
             </div>
           )}

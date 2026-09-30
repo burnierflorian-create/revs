@@ -84,11 +84,13 @@ export const YEARLY_PRICES: Record<'premium' | 'vip', string> = {
 // Réaligné le 26/09/2026 sur ce que le code livre RÉELLEMENT.
 //
 // Deux familles de promesses ont été retirées :
-//   1. « Spots illimités » / « sans aucune limite journalière » — le portail
-//      IA (server/ai-gate.js) applique des plafonds fermes. Ces chiffres sont
-//      la référence, répliquée par le trigger de la migration 0068 :
-//        free / starter  5  ·  premium  30  ·  vip  300
-//      Annoncer l'illimité était faux.
+//   1. « Sans aucune limite journalière » — le portail IA (server/ai-gate.js)
+//      applique des plafonds fermes sur les ANALYSES :
+//        free / starter  10  ·  premium  30  ·  vip  300
+//      Annoncer l'illimité sur l'IA était faux. En revanche, depuis le
+//      30/09/2026, la PUBLICATION de spots est bel et bien illimitée dans tous
+//      les paliers : elle ne consomme aucune IA, et la plafonner revenait à
+//      faire payer ce qui ne coûte rien.
 //   2. Track days, concours, tirages au sort, paddock F1, invitations Monaco,
 //      accès anticipé aux événements — aucune de ces contreparties n'existe,
 //      ni dans le logiciel ni en dehors.
@@ -110,20 +112,25 @@ export const YEARLY_PRICES: Record<'premium' | 'vip', string> = {
 // le code ou déjà contractualisé.
 
 // Short labels used on the main /premium grid cards (one-liners).
+// 30/09/2026 — « spots IA » devient « analyses IA ». Le mot « spots » laissait
+// croire que le nombre de voitures PUBLIABLES était plafonné. Il ne l'est plus
+// (et ne l'aurait jamais dû, publier ne coûtant rien) : seules les analyses
+// Claude sont comptées. Les chiffres, eux, sont inchangés pour Premium et VIP.
 export const PREMIUM_PERKS = [
-  '30 spots IA par jour',
+  '30 analyses IA par jour',
   'Badge Premium ⚡',
 ]
 
 export const VIP_PERKS = [
-  '300 spots IA par jour',
+  '300 analyses IA par jour',
   'Tout le Premium inclus',
   'Support prioritaire',
   'Badge VIP exclusif 👑',
 ]
 
 export const FREE_PERKS = [
-  '5 spots IA par jour',
+  '10 analyses IA par jour',
+  'Spots illimités',
   'Garage et collection de cartes',
   'Carte et fil',
   'XP, niveaux et badges',
@@ -136,8 +143,8 @@ export type DetailedPerk = { icon: string; title: string; body: string }
 export const PREMIUM_PERKS_DETAILED: DetailedPerk[] = [
   {
     icon: '⚡',
-    title: '30 spots IA par jour',
-    body: 'Passe de 5 à 30 reconnaissances par jour — de quoi couvrir un rassemblement entier.',
+    title: '30 analyses IA par jour',
+    body: 'Passe de 10 à 30 reconnaissances par jour — de quoi couvrir un rassemblement entier. Publier des spots reste illimité dans tous les paliers.',
   },
   {
     icon: '⚡',
@@ -149,7 +156,7 @@ export const PREMIUM_PERKS_DETAILED: DetailedPerk[] = [
 export const VIP_PERKS_DETAILED: DetailedPerk[] = [
   {
     icon: '⚡',
-    title: '300 spots IA par jour',
+    title: '300 analyses IA par jour',
     body: 'Le plafond le plus haut de REVS : 300 reconnaissances par jour, pour les spotteurs qui sortent tous les jours.',
   },
   {

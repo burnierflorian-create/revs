@@ -705,7 +705,7 @@
     "rejectGpsIncoherent": "Localisation incohérente",
     "statusAuthenticating": "Authentification…",
     "notAuthenticatedThrow": "Non authentifié",
-    "limitReached": "Tu as atteint ta limite de 5 spots aujourd'hui. Passe Premium pour en publier plus.",
+    "limitReached": "Publication impossible pour l’instant. Réessaie dans un moment.",
     "statusUploading": "Envoi de la photo…",
     "uploadLabel": "Envoi de la photo",
     "statusPublishing": "Publication…",
@@ -754,7 +754,13 @@
     "retry": "RÉESSAYER",
     "lowConfidenceBadge": "⚠️ Cible éloignée — Reconnaissance basse",
     "cooldown": "Doucement ! Attends {{seconds}} s avant le prochain scan.",
-    "plateGuardFailed": "La protection automatique des plaques n'a pas pu s'exécuter sur cette photo. Je confirme qu'aucune plaque d'immatriculation n'y est lisible."
+    "plateGuardFailed": "La protection automatique des plaques n'a pas pu s'exécuter sur cette photo. Je confirme qu'aucune plaque d'immatriculation n'y est lisible.",
+    "aiQuotaLeft": "Analyses IA restantes : {{remaining}}/{{limit}}",
+    "aiQuotaExhaustedTitle": "Analyses IA épuisées",
+    "aiQuotaExhausted": "Tu as utilisé tes {{limit}} analyses IA aujourd’hui. Tu peux toujours ajouter et publier des Spots manuellement.",
+    "manualEntry": "Saisir à la main",
+    "manualEntryHint": "Renseigne la marque et le modèle toi-même — aucune analyse IA ne sera lancée.",
+    "analyzeUnavailable": "Saisir à la main"
   },
   "racepage": {
     "back": "Retour",

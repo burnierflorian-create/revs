@@ -28,23 +28,30 @@ export const AI_ENDPOINTS = {
 /** Écart minimum entre deux appels d'un même utilisateur sur un même endpoint. */
 const COOLDOWN_MS = 3000
 
-// Quotas journaliers par tier, remis à zéro à minuit heure de Paris.
-// `user_tier()` (migration 0015) renvoie 'premium' | 'vip' | 'starter' | null ;
-// tout le reste retombe sur le tier gratuit.
-// 26/09/2026 — le gratuit passe de 6 à 5 pour coller à la limite de spots
-// PUBLIABLES par jour. Les deux plafonds étaient désalignés : un utilisateur
-// gratuit consommait 6 reconnaissances (~0,01 $ chacune) mais ne pouvait
-// publier que 5 spots. Le 6e scan était payé pour rien, puis refusé à la
-// publication.
+// Quotas D'ANALYSE IA par jour et par tier, remis à zéro à minuit heure de
+// Paris. `user_tier()` (migration 0015) renvoie 'premium' | 'vip' | 'starter'
+// | null ; tout le reste retombe sur le tier gratuit.
 //
-// 26/09/2026 — Premium ramené de 100 à 30. Ces valeurs sont la référence : tout
-// autre endroit qui affiche un plafond (src/lib/plans.ts,
-// src/components/WelcomeCelebration.tsx) doit citer les mêmes chiffres, et le
-// trigger de la migration 0068 les réplique côté base.
-//   free / starter  5  ·  premium  30  ·  vip  300
+// ⚠️ CE QUE CES NOMBRES LIMITENT, ET CE QU'ILS NE LIMITENT PAS
+// Ils plafonnent les APPELS À CLAUDE, c'est-à-dire la facture. Ils ne
+// plafonnent PAS la publication de spots : prendre une photo, saisir une
+// voiture à la main et la publier ne coûte rien et reste illimité.
+//
+// 30/09/2026 — le gratuit passe de 5 à 10 (bêta), et surtout le raisonnement
+// du 26/09 est ABANDONNÉ. Ce jour-là, le quota IA avait été aligné sur le
+// nombre de spots publiables « pour que les deux plafonds coïncident ». C'était
+// aligner deux choses qui n'ont rien à voir : l'une protège un budget, l'autre
+// rationnait une fonctionnalité gratuite. Le résultat était qu'épuiser ses
+// analyses interdisait de publier — voir le bloc supprimé plus bas.
+//
+// Ces valeurs sont la référence exécutoire. Tout endroit qui AFFICHE un
+// plafond (src/lib/plans.ts, src/components/WelcomeCelebration.tsx) doit citer
+// les mêmes chiffres, et `ai_daily_limit()` (migration 0086) les réplique en
+// SQL pour que l'application puisse les afficher.
+//   free / starter  10  ·  premium  30  ·  vip  300
 const DAILY_LIMITS = {
-  free: 5,
-  starter: 5,
+  free: 10,
+  starter: 10,
   premium: 30,
   vip: 300,
 }
@@ -53,9 +60,12 @@ const MESSAGES = {
   missing_token: 'Authentication required',
   invalid_token: 'Authentication required',
   cooldown: 'Doucement ! Attends quelques secondes avant le prochain scan.',
-  quota_exceeded: 'Tu as atteint ta limite du jour, réessaie demain',
-  publish_quota_exceeded:
-    'Tu as publié tous tes spots du jour, réessaie demain',
+  // Message vu par l'utilisateur quand ses analyses du jour sont épuisées. Il
+  // dit explicitement que la publication reste possible : c'est la seule chose
+  // qui compte pour lui à cet instant, et l'ancien texte laissait croire que
+  // REVS entier était fermé jusqu'au lendemain.
+  quota_exceeded:
+    'Analyses IA épuisées pour aujourd’hui. Tu peux toujours saisir la voiture à la main et publier.',
   gate_unavailable:
     'Service momentanément indisponible, réessaie dans un instant.',
 }
@@ -99,8 +109,11 @@ function parisParts(d) {
 
 /**
  * Instant UTC correspondant à minuit, heure de Paris, du jour en cours.
- * Sert de borne basse pour compter les spots publiés « aujourd'hui » dans la
- * table `spots`, dont `created_at` est un timestamptz.
+ *
+ * N'a plus d'appelant DANS ce fichier depuis que le plafond de publication en
+ * est sorti (30/09/2026). Conservé parce qu'il reste la définition de référence
+ * de « la journée » côté serveur, dupliquée à l'identique dans src/lib/spots.ts
+ * et dans le trigger de la migration 0068.
  *
  * Paris est à UTC+1 en hiver et UTC+2 en été : on teste les deux décalages et
  * on retient l'instant qui retombe exactement sur 00:00 le bon jour. Le
@@ -127,23 +140,6 @@ export function parisDayStart(now = new Date()) {
   // ce qui vaut mieux que de ne pas compter du tout.
   console.warn('[ai-gate] offset Paris indéterminé, repli sur minuit UTC')
   return new Date(base)
-}
-
-/** Nombre de spots publiés par l'utilisateur depuis minuit heure de Paris.
- *  Renvoie null si le comptage échoue — l'appelant décide quoi en faire. */
-async function countSpotsToday(sb, userId) {
-  try {
-    const { count, error } = await sb
-      .from('spots')
-      .select('id', { count: 'exact', head: true })
-      .eq('user_id', userId)
-      .gte('created_at', parisDayStart().toISOString())
-    if (error) throw new Error(error.message)
-    return typeof count === 'number' ? count : null
-  } catch (e) {
-    console.error('[ai-gate] comptage des spots du jour échoué:', e?.message ?? e)
-    return null
-  }
 }
 
 /** SHA-256 salé de l'IP appelante. On ne stocke jamais l'IP en clair : le
@@ -248,22 +244,22 @@ export async function requireAiAccess(req, endpoint) {
   }
   const limit = DAILY_LIMITS[tier] ?? DAILY_LIMITS.free
 
-  // ─── Plafond de PUBLICATION, vérifié côté serveur ───
-  // Jusqu'au 26/09/2026, la limite de spots publiables par jour n'existait que
-  // dans le navigateur (NewSpot.tsx) : un INSERT PostgREST direct l'ignorait
-  // complètement. Elle est désormais contrôlée ici, sur la table `spots`, avec
-  // la même borne de journée que le quota de scans — minuit heure de Paris.
+  // ─── SUPPRIMÉ le 30/09/2026 : le plafond de PUBLICATION vivait ici ───
   //
-  // Ce test passe AVANT ai_gate_consume() : un utilisateur qui a déjà publié
-  // son quota est refusé sans perdre un crédit de scan au passage.
-  const published = await countSpotsToday(sb, user.id)
-  if (published !== null && published >= limit) {
-    console.log(
-      `[quota] user ${user.id} (tier ${tier}) — ${published}/${limit} spots publiés aujourd'hui, scan refusé`,
-    )
-    await logAbuse(sb, req, endpoint, 'publish_quota_exceeded')
-    return deny(429, 'publish_quota_exceeded')
-  }
+  // Ce portail comptait les spots déjà publiés dans la journée et refusait le
+  // SCAN au-delà. Deux choses sans rapport se bloquaient mutuellement :
+  //
+  //   « Tu as publié 5 spots aujourd'hui, donc tu ne peux plus analyser. »
+  //   « Tu as analysé 5 photos aujourd'hui, donc tu ne peux plus publier. »
+  //
+  // La seconde était la plus absurde : publier ne déclenche aucun appel IA et
+  // ne coûte donc rien. Ce portail n'a qu'un seul travail — décider si REVS
+  // paie un appel à Claude — et il s'en tient désormais à celui-là.
+  //
+  // La publication reste protégée, mais AILLEURS et pour une autre raison : le
+  // trigger `enforce_spot_daily_quota` (migrations 0068 puis 0086) force
+  // `created_at` et arrête un flot manifestement automatisé. C'est un garde
+  // anti-abus, pas un quota commercial, et il ne dépend d'aucun tier.
 
   // Cooldown + quota + incrément, atomiques côté Postgres : deux requêtes
   // concurrentes ne peuvent pas consommer deux fois le même crédit.

@@ -34,7 +34,7 @@ type Slide = { emoji: string; title: string; body: string }
 const PREMIUM_SLIDES: Slide[] = [
   {
     emoji: '⚡',
-    title: '30 spots IA par jour',
+    title: '30 analyses IA par jour',
     body: 'Tu passes de 5 à 30 reconnaissances par jour — de quoi couvrir un rassemblement entier.',
   },
   {
@@ -51,7 +51,7 @@ const PREMIUM_SLIDES: Slide[] = [
 const VIP_SLIDES: Slide[] = [
   {
     emoji: '⚡',
-    title: '300 spots IA par jour',
+    title: '300 analyses IA par jour',
     body: 'Le plafond le plus haut de REVS — 300 reconnaissances par jour.',
   },
   {

@@ -705,7 +705,7 @@
     "rejectGpsIncoherent": "Inconsistent location",
     "statusAuthenticating": "Authenticating…",
     "notAuthenticatedThrow": "Not authenticated",
-    "limitReached": "You've reached your limit of 5 spots today. Go Premium to publish more.",
+    "limitReached": "Publishing isn’t possible right now. Try again in a moment.",
     "statusUploading": "Uploading photo…",
     "uploadLabel": "Photo upload",
     "statusPublishing": "Publishing…",
@@ -754,7 +754,13 @@
     "retry": "RETRY",
     "lowConfidenceBadge": "⚠️ Distant target — Low recognition",
     "cooldown": "Easy! Wait {{seconds}}s before the next scan.",
-    "plateGuardFailed": "Automatic licence-plate protection could not run on this photo. I confirm no plate is readable on it."
+    "plateGuardFailed": "Automatic licence-plate protection could not run on this photo. I confirm no plate is readable on it.",
+    "aiQuotaLeft": "AI analyses left: {{remaining}}/{{limit}}",
+    "aiQuotaExhaustedTitle": "AI analyses used up",
+    "aiQuotaExhausted": "You've used your {{limit}} AI analyses today. You can still add and publish Spots manually.",
+    "manualEntry": "Enter manually",
+    "manualEntryHint": "Fill in the make and model yourself — no AI analysis will run.",
+    "analyzeUnavailable": "Enter manually"
   },
   "racepage": {
     "back": "Back",

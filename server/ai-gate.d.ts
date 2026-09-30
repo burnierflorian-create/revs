@@ -26,7 +26,6 @@ export type AiAccessDenied = {
     | 'invalid_token'
     | 'cooldown'
     | 'quota_exceeded'
-    | 'publish_quota_exceeded'
     | 'gate_unavailable'
   body: { error: string; message: string }
 }
