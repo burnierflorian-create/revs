@@ -760,7 +760,16 @@
     "aiQuotaExhausted": "You've used your {{limit}} AI analyses today. You can still add and publish Spots manually.",
     "manualEntry": "Enter manually",
     "manualEntryHint": "Fill in the make and model yourself — no AI analysis will run.",
-    "analyzeUnavailable": "Enter manually"
+    "analyzeUnavailable": "Enter manually",
+    "plateChecking": "Checking plates…",
+    "chooseTitle": "How do you want to identify this car?",
+    "chooseAi": "Analyse with AI",
+    "chooseAiSub_one": "{{count}} free analysis left today",
+    "chooseAiSub_other": "{{count}} free analyses left today",
+    "chooseAiSubDefault": "{{limit}} free analyses per day",
+    "chooseManual": "Enter manually",
+    "chooseManualSub": "Publish your Spot without AI analysis",
+    "chooseExhausted": "You've used your {{limit}} AI analyses today."
   },
   "racepage": {
     "back": "Back",

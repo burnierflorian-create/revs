@@ -1625,7 +1625,45 @@ export default function MapPage() {
           refreshMarker(sp.id)
         },
       )
+      // ── DELETE — ajouté le 30/09/2026 ──
+      // Il manquait : un spot supprimé gardait son marqueur jusqu'au prochain
+      // sondage, soit jusqu'à une minute à pointer une voiture qui n'existe
+      // plus. `payload.old` ne porte que la clé primaire (REPLICA IDENTITY par
+      // défaut), et c'est tout ce dont on a besoin ici.
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'spots' },
+        (payload) => {
+          const id = (payload.old as { id?: string } | null)?.id
+          if (!id) return
+          allSpots.delete(id)
+          newSpotIds.delete(id)
+          refreshSource()
+          recomputeHotZones()
+        },
+      )
       .subscribe()
+
+    // ── Balayage des spots expirés ──
+    // `expires_at` est filtré à la construction de la source, mais celle-ci
+    // n'était reconstruite qu'à l'arrivée d'un événement ou au sondage : un
+    // spot pouvait donc rester affiché jusqu'à une minute après son heure.
+    // Sur une durée de vie d'UNE heure, une minute de retard se voit.
+    const sweepId = window.setInterval(() => {
+      const now = Date.now()
+      let dropped = false
+      for (const [id, sp] of allSpots) {
+        if (sp.expires_at && new Date(sp.expires_at).getTime() <= now) {
+          allSpots.delete(id)
+          newSpotIds.delete(id)
+          dropped = true
+        }
+      }
+      if (dropped) {
+        refreshSource()
+        recomputeHotZones()
+      }
+    }, 15000)
 
     // In-app bridge — the publisher's OWN spot appears instantly without
     // waiting on (or depending on) Supabase realtime. NewSpot emits the
@@ -1643,6 +1681,7 @@ export default function MapPage() {
 
     return () => {
       if (pollId) clearInterval(pollId)
+      window.clearInterval(sweepId)
       window.clearInterval(hotZonesInterval)
       clearHotZones()
       offNewSpot()

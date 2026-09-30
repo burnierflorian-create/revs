@@ -37,7 +37,8 @@ const COOLDOWN_MS = 3000
 // plafonnent PAS la publication de spots : prendre une photo, saisir une
 // voiture à la main et la publier ne coûte rien et reste illimité.
 //
-// 30/09/2026 — le gratuit passe de 5 à 10 (bêta), et surtout le raisonnement
+// 30/09/2026 — le gratuit est à 5 (porté à 10 le matin, ramené à 5 l'après-midi
+// sur demande explicite du brief P0-3), et surtout le raisonnement
 // du 26/09 est ABANDONNÉ. Ce jour-là, le quota IA avait été aligné sur le
 // nombre de spots publiables « pour que les deux plafonds coïncident ». C'était
 // aligner deux choses qui n'ont rien à voir : l'une protège un budget, l'autre
@@ -48,12 +49,34 @@ const COOLDOWN_MS = 3000
 // plafond (src/lib/plans.ts, src/components/WelcomeCelebration.tsx) doit citer
 // les mêmes chiffres, et `ai_daily_limit()` (migration 0086) les réplique en
 // SQL pour que l'application puisse les afficher.
-//   free / starter  10  ·  premium  30  ·  vip  300
+//   free / starter  5  ·  premium  30  ·  vip  300
 const DAILY_LIMITS = {
-  free: 10,
-  starter: 10,
+  free: 5,
+  starter: 5,
   premium: 30,
   vip: 300,
+}
+
+// ── LA CONFIDENTIALITÉ N'EST PAS UN QUOTA (30/09/2026) ──
+//
+// `detect-plate` passait par les mêmes plafonds que `identify-car`. Un
+// utilisateur gratuit ayant épuisé ses analyses se voyait donc refuser la
+// DÉTECTION DE PLAQUE — et publiait alors une photo non anonymisée, sur simple
+// case à cocher. Autrement dit : la protection de la vie privée des personnes
+// filmées dépendait du forfait du photographe.
+//
+// Identifier une voiture est un service, rationnable. Flouter une plaque est
+// une obligation. Les deux ne peuvent pas partager un compteur.
+//
+// Ce plafond-ci n'est donc PAS un quota produit mais un garde anti-abus, hors
+// d'atteinte d'un usage humain (≈ 0,005 $ l'appel) : il n'existe que pour
+// arrêter une boucle défectueuse ou un script.
+const PRIVACY_DAILY_LIMIT = 300
+
+/** Le plafond applicable à un endpoint, pour un tier donné. */
+function limitFor(endpoint, tier) {
+  if (endpoint === AI_ENDPOINTS.DETECT_PLATE) return PRIVACY_DAILY_LIMIT
+  return DAILY_LIMITS[tier] ?? DAILY_LIMITS.free
 }
 
 const MESSAGES = {
@@ -242,7 +265,7 @@ export async function requireAiAccess(req, endpoint) {
     // plutôt qu'un accès illimité accordé par erreur.
     console.error('[ai-gate] user_tier failed, falling back to free:', e?.message ?? e)
   }
-  const limit = DAILY_LIMITS[tier] ?? DAILY_LIMITS.free
+  const limit = limitFor(endpoint, tier)
 
   // ─── SUPPRIMÉ le 30/09/2026 : le plafond de PUBLICATION vivait ici ───
   //

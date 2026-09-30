@@ -131,6 +131,8 @@ export default function NewSpot() {
   // 'failed' n'autorise plus la publication silencieuse : voir plateAck.
   const [plateGuard, setPlateGuard] = useState<'ok' | 'failed'>('ok')
   const [plateAck, setPlateAck] = useState(false)
+  /** Vrai pendant la détection : la publication est retenue le temps du contrôle. */
+  const [plateChecking, setPlateChecking] = useState(false)
   const [image, setImage] = useState<{ blob: Blob; base64: string } | null>(
     null,
   )
@@ -452,7 +454,7 @@ export default function NewSpot() {
           applyResult(EMPTY_RESULT)
           setManualNotice(
             q?.message ||
-              t('newspot.aiQuotaExhausted', { limit: aiQuota?.limit ?? 10 }),
+              t('newspot.aiQuotaExhausted', { limit: aiQuota?.limit ?? 5 }),
           )
           setStep(3)
           return
@@ -530,20 +532,87 @@ export default function NewSpot() {
    * Aucun appel réseau n'est émis, donc aucun crédit consommé. C'est ce qui
    * garantit qu'atteindre le plafond ne déclenche plus de tentative inutile.
    */
-  function startManual() {
+  /**
+   * Saisie manuelle — SANS identification IA, mais AVEC floutage des plaques.
+   *
+   * ── CE QUI A CHANGÉ LE 30/09/2026 ──
+   * Ce chemin posait `plateGuard('failed')` et s'en remettait à une case à
+   * cocher : « je certifie qu'aucune plaque n'est lisible ». Le mode manuel
+   * devenait donc une sortie de secours du système de confidentialité, et
+   * c'est précisément par là que passaient les utilisateurs à court de quota.
+   *
+   * Désormais la détection de plaque tourne TOUJOURS. Elle ne dépend plus du
+   * quota d'identification (voir server/ai-gate.js) : identifier une voiture
+   * est un service, flouter une plaque est une obligation.
+   *
+   * La case à cocher ne subsiste que pour le vrai échec technique — détection
+   * indisponible, floutage impossible — jamais comme raccourci par défaut.
+   */
+  async function startManual() {
     if (!image) return
-    // Aucune analyse ne tourne, donc aucune détection de plaque non plus :
-    // même raisonnement que pour le quota épuisé, l'utilisateur confirme.
-    setPlateGuard('failed')
     applyResult(EMPTY_RESULT)
-    setManualNotice(
-      aiExhausted
-        ? t('newspot.aiQuotaExhausted', { limit: aiQuota?.limit ?? 10 })
-        : t('newspot.manualEntryHint'),
-    )
     setRejection(null)
     setPubError(null)
+    setManualNotice(
+      aiExhausted
+        ? t('newspot.aiQuotaExhausted', { limit: aiQuota?.limit ?? 5 })
+        : t('newspot.manualEntryHint'),
+    )
     setStep(3)
+    await runPlateGuard()
+  }
+
+  /**
+   * Détecte puis floute les plaques sur le blob en mémoire.
+   *
+   * Utilisé par les DEUX chemins : l'analyse IA le fait déjà dans son appel
+   * groupé, la saisie manuelle l'appelle ici. Le blob est remplacé sur place,
+   * donc `publish()` téléverse toujours la version anonymisée — l'original ne
+   * quitte jamais l'appareil.
+   */
+  async function runPlateGuard() {
+    if (!image) return
+    setPlateChecking(true)
+    try {
+      const { data: sess } = await supabase.auth.getSession()
+      const token = sess?.session?.access_token
+      if (!token) {
+        setPlateGuard('failed')
+        return
+      }
+      const res = await fetch('/api/detect-plate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          imageBase64: aiBase64 ?? image.base64,
+          mimeType: 'image/jpeg',
+        }),
+      })
+      if (!res.ok) {
+        setPlateGuard('failed')
+        return
+      }
+      const { plates } = (await res.json()) as { plates: BBox[] | null }
+      if (plates === null) {
+        setPlateGuard('failed')
+        return
+      }
+      if (plates.length > 0) {
+        const blurred = await blurRegions(image.blob, plates)
+        setImage(blurred)
+        if (previewUrl) URL.revokeObjectURL(previewUrl)
+        setPreviewUrl(URL.createObjectURL(blurred.blob))
+      }
+      setPlateGuard('ok')
+    } catch (e) {
+      console.error('[plate guard] échec :', e)
+      setPlateGuard('failed')
+    } finally {
+      setPlateChecking(false)
+    }
   }
 
   function pickAlternative(alt: { brand: string; model: string; year: number | null }) {
@@ -1010,48 +1079,94 @@ export default function NewSpot() {
                 >
                   {t('newspot.retake')}
                 </button>
-                <button
-                  onClick={aiExhausted ? startManual : analyze}
-                  disabled={!image}
-                  className="tappable flex-[2] rounded-full bg-accent py-3 text-sm font-extrabold tracking-wider text-fg disabled:opacity-50"
-                  style={{ boxShadow: '0 8px 24px rgba(232,32,58,0.45)' }}
-                >
-                  {/* Quota épuisé : le bouton principal n'appelle plus l'IA —
-                      il ouvre directement le formulaire. Aucun appel réseau
-                      n'est tenté, donc aucun 429 inutile. */}
-                  {aiExhausted ? t('newspot.manualEntry') : t('newspot.analyze')}
-                </button>
               </div>
 
-              {/* Compteur d'analyses IA. Masqué tant que le quota est inconnu :
-                  un chiffre par défaut vaudrait une promesse non tenue. */}
-              {aiQuota && (
-                <div className="mt-3 space-y-2 text-center">
-                  {aiExhausted ? (
-                    <p className="text-[12.5px] leading-snug text-fg2">
-                      {t('newspot.aiQuotaExhausted', { limit: aiQuota.limit })}
-                    </p>
-                  ) : (
-                    <>
-                      <p className="text-[12px] font-semibold text-fg2">
-                        {t('newspot.aiQuotaLeft', {
-                          remaining: aiQuota.remaining,
-                          limit: aiQuota.limit,
-                        })}
-                      </p>
-                      {/* CAS 3 — saisir à la main alors qu'il reste du quota.
-                          Discret : l'analyse reste le chemin par défaut. */}
-                      <button
-                        onClick={startManual}
-                        disabled={!image}
-                        className="tappable text-[12px] font-semibold text-fg2 underline underline-offset-4 disabled:opacity-40"
-                      >
-                        {t('newspot.manualEntry')}
-                      </button>
-                    </>
-                  )}
-                </div>
+              {/* ── « COMMENT VEUX-TU IDENTIFIER CE VÉHICULE ? » ──
+                  Deux chemins de rang ÉGAL (30/09/2026). L'analyse IA n'est
+                  plus une porte obligatoire : c'est un service, offert à côté
+                  de la saisie manuelle. Le bouton manuel reste présent même
+                  quand il reste des crédits — et devient le chemin mis en
+                  avant quand il n'y en a plus.
+
+                  Dans les deux cas, la détection de plaque tourne : elle ne
+                  dépend plus du quota (voir server/ai-gate.js). */}
+              <p className="mt-5 text-center text-[13px] font-bold text-fg">
+                {t('newspot.chooseTitle')}
+              </p>
+
+              {aiExhausted && (
+                <p className="mt-1.5 text-center text-[12px] leading-snug text-fg2">
+                  {t('newspot.chooseExhausted', { limit: aiQuota?.limit ?? 5 })}
+                </p>
               )}
+
+              <div className="mt-3 space-y-2.5">
+                <button
+                  onClick={analyze}
+                  disabled={!image || aiExhausted}
+                  className="tappable w-full rounded-2xl px-4 py-3.5 text-left disabled:opacity-40"
+                  style={{
+                    background: aiExhausted
+                      ? 'var(--color-glass-mid)'
+                      : 'rgb(var(--color-accent))',
+                    border: aiExhausted ? '1px solid var(--color-border)' : 'none',
+                    boxShadow: aiExhausted
+                      ? undefined
+                      : '0 8px 24px rgba(232,32,58,0.45)',
+                  }}
+                >
+                  <span
+                    className="block text-[14px] font-extrabold tracking-wide"
+                    style={{ color: aiExhausted ? 'rgb(var(--color-fg-2))' : '#fff' }}
+                  >
+                    {t('newspot.chooseAi')}
+                  </span>
+                  <span
+                    className="mt-0.5 block text-[11.5px] font-medium"
+                    style={{
+                      color: aiExhausted
+                        ? 'rgb(var(--color-fg-2))'
+                        : 'rgba(255,255,255,0.78)',
+                    }}
+                  >
+                    {aiQuota
+                      ? t('newspot.chooseAiSub', { count: aiQuota.remaining })
+                      : t('newspot.chooseAiSubDefault', { limit: 5 })}
+                  </span>
+                </button>
+
+                <button
+                  onClick={startManual}
+                  disabled={!image}
+                  className="tappable w-full rounded-2xl px-4 py-3.5 text-left disabled:opacity-40"
+                  style={{
+                    background: aiExhausted
+                      ? 'rgb(var(--color-accent))'
+                      : 'var(--color-glass-mid)',
+                    border: aiExhausted ? 'none' : '1px solid var(--color-border)',
+                    boxShadow: aiExhausted
+                      ? '0 8px 24px rgba(232,32,58,0.45)'
+                      : undefined,
+                  }}
+                >
+                  <span
+                    className="block text-[14px] font-extrabold tracking-wide"
+                    style={{ color: aiExhausted ? '#fff' : 'rgb(var(--color-fg))' }}
+                  >
+                    {t('newspot.chooseManual')}
+                  </span>
+                  <span
+                    className="mt-0.5 block text-[11.5px] font-medium"
+                    style={{
+                      color: aiExhausted
+                        ? 'rgba(255,255,255,0.78)'
+                        : 'rgb(var(--color-fg-2))',
+                    }}
+                  >
+                    {t('newspot.chooseManualSub')}
+                  </span>
+                </button>
+              </div>
             </div>
           ) : (
             <div className="space-y-4">
@@ -1354,15 +1469,20 @@ export default function NewSpot() {
 
           <button
             onClick={() => setStep(4)}
+            // `plateChecking` : la publication est retenue tant que le contrôle
+            // de plaque tourne. Sans ce garde, un utilisateur rapide pouvait
+            // publier AVANT que le floutage ne soit appliqué au blob — et
+            // téléverser l'original.
             disabled={
               !brand.trim() ||
               !model.trim() ||
+              plateChecking ||
               (plateGuard === 'failed' && !plateAck)
             }
             className="tappable w-full rounded-full bg-accent py-4 text-sm font-extrabold tracking-wider text-fg disabled:opacity-50"
             style={{ boxShadow: '0 8px 24px rgba(232,32,58,0.45)' }}
           >
-            {t('newspot.continue')}
+            {plateChecking ? t('newspot.plateChecking') : t('newspot.continue')}
           </button>
         </div>
       )}
