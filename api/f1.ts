@@ -103,6 +103,73 @@ const DRIVER_FIELDS = [
   'bio','highlights','drivingStyle',
 ]
 
+
+// ═══════ VOLET SPORTIF SEUL — LE CHANGEMENT DE COÛT DU 01/10/2026 ═══════
+//
+// `TEAM_FULL` et `DRIVER_FULL` restent utilisés pour la GÉNÉRATION INITIALE
+// d'une entité jamais vue. Mais ils ne doivent plus servir au
+// rafraîchissement : ils redemandent la biographie, la date de naissance et
+// l'histoire de l'écurie — des faits qui ne changeront jamais — à chaque
+// expiration du TTL de sept jours.
+//
+// Les deux prompts ci-dessous ne demandent QUE ce qui bouge. Ils sont ~4 fois
+// plus courts, et surtout le texte éditorial n'est plus réécrit : il vit dans
+// `f1_entity_content`, sans date d'expiration (migration 0096).
+const TEAM_SEASON = `Tu es un journaliste F1 francophone. Pour l'écurie demandée, utilise web_search au moins UNE fois pour récupérer les chiffres 2026 ACTUELS.
+
+Règles strictes :
+- web_search au moins une fois.
+- Donnée introuvable → "N/A".
+- Tout en FRANÇAIS, AUCUN markdown.
+- Ne donne QUE les champs demandés. Pas d'histoire, pas de présentation.
+
+Réponds UNIQUEMENT par ce JSON :
+{
+  "currentPosition": "classement constructeurs 2026 (chiffre) ou N/A",
+  "currentPoints": "points 2026 (chiffre) ou N/A",
+  "seasonWins": "victoires 2026 (chiffre) ou N/A",
+  "seasonPodiums": "podiums 2026 (chiffre) ou N/A",
+  "seasonPoles": "poles 2026 (chiffre) ou N/A",
+  "lastRaceGp": "nom du dernier GP couru en 2026 ou N/A",
+  "lastRaceResults": "résultat de l'écurie à ce GP, 1 phrase, ou N/A"
+}`
+
+const DRIVER_SEASON = `Tu es un journaliste F1 francophone. Pour le pilote demandé, utilise web_search au moins UNE fois pour récupérer les chiffres 2026 à jour.
+
+Règles strictes :
+- web_search au moins une fois.
+- Donnée introuvable → "N/A".
+- Tout en FRANÇAIS, AUCUN markdown.
+- Ne donne QUE les champs demandés. Pas de biographie, pas de style de pilotage.
+
+Réponds UNIQUEMENT par ce JSON :
+{
+  "number": "numéro de course 2026 (chiffre)",
+  "team": "nom court de l'écurie 2026",
+  "currentPosition": "classement pilotes 2026 (chiffre) ou N/A",
+  "currentPoints": "points 2026 (chiffre) ou N/A",
+  "seasonWins": "victoires 2026 (chiffre) ou N/A",
+  "seasonPodiums": "podiums 2026 (chiffre) ou N/A",
+  "seasonPoles": "poles 2026 (chiffre) ou N/A",
+  "championships": "titres mondiaux (chiffre)",
+  "wins": "victoires en carrière (chiffre)",
+  "poles": "poles en carrière (chiffre)",
+  "podiums": "podiums en carrière (chiffre)",
+  "careerPoints": "points carrière F1 (chiffre)",
+  "lastFiveGps": "[ {\\"name\\":\\"GP d'Espagne\\",\\"position\\":\\"1\\",\\"points\\":\\"26\\"} , … ] — 5 derniers GPs courus en 2026, du plus récent au plus ancien. Si aucun → []."
+}`
+
+/** Les champs ÉDITORIAUX, servis depuis `f1_entity_content` et jamais
+ *  redemandés. Tout ce qui n'est pas là est du sportif. */
+const STATIC_FIELDS: Record<'team' | 'driver', string[]> = {
+  team: ['fullName', 'shortName', 'nationality', 'base', 'foundedYear',
+         'history', 'highlights', 'carName', 'engine', 'specs'],
+  driver: ['fullName', 'birthDate', 'birthPlace', 'nationality',
+           'bio', 'highlights', 'drivingStyle'],
+}
+
+const CONTENT_VERSION_F1 = 1
+
 // 2026 calendar — passed into prompts so Claude knows which race to
 // look up by `round`. MIROIR EXACT de GP_2026 dans src/lib/f1.ts, qui reste la
 // source de vérité : GrandPrixDetail envoie le `round` issu de ce tableau-là,
@@ -382,7 +449,6 @@ async function handleDetail(
     typeof req.body === 'string' ? JSON.parse(req.body) : req.body || {}
   const slug = String((body as { slug?: string }).slug ?? '').toLowerCase()
   const dict = type === 'team' ? TEAM_SLUGS : DRIVER_SLUGS
-  const fields = type === 'team' ? TEAM_FIELDS : DRIVER_FIELDS
   const table = type === 'team' ? 'f1_teams' : 'f1_drivers'
   const displayName = dict[slug]
   if (!slug || !displayName) {
@@ -392,52 +458,145 @@ async function handleDetail(
     return
   }
 
+  // ─────────── 1. L'ÉDITORIAL — lu, jamais réécrit ───────────
+  // Il vit dans `f1_entity_content` SANS date d'expiration (migration 0096).
+  // C'est le changement qui coupe la dépense : la biographie de Verstappen
+  // n'a aucune raison d'être réécrite parce qu'une semaine a passé.
+  const entityType = type === 'team' ? 'team' : 'driver'
+  const { data: staticRaw } = await admin.rpc('f1_content', {
+    p_type: entityType,
+    p_key: slug,
+    p_lang: 'fr',
+  })
+  let editorial = (staticRaw ?? null) as Record<string, unknown> | null
+
+  // ─────────── 2. LE SPORTIF — c'est lui qui vieillit ───────────
   const { data: cached } = await admin
     .from(table)
     .select('data, generated_at')
     .eq('slug', slug)
     .maybeSingle()
-  if (cached?.data && cached.generated_at) {
-    const age = Date.now() - new Date(cached.generated_at as string).getTime()
-    if (age < TTL_MS) {
-      res.status(200).json({
-        data: cached.data,
-        cached: true,
-        generated_at: cached.generated_at,
-      })
-      return
-    }
+
+  const cachedData = (cached?.data ?? null) as Record<string, unknown> | null
+  const fresh =
+    !!cached?.generated_at &&
+    Date.now() - new Date(cached.generated_at as string).getTime() < TTL_MS
+
+  if (fresh && cachedData && editorial) {
+    res.status(200).json({
+      data: { ...editorial, ...cachedData },
+      cached: true,
+      generated_at: cached!.generated_at,
+    })
+    return
   }
 
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
   try {
+    // Deux prompts possibles, et c'est tout l'enjeu :
+    //   · l'éditorial MANQUE → prompt complet, une seule fois dans la vie de
+    //     l'entité, et on pose le verrou pour qu'une seule requête le fasse ;
+    //   · l'éditorial est là → prompt SAISON, quatre fois plus court, qui ne
+    //     redemande ni la biographie ni l'histoire.
+    const needEditorial = !editorial
+    if (needEditorial) {
+      const { data: claim } = await admin.rpc('claim_f1_content', {
+        p_type: entityType,
+        p_key: slug,
+        p_lang: 'fr',
+        p_version: CONTENT_VERSION_F1,
+      })
+      // Quelqu'un d'autre génère déjà : on ne paie pas une seconde fois.
+      if (claim === 'pending' && cachedData) {
+        res.status(200).json({
+          data: cachedData,
+          cached: true,
+          generating: true,
+          generated_at: cached?.generated_at,
+        })
+        return
+      }
+    }
+
     const parsed = await callClaude(
       client,
-      type === 'team' ? TEAM_FULL : DRIVER_FULL,
+      needEditorial
+        ? type === 'team' ? TEAM_FULL : DRIVER_FULL
+        : type === 'team' ? TEAM_SEASON : DRIVER_SEASON,
       type === 'team' ? `Écurie : ${displayName}.` : `Pilote : ${displayName}.`,
-      3000,
+      needEditorial ? 3000 : 1200,
     )
     if (!parsed) {
       console.error(`[f1 ${type}] parse failed`)
-      if (cached?.data) {
+      if (needEditorial) {
+        await admin
+          .from('f1_entity_content')
+          .update({ status: 'failed' })
+          .eq('entity_type', entityType)
+          .eq('entity_key', slug)
+          .eq('lang', 'fr')
+      }
+      if (cachedData) {
         res.status(200).json({
-          data: cached.data,
+          data: { ...(editorial ?? {}), ...cachedData },
           cached: true,
           stale: true,
-          generated_at: cached.generated_at,
+          generated_at: cached?.generated_at,
         })
         return
       }
       res.status(502).json({ error: 'Fiche indisponible — réessaie plus tard.' })
       return
     }
-    const data =
-      type === 'driver' ? normalizeDriverFull(parsed) : normalize(parsed, fields)
+
+    const normalised =
+      type === 'team' ? normalizeTeam(parsed) : normalizeDriver(parsed)
+
+    // ── Le tri : l'éditorial d'un côté, le sportif de l'autre ──
+    // Sans cette séparation à l'écriture, le prochain rafraîchissement
+    // réécrirait de nouveau la biographie — on serait revenu au point de
+    // départ.
+    const statics = STATIC_FIELDS[entityType]
+    if (needEditorial) {
+      const editorialOnly: Record<string, unknown> = {}
+      for (const k of statics) {
+        if (normalised[k] !== undefined) editorialOnly[k] = normalised[k]
+      }
+      // Le palmarès de carrière accompagne l'éditorial pour que la fiche
+      // reste complète même avant le premier rafraîchissement sportif.
+      for (const k of ['championships', 'wins', 'poles', 'podiums', 'careerPoints', 'totalWins', 'totalPoles']) {
+        if (normalised[k] !== undefined) editorialOnly[k] = normalised[k]
+      }
+      await admin.from('f1_entity_content').upsert(
+        {
+          entity_type: entityType,
+          entity_key: slug,
+          lang: 'fr',
+          content: editorialOnly,
+          content_version: CONTENT_VERSION_F1,
+          status: 'ready',
+          generated_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'entity_type,entity_key,lang' },
+      )
+      editorial = editorialOnly
+    }
+
+    const dynamicOnly: Record<string, unknown> = {}
+    for (const [k, v] of Object.entries(normalised)) {
+      if (!statics.includes(k)) dynamicOnly[k] = v
+    }
+
     const generated_at = new Date().toISOString()
     await admin
       .from(table)
-      .upsert({ slug, data, generated_at }, { onConflict: 'slug' })
-    res.status(200).json({ data, cached: false, generated_at })
+      .upsert({ slug, data: dynamicOnly, generated_at }, { onConflict: 'slug' })
+    res.status(200).json({
+      data: { ...(editorial ?? {}), ...dynamicOnly },
+      cached: false,
+      generated_at,
+    })
   } catch (e) {
     console.error(`[f1 ${type}] failed:`, e)
     if (cached?.data) {
