@@ -134,6 +134,76 @@ async function generate(spot, photo, attempt) {
   return { ok: true, ms, file, bytes: bytes.length, usage: json.usageMetadata }
 }
 
+/**
+ * Les quatre mesures automatiques de la grille (§8), appliquées à chaud.
+ * Elles n'évaluent QUE le mesurable — résolution, fond, cadrage, teinte
+ * saturée. L'identité du modèle, critère éliminatoire, reste à l'œil.
+ */
+async function score(file, expectedColour) {
+  const sharp = (await import('sharp')).default
+  const { colourFamily } = await import('../server/garage-visual.js')
+  const img = sharp(readFileSync(file))
+  const meta = await img.metadata()
+  const { data, info } = await img
+    .resize({ width: 320, fit: 'inside' })
+    .removeAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true })
+  const { width: w, height: h, channels: ch } = info
+  const at = (x, y) => {
+    const i = (y * w + x) * ch
+    return [data[i], data[i + 1], data[i + 2]]
+  }
+  const lum = ([r, g, b]) => (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255
+  const band = Math.max(2, Math.round(h * 0.06))
+  let es = 0
+  let en = 0
+  for (let y = 0; y < h; y += 1)
+    for (let x = 0; x < w; x += 1)
+      if (y < band || y >= h - band || x < band || x >= w - band) {
+        es += lum(at(x, y))
+        en += 1
+      }
+  const edgeLum = es / en
+  const hit = (pts) => pts.filter((p) => lum(at(p[0], p[1])) > edgeLum + 0.18).length / pts.length
+  const rowAt = (y) => Array.from({ length: w }, (_, x) => [x, y])
+  const colAt = (x) => Array.from({ length: h }, (_, y) => [x, y])
+  const touches = [
+    ['haut', hit(rowAt(1))], ['bas', hit(rowAt(h - 2))],
+    ['gauche', hit(colAt(1))], ['droite', hit(colAt(w - 2))],
+  ].filter(([, v]) => v > 0.12).map(([k]) => k)
+
+  let rs = 0, gs = 0, bs = 0, nc = 0
+  for (let y = Math.round(h * 0.3); y < Math.round(h * 0.8); y += 1)
+    for (let x = Math.round(w * 0.25); x < Math.round(w * 0.75); x += 1) {
+      const px = at(x, y)
+      if (lum(px) < 0.06) continue
+      rs += px[0]; gs += px[1]; bs += px[2]; nc += 1
+    }
+  const [r, g, b] = nc ? [rs / nc, gs / nc, bs / nc] : [0, 0, 0]
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b)
+  const sat = mx === 0 ? 0 : (mx - mn) / mx
+  const observed =
+    sat < 0.14 ? (mx > 170 ? 'white' : mx < 70 ? 'black' : 'grey')
+    : r > g && r > b ? (g > b * 1.25 ? 'orange' : 'red')
+    : g > r && g > b ? 'green'
+    : b > r && b > g ? 'blue'
+    : 'other'
+  const expected = colourFamily(expectedColour)
+  const testable = !['white', 'black', 'grey', 'other'].includes(expected)
+  const checks = {
+    resolution: (meta.width ?? 0) >= 900,
+    darkBg: edgeLum < 0.3,
+    framing: touches.length <= 1,
+    colour: !testable || expected === observed,
+  }
+  return {
+    ...checks,
+    passed: Object.values(checks).filter(Boolean).length,
+    detail: `${meta.width}×${meta.height} · bords ${edgeLum.toFixed(2)} · ${touches.length ? 'touche ' + touches.join('/') : 'cadrage libre'} · teinte ${observed}${testable ? ` (attendu ${expected})` : ' (non évaluable)'}`,
+  }
+}
+
 /** Dimensions PNG/JPEG lues dans l'en-tête, sans dépendance. */
 function dimensions(file) {
   const b = readFileSync(file)
@@ -204,7 +274,11 @@ for (const spot of spots) {
     runs.push({ spot: label, ...r })
     if (r.ok) {
       const d = dimensions(r.file)
+      const sc = await score(r.file, spot.color ?? '')
+      r.score = sc
       console.log(`✓ ${label} · essai ${n} · ${r.ms} ms · ${d.w}×${d.h} · ${Math.round(r.bytes / 1024)} Ko`)
+      console.log(`    auto ${sc.passed}/4 — ${sc.detail}`)
+      console.log(`    ${r.file}`)
     } else {
       console.log(`✗ ${label} · essai ${n} · ${r.ms} ms · ${r.status} · ${r.error}`)
     }
@@ -222,5 +296,11 @@ if (times.length) {
 }
 console.log(`coût de cet essai    : ${(ok.length * USD_PER_IMAGE).toFixed(3)} $ (${USD_PER_IMAGE} $/image)`)
 console.log(`coût des 32 spots    : ${(32 * USD_PER_IMAGE).toFixed(2)} $ en une passe`)
+const scored = ok.filter((r) => r.score)
+if (scored.length) {
+  const clean = scored.filter((r) => r.score.passed === 4).length
+  console.log(`\ncontrôle automatique : ${clean}/${scored.length} sans défaut mesurable`)
+  console.log('  (résolution, fond sombre, cadrage, teinte saturée — PAS la fidélité du modèle)')
+}
 console.log('\nLes images sont dans .garage-poc/ — comparer chaque -N.png à son -source.jpg.')
 console.log('Rien n’a été écrit en base : ce script ne fait que mesurer.')
