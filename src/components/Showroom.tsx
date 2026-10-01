@@ -196,28 +196,80 @@ export default function Showroom({
   }, [])
   const spacing = width * SPACING_RATIO
 
-  // ── Swipe (pointer drag → snap to nearest) ──
-  const dragRef = useRef<{ x: number; moved: boolean } | null>(null)
+  // ── Glissement horizontal, avec VERROUILLAGE D'AXE ──
+  //
+  // ── LE BOGUE QU'ON CORRIGE (01/10/2026) ──
+  // Le conteneur portait `touch-action: pan-y` et rien d'autre. Cette
+  // déclaration dit au navigateur : « tu gardes le défilement vertical ».
+  // Le JS, lui, déplaçait le carousel dès qu'il voyait un mouvement
+  // horizontal. Les deux travaillaient donc EN MÊME TEMPS : un geste en
+  // diagonale faisait glisser les voitures ET monter la page.
+  //
+  // ── LA CORRECTION ──
+  // On décide de l'axe UNE FOIS, sur les premiers pixels, et on s'y tient
+  // jusqu'à la fin du geste :
+  //   · dominante horizontale → on prend la main, et `preventDefault()` sur
+  //     un écouteur NON PASSIF empêche le navigateur de faire défiler la
+  //     page. C'est la seule façon de l'arrêter une fois qu'il a commencé ;
+  //   · dominante verticale   → on ne touche à rien, la page défile
+  //     normalement. Le carousel ne doit pas confisquer le scroll.
+  //
+  // Le seuil est volontairement asymétrique : il faut 1,3× plus de
+  // mouvement horizontal que vertical pour réclamer le geste. Sur mobile un
+  // défilement vertical n'est jamais parfaitement droit, et sans cette marge
+  // le carousel volait des gestes qui voulaient faire défiler la page.
+  const AXIS_THRESHOLD = 8
+  const AXIS_DOMINANCE = 1.3
+  const dragRef = useRef<{
+    x: number
+    y: number
+    axis: 'none' | 'x' | 'y'
+  } | null>(null)
+
+  // `preventDefault()` n'a aucun effet depuis un écouteur passif, et React
+  // attache les siens en passif. D'où cet écouteur natif explicite.
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    const onTouchMove = (e: TouchEvent) => {
+      if (dragRef.current?.axis === 'x' && e.cancelable) e.preventDefault()
+    }
+    el.addEventListener('touchmove', onTouchMove, { passive: false })
+    return () => el.removeEventListener('touchmove', onTouchMove)
+  }, [])
+
   function onPointerDown(e: React.PointerEvent) {
-    dragRef.current = { x: e.clientX, moved: false }
+    dragRef.current = { x: e.clientX, y: e.clientY, axis: 'none' }
     if (stageRef.current) stageRef.current.style.transition = 'none'
   }
+
   function onPointerMove(e: React.PointerEvent) {
     const d = dragRef.current
     if (!d) return
     const dx = e.clientX - d.x
-    if (!d.moved && Math.abs(dx) > 6) {
-      d.moved = true
-      try {
-        ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
-      } catch {
-        /* ignore */
+    const dy = e.clientY - d.y
+
+    if (d.axis === 'none') {
+      const ax = Math.abs(dx)
+      const ay = Math.abs(dy)
+      if (ax < AXIS_THRESHOLD && ay < AXIS_THRESHOLD) return
+      // Le verdict est rendu une fois pour toutes : changer d'avis en cours
+      // de geste produit exactement le tremblement qu'on cherche à éliminer.
+      d.axis = ax > ay * AXIS_DOMINANCE ? 'x' : 'y'
+      if (d.axis === 'x') {
+        try {
+          ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+        } catch {
+          /* ignore */
+        }
       }
     }
-    if (d.moved && stageRef.current) {
+
+    if (d.axis === 'x' && stageRef.current) {
       stageRef.current.style.transform = `translate3d(${dx}px,0,0)`
     }
   }
+
   function onPointerUp(e: React.PointerEvent) {
     const d = dragRef.current
     dragRef.current = null
@@ -225,10 +277,13 @@ export default function Showroom({
       stageRef.current.style.transition = 'transform 0.5s cubic-bezier(0.22,1,0.36,1)'
       stageRef.current.style.transform = 'translate3d(0,0,0)'
     }
-    if (!d || !d.moved || spacing === 0) return
+    // Un geste vertical ne change jamais de voiture, même s'il a dérivé.
+    if (!d || d.axis !== 'x' || spacing === 0) return
     const dx = e.clientX - d.x
-    const delta = -Math.round(dx / spacing)
-    setActive((a) => a + delta) // unbounded — wraps at render time
+    // Un pouce rapide parcourt peu de distance : sans ce plancher, un
+    // glissement franc mais court ne faisait rien du tout.
+    const delta = Math.abs(dx) > spacing / 3 ? -Math.sign(dx) * Math.max(1, Math.round(Math.abs(dx) / spacing)) : 0
+    if (delta !== 0) setActive((a) => a + delta) // non borné — l'enroulement se fait au rendu
   }
 
   // ── Gyroscope + pointer parallax on the decor ──
