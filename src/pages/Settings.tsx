@@ -39,6 +39,7 @@ import { APP_VERSION, CONTACT_EMAIL } from '../lib/constants'
 import { pickPrimaryVehicle } from '../lib/primaryVehicle'
 import type { Spot } from '../lib/spots'
 import { fetchUnreadCount, onUnreadChanged } from '../lib/notifications'
+import type { OrganizerStatus } from '../lib/organizer'
 import { hasTutorialAccess } from '../lib/tutorial'
 import { useTheme } from '../lib/theme'
 import { hapticSuccess } from '../lib/haptic'
@@ -452,10 +453,9 @@ export default function Settings() {
   const [radarBusy, setRadarBusy] = useState(false)
   const [radarErr, setRadarErr] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
-  const [orgOpen, setOrgOpen] = useState(false)
-  const [orgRaison, setOrgRaison] = useState('')
-  const [orgSending, setOrgSending] = useState(false)
-  const [orgSent, setOrgSent] = useState(false)
+  /** Statut du dossier organisateur — lu via `my_organizer_request()`, qui
+   *  ne remonte que l'état, jamais les notes d'instruction. */
+  const [orgStatus, setOrgStatus] = useState<OrganizerStatus | null>(null)
   const [pushBusy, setPushBusy] = useState(false)
   const [pushMsg, setPushMsg] = useState<string | null>(null)
   const [npref, setNpref] = useState({
@@ -483,11 +483,10 @@ export default function Settings() {
             .select('pseudo, ville, avatar, is_public, role, garage_brand, instagram, tiktok, dream_car, preferred_brands, preferred_universes, ambition')
             .eq('user_id', user.id)
             .maybeSingle(),
-          supabase
-            .from('organizer_requests')
-            .select('id')
-            .eq('user_id', user.id)
-            .limit(1),
+          // `my_organizer_request()` : une seule ligne, servie par l'index
+          // (user_id, created_at desc). La page Paramètres n'a jamais besoin
+          // de plus que le statut courant.
+          supabase.rpc('my_organizer_request'),
           supabase
             .from('notification_prefs')
             .select('likes, comments, followers, nearby, streak')
@@ -536,7 +535,11 @@ export default function Settings() {
           nearby: np.nearby ?? true,
           streak: np.streak ?? true,
         })
-      if (orgReq && orgReq.length > 0) setOrgSent(true)
+      {
+        const row = Array.isArray(orgReq) ? orgReq[0] : orgReq
+        const st = (row as { status?: OrganizerStatus } | null)?.status
+        if (st) setOrgStatus(st)
+      }
 
       try {
         setGeo(localStorage.getItem('revs_geo') === '1')
@@ -984,28 +987,6 @@ export default function Settings() {
       /* ignore — reload anyway */
     }
     window.location.reload()
-  }
-
-  async function submitOrganizerRequest() {
-    if (!userId || orgSending) return
-    setErr(null)
-    setMsg(null)
-    setOrgSending(true)
-    const { error } = await supabase.from('organizer_requests').insert({
-      user_id: userId,
-      pseudo: pseudo.trim() || null,
-      ville: ville.trim() || null,
-      raison: orgRaison.trim() || null,
-    })
-    setOrgSending(false)
-    if (error) {
-      setErr(t('settingspage.orgRequestFailed'))
-      return
-    }
-    setOrgSent(true)
-    setOrgOpen(false)
-    setOrgRaison('')
-    setMsg(t('settingspage.orgRequestSent'))
   }
 
   const isOrganizer = role === 'organizer' || role === 'admin'
@@ -2097,17 +2078,30 @@ export default function Settings() {
                   </div>
                 </div>
 
-                {orgSent ? (
-                  <p
-                    className="mt-4 rounded-2xl px-3 py-2.5 text-[12px] font-semibold text-[#F59E0B]"
+                {/* L'ÉTAT RÉEL DU DOSSIER, pas un drapeau local.
+                    `my_organizer_request()` ne renvoie que le statut et les
+                    dates du dossier de l'appelant — ni les notes internes, ni
+                    l'identité de qui l'a instruit. */}
+                {orgStatus === 'pending' ? (
+                  <button
+                    onClick={() => navigate('/become-organizer')}
+                    className="tappable mt-4 flex w-full items-center justify-between gap-3 rounded-2xl px-3.5 py-3 text-left"
                     style={{
                       background: 'rgba(245,158,11,0.08)',
                       border: '1px solid rgba(245,158,11,0.3)',
                     }}
                   >
-                    {t('settingspage.organizerRequestSentSub')}
-                  </p>
-                ) : !orgOpen ? (
+                    <span className="min-w-0">
+                      <span className="block text-[12.5px] font-extrabold text-[#F59E0B]">
+                        {t('organizer.settings.pendingTitle')}
+                      </span>
+                      <span className="mt-0.5 block text-[11.5px] text-fg2">
+                        {t('organizer.settings.pendingSub')}
+                      </span>
+                    </span>
+                    <ChevronRight className="h-4 w-4 flex-none text-[#F59E0B]" />
+                  </button>
+                ) : (
                   <div className="mt-4 flex justify-end">
                     {/* AMBRE ET CONTOURÉ, délibérément.
                         Deux gros boutons rouges empilés — « Faire une demande »
@@ -2115,7 +2109,7 @@ export default function Settings() {
                         erreur qui attend de se produire. La couleur, le
                         remplissage et la taille les séparent tous les trois. */}
                     <button
-                      onClick={() => setOrgOpen(true)}
+                      onClick={() => navigate('/become-organizer')}
                       className="tappable rounded-full px-4 py-2.5 text-[12px] font-extrabold tracking-wider transition-colors"
                       style={{
                         color: '#F59E0B',
@@ -2123,44 +2117,11 @@ export default function Settings() {
                         border: '1px solid rgba(245,158,11,0.45)',
                       }}
                     >
-                      {t('settingspage.makeRequest')} →
+                      {orgStatus === 'rejected'
+                        ? t('organizer.settings.reapply')
+                        : t('settingspage.makeRequest')}{' '}
+                      →
                     </button>
-                  </div>
-                ) : (
-                  <div className="mt-4 space-y-3">
-                    <p className="text-xs text-fg2">
-                      {t('settingspage.organizerReasonHint')}
-                    </p>
-                    <textarea
-                      value={orgRaison}
-                      rows={3}
-                      onChange={(e) => setOrgRaison(e.target.value)}
-                      placeholder={t('settingspage.motivationPlaceholder')}
-                      className="w-full resize-none rounded-2xl bg-fg/5 px-3 py-3 text-sm text-fg outline-none focus:ring-1 focus:ring-accent"
-                    />
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => {
-                          setOrgOpen(false)
-                          setOrgRaison('')
-                        }}
-                        className="flex-1 rounded-full bg-fg/5 py-2.5 text-[12px] font-semibold text-fg2"
-                      >
-                        {t('settingspage.cancel')}
-                      </button>
-                      <button
-                        onClick={submitOrganizerRequest}
-                        disabled={orgSending}
-                        className="flex-1 rounded-full py-2.5 text-[12px] font-extrabold tracking-wider disabled:opacity-50"
-                        style={{
-                          color: '#F59E0B',
-                          background: 'rgba(245,158,11,0.10)',
-                          border: '1px solid rgba(245,158,11,0.5)',
-                        }}
-                      >
-                        {orgSending ? '…' : t('settingspage.sendRequest')}
-                      </button>
-                    </div>
                   </div>
                 )}
               </div>

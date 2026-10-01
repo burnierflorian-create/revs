@@ -1,16 +1,32 @@
 import { useEffect, useState } from 'react'
-import { Search, LocateFixed } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
+import { Search, LocateFixed, Plus, ChevronRight } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { formatEventDate, type CarEvent } from '../lib/events'
 import { distanceMeters } from '../lib/spots'
+import { fetchMyOrganizerRequest, type OrganizerStatus } from '../lib/organizer'
 import { Skeleton } from './Skeleton'
 
 const ORANGE = '#F59E0B'
 const NEAR_RADIUS_M = 50_000
 
-// Read-only list of community meets. Event creation lives in
-// Paramètres → Avancé (organizers/admins only).
+// Liste des rassemblements de la communauté.
+//
+// ── L'ENTRÉE ORGANISATEUR (01/10/2026) ──
+// Un organisateur voit « Créer un événement » en tête de page : c'est son
+// action principale, et `/new-event` existe déjà — la policy INSERT de
+// `events` exige `role in ('organizer','admin')`, donc l'autorisation est
+// vérifiée côté serveur, pas seulement masquée ici.
+//
+// Pour tout le monde d'autre, l'invitation à candidater vit EN BAS, après les
+// événements. Elle ne doit pas concurrencer le contenu : quelqu'un vient ici
+// pour trouver un rassemblement, pas pour en organiser un.
 export default function Meets() {
+  const { t } = useTranslation()
+  const navigate = useNavigate()
+  const [isOrganizer, setIsOrganizer] = useState(false)
+  const [orgStatus, setOrgStatus] = useState<OrganizerStatus | null>(null)
   const [events, setEvents] = useState<CarEvent[] | null>(null)
   const [q, setQ] = useState('')
   const [near, setNear] = useState(false)
@@ -64,7 +80,10 @@ export default function Meets() {
     }
   }, [])
 
-  // The user's city — personalises the empty state ("Aucun événement à …").
+  // La ville (pour l'état vide) ET le rôle, dans la MÊME requête de profil :
+  // le rôle décide de l'entrée organisateur, et il aurait été absurde de
+  // relire la même ligne deux fois. Le statut du dossier ne se lit que si le
+  // rôle ne l'a pas déjà tranché.
   useEffect(() => {
     let active = true
     ;(async () => {
@@ -74,10 +93,17 @@ export default function Meets() {
       if (!user) return
       const { data } = await supabase
         .from('profiles')
-        .select('ville')
+        .select('ville, role')
         .eq('user_id', user.id)
         .maybeSingle()
-      if (active) setCity((data?.ville as string | undefined)?.trim() || null)
+      if (!active) return
+      const p = data as { ville?: string | null; role?: string | null } | null
+      setCity(p?.ville?.trim() || null)
+      const organizer = p?.role === 'organizer' || p?.role === 'admin'
+      setIsOrganizer(organizer)
+      if (organizer) return
+      const req = await fetchMyOrganizerRequest()
+      if (active) setOrgStatus(req?.status ?? null)
     })()
     return () => {
       active = false
@@ -115,6 +141,17 @@ export default function Meets() {
 
   return (
     <div className="px-4 pb-8">
+      {isOrganizer && (
+        <button
+          onClick={() => navigate('/new-event')}
+          className="tappable mb-3 flex w-full items-center justify-center gap-2 rounded-full py-3 text-[13px] font-extrabold tracking-wider text-[#0A0A0A] transition-transform active:scale-[0.99]"
+          style={{ background: ORANGE, boxShadow: '0 8px 22px rgba(245,158,11,0.3)' }}
+        >
+          <Plus className="h-4 w-4" />
+          {t('organizer.events.create')}
+        </button>
+      )}
+
       <div className="mb-3 flex gap-2">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-fg/30" />
@@ -199,6 +236,38 @@ export default function Meets() {
           ))
         )}
       </div>
+
+      {/* ── Entrée secondaire vers la candidature ──
+          Délibérément en bas, discrète, sans aplat de couleur : les
+          événements réels passent avant. */}
+      {!isOrganizer && (
+        <button
+          onClick={() => navigate('/become-organizer')}
+          className="tappable mt-5 flex w-full items-center gap-3 rounded-2xl px-4 py-3.5 text-left"
+          style={{ background: 'var(--color-card)', border: '1px solid var(--color-border)' }}
+        >
+          <span className="min-w-0 flex-1">
+            <span className="block text-[13px] font-bold text-fg">
+              {t('organizer.events.teaserTitle')}
+            </span>
+            <span className="mt-0.5 block text-[12px] leading-snug text-fg2">
+              {orgStatus === 'pending'
+                ? t('organizer.settings.pendingSub')
+                : t('organizer.events.teaserBody')}
+            </span>
+          </span>
+          <span
+            className="flex-none text-[12px] font-extrabold"
+            style={{ color: orgStatus === 'pending' ? '#F59E0B' : ORANGE }}
+          >
+            {orgStatus === 'pending' ? (
+              t('organizer.settings.pendingTitle')
+            ) : (
+              <ChevronRight className="h-4 w-4" />
+            )}
+          </span>
+        </button>
+      )}
     </div>
   )
 }

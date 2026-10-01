@@ -1488,5 +1488,145 @@
     "updatesSub": "Les dernières mises à jour de REVS",
     "badgeUnlocked": "Badge débloqué !",
     "badgeEyebrow": "Badge débloqué"
+  },
+  "organizer": {
+    "pageTitle": "Demande d'organisateur",
+    "back": "Retour",
+    "intro": {
+      "title": "Devenir organisateur sur REVS",
+      "subtitle": "Fais vivre ta passion automobile à travers tes propres événements.",
+      "body": "Les organisateurs REVS peuvent proposer et développer leurs propres événements automobiles au sein de la communauté."
+    },
+    "benefits": {
+      "create": {
+        "title": "Crée tes événements",
+        "body": "Propose tes propres rassemblements et rendez-vous automobiles."
+      },
+      "gather": {
+        "title": "Rassemble la communauté",
+        "body": "Fais découvrir tes événements aux passionnés près de chez toi."
+      },
+      "share": {
+        "title": "Partage ta passion",
+        "body": "Construis une communauté autour de ton univers automobile."
+      },
+      "visibility": {
+        "title": "Développe ta visibilité",
+        "body": "Donne à tes événements une présence au sein de REVS."
+      }
+    },
+    "identity": {
+      "title": "Tes informations",
+      "subtitle": "Ces informations nous permettent de mieux te connaître et de pouvoir te contacter."
+    },
+    "fields": {
+      "firstName": "Prénom",
+      "lastName": "Nom",
+      "displayName": "Pseudo REVS",
+      "email": "Adresse e-mail",
+      "emailHint": "L'adresse de ton compte REVS. C'est elle que nous utiliserons pour te répondre.",
+      "phone": "Téléphone",
+      "phoneHint": "Pour te joindre au sujet de ta demande ou de ton projet.",
+      "cityRegion": "Ville / région",
+      "cityRegionPlaceholder": "Annecy / Haute-Savoie",
+      "instagram": "Instagram",
+      "website": "Site web",
+      "organization": "Club, association ou entreprise",
+      "organizationHint": "Si tu organises au nom d'une structure. Facultatif."
+    },
+    "project": {
+      "title": "Ton expérience et tes événements",
+      "subtitle": "Parle-nous de ton parcours et des événements que tu souhaites organiser.",
+      "typesLabel": "Types d'événements",
+      "experienceLabel": "Depuis combien de temps organises-tu des événements ?",
+      "descriptionLabel": "Parle-nous de ton projet",
+      "descriptionPlaceholder": "Explique-nous qui tu es, ce que tu souhaites organiser, dans quelle région, à quelle fréquence et pourquoi tu souhaites devenir organisateur REVS.",
+      "charsLeft_one": "{{count}} caractère restant",
+      "charsLeft_other": "{{count}} caractères restants",
+      "attendanceLabel": "Combien de participants attends-tu environ ?",
+      "regionLabel": "Où souhaites-tu organiser tes événements ?",
+      "regionHint": "Prérempli avec ta ville. Modifiable si tu organises ailleurs."
+    },
+    "types": {
+      "cars_coffee": "Cars & Coffee",
+      "meetup": "Rassemblements",
+      "drive": "Balades",
+      "track": "Sorties circuit",
+      "show": "Salons / Expositions",
+      "private": "Événements privés",
+      "other": "Autre"
+    },
+    "experience": {
+      "beginner": "Je débute",
+      "under_1y": "Moins d'un an",
+      "1_3y": "1 à 3 ans",
+      "3_5y": "3 à 5 ans",
+      "over_5y": "Plus de 5 ans"
+    },
+    "attendance": {
+      "lt20": "Moins de 20",
+      "20_50": "20 à 50",
+      "50_100": "50 à 100",
+      "100_250": "100 à 250",
+      "gt250": "Plus de 250",
+      "unknown": "Je ne sais pas encore"
+    },
+    "recap": {
+      "title": "Récapitulatif de ta demande",
+      "subtitle": "Vérifie tes informations avant de l'envoyer.",
+      "identity": "Tes informations",
+      "project": "Ton projet",
+      "edit": "Modifier",
+      "consent": "J'accepte que REVS me contacte au sujet de cette demande et traite ces informations uniquement dans le cadre de l'étude de ma candidature d'organisateur."
+    },
+    "cta": {
+      "start": "Commencer ma demande",
+      "next": "Continuer",
+      "send": "Envoyer ma demande",
+      "sending": "Envoi…"
+    },
+    "errors": {
+      "required": "Champ obligatoire",
+      "pickOne": "Choisis au moins un type",
+      "phone": "Numéro invalide",
+      "url": "Adresse invalide",
+      "tooLong": "Texte trop long",
+      "consent": "Tu dois accepter pour envoyer ta demande.",
+      "sendFailed": "L'envoi a échoué. Ta demande n'a pas été enregistrée — réessaie dans un instant.",
+      "request_already_open": "Tu as déjà une demande en cours d'examen.",
+      "already_organizer": "Tu es déjà organisateur REVS."
+    },
+    "done": {
+      "title": "Demande envoyée !",
+      "body": "Merci pour ta confiance. Nous avons bien reçu ta demande pour devenir organisateur REVS.",
+      "timeline": {
+        "sent": "Demande envoyée",
+        "review": "En cours d'examen",
+        "answer": "Réponse",
+        "activated": "Statut organisateur activé"
+      },
+      "note": "Une fois ta demande examinée, tu recevras une notification et un e-mail avec la décision.",
+      "emailPending": "Ta demande est bien enregistrée, mais l'alerte à l'équipe REVS n'a pas pu partir. Elle sera relancée — tu n'as rien à refaire.",
+      "backToSettings": "Retour aux paramètres",
+      "discoverEvents": "Découvrir les événements REVS"
+    },
+    "status": {
+      "pendingTitle": "Ta demande est en cours d'examen",
+      "pendingBody": "Nous avons bien reçu ta candidature. Tu recevras une notification et un e-mail dès qu'une décision aura été prise.",
+      "approvedTitle": "Tu es organisateur REVS",
+      "approvedBody": "Ton statut est actif. Tu peux créer tes événements depuis l'onglet Événements.",
+      "sentOn": "Envoyée le {{date}}",
+      "rejectedCanReapply": "Ta précédente demande n'a pas été retenue. Tu peux en déposer une nouvelle : ton historique est conservé."
+    },
+    "settings": {
+      "pendingTitle": "Demande en cours",
+      "pendingSub": "En cours d'examen",
+      "reapply": "Faire une nouvelle demande"
+    },
+    "events": {
+      "create": "Créer un événement",
+      "teaserTitle": "Tu organises des événements automobiles ?",
+      "teaserBody": "Rejoins les organisateurs REVS."
+    }
   }
 }

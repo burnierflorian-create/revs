@@ -1488,5 +1488,145 @@
     "updatesSub": "The latest REVS updates",
     "badgeUnlocked": "Badge unlocked!",
     "badgeEyebrow": "Badge unlocked"
+  },
+  "organizer": {
+    "pageTitle": "Organiser application",
+    "back": "Back",
+    "intro": {
+      "title": "Become an organiser on REVS",
+      "subtitle": "Bring your passion for cars to life through your own events.",
+      "body": "REVS organisers can propose and grow their own automotive events within the community."
+    },
+    "benefits": {
+      "create": {
+        "title": "Create your events",
+        "body": "Propose your own meets and automotive gatherings."
+      },
+      "gather": {
+        "title": "Bring people together",
+        "body": "Let enthusiasts near you discover your events."
+      },
+      "share": {
+        "title": "Share your passion",
+        "body": "Build a community around your corner of car culture."
+      },
+      "visibility": {
+        "title": "Grow your reach",
+        "body": "Give your events a presence inside REVS."
+      }
+    },
+    "identity": {
+      "title": "Your details",
+      "subtitle": "These details help us get to know you and reach you about your application."
+    },
+    "fields": {
+      "firstName": "First name",
+      "lastName": "Last name",
+      "displayName": "REVS username",
+      "email": "Email address",
+      "emailHint": "Your REVS account address. This is where we'll reply.",
+      "phone": "Phone",
+      "phoneHint": "So we can reach you about your application or your project.",
+      "cityRegion": "City / region",
+      "cityRegionPlaceholder": "Annecy / Haute-Savoie",
+      "instagram": "Instagram",
+      "website": "Website",
+      "organization": "Club, association or company",
+      "organizationHint": "If you organise on behalf of an organisation. Optional."
+    },
+    "project": {
+      "title": "Your experience and your events",
+      "subtitle": "Tell us about your background and the events you want to organise.",
+      "typesLabel": "Event types",
+      "experienceLabel": "How long have you been organising events?",
+      "descriptionLabel": "Tell us about your project",
+      "descriptionPlaceholder": "Tell us who you are, what you want to organise, in which area, how often, and why you want to become a REVS organiser.",
+      "charsLeft_one": "{{count}} character left",
+      "charsLeft_other": "{{count}} characters left",
+      "attendanceLabel": "Roughly how many people do you expect?",
+      "regionLabel": "Where do you want to organise your events?",
+      "regionHint": "Prefilled with your city. Change it if you organise elsewhere."
+    },
+    "types": {
+      "cars_coffee": "Cars & Coffee",
+      "meetup": "Meets",
+      "drive": "Drives",
+      "track": "Track days",
+      "show": "Shows / Exhibitions",
+      "private": "Private events",
+      "other": "Other"
+    },
+    "experience": {
+      "beginner": "Just starting",
+      "under_1y": "Under a year",
+      "1_3y": "1 to 3 years",
+      "3_5y": "3 to 5 years",
+      "over_5y": "Over 5 years"
+    },
+    "attendance": {
+      "lt20": "Under 20",
+      "20_50": "20 to 50",
+      "50_100": "50 to 100",
+      "100_250": "100 to 250",
+      "gt250": "Over 250",
+      "unknown": "Not sure yet"
+    },
+    "recap": {
+      "title": "Review your application",
+      "subtitle": "Check your details before sending.",
+      "identity": "Your details",
+      "project": "Your project",
+      "edit": "Edit",
+      "consent": "I agree that REVS may contact me about this application and process this information solely to review my organiser candidacy."
+    },
+    "cta": {
+      "start": "Start my application",
+      "next": "Continue",
+      "send": "Send my application",
+      "sending": "Sending…"
+    },
+    "errors": {
+      "required": "Required field",
+      "pickOne": "Pick at least one type",
+      "phone": "Invalid number",
+      "url": "Invalid address",
+      "tooLong": "Text too long",
+      "consent": "You must agree before sending your application.",
+      "sendFailed": "Sending failed. Your application was not saved — try again in a moment.",
+      "request_already_open": "You already have an application under review.",
+      "already_organizer": "You're already a REVS organiser."
+    },
+    "done": {
+      "title": "Application sent!",
+      "body": "Thanks for your trust. We've received your application to become a REVS organiser.",
+      "timeline": {
+        "sent": "Application sent",
+        "review": "Under review",
+        "answer": "Decision",
+        "activated": "Organiser status activated"
+      },
+      "note": "Once your application has been reviewed, you'll get a notification and an email with the decision.",
+      "emailPending": "Your application is saved, but the alert to the REVS team couldn't be sent. It will be retried — there's nothing for you to redo.",
+      "backToSettings": "Back to settings",
+      "discoverEvents": "Discover REVS events"
+    },
+    "status": {
+      "pendingTitle": "Your application is under review",
+      "pendingBody": "We've received it. You'll get a notification and an email as soon as a decision is made.",
+      "approvedTitle": "You're a REVS organiser",
+      "approvedBody": "Your status is active. You can create your events from the Events tab.",
+      "sentOn": "Sent on {{date}}",
+      "rejectedCanReapply": "Your previous application wasn't accepted. You can submit a new one — your history is kept."
+    },
+    "settings": {
+      "pendingTitle": "Application pending",
+      "pendingSub": "Under review",
+      "reapply": "Apply again"
+    },
+    "events": {
+      "create": "Create an event",
+      "teaserTitle": "Do you organise car events?",
+      "teaserBody": "Join the REVS organisers."
+    }
   }
 }

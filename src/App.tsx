@@ -14,6 +14,7 @@ const NewEvent = lazy(() => import('./pages/NewEvent'))
 const Premium = lazy(() => import('./pages/Premium'))
 const PremiumCheckout = lazy(() => import('./pages/PremiumCheckout'))
 const Settings = lazy(() => import('./pages/Settings'))
+const BecomeOrganizer = lazy(() => import('./pages/BecomeOrganizer'))
 const LegalMentions = lazy(() => import('./pages/LegalMentions'))
 const LegalPrivacy = lazy(() => import('./pages/LegalPrivacy'))
 const LegalTerms = lazy(() => import('./pages/LegalTerms'))
@@ -194,6 +195,10 @@ export default function App() {
           <Route path="/ma-galerie" element={lazyRoute(<MyGallery />)} />
           <Route path="/u/:id" element={lazyRoute(<PublicProfile />)} />
           <Route path="/settings" element={lazyRoute(<Settings />)} />
+          <Route
+            path="/become-organizer"
+            element={lazyRoute(<BecomeOrganizer />)}
+          />
           <Route path="/tutorial" element={lazyRoute(<Tutorial />)} />
           <Route
             path="/legal/mentions"
