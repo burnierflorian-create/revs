@@ -549,8 +549,12 @@ async function handleDetail(
       return
     }
 
-    const normalised =
-      type === 'team' ? normalizeTeam(parsed) : normalizeDriver(parsed)
+    // Les fonctions de normalisation existantes, pas des inventées :
+    // `normalize(raw, fields)` et `normalizeDriverFull(raw)`.
+    const normalised: Record<string, unknown> =
+      type === 'team'
+        ? normalize(parsed, TEAM_FIELDS)
+        : normalizeDriverFull(parsed)
 
     // ── Le tri : l'éditorial d'un côté, le sportif de l'autre ──
     // Sans cette séparation à l'écriture, le prochain rafraîchissement
