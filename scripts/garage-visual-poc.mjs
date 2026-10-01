@@ -33,6 +33,12 @@
 
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { createClient } from '@supabase/supabase-js'
+import {
+  buildPrompt,
+  cacheKey,
+  pickProvider,
+  providers,
+} from '../server/garage-visual.js'
 
 const env = readFileSync(new URL('../.env.local', import.meta.url), 'utf8')
 const pick = (k, re) =>
@@ -78,81 +84,10 @@ const DEFAULT_SPOTS = [
 const ATTEMPTS = Number(process.env.REVS_POC_N || 1)
 const OUT = new URL('../.garage-poc/', import.meta.url).pathname
 
-/**
- * Le prompt — RÉÉCRIT le 01/10/2026.
- *
- * ── CE QUI N'ALLAIT PAS DANS LE PRÉCÉDENT ──
- * Il commençait par « Re-photograph THIS EXACT CAR … This is a retouching
- * task ». C'est un cadrage de RETOUCHE, et un modèle à qui l'on demande une
- * retouche rend une retouche : la photo d'origine avec un autre fond. C'est
- * exactement ce qu'on cherche à ne plus produire. Le mot « retouching » a donc
- * disparu, et l'instruction d'ouverture demande maintenant une IMAGE NOUVELLE.
- *
- * ── CE QUI A CHANGÉ ──
- * 1. La photo d'entrée est présentée comme une RÉFÉRENCE D'IDENTIFICATION, pas
- *    comme un calque à modifier. C'est le pivot de toute la réécriture.
- * 2. Une liste explicite de ce qui appartient à la SCÈNE et non au véhicule :
- *    personnes, bras, mains, le rétroviseur et le montant de la voiture DEPUIS
- *    LAQUELLE la photo a été prise, bâtiments, enseignes, poteaux, trottoirs.
- *    Sans cette liste, le modèle n'a aucune raison de deviner que le gros
- *    rétroviseur au premier plan n'est pas une pièce du sujet.
- * 3. L'identité reste en tête ET en queue, sous forme d'interdits : un modèle
- *    qui lit d'abord une longue description de studio a déjà commencé à
- *    composer un studio, et la vraie voiture devient un détail.
- *
- * ── NIVEAU DE CONFIANCE (§27) ──
- * Quand l'identification REVS est incertaine, on NE donne PAS la désignation
- * précise au modèle : lui dire « Ferrari Modèle inconnu » l'inviterait à
- * inventer une Ferrari. On lui demande alors de s'en tenir à ce qu'il VOIT.
- */
-const CONFIDENT = 85
-
-function buildPrompt(spot) {
-  const name = [spot.brand, spot.model].filter(Boolean).join(' ').trim()
-  const year = spot.year ? `, model year ${spot.year}` : ''
-  const sure = Number(spot.confidence ?? 0) >= CONFIDENT && !/inconnu|unknown/i.test(name)
-
-  // Avec une identification sûre, la désignation aide le modèle à restituer
-  // les bons détails. Sans elle, elle le pousserait à en inventer.
-  const identity = sure
-    ? `The subject is a ${name}${year}, finished in "${spot.color}". Render that exact model and generation — the correct silhouette, roofline, greenhouse, overhangs, bumpers, lamp signatures, grille and wheel design.`
-    : `The model is NOT reliably identified. Do not name or guess a model: reproduce faithfully the car VISIBLE in the reference photo — its exact silhouette, proportions, lamp shapes, glass area and wheels — in the colour "${spot.color}".`
-
-  return `Create a NEW premium automotive showroom photograph of one single car.
-
-The attached photo is a REFERENCE FOR IDENTIFYING THE CAR ONLY. Do not edit it, do not reuse its framing, its angle, its lighting or any part of its surroundings. Build a new image from scratch.
-
-SUBJECT
-${identity}
-Keep the real paint colour and finish. Keep any body kit, spoiler, wrap or wheel option that is genuinely on this car.
-
-WHAT BELONGS TO THE SCENE, NOT TO THE CAR — exclude all of it
-The reference photo was taken in the street, often from inside another vehicle. Everything below belongs to that situation and must not appear in the output:
-people, arms, hands, faces, reflections of people; the door mirror, window frame, A-pillar, dashboard or bodywork of the car the photo was taken FROM; other vehicles; buildings, shopfronts, signage, lettering, awnings; poles, posts, traffic signs, road markings, kerbs, pavements, street furniture; trees, sky, any outdoor background; any object in front of or overlapping the car.
-Only the identified car survives into the new image.
-
-COMPOSITION
-Three-quarter view, REAR of the car toward the LEFT of the frame and FRONT toward the RIGHT. Camera at about headlight height — a low, car-level viewpoint, never a drone or steep top-down angle. 50-85mm equivalent lens, no wide-angle distortion. The complete vehicle is inside the frame, all four wheels visible, nothing cropped, with comfortable margin on every side. The car fills most of the frame and is the obvious subject — not a small object lost in empty space.
-
-ENVIRONMENT — the REVS showroom
-A dark, seamless studio: black and graphite, falling off to deep black at the edges. Polished floor with a soft, believable reflection of the car beneath it. Elegant vertical studio light sources, a sense of depth, optional faint atmospheric haze. Clean and minimal — no walls, props, furniture, decoration or text of any kind.
-
-LIGHTING
-Premium automotive studio lighting that gives the bodywork volume: long soft strip highlights along the shoulder line and roof, a gentle rim light separating the car from the background, clean speculars on the wheels and lamps. A soft contact shadow directly under the car so it sits on the floor instead of floating.
-
-STRICT PROHIBITIONS
-- Do NOT output a different model, generation or trim than the subject.
-- Do NOT restyle, modernise, lower, widen or otherwise "improve" the bodywork.
-- Do NOT change the paint colour.
-- Do NOT include any person, body part, or reflection of a person.
-- Do NOT render a readable licence plate: leave the plate area blank, dark or softly blurred.
-- Do NOT add any manufacturer badge, logo or lettering that is not genuinely on this car.
-- Do NOT add text, captions, graphics or watermarks anywhere.
-- Do NOT reuse the background, framing or perspective of the reference photo.
-
-Output: one photorealistic image, nothing else.`
-}
-
+// Le prompt, la clé de cache et le contrôle qualité vivent dans
+// `server/garage-visual.js`, partagés avec la couche fournisseur. Deux
+// copies du prompt finiraient par diverger, et on ne comparerait plus des
+// moteurs mais des consignes.
 /** La photo du spot, telle qu'elle est stockée (déjà floutée côté plaques). */
 async function fetchPhoto(url) {
   const r = await fetch(url)
@@ -237,6 +172,18 @@ if (spots.length !== wanted.length) {
   process.exit(1)
 }
 
+const { provider, report } = await pickProvider({ GEMINI_API_KEY: GEMINI_KEY })
+console.log('moteurs   :')
+report.forEach((r) => console.log(`  ${r.id.padEnd(8)} ${r.ok ? '✓ disponible' : '✗ ' + r.reason}`))
+if (!provider) {
+  console.log('\nAUCUN MOTEUR DISPONIBLE — rien ne sera généré, rien ne sera dépensé.')
+  console.log('Les 5 véhicules de l’échantillon et leurs clés de cache :')
+  for (const s of spots) {
+    console.log(`  ${(s.brand + ' ' + s.model).padEnd(42)} → ${cacheKey(s)}`)
+  }
+  console.log(`\ncoût évité : ${(spots.length * providers.gemini.usdPerImage).toFixed(2)} $`)
+  process.exit(0)
+}
 console.log(`modèle    : ${MODEL}`)
 console.log(`véhicules : ${spots.length} · ${ATTEMPTS} essai(s) chacun`)
 console.log(`sortie    : ${OUT}\n`)
