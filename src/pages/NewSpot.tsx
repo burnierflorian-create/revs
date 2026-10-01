@@ -291,13 +291,23 @@ const [plateGuard, setPlateGuard] = useState<'pending' | 'ok' | 'failed'>('ok')
       // deux chemins. Le composant reste dans le dépôt, mais il n'est plus
       // sur le chemin obligatoire.
       setPlateGuard('pending')
-      // AI-only downscale (768px / q0.85). Image tokens scale with pixel
-      // area (≈ w×h/750), so 768px is ~2× cheaper than 1200px; the higher
-      // JPEG quality keeps badges/logos legible for the vision model.
-      // Best-effort: if it fails we fall back to image.base64 in analyze(),
-      // so capture is never blocked.
+      // ── 768 → 1024 px (01/10/2026) ──
+      // Le coût d'une image suit sa SURFACE (≈ w×h/750 jetons), donc 1024 px
+      // coûte 1,8× plus que 768. Ce n'est pas un réglage gratuit, et il est
+      // assumé pour une raison précise : à 768 px, les indices qui séparent
+      // deux modèles voisins ne sont plus lisibles. La poignée affleurante
+      // qui distingue une Classe E W214 d'une Classe C W206 fait une vingtaine
+      // de pixels à cette taille ; les protections d'arches noires d'une
+      // Model Y se confondent avec l'ombre du passage de roue.
+      //
+      // Ces deux erreurs-là sont précisément celles trouvées dans le parc. On
+      // paie ~0,002 $ de plus par spot pour cesser de les commettre, sur une
+      // chaîne qui en coûte déjà bien davantage.
+      //
+      // Au-delà, repli sur image.base64 dans analyze() : la capture n'est
+      // jamais bloquée par un échec de redimensionnement.
       try {
-        const ai = await resizeImageToJpeg(file, 768, 0.85)
+        const ai = await resizeImageToJpeg(file, 1024, 0.85)
         setAiBase64(ai.base64)
       } catch {
         /* keep aiBase64 null → analyze() uses the full-res base64 */
@@ -819,6 +829,17 @@ const [plateGuard, setPlateGuard] = useState<'pending' | 'ok' | 'failed'>('ok')
           lat: roundCoord(pos.coords.latitude),
           lng: roundCoord(pos.coords.longitude),
           event_id: liveEventId,
+          // ── QUI FAIT AUTORITÉ SUR L'IDENTITÉ ──
+          // Si l'utilisateur a modifié la marque ou le modèle proposés, c'est
+          // SA saisie la vérité du spot, et aucune ré-identification
+          // automatique ne doit plus l'écraser — l'audit du parc a montré que
+          // l'IA se trompe sur un spot sur dix, et il serait absurde qu'un
+          // futur passage « corrige » une donnée humaine exacte.
+          // Le drapeau marque aussi les spots saisis à la main quand l'IA
+          // n'avait rien proposé.
+          ident_locked:
+            brand.trim() !== (result.brand ?? '').trim() ||
+            model.trim() !== (result.model ?? '').trim(),
         })
         .select('*')
         .single()
@@ -1371,17 +1392,26 @@ const [plateGuard, setPlateGuard] = useState<'pending' | 'ok' | 'failed'>('ok')
                   l'IA un travail qu'on ne lui a jamais demandé. */}
               {!manualNotice && (
                 <>
+                  {/* ── PLUS DE POURCENTAGE (01/10/2026) ──
+                      On affichait « IA · 94 % de confiance ». Ce chiffre est
+                      la certitude que le modèle s'attribue à lui-même, pas une
+                      probabilité mesurée : il n'a jamais été calibré contre
+                      des résultats réels. Mesuré sur les 33 spots du parc,
+                      trois fiches étaient fausses, dont une annoncée à 88 —
+                      « Model 3 » sur une Model Y. Un pourcentage sur deux
+                      décimales donne l'impression d'une précision qui n'existe
+                      pas, et détourne de la seule chose utile : relire.
+                      Le score reste calculé et stocké pour la logique
+                      interne ; il n'est simplement plus montré. */}
                   <p
-                    className="text-center font-medium uppercase text-fg2"
-                    style={{ fontSize: '10px', letterSpacing: '0.18em' }}
+                    className="px-3 text-center leading-snug text-fg2"
+                    style={{ fontSize: '11px' }}
                   >
-                    {t('newspot.confidenceLine', {
-                      confidence: result.confidence,
-                    })}
+                    {t('newspot.aiDisclaimer')}
                   </p>
-                  {/* Low-confidence warning — a far / obscured shot makes the
-                      model guess unreliable. Surfaced under the card so the
-                      user double-checks the brand/model before publishing. */}
+                  {/* Photo lointaine ou véhicule masqué : le doute, lui, reste
+                      affiché — c'est une information actionnable (reprendre la
+                      photo), pas un chiffre décoratif. */}
                   {result.confidence < 50 && <LowConfidenceBadge />}
                 </>
               )}

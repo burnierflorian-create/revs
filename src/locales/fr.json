@@ -737,7 +737,6 @@
     "analyzingSubtitle": "Identification des courbes, de la rareté et des caractéristiques techniques…",
     "previewUnknownModel": "Modèle indéterminé",
     "identifyDifficult": "Identification difficile — complète ou corrige les champs ci-dessous.",
-    "confidenceLine": "IA · {{confidence}}% de confiance",
     "alternatives": "Alternatives",
     "fieldBrand": "Marque",
     "fieldModel": "Modèle",
@@ -773,7 +772,8 @@
     "chooseExhausted": "Tu as utilisé tes {{limit}} analyses IA aujourd’hui.",
     "plateGuardBlockedTitle": "Plaque non vérifiée",
     "plateGuardBlockedBody": "La détection automatique n'a pas abouti. Tant qu'on n'a pas pu vérifier, la publication reste bloquée — on ne met pas une plaque en ligne par défaut. Relance la vérification, ou reprends la photo.",
-    "plateGuardRetry": "Relancer la vérification"
+    "plateGuardRetry": "Relancer la vérification",
+    "aiDisclaimer": "L’identification est réalisée par IA et peut comporter des erreurs. Vérifiez les informations avant de publier."
   },
   "racepage": {
     "back": "Retour",
@@ -988,7 +988,7 @@
       "year": "Année",
       "color": "Couleur",
       "category": "Catégorie",
-      "aiConfidence": "Confiance IA"
+      "aiDisclaimer": "Identification IA — à vérifier"
     },
     "locationCountry": "{{ville}}, France",
     "about": "À propos de cette voiture",

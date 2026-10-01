@@ -212,6 +212,33 @@ Reconnais ces marques même de DOS ou de CÔTÉ, y compris sur une photo médioc
 - McLAREN : portes papillon (dièdre), flancs profondément sculptés vers les prises d'air moteur, nez très pointu à splitter intégré, prises d'air derrière les vitres latérales, feux arrière fins horizontaux. GT : ligne plus douce que la 720S.
 - PORSCHE : capot arrière bombé, silhouette 911 fuyante inimitable, bandeau de feux arrière horizontal continu (991/992), 4 phares ronds sur Cayenne/Macan/Taycan, écusson de Stuttgart. 911 GT3 : aileron fixe très large et haut (swan neck), diffuseur agressif, roues centre-lock, jantes dorées ou noires spécifiques, badge GT3.
 - BMW : calandre en haricots · AUDI : calandre mono-cadre, anneaux · MERCEDES : étoile.
+- TESLA : aucune calandre, nez lisse et plein, poignées affleurantes, jantes aérodynamiques pleines ou à cache.
+
+── CARROSSERIE PUIS MODÈLE : L'ERREUR LA PLUS COÛTEUSE ──
+Mesuré sur les fiches réelles de REVS, les erreurs ne portent presque jamais
+sur la marque : elles portent sur le MODÈLE VOISIN de la même marque. Trois
+fiches sur trente-trois étaient fausses, toutes de ce type — une Model Y
+fichée « Model 3 », une Classe E fichée « Classe C », une Rolls-Royce fichée
+« Bentley ».
+
+Avant de nommer un modèle, tranche d'abord la CARROSSERIE, en regardant :
+hauteur de pavillon · garde au sol · longueur et nombre de portes · empattement ·
+forme du vitrage latéral · angle du hayon · porte-à-faux arrière · rapport entre
+le diamètre de roue et la hauteur de caisse · présence de protections d'arches
+en plastique noir (signature d'un crossover).
+
+Un crossover et une berline de la même marque ne sont JAMAIS le même modèle.
+Exemples à ne pas confondre : Tesla Model 3 (berline basse) / Model Y
+(crossover haut, arches protégées) · Mercedes Classe C / Classe E / Classe S
+(longueur croissante ; la Classe E W214 a des poignées AFFLEURANTES, la Classe
+C W206 des poignées classiques) · BMW Série 3 (berline) / Série 4 (coupé ou
+Gran Coupé au pavillon fuyant) · Audi A4 / A5 · Porsche 911 selon la
+génération (dessin des feux arrière et du bandeau central) · Volkswagen Golf /
+Polo (longueur).
+
+Si la photo ne permet pas de trancher entre deux modèles voisins, ne choisis
+PAS le plus probable : laisse "model" vide et baisse "confidence". Une marque
+seule et juste vaut mieux qu'un modèle complet et faux.
 
 ── RÉPONSE ATTENDUE ──
 {
@@ -237,7 +264,10 @@ Règles :
 - Le champ s'appelle "brand", pas "make".
 - Pas d'appel web : appuie-toi UNIQUEMENT sur cette photo et tes connaissances statiques.
 
-MARQUE OBLIGATOIRE — NON NÉGOCIABLE, priorité maximale. Dès qu'une carrosserie est visible, tu DOIS nommer une marque réelle en croisant les indices ci-dessus. Il est INTERDIT de renvoyer "Voiture", "Voiture inconnue", "Véhicule non identifié", une chaîne vide ou null. Si tu reconnais la marque mais pas le modèle exact : marque + "Modèle inconnu". Donne toujours ta meilleure estimation, même à confidence basse (25). "Inconnue" n'est admissible QUE s'il n'y a réellement AUCUNE voiture sur la photo.`
+MARQUE OBLIGATOIRE — NON NÉGOCIABLE, priorité maximale. Dès qu'une carrosserie est visible, tu DOIS nommer une marque réelle en croisant les indices ci-dessus. Il est INTERDIT de renvoyer "Voiture", "Voiture inconnue", "Véhicule non identifié", une chaîne vide ou null. "Inconnue" n'est admissible QUE s'il n'y a réellement AUCUNE voiture sur la photo.
+
+LE MODÈLE, LUI, N'EST PAS OBLIGATOIRE. Cette obligation vaut pour la MARQUE seule.
+Si tu reconnais la marque mais pas le modèle avec certitude : marque + "Modèle inconnu", et confidence basse. N'invente jamais un modèle pour remplir le champ — c'est exactement ce qui produit une Model 3 à la place d'une Model Y. Un champ honnêtement vide est corrigeable par l'utilisateur ; un modèle faux, lui, sera recopié tel quel dans sa collection et dans son Garage.`
 
 const SYSTEM_SIMPLE = `Tu es un expert automobile. Identifie la voiture sur la photo. La MARQUE est OBLIGATOIRE (non négociable) dès qu'une voiture est visible : ne renvoie JAMAIS une marque vide, null ou "Voiture inconnue". Si le modèle exact est incertain, renvoie la marque + "Modèle inconnu" + confidence: 20.
 
@@ -502,7 +532,18 @@ function cleanModelName(s) {
 // minutes : au-delà, les lectures à 0,1x rentabilisent largement l'écriture.
 // Vérifier alors `usage.cache_read_input_tokens` dans la réponse — s'il reste
 // à zéro, c'est qu'un élément du préfixe varie d'un appel à l'autre.
-async function callClaude(client, mimeType, imageBase64, system, maxTokens, model = MODEL) {
+// `userText` permet de réutiliser cet appel pour autre chose qu'identifier —
+// la contre-vérification lui soumet une affirmation à réfuter. Sans ce
+// paramètre il aurait fallu dupliquer la fonction pour changer une phrase.
+async function callClaude(
+  client,
+  mimeType,
+  imageBase64,
+  system,
+  maxTokens,
+  model = MODEL,
+  userText = "Identifie cette voiture. Renvoie uniquement le JSON, rien d'autre.",
+) {
   return client.messages.create({
     model,
     max_tokens: maxTokens,
@@ -519,10 +560,7 @@ async function callClaude(client, mimeType, imageBase64, system, maxTokens, mode
               data: imageBase64,
             },
           },
-          {
-            type: 'text',
-            text: "Identifie cette voiture. Renvoie uniquement le JSON, rien d'autre.",
-          },
+          { type: 'text', text: userText },
         ],
       },
     ],
@@ -533,6 +571,106 @@ async function callClaude(client, mimeType, imageBase64, system, maxTokens, mode
 // the frozen price/rarity from the catalog (zero AI when cached) or compute
 // it once via Haiku, freeze it, and send. Shared by the confident path and
 // the low-confidence Haiku fallback.
+// ═══════ CONTRE-VÉRIFICATION DES MODÈLES VOISINS ═══════
+//
+// ── POURQUOI UNIQUEMENT CERTAINES FAMILLES ──
+// Vérifier chaque spot doublerait le coût de la chaîne pour corriger un
+// problème qui, mesuré, ne se produit que dans un cas bien particulier : deux
+// modèles de la MÊME marque dont les silhouettes se ressemblent. Les trois
+// erreurs trouvées dans le parc sont toutes de ce type. Une Huracán n'est
+// jamais prise pour une 488 ; une Model Y est prise pour une Model 3.
+//
+// On paie donc un appel supplémentaire seulement quand la marque identifiée
+// appartient à une famille connue pour ça — soit, sur le parc actuel, moins
+// d'un spot sur quatre.
+//
+// ── POURQUOI LA QUESTION EST POSÉE À L'ENVERS ──
+// On ne redemande pas « quelle voiture est-ce ? » : le modèle refournirait sa
+// première réponse, pour les mêmes raisons qu'au premier passage. On lui
+// soumet SA PROPRE conclusion comme une affirmation à réfuter, et on lui
+// demande ce qu'il voit réellement. Réfuter une affirmation précise est une
+// tâche différente, et beaucoup plus facile, que produire une identification.
+const CONFUSABLE = [
+  /tesla/i,
+  /mercedes/i,
+  /\bbmw\b/i,
+  /\baudi\b/i,
+  /porsche/i,
+  /volkswagen|\bvw\b/i,
+  /bentley|rolls/i,
+]
+
+const VERIFY_SYSTEM = `Tu vérifies une identification automobile, pas tu n'en produis une.
+
+On te soumet une PHOTO et une AFFIRMATION. Ton travail est de dire si la photo soutient réellement cette affirmation.
+
+Regarde dans cet ordre : hauteur de pavillon, garde au sol, longueur et nombre de portes, empattement, porte-à-faux arrière, forme du vitrage latéral, protections d'arches, dessin des poignées de porte, signature des feux.
+
+Une erreur d'un cran à l'intérieur d'une même marque est le cas le plus fréquent (berline prise pour crossover, Classe C pour Classe E, génération antérieure pour la suivante). C'est précisément ce que tu dois attraper.
+
+Réponds UNIQUEMENT par ce JSON, sans markdown :
+{"supported":true,"actual_brand":"","actual_model":"","why":"une phrase, les éléments visuels utilisés"}
+
+"supported": true si la photo soutient l'affirmation. false sinon — et dans ce cas remplis actual_brand/actual_model avec ce que tu vois RÉELLEMENT. Si tu ne peux pas trancher le modèle, laisse actual_model vide plutôt que d'en proposer un.`
+
+async function verifyModel(client, mimeType, imageBase64, result) {
+  const brand = String(result.brand || '')
+  const model = String(result.model || '')
+  // Rien à vérifier : pas de modèle affirmé, ou marque hors des familles
+  // sujettes à confusion.
+  if (!model || /inconnu|unknown/i.test(model)) return result
+  if (!CONFUSABLE.some((re) => re.test(brand))) return result
+
+  try {
+    const r = await callClaude(
+      client,
+      mimeType,
+      imageBase64,
+      VERIFY_SYSTEM,
+      300,
+      HAIKU_VISION_MODEL,
+      `AFFIRMATION À VÉRIFIER : cette photo montre une « ${brand} ${model} ».`,
+    )
+    if (r.stop_reason === 'refusal') return result
+    const v = extractJSON(lastText(r))
+    if (!v || typeof v.supported !== 'boolean') return result
+
+    if (v.supported) return { ...result, verified: true }
+
+    const altBrand = String(v.actual_brand || '').trim()
+    const altModel = String(v.actual_model || '').trim()
+
+    // ── EN CAS DE DÉSACCORD, ON NE TRANCHE PAS À PILE OU FACE ──
+    // Deux lectures du même moteur se contredisent : rien ne dit laquelle a
+    // raison. On ne remplace donc PAS un modèle par l'autre. On retire le
+    // modèle contesté et on garde ce sur quoi les deux s'accordent — la
+    // marque. L'utilisateur complète lui-même, et sa saisie fera autorité.
+    //
+    // « Tesla » seul et juste vaut mieux que « Tesla Model 3 » faux : le
+    // premier se corrige d'un geste, le second part dans la collection, la
+    // carte et le Garage.
+    const sameBrand = altBrand && brand.toLowerCase().includes(altBrand.toLowerCase().split(' ')[0])
+    console.warn(
+      `[identify-car] vérification négative : « ${brand} ${model} » contesté → « ${altBrand} ${altModel} » (${v.why ?? ''})`,
+    )
+    return {
+      ...result,
+      brand: sameBrand || !altBrand ? result.brand : altBrand,
+      model: NEVER_EMPTY_MODEL,
+      // Le doute doit se voir dans le score interne, qui pilote l'affichage
+      // du badge « reconnaissance basse » et le feu vert du Garage Visual.
+      confidence: Math.min(Number(result.confidence) || 0, 40),
+      verified: false,
+      verify_note: `Modèle incertain : une seconde lecture y voit « ${[altBrand, altModel].filter(Boolean).join(' ')} ».`,
+    }
+  } catch (e) {
+    // Une vérification en échec ne doit pas dégrader une identification qui,
+    // elle, a abouti. On laisse le résultat tel quel, non marqué « vérifié ».
+    console.error('[identify-car] vérification impossible :', e?.message ?? e)
+    return result
+  }
+}
+
 async function enrichAndSend(res, client, mimeType, imageBase64, parsed, initial) {
   let result = initial
 
@@ -544,6 +682,11 @@ async function enrichAndSend(res, client, mimeType, imageBase64, parsed, initial
       result = finalize({ ...parsed, ...better })
     }
   }
+
+  // Contre-vérification ciblée des familles où une erreur d'un cran est
+  // courante et invisible. Ne tourne QUE sur ces familles — voir
+  // CONFUSABLE et verifyModel().
+  result = await verifyModel(client, mimeType, imageBase64, result)
 
   // ─── Rareté : l'IA d'abord, le prix seulement en dernier recours ───
   // Avant le 26/09/2026, rarityFromPrice() écrasait systématiquement la

@@ -36,6 +36,7 @@ import { createClient } from '@supabase/supabase-js'
 import {
   buildPrompt,
   cacheKey,
+  canRender,
   pickProvider,
   providers,
 } from '../server/garage-visual.js'
@@ -232,8 +233,8 @@ mkdirSync(OUT, { recursive: true })
 const wanted = process.argv.slice(2).length ? process.argv.slice(2) : DEFAULT_SPOTS
 const { data: all } = await db
   .from('spots')
-  .select('id, brand, model, year, color, category, confidence, photo_url')
-const spots = wanted
+  .select('id, brand, model, year, color, category, confidence, photo_url, ident_locked')
+let spots = wanted
   .map((w) => all?.find((s) => s.id.startsWith(w)))
   .filter(Boolean)
 
@@ -254,6 +255,27 @@ if (!provider) {
   console.log(`\ncoût évité : ${(spots.length * providers.gemini.usdPerImage).toFixed(2)} $`)
   process.exit(0)
 }
+// ── LE VERROU D'IDENTITÉ (01/10/2026) ──
+// Le POC générait sur n'importe quelle fiche. C'est ainsi qu'il a produit une
+// Model 3 impeccable pour une Model Y, et une Classe S pour une Classe E :
+// des rendus réussis de la mauvaise voiture, que rien ne distinguait d'un
+// succès. On refuse désormais de dépenser sur une identité non validée, et on
+// dit pourquoi plutôt que de produire une image trompeuse.
+const gated = spots.map((s) => ({ spot: s, gate: canRender(s) }))
+const blocked = gated.filter((g) => !g.gate.ok)
+if (blocked.length) {
+  console.log('identité non validée — AUCUNE génération pour :')
+  for (const b of blocked) {
+    console.log(`  ✗ ${(b.spot.brand + ' ' + b.spot.model).slice(0, 40).padEnd(42)} ${b.gate.reason}`)
+  }
+  console.log(`coût évité : ${(blocked.length * providers.gemini.usdPerImage).toFixed(2)} $\n`)
+}
+spots = gated.filter((g) => g.gate.ok).map((g) => g.spot)
+if (!spots.length) {
+  console.log('Aucun véhicule à identité validée — rien à générer.')
+  process.exit(0)
+}
+
 console.log(`modèle    : ${MODEL}`)
 console.log(`véhicules : ${spots.length} · ${ATTEMPTS} essai(s) chacun`)
 console.log(`sortie    : ${OUT}\n`)

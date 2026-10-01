@@ -24,7 +24,10 @@
 // production. Il fixe le contrat pour que le jour où un moteur passe la
 // validation, seul `providers.<nom>.generate` soit à écrire.
 
-export const GARAGE_VISUAL_VERSION = 1
+// v2 (01/10/2026) — prompt hybride. Voir buildPrompt : la version entre dans
+// la clé de cache, donc la changer invalide les rendus faits avec l'ancien
+// prompt. C'est voulu : ils ont été produits par une consigne qu'on sait fausse.
+export const GARAGE_VISUAL_VERSION = 2
 
 /**
  * Le prompt. Partagé par tous les fournisseurs : si deux moteurs reçoivent
@@ -38,16 +41,105 @@ export const GARAGE_VISUAL_VERSION = 1
  * qui on décrit d'abord un studio a déjà commencé à composer un studio, et
  * la vraie voiture devient un détail.
  */
-export function buildPrompt(vehicle) {
-  const { brand, model, year, color, confidence } = vehicle
-  const name = [brand, model].filter(Boolean).join(' ').trim()
-  const sure = Number(confidence ?? 0) >= 85 && !/inconnu|unknown/i.test(name)
+/**
+ * ═══════ LE GARAGE NE DÉCIDE JAMAIS DE L'IDENTITÉ ═══════
+ *
+ * ── CE QUE CE VERROU EMPÊCHE ──
+ * Le Garage Visual reçoit une fiche et dessine ce qu'elle dit. Il n'a aucun
+ * moyen de savoir si elle est juste, et aucun droit d'en juger : son rôle est
+ * de représenter, pas d'identifier. Or l'audit du parc, le 01/10/2026, a
+ * trouvé 3 fiches fausses sur 33 — une Model Y fichée « Model 3 », une
+ * Classe E fichée « Classe C », une Rolls-Royce fichée « Bentley ». Chacune
+ * aurait produit, en toute logique, un rendu impeccable de la mauvaise
+ * voiture, affiché dans le Garage de quelqu'un comme étant la sienne.
+ *
+ * Un beau rendu faux est pire qu'une absence de rendu : il est crédible.
+ *
+ * ── LA RÈGLE ──
+ * On ne génère que sur une identité VALIDÉE, c'est-à-dire :
+ *   · une marque réelle, pas un libellé générique ;
+ *   · un modèle réel, pas « Modèle inconnu » ;
+ *   · ET l'un des deux sceaux : soit un humain l'a saisie ou confirmée
+ *     (`ident_locked`), soit la contre-vérification l'a soutenue
+ *     (`verified`).
+ *
+ * La confiance seule ne suffit PAS à faire sceau : c'est un score que le
+ * modèle s'attribue, et la Model Y était annoncée à 88.
+ *
+ * @returns {{ok: true} | {ok: false, reason: string}}
+ */
+export function canRender(vehicle) {
+  const brand = String(vehicle?.brand || '').trim()
+  const model = String(vehicle?.model || '').trim()
+  const generic = /^(inconnue?|unknown|voiture|véhicule|vehicle)$/i
 
-  // Sous 85 de confiance, on NE donne PAS la désignation : écrire
-  // « Ferrari modèle inconnu » invite le moteur à inventer une Ferrari.
-  const identity = sure
-    ? `The subject is a ${name}${year ? `, model year ${year}` : ''}, finished in "${color}". Render that exact model and generation — correct silhouette, roofline, greenhouse, overhangs, bumpers, lamp signatures, grille and wheel design.`
-    : `The model is NOT reliably identified. Do not name or guess a model: reproduce faithfully the car VISIBLE in the reference photo — its exact silhouette, proportions, lamp shapes, glass area and wheels — in the colour "${color}".`
+  if (!brand || generic.test(brand)) {
+    return { ok: false, reason: 'marque non identifiée' }
+  }
+  if (!model || /inconnu|unknown/i.test(model)) {
+    return { ok: false, reason: 'modèle non identifié — le Garage ne devine pas' }
+  }
+  if (vehicle?.ident_locked === true) return { ok: true }
+  if (vehicle?.verified === true) return { ok: true }
+  return {
+    ok: false,
+    reason:
+      'identité ni confirmée par un humain ni soutenue par la contre-vérification',
+  }
+}
+
+export function buildPrompt(vehicle) {
+  // `year` est volontairement ABSENT : c'est lui qui a fait rendre une Model 3
+  // d'avant 2023 pour une Highland. Une année dans le prompt se lit comme un
+  // ordre de génération, et la génération doit venir de la photo.
+  const { brand, model, color, confidence } = vehicle
+  // La marque est souvent répétée dans le modèle (« Bentley Bentley R-Type »,
+  // tel quel en base) : on la retire, un doublon brouille la désignation.
+  const clean = String(model || '').replace(new RegExp(`^${String(brand || '').trim()}\\s+`, 'i'), '')
+  const name = [brand, clean].filter(Boolean).join(' ').trim()
+  const known = name.length > 0 && !/inconnu|unknown/i.test(name)
+  const trusted = Number(confidence ?? 0) >= 85
+
+  // ── POURQUOI « INDICE » ET NON « CONSIGNE » ──
+  // Les deux formulations précédentes se partageaient les véhicules selon le
+  // seuil de confiance 85, et MESURÉ sur les 5 rendus du 01/10, chacune
+  // échouait dès que SA source était fausse :
+  //
+  //   branche stricte (conf ≥ 85) « rends exactement un <nom> <année> »
+  //     911 GT3 (94) ✓ · Cayenne GTS (92) ✓  — la fiche était juste.
+  //     Model 3 (88) ✗ — la fiche dit « 2021 », la photo montre le restylage
+  //     Highland. Le moteur a obéi à la fiche et rendu la voiture d'avant
+  //     2023. L'ANNÉE de la fiche est le piège : elle commande une génération.
+  //
+  //   branche photo seule (conf < 85) « ne nomme rien, recopie la photo »
+  //     Rolls-Royce fichée « Bentley R-Type » (82) ✓ — la photo a sauvé le
+  //     rendu là où la fiche l'aurait détruit.
+  //     Mercedes (78) ✗ — sans ancrage, le moteur dérive vers l'archétype du
+  //     constructeur : la Classe C est devenue une Classe S.
+  //
+  // Aucune des deux sources n'est fiable seule, et le seuil ne fait que
+  // choisir laquelle échouera.
+  //
+  // ── CE QUI A TRANCHÉ LE DOSAGE ──
+  // Une vérification croisée des 5 photos contre leur fiche (voir
+  // garage-visual-verify.mjs) a montré que la fiche est fausse sur TROIS des
+  // cinq : une Classe E fichée « Classe C », une Rolls-Royce Silver Cloud
+  // fichée « Bentley R-Type », une Model Y fichée « Model 3 ». La fiche n'est
+  // donc pas une source d'appoint légèrement bruitée : sur cet échantillon
+  // elle se trompe plus souvent qu'elle ne tombe juste, y compris sur la
+  // MARQUE et sur la FAMILLE du modèle.
+  //
+  // La photo est donc posée comme source unique, lue en premier ; la fiche
+  // n'intervient qu'en départage d'ambiguïté réelle. La confiance ne décide
+  // plus quelle branche tire — elle ne fait que doser le crédit accordé à ce
+  // départage.
+  const identity = known
+    ? `Identify the car FROM THE PHOTO ITSELF. The photo is the primary source: read its make, model, generation and facelift from what you can actually see — lamp signatures, grille, roofline, proportions, glass area, bonnet height, wheels and trim.
+A database record calls this car a "${name}". That record was produced automatically and ${trusted ? 'is often wrong' : 'is unreliable'} — it may be wrong about the generation, about the model, and even about the make. Use it ONLY to break a genuine ambiguity when the photo alone does not settle the question, never against something you can see.
+WHEREVER THE RECORD AND THE PHOTO DISAGREE, FOLLOW THE PHOTO.
+Never replace the car with a larger, longer, newer, older or more prestigious model of the same brand, never turn a saloon into a crossover or the reverse, and never swap one generation or facelift for another.
+Keep the paint colour and finish visible in the photo (catalogued as "${color}").`
+    : `The model is NOT identified. Do not name or guess a model: reproduce faithfully the car VISIBLE in the reference photo — its exact silhouette, proportions, lamp shapes, glass area and wheels — in the colour "${color}".`
 
   return `Create a NEW premium automotive showroom photograph of one single car.
 
@@ -79,7 +171,8 @@ STRICT PROHIBITIONS
 - Do NOT include any person, body part or reflection of a person.
 - Do NOT render a readable licence plate: leave the plate area blank, dark or softly blurred.
 - Do NOT add any manufacturer badge, logo or lettering not genuinely on this car.
-- Do NOT add text, captions, graphics or watermarks anywhere.
+- Do NOT draw text, letters, numbers or pseudo-text ANYWHERE in the image — not on the bodywork, not on the floor, not on the plate, and above all NOT INSIDE the head lamps or tail lamps. Lamp internals are clean optics, reflectors and plain LED light bars, with no characters, no micro-text and no engraved wording of any kind.
+- Do NOT add captions, graphics or watermarks anywhere.
 - Do NOT reuse the background, framing or perspective of the reference photo.
 
 Output: one photorealistic image, nothing else.`

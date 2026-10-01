@@ -737,7 +737,6 @@
     "analyzingSubtitle": "Identifying curves, rarity and technical characteristics…",
     "previewUnknownModel": "Unknown model",
     "identifyDifficult": "Identification difficult — complete or correct the fields below.",
-    "confidenceLine": "AI · {{confidence}}% confidence",
     "alternatives": "Alternatives",
     "fieldBrand": "Brand",
     "fieldModel": "Model",
@@ -773,7 +772,8 @@
     "chooseExhausted": "You've used your {{limit}} AI analyses today.",
     "plateGuardBlockedTitle": "Plate not verified",
     "plateGuardBlockedBody": "Automatic detection didn't complete. Until we can check, publishing stays blocked — we don't put a plate online by default. Run the check again, or retake the photo.",
-    "plateGuardRetry": "Run the check again"
+    "plateGuardRetry": "Run the check again",
+    "aiDisclaimer": "AI identification can contain errors. Please check the information before publishing."
   },
   "racepage": {
     "back": "Back",
@@ -988,7 +988,7 @@
       "year": "Year",
       "color": "Color",
       "category": "Category",
-      "aiConfidence": "AI confidence"
+      "aiDisclaimer": "AI identification — please verify"
     },
     "locationCountry": "{{ville}}, France",
     "about": "About this car",

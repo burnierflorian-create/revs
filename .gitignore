@@ -49,3 +49,6 @@ backups/
 plate-audit/
 plate-tests/
 preview/
+
+# Sorties d'audit d'identification — mesures, pas du code
+ident-audit/

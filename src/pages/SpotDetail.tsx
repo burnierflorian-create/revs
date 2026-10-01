@@ -558,10 +558,11 @@ export default function SpotDetail() {
     [t('spotdetail.info.year'), spot.year != null ? String(spot.year) : '—'],
     [t('spotdetail.info.color'), spot.color || '—'],
     [t('spotdetail.info.category'), categoryLabel(spot.category)],
-    [
-      t('spotdetail.info.aiConfidence'),
-      spot.confidence != null ? `${spot.confidence}%` : '—',
-    ],
+    // La ligne « Confiance IA · 94 % » a été retirée le 01/10/2026 : ce
+    // chiffre est auto-déclaré par le modèle, jamais calibré, et il donnait à
+    // une identification fausse l'autorité d'une mesure. Trois fiches du parc
+    // étaient erronées, dont une annoncée à 88. Le score reste en base pour la
+    // logique interne, il n'est plus présenté comme un fait à l'utilisateur.
   ]
 
   return (
@@ -747,6 +748,14 @@ export default function SpotDetail() {
             </div>
           ))}
         </div>
+
+        {/* Mention discrète SOUS les informations issues de l'IA, à la place du
+            pourcentage de confiance retiré. Elle dit la seule chose vraie et
+            utile : ces champs sont une lecture automatique, ils peuvent être
+            faux, et ils sont corrigeables. */}
+        <p className="-mt-1 text-[11px] leading-snug text-fg2">
+          {t('spotdetail.info.aiDisclaimer')}
+        </p>
 
         {/* Fun fact (IA, cached per model) */}
         {funFact && (
