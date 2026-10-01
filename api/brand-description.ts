@@ -138,8 +138,15 @@ RULES — these matter more than completeness:
 
 /** `content_version` attendue. L'incrémenter ici — et NULLE PART ailleurs —
  *  est le seul moyen de déclencher une réécriture éditoriale ; aucun geste
- *  utilisateur ne peut le faire. */
-const CONTENT_VERSION = 1
+ *  utilisateur ne peut le faire.
+ *
+ *  Passée à 2 le 01/10/2026 : les 19 fiches d'avant la refonte sont en
+ *  version 1 et n'ont qu'une description courte. La version 2 les fait
+ *  régénérer au format structuré — UNE fois chacune, au premier visiteur,
+ *  puis plus jamais. C'est précisément l'usage pour lequel ce compteur
+ *  existe : une actualisation éditoriale décidée côté serveur, jamais
+ *  déclenchée par un utilisateur qui ouvre une page. */
+const CONTENT_VERSION = 2
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {

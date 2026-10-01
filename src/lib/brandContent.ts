@@ -61,7 +61,13 @@ export async function fetchBrandContent(
     p_lang: l,
   })
   const cached = (Array.isArray(row) ? row[0] : row) as BrandContent | undefined
-  if (cached && (cached.summary || cached.history || cached.description)) {
+  // On n'accepte le cache que s'il porte le contenu STRUCTURÉ. Les 19 fiches
+  // d'avant la refonte n'ont qu'une `description` courte : les accepter ici
+  // les figerait pour toujours dans l'ancien format, et les marques les plus
+  // consultées seraient les seules sans histoire ni modèles. Elles repassent
+  // donc une fois par le serveur, qui les régénère au format complet —
+  // une fois, puis plus jamais (content_version).
+  if (cached && (cached.summary || cached.history)) {
     return { content: normalise(cached), generating: false }
   }
 
