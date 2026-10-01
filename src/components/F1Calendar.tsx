@@ -1,6 +1,7 @@
 import { useEffect, useState, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { X } from 'lucide-react'
 import { GP_2026, fmtGpDate, type GrandPrix } from '../lib/f1'
 import { F1_TEAMS } from '../lib/f1team'
@@ -24,10 +25,15 @@ function teamColor(name: string): string {
 // podium + AI-summary modal; the next race is highlighted (red border,
 // animated "PROCHAIN" badge, live countdown); future races stay muted.
 export default function F1Calendar() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const [now, setNow] = useState(() => Date.now())
   const [results, setResults] = useState<Record<number, RaceData>>({})
   const [openRound, setOpenRound] = useState<number | null>(null)
+  /** Filtre de statut. « En cours » n'apparaît QUE s'il y a réellement un GP
+   *  en cours : proposer un filtre vide 51 semaines par an est une promesse
+   *  qui ne tient jamais. */
+  const [filter, setFilter] = useState<'all' | 'upcoming' | 'live' | 'done'>('all')
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 60_000)
@@ -56,9 +62,58 @@ export default function F1Calendar() {
   const openGp =
     openRound != null ? GP_2026.find((g) => g.round === openRound) ?? null : null
 
+  // Un Grand Prix est « en cours » pendant sa fenêtre de course : la date
+  // stockée est le départ, et une course dure environ deux heures.
+  const RACE_WINDOW_MS = 2 * 60 * 60 * 1000
+  const statusOf = (iso: string) => {
+    const ts = new Date(iso).getTime()
+    if (now >= ts && now < ts + RACE_WINDOW_MS) return 'live' as const
+    return ts < now ? ('done' as const) : ('upcoming' as const)
+  }
+  const anyLive = GP_2026.some((g) => statusOf(g.date) === 'live')
+  const FILTERS = (['all', 'upcoming', 'live', 'done'] as const).filter(
+    (f) => f !== 'live' || anyLive,
+  )
+  const shown = GP_2026.filter(
+    (g) => filter === 'all' || statusOf(g.date) === filter,
+  )
+
   return (
     <section className="space-y-2.5 pt-1">
-      {GP_2026.map((g, i) => {
+      {/* ── Filtres de statut ── */}
+      <div className="mb-1 flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
+        {FILTERS.map((f) => {
+          const on = filter === f
+          return (
+            <button
+              key={f}
+              onClick={() => setFilter(f)}
+              aria-pressed={on}
+              className="tappable flex-none rounded-full px-3.5 py-1.5 text-[12px] font-bold transition-colors"
+              style={{
+                background: on ? 'rgba(232,32,58,0.14)' : 'var(--color-card)',
+                border: `1px solid ${on ? '#E8203A' : 'var(--color-border)'}`,
+                color: on ? '#fff' : 'rgb(var(--color-fg-2))',
+                boxShadow: on ? '0 0 14px rgba(232,32,58,0.18)' : undefined,
+              }}
+            >
+              {t(`f1cal.filter.${f}`)}
+            </button>
+          )
+        })}
+      </div>
+
+      {shown.length === 0 && (
+        <p
+          className="rounded-2xl px-4 py-6 text-center text-[12.5px] text-fg2"
+          style={{ background: 'var(--color-card)', border: '1px solid var(--color-border)' }}
+        >
+          {t('f1cal.empty')}
+        </p>
+      )}
+
+      {shown.map((g) => {
+        const i = GP_2026.indexOf(g)
         const ts = new Date(g.date).getTime()
         const isPast = ts < now
         const isNext = i === nextIndex

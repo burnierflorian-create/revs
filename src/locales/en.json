@@ -1643,5 +1643,14 @@
       "teaserTitle": "Do you organise car events?",
       "teaserBody": "Join the REVS organisers."
     }
+  },
+  "f1cal": {
+    "filter": {
+      "all": "All",
+      "upcoming": "Upcoming",
+      "live": "Live",
+      "done": "Finished"
+    },
+    "empty": "No Grand Prix in this category."
   }
 }

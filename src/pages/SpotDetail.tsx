@@ -447,18 +447,46 @@ export default function SpotDetail() {
   }
 
   // Swipe-down-to-close — single-finger drag starting on the hero photo.
+  // ── Glisser vers le bas pour fermer, AVEC VERROUILLAGE D'AXE ──
+  //
+  // Le même défaut que le carousel du Garage (corrigé le 01/10) existait
+  // ici : le geste ne regardait que l'axe Y. Un glissement horizontal sur la
+  // photo — pour la faire défiler, ou simplement en diagonale — entraînait
+  // donc la page vers le bas dès qu'il dérivait d'un pixel vers le bas.
+  //
+  // On décide l'axe une fois, sur les 8 premiers pixels, et on s'y tient.
+  const dragAxisRef = useRef<'none' | 'x' | 'y'>('none')
+  const dragStartXRef = useRef<number | null>(null)
+
   function onDragStart(e: TouchEvent) {
-    if (e.touches.length === 1) dragStartRef.current = e.touches[0].clientY
+    if (e.touches.length !== 1) return
+    dragStartRef.current = e.touches[0].clientY
+    dragStartXRef.current = e.touches[0].clientX
+    dragAxisRef.current = 'none'
   }
   function onDragMove(e: TouchEvent) {
     if (dragStartRef.current == null || e.touches.length !== 1) return
     const dy = e.touches[0].clientY - dragStartRef.current
+    const dx = e.touches[0].clientX - (dragStartXRef.current ?? 0)
+
+    if (dragAxisRef.current === 'none') {
+      const ax = Math.abs(dx)
+      const ay = Math.abs(dy)
+      if (ax < 8 && ay < 8) return
+      // Fermer une page est irréversible du point de vue de l'utilisateur :
+      // on exige donc que le geste soit franchement vertical.
+      dragAxisRef.current = ay > ax * 1.3 ? 'y' : 'x'
+    }
+    if (dragAxisRef.current !== 'y') return
     if (dy > 0) setDragY(dy)
   }
   function onDragEnd() {
     if (dragStartRef.current == null) return
+    const wasVertical = dragAxisRef.current === 'y'
     dragStartRef.current = null
-    if (dragY > 120) navigate(-1)
+    dragStartXRef.current = null
+    dragAxisRef.current = 'none'
+    if (wasVertical && dragY > 120) navigate(-1)
     else setDragY(0)
   }
 

@@ -1643,5 +1643,14 @@
       "teaserTitle": "Tu organises des événements automobiles ?",
       "teaserBody": "Rejoins les organisateurs REVS."
     }
+  },
+  "f1cal": {
+    "filter": {
+      "all": "Tous",
+      "upcoming": "À venir",
+      "live": "En cours",
+      "done": "Terminés"
+    },
+    "empty": "Aucun Grand Prix dans cette catégorie."
   }
 }

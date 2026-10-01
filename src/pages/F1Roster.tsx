@@ -35,6 +35,31 @@ export default function F1Roster({
   // from Jolpica into f1_grid_teams. Replaces the old AI-estimated points.
   const [points, setPoints] = useState<Record<string, string>>({})
   const [positions, setPositions] = useState<Record<string, number>>({})
+  /** Classement PILOTES — `f1_grid` porte déjà `points` et `position`,
+   *  synchronisés depuis Jolpica. La donnée existait, elle n'était
+   *  simplement pas affichée. */
+  const [driverStand, setDriverStand] = useState<
+    Record<string, { pts: number; pos: number }>
+  >({})
+  useEffect(() => {
+    let active = true
+    supabase
+      .from('f1_grid')
+      .select('driver_slug, points, position')
+      .then(({ data }) => {
+        if (!active || !data) return
+        const m: Record<string, { pts: number; pos: number }> = {}
+        for (const r of data as { driver_slug: string; points: number | null; position: number | null }[]) {
+          if (r.points != null && r.position != null) {
+            m[r.driver_slug] = { pts: r.points, pos: r.position }
+          }
+        }
+        setDriverStand(m)
+      })
+    return () => {
+      active = false
+    }
+  }, [])
   useEffect(() => {
     let active = true
     supabase
@@ -99,12 +124,21 @@ export default function F1Roster({
               className="relative pb-2 text-sm transition-colors"
             >
               <span
-                className={active ? 'font-medium text-fg' : 'font-normal text-fg2'}
+                className={active ? 'font-semibold text-fg' : 'font-normal text-fg2'}
               >
                 {t(`f1gp.${tabKey}`)}
               </span>
+              {/* Indicateur rouge REVS : l'onglet actif doit se repérer d'un
+                  coup d'œil, sans relire les libellés. Un trait blanc se
+                  confondait avec le texte. */}
               {active && (
-                <span className="absolute inset-x-0 -bottom-px h-px bg-fg" />
+                <span
+                  className="absolute inset-x-0 -bottom-px h-[2px] rounded-full"
+                  style={{
+                    background: '#E8203A',
+                    boxShadow: '0 0 10px rgba(232,32,58,0.5)',
+                  }}
+                />
               )}
             </button>
           )
@@ -112,11 +146,12 @@ export default function F1Roster({
       </div>
 
       {tab === 'teams' ? (
-        <TeamsGrid teams={orderedTeams} points={points} />
+        <TeamsGrid teams={orderedTeams} points={points} positions={positions} />
       ) : tab === 'drivers' ? (
         <DriversGrid
           drivers={drivers}
           teamColor={Object.fromEntries(teams.map((tm) => [tm.slug, tm.color]))}
+          standings={driverStand}
         />
       ) : (
         <ResultsList
@@ -149,14 +184,16 @@ export default function F1Roster({
 function TeamsGrid({
   teams,
   points,
+  positions,
 }: {
   teams: F1Team[]
   points: Record<string, string>
+  positions: Record<string, number>
 }) {
   return (
     <div className="grid grid-cols-2 gap-3">
       {teams.map((t) => (
-        <TeamCard key={t.slug} team={t} pts={points[t.slug]} />
+        <TeamCard key={t.slug} team={t} pts={points[t.slug]} pos={positions[t.slug]} />
       ))}
     </div>
   )
@@ -165,7 +202,7 @@ function TeamsGrid({
 // #141414 card with a 3px left border in the team's official livery
 // colour. The monoplace sits on top; a footer row carries the team name
 // (white, bold) on the left and the championship points (red) on the right.
-function TeamCard({ team, pts }: { team: F1Team; pts?: string }) {
+function TeamCard({ team, pts, pos }: { team: F1Team; pts?: string; pos?: number }) {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const [photoFailed, setPhotoFailed] = useState(false)
@@ -182,6 +219,21 @@ function TeamCard({ team, pts }: { team: F1Team; pts?: string }) {
       }}
     >
       <div className="relative aspect-[5/4] w-full overflow-hidden">
+        {/* Position au championnat — affichée UNIQUEMENT si la donnée existe
+            réellement. Un « P— » décoratif vaudrait moins que rien. */}
+        {pos != null && (
+          <span
+            className="absolute left-2 top-2 z-10 rounded-md px-1.5 py-0.5 font-display text-[11px] font-black tabular-nums"
+            style={{
+              background: 'rgba(0,0,0,0.55)',
+              border: `1px solid ${team.color}`,
+              color: '#fff',
+              backdropFilter: 'blur(4px)',
+            }}
+          >
+            P{pos}
+          </span>
+        )}
         {appConfig.SHOW_F1_PHOTOS && photoUrl ? (
           <img
             src={photoUrl}
@@ -216,18 +268,26 @@ function TeamCard({ team, pts }: { team: F1Team; pts?: string }) {
 function DriversGrid({
   drivers,
   teamColor,
+  standings,
 }: {
   drivers: F1Driver[]
   teamColor: Record<string, string>
+  standings: Record<string, { pts: number; pos: number }>
 }) {
   const navigate = useNavigate()
+  // Classés par position réelle quand elle existe ; les autres suivent.
+  // Une grille de pilotes dans un ordre arbitraire n'apprend rien.
+  const ordered = [...drivers].sort(
+    (a, b) => (standings[a.slug]?.pos ?? 99) - (standings[b.slug]?.pos ?? 99),
+  )
   return (
     <div className="grid grid-cols-2 gap-3">
-      {drivers.map((d) => (
+      {ordered.map((d) => (
         <DriverCard
           key={d.slug}
           driver={d}
           color={teamColor[d.team] ?? '#888888'}
+          standing={standings[d.slug]}
           onClick={() => navigate(`/f1-driver/${d.slug}`)}
         />
       ))}
@@ -290,10 +350,12 @@ function ResultsList({
 function DriverCard({
   driver,
   color,
+  standing,
   onClick,
 }: {
   driver: F1Driver
   color: string
+  standing?: { pts: number; pos: number }
   onClick: () => void
 }) {
   const [photoFailed, setPhotoFailed] = useState(false)
@@ -341,6 +403,15 @@ function DriverCard({
         <span className="line-clamp-1 font-display text-[14px] font-extrabold leading-tight tracking-tight text-white">
           {driver.name}
         </span>
+        {/* Position et points — affichés UNIQUEMENT quand la donnée existe.
+            Rien d'inventé : `f1_grid` les porte, synchronisés depuis Jolpica. */}
+        {standing && (
+          <span className="flex items-center gap-1.5 text-[11px] font-bold leading-none">
+            <span style={{ color: '#E8203A' }}>P{standing.pos}</span>
+            <span className="text-white/35">·</span>
+            <span className="tabular-nums text-white/70">{standing.pts} pts</span>
+          </span>
+        )}
       </div>
     </button>
   )
