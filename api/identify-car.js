@@ -608,6 +608,13 @@ Regarde dans cet ordre : hauteur de pavillon, garde au sol, longueur et nombre d
 
 Une erreur d'un cran à l'intérieur d'une même marque est le cas le plus fréquent (berline prise pour crossover, Classe C pour Classe E, génération antérieure pour la suivante). C'est précisément ce que tu dois attraper.
 
+DISCRIMINANTS CONCRETS, à vérifier quand ils s'appliquent — ce sont ceux sur lesquels des erreurs réelles ont été constatées :
+- Mercedes Classe C W206 vs Classe E W214 : la W214 a des POIGNÉES DE PORTE AFFLEURANTES, escamotées dans la tôle ; la W206 a des poignées classiques en étrier, qui se détachent nettement du flanc. La W214 est aussi plus longue, avec une porte arrière et un porte-à-faux arrière sensiblement plus grands. Cette seule poignée tranche le cas.
+- Tesla Model 3 vs Model Y : la Model Y est un crossover à pavillon haut avec des protections d'arches en plastique noir ; la Model 3 est une berline basse sans protections.
+- Bentley vs Rolls-Royce d'époque : la Rolls porte une calandre PARTHÉNON, rectangulaire à sommet plat, surmontée de la Spirit of Ecstasy ; la Bentley a une calandre arrondie en haricot et un B ailé.
+- BMW Série 3 vs Série 4 : la Série 4 a un pavillon fuyant de coupé ou de Gran Coupé ; la Série 3 est une berline à pavillon horizontal.
+- Porsche 911 : la génération se lit au bandeau arrière (continu sur 991 et 992) et au dessin des feux.
+
 Réponds UNIQUEMENT par ce JSON, sans markdown :
 {"supported":true,"actual_brand":"","actual_model":"","why":"une phrase, les éléments visuels utilisés"}
 
