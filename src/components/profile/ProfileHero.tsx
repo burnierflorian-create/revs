@@ -17,7 +17,7 @@
 import { useTranslation } from 'react-i18next'
 import { BadgeCheck, Share2 } from 'lucide-react'
 import type { Spot } from '../../lib/spots'
-import { rarityRank } from '../CollectorCard'
+import { pickPrimaryVehicle } from '../../lib/primaryVehicle'
 
 export default function ProfileHero({
   pseudo,
@@ -46,13 +46,12 @@ export default function ProfileHero({
 }) {
   const { t } = useTranslation()
 
-  // Photo de fond : le spot le plus rare, sinon le hero de l'accueil. Aucun
-  // appel réseau — `spots` est déjà chargé par la page.
-  const cover =
-    [...spots]
-      .filter((s) => s.photo_url)
-      .sort((a, b) => rarityRank(b.rarity) - rarityRank(a.rarity))[0]
-      ?.photo_url ?? null
+  // Photo de fond : le véhicule principal, choisi par `pickPrimaryVehicle()`.
+  // La règle est la même qu'avant (le spot le plus rare) mais elle vit
+  // désormais à UN endroit, partagé avec le hero des Paramètres : les deux
+  // écrans ne peuvent plus montrer deux voitures différentes.
+  // Aucun appel réseau — `spots` est déjà chargé par la page.
+  const cover = pickPrimaryVehicle(spots).photo
 
   const idLine = [accountTitle, levelTitle, ville].filter(Boolean)
 

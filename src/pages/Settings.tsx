@@ -14,7 +14,6 @@ import {
   Heart,
   KeyRound,
   LogOut,
-  Mail,
   MapPin,
   Megaphone,
   MessageCircle,
@@ -26,15 +25,20 @@ import {
   Shield,
   Car,
   Smartphone,
-  Sun,
   Trash2,
   UserPlus,
   Users,
   Globe,
   BookOpen,
+  BadgeCheck,
+  HelpCircle,
+  Palette,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { APP_VERSION } from '../lib/constants'
+import { APP_VERSION, CONTACT_EMAIL } from '../lib/constants'
+import { pickPrimaryVehicle } from '../lib/primaryVehicle'
+import type { Spot } from '../lib/spots'
+import { fetchUnreadCount, onUnreadChanged } from '../lib/notifications'
 import { hasTutorialAccess } from '../lib/tutorial'
 import { useTheme } from '../lib/theme'
 import { hapticSuccess } from '../lib/haptic'
@@ -242,17 +246,36 @@ export default function Settings() {
   const [passionsBusy, setPassionsBusy] = useState(false)
   const [passionsMsg, setPassionsMsg] = useState<string | null>(null)
   const [isPublic, setIsPublic] = useState(true)
-  const [notif, setNotif] = useState(false)
   const [geo, setGeo] = useState(false)
   const [geoDenied, setGeoDenied] = useState(false)
   const [analytics, setAnalytics] = useState(false)
   const [marketing, setMarketing] = useState(false)
   const [role, setRole] = useState<string>('user')
+  // Les spots de l'utilisateur, uniquement pour le hero : c'est d'eux que sort
+  // la photo du véhicule principal (voir src/lib/primaryVehicle.ts). Aucune
+  // nouvelle donnée n'est créée — on lit ce qui existe déjà.
+  const [spots, setSpots] = useState<Spot[]>([])
+  const [unread, setUnread] = useState(0)
+  /** Replie/déplie les réglages fins du push (likes, commentaires…). */
+  const [pushPrefsOpen, setPushPrefsOpen] = useState(false)
+  /** Le bloc bas : sécurité, appareil, actions sensibles. Fermé par défaut —
+   *  la page principale est un centre de configuration, pas un inventaire. */
+  const [advancedOpen, setAdvancedOpen] = useState(false)
+  const [tourMsg, setTourMsg] = useState<string | null>(null)
 
   const [editOpen, setEditOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
   const [err, setErr] = useState<string | null>(null)
+
+  // La pastille de la ligne « Notifications ». Le même compteur que la cloche
+  // de l'accueil — une seule source (`my_unread_count()`), pas deux comptes
+  // qui se contrediraient d'un écran à l'autre.
+  useEffect(() => {
+    const refresh = () => void fetchUnreadCount().then(setUnread)
+    refresh()
+    return onUnreadChanged(refresh)
+  }, [])
 
   // Verdict d'accès au tutoriel interne. Une seule requête par chargement de
   // page (le résultat est mémorisé dans src/lib/tutorial.ts). En cas d'échec
@@ -453,7 +476,7 @@ export default function Settings() {
       setUserId(user.id)
       setEmail(user.email ?? '')
 
-      const [{ data: prof }, { data: orgReq }, { data: np }] =
+      const [{ data: prof }, { data: orgReq }, { data: np }, { data: mySpots }] =
         await Promise.all([
           supabase
             .from('profiles')
@@ -470,8 +493,16 @@ export default function Settings() {
             .select('likes, comments, followers, nearby, streak')
             .eq('user_id', user.id)
             .maybeSingle(),
+          // Pour le hero seulement. On ne remonte que les colonnes dont
+          // `pickPrimaryVehicle()` a besoin : inutile de tirer toute la ligne.
+          supabase
+            .from('spots')
+            .select('id, user_id, brand, model, rarity, photo_url, created_at')
+            .eq('user_id', user.id)
+            .order('created_at', { ascending: false }),
         ])
       if (!active) return
+      if (mySpots) setSpots(mySpots as unknown as Spot[])
       if (prof) {
         setPseudo(prof.pseudo ?? '')
         setVille(prof.ville ?? '')
@@ -508,11 +539,6 @@ export default function Settings() {
       if (orgReq && orgReq.length > 0) setOrgSent(true)
 
       try {
-        setNotif(
-          localStorage.getItem('revs_notifications') === '1' &&
-            typeof Notification !== 'undefined' &&
-            Notification.permission === 'granted',
-        )
         setGeo(localStorage.getItem('revs_geo') === '1')
         setAnalytics(localStorage.getItem('revs_consent_analytics') === '1')
         setMarketing(localStorage.getItem('revs_consent_marketing') === '1')
@@ -798,33 +824,6 @@ export default function Settings() {
     }, 2000)
   }
 
-  async function toggleNotif() {
-    if (notif) {
-      try {
-        localStorage.setItem('revs_notifications', '0')
-      } catch {
-        /* ignore */
-      }
-      setNotif(false)
-      return
-    }
-    if (typeof Notification === 'undefined') {
-      setErr(t('settingspage.notifNotSupported'))
-      return
-    }
-    const perm = await Notification.requestPermission()
-    if (perm === 'granted') {
-      try {
-        localStorage.setItem('revs_notifications', '1')
-      } catch {
-        /* ignore */
-      }
-      setNotif(true)
-    } else {
-      setErr(t('settingspage.notifDenied'))
-    }
-  }
-
   function persist(key: string, on: boolean) {
     try {
       localStorage.setItem(key, on ? '1' : '0')
@@ -936,6 +935,32 @@ export default function Settings() {
       .from('notification_prefs')
       .upsert({ user_id: userId, ...next }, { onConflict: 'user_id' })
     if (error) setNpref(npref)
+  }
+
+  /**
+   * Rejoue le tutoriel de découverte.
+   *
+   * ⚠️ NE PAS CONFONDRE avec `/tutorial`, qui est la DOCUMENTATION INTERNE
+   * réservée au compte créateur et gardée côté serveur. Le tutoriel
+   * UTILISATEUR est le parcours en dix écrans (`TutorialTour`), monté dans
+   * MainLayout et déclenché par `profiles.tutorial_completed = false`.
+   *
+   * On remet donc ce drapeau à false et on renvoie à l'accueil, où le
+   * composant se montera de lui-même. Aucun nouveau système : on réutilise
+   * exactement le déclencheur existant.
+   */
+  async function replayTutorial() {
+    if (!userId) return
+    const { error } = await supabase
+      .from('profiles')
+      .update({ tutorial_completed: false })
+      .eq('user_id', userId)
+    if (error) {
+      setTourMsg(translateError(error))
+      return
+    }
+    hapticSuccess()
+    navigate('/')
   }
 
   async function resetOnboarding() {
@@ -1412,13 +1437,20 @@ export default function Settings() {
 
   // ─────────────────────── Render ───────────────────────
 
+  // Le véhicule principal — MÊME source que le hero du Profil
+  // (src/lib/primaryVehicle.ts). Les deux écrans ne peuvent pas diverger, et
+  // le jour où l'utilisateur choisira lui-même sa voiture, il n'y aura qu'un
+  // seul endroit à changer. Cette mission n'implémente PAS ce choix.
+  const vehicle = pickPrimaryVehicle(spots, garageBrand)
+
   return (
-    <div className="min-h-screen bg-bg px-4 pt-[calc(max(1rem,env(safe-area-inset-top))+15px)] text-fg">
+    <div className="min-h-screen bg-bg px-4 pb-32 pt-[calc(max(1rem,env(safe-area-inset-top))+15px)] text-fg">
+      {/* ── EN-TÊTE ── */}
       <div className="flex items-center gap-3 py-4">
         <button
           onClick={() => navigate(-1)}
           aria-label={t('settingspage.back')}
-          className="tappable -ml-2 flex h-10 w-10 items-center justify-center rounded-full text-fg2 hover:text-fg"
+          className="tappable -ml-2 flex h-11 w-11 items-center justify-center rounded-full text-fg2 hover:text-fg"
         >
           <ArrowLeft className="h-6 w-6" />
         </button>
@@ -1428,101 +1460,356 @@ export default function Settings() {
       {loading ? (
         <p className="py-10 text-center text-sm text-fg2">{t('settingspage.loading')}</p>
       ) : (
-        <div className="space-y-8 pb-6">
-          {/* Identité — header avec avatar ring gradient */}
-          <div className="flex flex-col items-center pt-4 text-center">
-            <button
-              onClick={() => setEditOpen((v) => !v)}
-              aria-label={t('settingspage.editPhotoAria')}
-              className="tappable flex h-24 w-24 items-center justify-center rounded-full p-[3px]"
+        <div className="space-y-7">
+          {/* ══════════ HERO PROFIL ══════════
+              Photo du véhicule principal en fond, identité par-dessus. Le
+              véhicule vient de `pickPrimaryVehicle()` : aucune donnée nouvelle,
+              aucun sélecteur — on montre ce qui existe déjà. */}
+          <div
+            className="relative isolate overflow-hidden rounded-3xl"
+            style={{
+              border: '1px solid rgba(232,32,58,0.26)',
+              boxShadow: '0 14px 40px rgba(0,0,0,0.5), 0 0 34px rgba(232,32,58,0.09)',
+            }}
+          >
+            {vehicle.photo ? (
+              /* Flou léger + agrandissement : le texte se pose ici DIRECTEMENT
+                 sur la photo, et une photo de voiture peut être claire,
+                 contrastée, pleine de reflets. Floutée, elle devient une
+                 matière — l'ambiance reste, le pseudo reste lisible quelle que
+                 soit la prise. Le `scale` masque les bords ramollis par le
+                 flou. */
+              <img
+                src={vehicle.photo}
+                alt=""
+                aria-hidden
+                loading="lazy"
+                decoding="async"
+                className="absolute inset-0 h-full w-full object-cover"
+                style={{
+                  objectPosition: 'center 55%',
+                  filter: 'blur(10px) saturate(1.15)',
+                  transform: 'scale(1.15)',
+                }}
+              />
+            ) : (
+              <div
+                aria-hidden
+                className="absolute inset-0"
+                style={{
+                  background:
+                    'radial-gradient(120% 90% at 80% 0%, rgba(232,32,58,0.22), transparent 62%)',
+                }}
+              />
+            )}
+            {/* Voile : la photo doit rester une ambiance, jamais concurrencer
+                le pseudo qui est l'information réelle de ce bloc. */}
+            <div
+              aria-hidden
+              className="absolute inset-0"
               style={{
                 background:
-                  'conic-gradient(from 220deg, #E8203A 0%, #b91528 25%, #4a0f16 55%, #E8203A 100%)',
-                boxShadow: '0 6px 22px rgba(232,32,58,0.32)',
+                  'linear-gradient(105deg, rgba(10,10,11,0.93) 0%, rgba(10,10,11,0.84) 52%, rgba(10,10,11,0.58) 100%)',
               }}
-            >
-              <span className="flex h-full w-full items-center justify-center overflow-hidden rounded-full bg-card font-display text-3xl font-extrabold tracking-tighter text-fg">
-                {avatarUrl ? (
-                  <img
-                    src={avatarUrl}
-                    alt=""
-                    loading="lazy"
-                    decoding="async"
-                    className="h-full w-full object-cover object-top"
-                  />
-                ) : (
-                  (pseudo.charAt(0) || '?').toUpperCase()
-                )}
+            />
+
+            <div className="relative flex items-center gap-4 p-4">
+              <span
+                className="flex h-16 w-16 flex-none items-center justify-center rounded-full p-[2.5px]"
+                style={{
+                  background:
+                    'conic-gradient(from 220deg, #E8203A 0%, #b91528 28%, #4a0f16 58%, #E8203A 100%)',
+                  boxShadow: '0 6px 20px rgba(232,32,58,0.34)',
+                }}
+              >
+                <span className="flex h-full w-full items-center justify-center overflow-hidden rounded-full bg-card font-display text-2xl font-extrabold tracking-tighter text-fg">
+                  {avatarUrl ? (
+                    <img
+                      src={avatarUrl}
+                      alt=""
+                      loading="lazy"
+                      decoding="async"
+                      className="h-full w-full object-cover object-top"
+                    />
+                  ) : (
+                    (pseudo.charAt(0) || '?').toUpperCase()
+                  )}
+                </span>
               </span>
-            </button>
-            <p className="mt-3 line-clamp-1 font-display text-xl font-extrabold tracking-tighter text-fg">
-              {pseudo || t('settingspage.defaultPseudo')}
-            </p>
-            {ville && (
-              <p className="mt-0.5 line-clamp-1 text-sm text-fg2">{ville}</p>
-            )}
+
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5">
+                  <p className="min-w-0 truncate font-display text-[21px] font-black tracking-tight text-fg">
+                    {pseudo || t('settingspage.defaultPseudo')}
+                  </p>
+                  {(role === 'admin' || tier === 'vip') && (
+                    <BadgeCheck
+                      className="h-[18px] w-[18px] flex-none"
+                      style={{ color: '#E8203A' }}
+                      aria-hidden
+                    />
+                  )}
+                </div>
+                {ville && (
+                  <p className="mt-0.5 flex items-center gap-1 truncate text-[13px] text-fg2">
+                    <MapPin className="h-3 w-3 flex-none" />
+                    {ville}
+                  </p>
+                )}
+                {vehicle.label && (
+                  <span
+                    className="mt-2 inline-flex max-w-full items-center gap-1.5 truncate rounded-full px-2.5 py-1 text-[11px] font-bold text-fg/85"
+                    style={{
+                      background: 'rgba(255,255,255,0.07)',
+                      border: '1px solid rgba(255,255,255,0.11)',
+                    }}
+                  >
+                    <Car className="h-3 w-3 flex-none" style={{ color: '#E8203A' }} />
+                    <span className="truncate">{vehicle.label}</span>
+                  </span>
+                )}
+              </div>
+            </div>
           </div>
+
+          {/* ══════════ RACCOURCIS ══════════ */}
+          <div className="grid grid-cols-2 gap-3">
+            <ShortcutCard
+              icon={<UserPlus className="h-4 w-4" />}
+              title={t('settingspage.myProfileCard')}
+              sub={t('settingspage.myProfileCardSub')}
+              active={editOpen}
+              onClick={() => {
+                setGarageOpen(false)
+                setEditOpen((v) => !v)
+              }}
+            />
+            <ShortcutCard
+              icon={<Car className="h-4 w-4" />}
+              title={t('settingspage.myVehicleCard')}
+              sub={vehicle.label ?? t('settingspage.myVehicleCardEmpty')}
+              active={garageOpen}
+              onClick={() => {
+                setEditOpen(false)
+                setGarageMsg(null)
+                setGarageOpen((v) => !v)
+              }}
+            />
+          </div>
+
+          {/* Les éditeurs existants, dépliés sous la carte concernée. Aucun
+              nouveau formulaire : ce sont exactement ceux d'avant. */}
+          {editOpen && (
+            <div
+              className="overflow-hidden rounded-3xl bg-card"
+              style={{ border: '1px solid var(--color-border)' }}
+            >
+              {ProfileEditor}
+              <Row
+                icon={<AtSign className="h-4 w-4" />}
+                label={t('settingspage.socialNetworks')}
+                sub={
+                  instagram || tiktok
+                    ? [
+                        instagram ? `IG @${instagram}` : null,
+                        tiktok ? `TT @${tiktok}` : null,
+                      ]
+                        .filter(Boolean)
+                        .join(' · ')
+                    : t('settingspage.socialNetworksSub')
+                }
+                onClick={() => {
+                  setSocialMsg(null)
+                  setSocialOpen((v) => !v)
+                }}
+              />
+              {socialOpen && SocialEditor}
+            </div>
+          )}
+          {garageOpen && (
+            <div
+              className="overflow-hidden rounded-3xl bg-card"
+              style={{ border: '1px solid var(--color-border)' }}
+            >
+              {GarageEditor}
+            </div>
+          )}
 
           {(msg || err) && (
             <p
               className={`rounded-2xl px-4 py-3 text-sm ${
                 err ? 'bg-accent/15 text-accent' : 'bg-card text-fg/85'
               }`}
-              style={
-                err ? undefined : { border: '1px solid var(--color-border)' }
-              }
+              style={err ? undefined : { border: '1px solid var(--color-border)' }}
             >
               {err ?? msg}
             </p>
           )}
 
-          {/* 1 — MON COMPTE — identity-facing rows only. The two
-              security-facing rows (e-mail + password) moved to the
-              new Sécurité section below per the 2026-06-03 settings
-              restructure spec. */}
-          <Section title={t('settingspage.sectionAccount')}>
+          {/* ══════════ EXPÉRIENCE ══════════ */}
+          <Section title={t('settingspage.sectionExperience')}>
             <Row
-              icon={<UserPlus className="h-4 w-4" />}
-              label={t('settingspage.editProfile')}
-              sub={t('settingspage.editProfileSub')}
-              onClick={() => setEditOpen((v) => !v)}
-            />
-            {editOpen && ProfileEditor}
-            <Row
-              icon={<Car className="h-4 w-4" />}
-              label={t('settingspage.myVehicle')}
-              sub={garageBrand || t('settingspage.myVehicleSub')}
-              onClick={() => {
-                setGarageMsg(null)
-                setGarageOpen((v) => !v)
-              }}
-            />
-            {garageOpen && GarageEditor}
-            <Row
-              icon={<AtSign className="h-4 w-4" />}
-              label={t('settingspage.socialNetworks')}
-              sub={
-                instagram || tiktok
-                  ? [
-                      instagram ? `IG @${instagram}` : null,
-                      tiktok ? `TT @${tiktok}` : null,
-                    ]
-                      .filter(Boolean)
-                      .join(' · ')
-                  : t('settingspage.socialNetworksSub')
+              icon={<Bell className="h-4 w-4" />}
+              label={t('settingspage.notifications')}
+              sub={t('settingspage.notifCenterSub')}
+              onClick={() => navigate('/notifications')}
+              right={
+                unread > 0 ? (
+                  <span className="flex items-center gap-2">
+                    <span
+                      className="flex h-5 min-w-[20px] items-center justify-center rounded-full px-1.5 text-[11px] font-extrabold text-white"
+                      style={{
+                        background: 'rgb(var(--color-accent))',
+                        boxShadow: '0 0 10px rgba(232,32,58,0.45)',
+                      }}
+                    >
+                      {unread > 99 ? '99+' : unread}
+                    </span>
+                    <ChevronRight className="h-4 w-4 flex-none text-fg2" />
+                  </span>
+                ) : undefined
               }
-              onClick={() => {
-                setSocialMsg(null)
-                setSocialOpen((v) => !v)
-              }}
             />
-            {socialOpen && SocialEditor}
+            <Row
+              icon={<Globe className="h-4 w-4" />}
+              label={t('settings.language.label')}
+              sub={t('settingspage.languageSub')}
+              noChevron
+              right={
+                <span className="flex flex-none rounded-full bg-fg/10 p-0.5">
+                  {(['fr', 'en'] as Lang[]).map((l) => {
+                    const active =
+                      (i18n.language?.startsWith('en') ? 'en' : 'fr') === l
+                    return (
+                      <button
+                        key={l}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          hapticSuccess()
+                          setLanguage(l)
+                          if (userId)
+                            void supabase
+                              .from('profiles')
+                              .update({ language: l })
+                              .eq('user_id', userId)
+                        }}
+                        className={`rounded-full px-3 py-1 text-[11px] font-bold tracking-wide transition-colors ${
+                          active ? 'bg-accent text-white' : 'text-fg2'
+                        }`}
+                      >
+                        {l.toUpperCase()}
+                      </button>
+                    )
+                  })}
+                </span>
+              }
+            />
+            <Row
+              icon={<Palette className="h-4 w-4" />}
+              label={t('settingspage.appearance')}
+              sub={
+                theme === 'light'
+                  ? t('settingspage.lightMode')
+                  : t('settingspage.darkMode')
+              }
+              // L'onClick est requis pour que le <button> extérieur reste
+              // actif : un <button disabled> avale les événements de ses
+              // enfants, ce qui figeait le Toggle (corrigé le 02/06/2026).
+              onClick={() => {
+                hapticSuccess()
+                setTheme(theme === 'light' ? 'dark' : 'light')
+              }}
+              right={
+                <Toggle
+                  checked={theme === 'light'}
+                  onChange={() => {
+                    hapticSuccess()
+                    setTheme(theme === 'light' ? 'dark' : 'light')
+                  }}
+                />
+              }
+              noChevron
+            />
+            {/* Les notifications push sont le SEUL système d'envoi : l'ancien
+                interrupteur « Notifications », qui n'écrivait qu'un drapeau
+                local lu par personne, a disparu — deux systèmes apparents
+                pour une seule réalité était précisément ce qu'il fallait
+                arrêter. Les réglages fins ci-dessous pilotent `send-push.ts`. */}
+            <Row
+              icon={<Smartphone className="h-4 w-4" />}
+              label={t('settingspage.enablePush')}
+              sub={pushMsg ?? t('settingspage.enablePushSub')}
+              onClick={pushBusy ? undefined : enableDevicePush}
+            />
+            <Row
+              icon={<BellRing className="h-4 w-4" />}
+              label={t('settingspage.pushWhat')}
+              sub={t('settingspage.pushWhatSub')}
+              onClick={() => setPushPrefsOpen((v) => !v)}
+            />
+            {pushPrefsOpen && (
+              <>
+                <Row
+                  icon={<Heart className="h-4 w-4" />}
+                  label={t('settingspage.likesOnSpots')}
+                  right={
+                    <Toggle
+                      checked={npref.likes}
+                      onChange={() => toggleNpref('likes')}
+                    />
+                  }
+                  noChevron
+                />
+                <Row
+                  icon={<MessageCircle className="h-4 w-4" />}
+                  label={t('settingspage.comments')}
+                  right={
+                    <Toggle
+                      checked={npref.comments}
+                      onChange={() => toggleNpref('comments')}
+                    />
+                  }
+                  noChevron
+                />
+                <Row
+                  icon={<UserPlus className="h-4 w-4" />}
+                  label={t('settingspage.newFollowers')}
+                  right={
+                    <Toggle
+                      checked={npref.followers}
+                      onChange={() => toggleNpref('followers')}
+                    />
+                  }
+                  noChevron
+                />
+                <Row
+                  icon={<BellRing className="h-4 w-4" />}
+                  label={t('settingspage.spotsNearMe')}
+                  right={
+                    <Toggle
+                      checked={npref.nearby}
+                      onChange={() => toggleNpref('nearby')}
+                    />
+                  }
+                  noChevron
+                />
+                <Row
+                  icon={<Flame className="h-4 w-4" />}
+                  label={t('settingspage.streakReminder')}
+                  right={
+                    <Toggle
+                      checked={npref.streak}
+                      onChange={() => toggleNpref('streak')}
+                    />
+                  }
+                  noChevron
+                />
+              </>
+            )}
           </Section>
 
-          {/* 1ter — MES PASSIONS AUTO — editable copy of the onboarding
-              preferences (brands / universes / ambition). Stored only for
-              now; the personalisation modules that read them come later. */}
-          <Section title={t('settingspage.sectionPassions')}>
+          {/* ══════════ REVS & COMMUNAUTÉ ══════════ */}
+          <Section title={t('settingspage.sectionRevsCommunity')}>
             <Row
               icon={<Flame className="h-4 w-4" />}
               label={t('settingspage.sectionPassions')}
@@ -1533,7 +1820,7 @@ export default function Settings() {
                     ? preferredUniverses
                         .map((u) => t(`onboarding.universes.options.${u}`))
                         .join(' · ')
-                    : t('settingspage.passionsSub')
+                    : t('settingspage.passionsShortSub')
               }
               onClick={() => {
                 setPassionsMsg(null)
@@ -1541,41 +1828,27 @@ export default function Settings() {
               }}
             />
             {passionsOpen && PassionsEditor}
+            <Row
+              icon={<UserPlus className="h-4 w-4" />}
+              label={t('settingspage.inviteFriends')}
+              sub={t('settingspage.inviteShortSub')}
+              onClick={shareApp}
+            />
+            {/* « REVS Master Tutorial » = le parcours de découverte en dix
+                écrans, celui que voit un nouvel inscrit. Ce n'est PAS
+                /tutorial, qui est la documentation interne réservée au compte
+                créateur et gardée côté serveur — elle reste plus bas. */}
+            <Row
+              icon={<BookOpen className="h-4 w-4" />}
+              label={t('settingspage.masterTutorial')}
+              sub={tourMsg ?? t('settingspage.masterTutorialSub')}
+              onClick={replayTutorial}
+            />
           </Section>
 
-          {/* 1bis — SÉCURITÉ — relocated email + password + new global
-              session signout. Supabase doesn't expose a per-device
-              session list to clients, so device management is collapsed
-              into a single "Déconnexion sur tous les appareils" action
-              that calls signOut({ scope: 'global' }) — invalidates
-              every session token for the user across devices. */}
-          <Section title={t('settingspage.sectionSecurity')}>
-            <Row
-              icon={<AtSign className="h-4 w-4" />}
-              label={t('settingspage.editEmail')}
-              sub={email}
-              onClick={() => {
-                setEmailErr(null)
-                setEmailMsg(null)
-                setEmailOpen((v) => !v)
-              }}
-            />
-            {emailOpen && EmailEditor}
-            <Row
-              icon={<KeyRound className="h-4 w-4" />}
-              label={t('settingspage.editPassword')}
-              onClick={() => {
-                setPwErr(null)
-                setPwMsg(null)
-                setPwOpen((v) => !v)
-              }}
-            />
-            {pwOpen && PasswordEditor}
-          </Section>
-
-          {/* 2 — PREMIUM features. Hidden for free users; Mode Radar
-              activation captures the user's home coords on first toggle
-              and persists radius preference. */}
+          {/* ══════════ MODE RADAR — premium uniquement ══════════
+              Absent de la maquette mais bien réel et payant : le retirer
+              reviendrait à supprimer une contrepartie d'abonnement. */}
           {tier && (
             <Section title={t('settingspage.sectionPremium')}>
               <div className="px-4 py-4">
@@ -1609,9 +1882,7 @@ export default function Settings() {
                       >
                         <span
                           className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow-soft transition-transform ${
-                            radarPrefs?.enabled
-                              ? 'translate-x-5'
-                              : 'translate-x-0.5'
+                            radarPrefs?.enabled ? 'translate-x-5' : 'translate-x-0.5'
                           }`}
                         />
                       </button>
@@ -1640,10 +1911,7 @@ export default function Settings() {
                             }`}
                             style={
                               radarPrefs.radius_km === r
-                                ? {
-                                    boxShadow:
-                                      '0 6px 18px rgba(232,32,58,0.35)',
-                                  }
+                                ? { boxShadow: '0 6px 18px rgba(232,32,58,0.35)' }
                                 : { border: '1px solid var(--color-border)' }
                             }
                           >
@@ -1674,169 +1942,37 @@ export default function Settings() {
                     </div>
                   </>
                 )}
-                {radarErr && (
-                  <p className="mt-3 text-xs text-accent">{radarErr}</p>
-                )}
+                {radarErr && <p className="mt-3 text-xs text-accent">{radarErr}</p>}
               </div>
             </Section>
           )}
 
-          {/* 3 — PRÉFÉRENCES */}
-          <Section title={t('settings.sections.preferences')}>
-            <Row
-              icon={<Globe className="h-4 w-4" />}
-              label={t('settings.language.label')}
-              sub={t('settings.language.sub')}
-              noChevron
-              right={
-                <span className="flex flex-none rounded-full bg-fg/10 p-0.5">
-                  {(['fr', 'en'] as Lang[]).map((l) => {
-                    const active = (i18n.language?.startsWith('en')
-                      ? 'en'
-                      : 'fr') === l
-                    return (
-                      <button
-                        key={l}
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          hapticSuccess()
-                          setLanguage(l)
-                          if (userId)
-                            void supabase
-                              .from('profiles')
-                              .update({ language: l })
-                              .eq('user_id', userId)
-                        }}
-                        className={`rounded-full px-3 py-1 text-[11px] font-bold tracking-wide transition-colors ${
-                          active ? 'bg-accent text-white' : 'text-fg2'
-                        }`}
-                      >
-                        {l.toUpperCase()}
-                      </button>
-                    )
-                  })}
-                </span>
-              }
-            />
-            <Row
-              icon={<Sun className="h-4 w-4" />}
-              label={t('settingspage.appearance')}
-              sub={theme === 'light' ? t('settingspage.lightMode') : t('settingspage.darkMode')}
-              // onClick on Row is required so the outer <button> stays
-              // enabled — a disabled <button> blocks pointer events on
-              // its children, which made the Toggle inert. Tapping the
-              // row body OR the toggle directly both flip the theme.
-              onClick={() => {
-                hapticSuccess()
-                setTheme(theme === 'light' ? 'dark' : 'light')
-              }}
-              right={
-                <Toggle
-                  checked={theme === 'light'}
-                  onChange={() => {
-                    hapticSuccess()
-                    setTheme(theme === 'light' ? 'dark' : 'light')
-                  }}
-                />
-              }
-              noChevron
-            />
-            <Row
-              icon={<Bell className="h-4 w-4" />}
-              label={t('settingspage.notifications')}
-              sub={t('settingspage.notificationsSub')}
-              right={<Toggle checked={notif} onChange={toggleNotif} />}
-              noChevron
-            />
-            <Row
-              icon={<Smartphone className="h-4 w-4" />}
-              label={t('settingspage.enablePush')}
-              sub={pushMsg ?? t('settingspage.enablePushSub')}
-              onClick={pushBusy ? undefined : enableDevicePush}
-            />
-            <Row
-              icon={<Heart className="h-4 w-4" />}
-              label={t('settingspage.likesOnSpots')}
-              right={
-                <Toggle
-                  checked={npref.likes}
-                  onChange={() => toggleNpref('likes')}
-                />
-              }
-              noChevron
-            />
-            <Row
-              icon={<MessageCircle className="h-4 w-4" />}
-              label={t('settingspage.comments')}
-              right={
-                <Toggle
-                  checked={npref.comments}
-                  onChange={() => toggleNpref('comments')}
-                />
-              }
-              noChevron
-            />
-            <Row
-              icon={<UserPlus className="h-4 w-4" />}
-              label={t('settingspage.newFollowers')}
-              right={
-                <Toggle
-                  checked={npref.followers}
-                  onChange={() => toggleNpref('followers')}
-                />
-              }
-              noChevron
-            />
-            <Row
-              icon={<BellRing className="h-4 w-4" />}
-              label={t('settingspage.spotsNearMe')}
-              right={
-                <Toggle
-                  checked={npref.nearby}
-                  onChange={() => toggleNpref('nearby')}
-                />
-              }
-              noChevron
-            />
-            <Row
-              icon={<Flame className="h-4 w-4" />}
-              label={t('settingspage.streakReminder')}
-              right={
-                <Toggle
-                  checked={npref.streak}
-                  onChange={() => toggleNpref('streak')}
-                />
-              }
-              noChevron
-            />
-            <Row
-              icon={<MapPin className="h-4 w-4" />}
-              label={t('settingspage.location')}
-              sub={
-                !geo || geoDenied
-                  ? t('settingspage.locationDisabled')
-                  : t('settingspage.locationEnabled')
-              }
-              right={<Toggle checked={geo} onChange={toggleGeo} />}
-              noChevron
-            />
-          </Section>
-
-          {/* 4 — CONFIDENTIALITÉ & LÉGAL */}
+          {/* ══════════ CONFIDENTIALITÉ & LÉGAL ══════════ */}
           <Section title={t('settingspage.sectionPrivacy')}>
             <Row
               icon={<Eye className="h-4 w-4" />}
-              label={isPublic ? t('settingspage.publicProfile') : t('settingspage.privateProfile')}
+              label={
+                isPublic
+                  ? t('settingspage.publicProfile')
+                  : t('settingspage.privateProfile')
+              }
               sub={t('settingspage.profileVisibilitySub')}
               right={<Toggle checked={isPublic} onChange={togglePrivacy} />}
               noChevron
             />
+            {/* ⚠️ HONNÊTETÉ DU RÉGLAGE — vérifié le 30/09/2026 :
+                `revs_consent_analytics` n'est lu NULLE PART dans le dépôt.
+                Aucun outil de mesure n'est branché à REVS. L'interrupteur est
+                conservé (le consentement recueilli garde sa valeur le jour où
+                un outil arrivera) mais le sous-titre dit la vérité au lieu de
+                laisser croire qu'une mesure d'audience tourne. */}
             <Row
               icon={<Cookie className="h-4 w-4" />}
               label={t('settingspage.analyticsCookies')}
-              sub={t('settingspage.analyticsCookiesSub')}
+              sub={t('settingspage.analyticsNotWired')}
               right={<Toggle checked={analytics} onChange={toggleAnalytics} />}
               noChevron
+              wrap
             />
             <Row
               icon={<Megaphone className="h-4 w-4" />}
@@ -1844,21 +1980,7 @@ export default function Settings() {
               sub={t('settingspage.marketingCommsSub')}
               right={<Toggle checked={marketing} onChange={toggleMarketing} />}
               noChevron
-            />
-            <Row
-              icon={<Scale className="h-4 w-4" />}
-              label={t('settingspage.legalNotice')}
-              onClick={() => navigate('/legal/mentions')}
-            />
-            {/* « À propos de REVS » — le deuxième accès aux nouveautés, celui
-                qu'on retrouve quand on ne se souvient plus d'où venait la
-                cloche. Il porte la version, ce qui en fait aussi la réponse à
-                « quelle version j'ai ? ». */}
-            <Row
-              icon={<Info className="h-4 w-4" />}
-              label={t('notif.about')}
-              sub={t('notif.aboutSub', { version: APP_VERSION })}
-              onClick={() => navigate('/notifications?tab=updates')}
+              wrap
             />
             <Row
               icon={<Shield className="h-4 w-4" />}
@@ -1870,196 +1992,337 @@ export default function Settings() {
               label={t('settingspage.terms')}
               onClick={() => navigate('/legal/terms')}
             />
+            <Row
+              icon={<Scale className="h-4 w-4" />}
+              label={t('settingspage.legalNotice')}
+              onClick={() => navigate('/legal/mentions')}
+            />
+            {/* « À propos de REVS » — le second accès aux nouveautés, celui
+                qu'on retrouve quand on ne se souvient plus d'où venait la
+                cloche. Il porte la version, ce qui en fait aussi la réponse à
+                « quelle version j'ai ? ». */}
+            <Row
+              icon={<Info className="h-4 w-4" />}
+              label={t('notif.about')}
+              sub={t('notif.aboutSub', { version: APP_VERSION })}
+              onClick={() => navigate('/notifications?tab=updates')}
+            />
           </Section>
 
-          {/* 5 — COMMUNAUTÉ */}
-          <Section title={t('settingspage.sectionCommunity')}>
+          {/* ══════════ SUPPORT ══════════
+              Pas de système de tickets : il n'en existe aucun, et en inventer
+              un serait promettre un suivi qui n'arriverait jamais. La ligne
+              ouvre le client mail sur l'adresse déjà utilisée par REVS. */}
+          <Section title={t('settingspage.sectionSupport')}>
             <Row
-              icon={<UserPlus className="h-4 w-4" />}
-              label={t('settingspage.inviteFriends')}
-              sub={t('settingspage.inviteFriendsSub')}
-              onClick={shareApp}
+              icon={<HelpCircle className="h-4 w-4" />}
+              label={t('settingspage.helpContact')}
+              sub={CONTACT_EMAIL}
+              onClick={() => {
+                window.location.href = `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent(
+                  t('settingspage.helpMailSubject', { version: APP_VERSION }),
+                )}`
+              }}
             />
-            {isOrganizer ? (
+          </Section>
+
+          {/* ══════════ DEVIENS ORGANISATEUR ══════════
+              Visuellement à part : c'est une DEMANDE, pas un réglage. Et son
+              bouton est ambre, jamais rouge — voir le commentaire du bouton
+              de déconnexion plus bas. */}
+          {isOrganizer ? (
+            <Section title={t('settingspage.sectionOrganizer')}>
               <Row
                 icon={<Crown className="h-4 w-4" />}
                 label={t('settingspage.createEvent')}
                 sub={t('settingspage.createEventSub')}
                 onClick={() => navigate('/new-event')}
               />
-            ) : orgSent ? (
-              <Row
-                icon={<Users className="h-4 w-4" />}
-                label={t('settingspage.becomeOrganizer')}
-                sub={t('settingspage.organizerRequestSentSub')}
-                right={
-                  <span className="rounded-full bg-fg/[0.06] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-fg/55">
-                    {t('settingspage.pending')}
-                  </span>
-                }
-                noChevron
+            </Section>
+          ) : (
+            <div
+              className="relative isolate overflow-hidden rounded-3xl"
+              style={{
+                border: '1px solid rgba(232,32,58,0.3)',
+                boxShadow: '0 14px 40px rgba(0,0,0,0.45)',
+              }}
+            >
+              {vehicle.photo && (
+                <img
+                  src={vehicle.photo}
+                  alt=""
+                  aria-hidden
+                  loading="lazy"
+                  decoding="async"
+                  className="absolute inset-0 h-full w-full object-cover"
+                  style={{ filter: 'blur(14px)', transform: 'scale(1.2)' }}
+                />
+              )}
+              <div
+                aria-hidden
+                className="absolute inset-0"
+                style={{
+                  background: vehicle.photo
+                    ? 'linear-gradient(180deg, rgba(10,10,11,0.93), rgba(10,10,11,0.97))'
+                    : 'linear-gradient(160deg, #141415, #0e0e0f)',
+                }}
               />
-            ) : !orgOpen ? (
-              <div className="space-y-3 p-4">
+              <div
+                aria-hidden
+                className="absolute inset-0"
+                style={{
+                  background:
+                    'radial-gradient(90% 70% at 100% 0%, rgba(232,32,58,0.16), transparent 62%)',
+                }}
+              />
+
+              <div className="relative p-5">
                 <div className="flex items-start gap-3">
-                  <span className="flex h-9 w-9 flex-none items-center justify-center rounded-xl bg-accent/15 text-accent">
+                  <span
+                    className="flex h-9 w-9 flex-none items-center justify-center rounded-xl text-accent"
+                    style={{
+                      background: 'rgba(232,32,58,0.14)',
+                      border: '1px solid rgba(232,32,58,0.34)',
+                    }}
+                  >
                     <Users className="h-4 w-4" />
                   </span>
                   <div className="min-w-0 flex-1">
-                    <p className="text-[15px] font-semibold text-fg">
-                      {t('settingspage.becomeOrganizer')}
+                    <p className="font-display text-[17px] font-black tracking-tight text-fg">
+                      {t('settingspage.organizerTitle')}
                     </p>
-                    <p className="mt-1 text-xs leading-relaxed text-fg/55">
+                    <p className="mt-1.5 text-[12.5px] leading-relaxed text-fg2">
                       {t('settingspage.organizerPitch')}
                     </p>
                   </div>
                 </div>
-                <button
-                  onClick={() => setOrgOpen(true)}
-                  className="w-full rounded-full bg-accent/15 py-2 text-xs font-bold tracking-wider text-accent transition-colors hover:bg-accent/20"
-                >
-                  {t('settingspage.makeRequest')}
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-3 p-4">
-                <p className="text-xs text-fg/55">
-                  {t('settingspage.organizerReasonHint')}
-                </p>
-                <textarea
-                  value={orgRaison}
-                  rows={3}
-                  onChange={(e) => setOrgRaison(e.target.value)}
-                  placeholder={t('settingspage.motivationPlaceholder')}
-                  className="w-full resize-none rounded-lg bg-fg/5 px-3 py-3 text-sm text-fg outline-none focus:ring-1 focus:ring-accent"
-                />
-                <div className="flex gap-3">
-                  <button
-                    onClick={() => {
-                      setOrgOpen(false)
-                      setOrgRaison('')
+
+                {orgSent ? (
+                  <p
+                    className="mt-4 rounded-2xl px-3 py-2.5 text-[12px] font-semibold text-[#F59E0B]"
+                    style={{
+                      background: 'rgba(245,158,11,0.08)',
+                      border: '1px solid rgba(245,158,11,0.3)',
                     }}
-                    className="flex-1 rounded-full bg-fg/5 py-3 text-sm font-medium text-fg"
                   >
-                    {t('settingspage.cancel')}
-                  </button>
-                  <button
-                    onClick={submitOrganizerRequest}
-                    disabled={orgSending}
-                    className="flex-1 rounded-full bg-accent py-3 text-sm font-semibold text-fg disabled:opacity-50"
-                  >
-                    {orgSending ? '…' : t('settingspage.sendRequest')}
-                  </button>
-                </div>
-              </div>
-            )}
-          </Section>
-
-          {/* 6 — AVANCÉ */}
-          <Section title={t('settingspage.sectionAdvanced')}>
-            <Row
-              icon={<RotateCcw className="h-4 w-4" />}
-              label={t('settingspage.resetOnboarding')}
-              sub={t('settingspage.resetOnboardingSub')}
-              onClick={resetOnboarding}
-              wrap
-            />
-            {/* Documentation interne — visible uniquement pour le compte
-                administrateur. Volontairement non traduit : outil interne.
-                ⚠️ V1 — à remplacer par un vrai système de rôles si besoin. */}
-            {tutorialOk && (
-              <Row
-                icon={<BookOpen className="h-4 w-4" />}
-                label="REVS Master Tutorial"
-                sub="Documentation interne de l'application"
-                onClick={() => navigate('/tutorial')}
-                wrap
-              />
-            )}
-          </Section>
-
-          {/* 7 — ZONE SENSIBLE */}
-          <section className="space-y-3 pt-4">
-            <div className="h-px bg-fg/10" />
-            <h2 className="px-1 text-[11px] font-bold uppercase tracking-[0.18em] text-accent/70">
-              {t('settingspage.sensitiveZone')}
-            </h2>
-            <div className="space-y-3">
-              <button
-                onClick={signOutAllDevices}
-                className="flex w-full items-center gap-3 rounded-2xl border border-[#F59E0B]/30 px-4 py-3.5 text-left transition-colors hover:bg-[#F59E0B]/5"
-              >
-                <span className="flex h-9 w-9 flex-none items-center justify-center rounded-xl bg-[#F59E0B]/15 text-[#F59E0B]">
-                  <Shield className="h-4 w-4" />
-                </span>
-                <span className="flex-1">
-                  <span className="block text-[15px] font-semibold text-[#F59E0B]">
-                    {t('settingspage.signOutAllDevices')}
-                  </span>
-                  <span className="mt-0.5 block text-[11px] text-fg2">
-                    {t('settingspage.signOutAllDevicesSub')}
-                  </span>
-                </span>
-              </button>
-
-              <button
-                onClick={logout}
-                className="flex w-full items-center gap-3 rounded-2xl border border-[#F59E0B]/30 px-4 py-3.5 text-left transition-colors hover:bg-[#F59E0B]/5"
-              >
-                <span className="flex h-9 w-9 flex-none items-center justify-center rounded-xl bg-[#F59E0B]/15 text-[#F59E0B]">
-                  <LogOut className="h-4 w-4" />
-                </span>
-                <span className="flex-1 text-[15px] font-semibold text-[#F59E0B]">
-                  {t('settingspage.signOut')}
-                </span>
-              </button>
-
-              {!confirmDelete ? (
-                <button
-                  onClick={() => setConfirmDelete(true)}
-                  className="flex w-full items-center gap-3 rounded-2xl border border-accent/40 px-4 py-3.5 text-left transition-colors hover:bg-accent/5"
-                >
-                  <span className="flex h-9 w-9 flex-none items-center justify-center rounded-xl bg-accent/15 text-accent">
-                    <Trash2 className="h-4 w-4" />
-                  </span>
-                  <span className="flex-1 text-[15px] font-semibold text-accent">
-                    {t('settingspage.deleteAccount')}
-                  </span>
-                </button>
-              ) : (
-                <div className="space-y-3 rounded-2xl border border-accent/40 bg-accent/5 p-4">
-                  <p className="text-sm text-accent">
-                    {t('settingspage.deleteConfirmText')}
+                    {t('settingspage.organizerRequestSentSub')}
                   </p>
-                  <div className="flex gap-3">
+                ) : !orgOpen ? (
+                  <div className="mt-4 flex justify-end">
+                    {/* AMBRE ET CONTOURÉ, délibérément.
+                        Deux gros boutons rouges empilés — « Faire une demande »
+                        puis « Se déconnecter » — c'est une déconnexion par
+                        erreur qui attend de se produire. La couleur, le
+                        remplissage et la taille les séparent tous les trois. */}
                     <button
-                      onClick={() => setConfirmDelete(false)}
-                      className="flex-1 rounded-full border border-fg/15 py-3 text-sm text-fg/70"
+                      onClick={() => setOrgOpen(true)}
+                      className="tappable rounded-full px-4 py-2.5 text-[12px] font-extrabold tracking-wider transition-colors"
+                      style={{
+                        color: '#F59E0B',
+                        background: 'rgba(245,158,11,0.07)',
+                        border: '1px solid rgba(245,158,11,0.45)',
+                      }}
                     >
-                      {t('settingspage.cancel')}
-                    </button>
-                    <button
-                      onClick={deleteAccount}
-                      disabled={saving}
-                      className="flex-1 rounded-full bg-accent py-3 text-sm font-semibold disabled:opacity-50"
-                    >
-                      {saving ? '…' : t('settingspage.yesDelete')}
+                      {t('settingspage.makeRequest')} →
                     </button>
                   </div>
-                </div>
-              )}
+                ) : (
+                  <div className="mt-4 space-y-3">
+                    <p className="text-xs text-fg2">
+                      {t('settingspage.organizerReasonHint')}
+                    </p>
+                    <textarea
+                      value={orgRaison}
+                      rows={3}
+                      onChange={(e) => setOrgRaison(e.target.value)}
+                      placeholder={t('settingspage.motivationPlaceholder')}
+                      className="w-full resize-none rounded-2xl bg-fg/5 px-3 py-3 text-sm text-fg outline-none focus:ring-1 focus:ring-accent"
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => {
+                          setOrgOpen(false)
+                          setOrgRaison('')
+                        }}
+                        className="flex-1 rounded-full bg-fg/5 py-2.5 text-[12px] font-semibold text-fg2"
+                      >
+                        {t('settingspage.cancel')}
+                      </button>
+                      <button
+                        onClick={submitOrganizerRequest}
+                        disabled={orgSending}
+                        className="flex-1 rounded-full py-2.5 text-[12px] font-extrabold tracking-wider disabled:opacity-50"
+                        style={{
+                          color: '#F59E0B',
+                          background: 'rgba(245,158,11,0.10)',
+                          border: '1px solid rgba(245,158,11,0.5)',
+                        }}
+                      >
+                        {orgSending ? '…' : t('settingspage.sendRequest')}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
-          </section>
+          )}
 
-          <p className="pt-4 text-center text-[10px] text-fg/30">
-            <Mail className="mr-1 inline h-3 w-3" />
-            contact@revs.app
-          </p>
+          {/* ══════════ DÉCONNEXION ══════════
+              Séparée par une vraie respiration (pt-6) du bloc organisateur :
+              c'est la seule garantie qui tienne quand le pouce descend vite. */}
+          <div className="pt-6">
+            <button
+              onClick={logout}
+              className="tappable flex w-full items-center justify-center gap-2.5 rounded-full py-4 text-sm font-extrabold tracking-wider text-white transition-transform active:scale-[0.99]"
+              style={{
+                background: '#E8203A',
+                boxShadow: '0 10px 30px rgba(232,32,58,0.42)',
+              }}
+            >
+              <LogOut className="h-4 w-4" />
+              {t('settingspage.signOut')}
+            </button>
+          </div>
+
+          {/* ══════════ ZONE SECONDAIRE ══════════
+              Compte, appareil, sécurité, suppression. Tout ce qui existait est
+              conservé — simplement replié, pour que la page principale reste un
+              centre de configuration et non un inventaire. */}
+          <div className="pt-2">
+            <button
+              onClick={() => setAdvancedOpen((v) => !v)}
+              className="tappable flex w-full items-center justify-center gap-1.5 py-2 text-[12px] font-semibold text-fg2"
+            >
+              {advancedOpen
+                ? t('settingspage.advancedHide')
+                : t('settingspage.advancedShow')}
+              <ChevronRight
+                className={`h-3.5 w-3.5 transition-transform ${
+                  advancedOpen ? 'rotate-90' : ''
+                }`}
+              />
+            </button>
+          </div>
+
+          {advancedOpen && (
+            <div className="space-y-7">
+              <Section title={t('settingspage.sectionSecurity')}>
+                <Row
+                  icon={<AtSign className="h-4 w-4" />}
+                  label={t('settingspage.editEmail')}
+                  sub={email}
+                  onClick={() => {
+                    setEmailErr(null)
+                    setEmailMsg(null)
+                    setEmailOpen((v) => !v)
+                  }}
+                />
+                {emailOpen && EmailEditor}
+                <Row
+                  icon={<KeyRound className="h-4 w-4" />}
+                  label={t('settingspage.editPassword')}
+                  onClick={() => {
+                    setPwErr(null)
+                    setPwMsg(null)
+                    setPwOpen((v) => !v)
+                  }}
+                />
+                {pwOpen && PasswordEditor}
+                <Row
+                  icon={<Shield className="h-4 w-4" />}
+                  label={t('settingspage.signOutAllDevices')}
+                  sub={t('settingspage.signOutAllDevicesSub')}
+                  onClick={signOutAllDevices}
+                  warn
+                  wrap
+                />
+              </Section>
+
+              <Section title={t('settingspage.sectionDevice')}>
+                {/* La localisation quitte la page principale : elle se demande
+                    déjà dans le questionnaire et sur la carte, qui réécrivent
+                    tous deux `revs_geo`. Elle reste ici parce qu'elle est
+                    réellement branchée (src/lib/geo.ts la relit) — la retirer
+                    tout à fait aurait supprimé le seul moyen de la couper. */}
+                <Row
+                  icon={<MapPin className="h-4 w-4" />}
+                  label={t('settingspage.location')}
+                  sub={
+                    !geo || geoDenied
+                      ? t('settingspage.locationDisabled')
+                      : t('settingspage.locationEnabled')
+                  }
+                  right={<Toggle checked={geo} onChange={toggleGeo} />}
+                  noChevron
+                />
+                <Row
+                  icon={<RotateCcw className="h-4 w-4" />}
+                  label={t('settingspage.resetOnboarding')}
+                  sub={t('settingspage.resetOnboardingSub')}
+                  onClick={resetOnboarding}
+                  wrap
+                />
+                {/* Documentation interne — visible uniquement pour le compte
+                    créateur, et de toute façon gardée côté serveur. Sans
+                    rapport avec le « REVS Master Tutorial » plus haut, qui est
+                    le parcours utilisateur. */}
+                {tutorialOk && (
+                  <Row
+                    icon={<BookOpen className="h-4 w-4" />}
+                    label={t('settingspage.internalDoc')}
+                    sub={t('settingspage.internalDocSub')}
+                    onClick={() => navigate('/tutorial')}
+                    wrap
+                  />
+                )}
+              </Section>
+
+              <section className="space-y-3">
+                <h2 className="px-1 text-[11px] font-bold uppercase tracking-[0.18em] text-accent/70">
+                  {t('settingspage.sensitiveZone')}
+                </h2>
+                {!confirmDelete ? (
+                  <button
+                    onClick={() => setConfirmDelete(true)}
+                    className="flex w-full items-center gap-3 rounded-2xl border border-accent/40 px-4 py-3.5 text-left transition-colors hover:bg-accent/5"
+                  >
+                    <span className="flex h-9 w-9 flex-none items-center justify-center rounded-xl bg-accent/15 text-accent">
+                      <Trash2 className="h-4 w-4" />
+                    </span>
+                    <span className="flex-1 text-[15px] font-semibold text-accent">
+                      {t('settingspage.deleteAccount')}
+                    </span>
+                  </button>
+                ) : (
+                  <div className="space-y-3 rounded-2xl border border-accent/40 bg-accent/5 p-4">
+                    <p className="text-sm text-accent">
+                      {t('settingspage.deleteConfirmText')}
+                    </p>
+                    <div className="flex gap-3">
+                      <button
+                        onClick={() => setConfirmDelete(false)}
+                        className="flex-1 rounded-full border border-fg/15 py-3 text-sm text-fg/70"
+                      >
+                        {t('settingspage.cancel')}
+                      </button>
+                      <button
+                        onClick={deleteAccount}
+                        disabled={saving}
+                        className="flex-1 rounded-full bg-accent py-3 text-sm font-semibold disabled:opacity-50"
+                      >
+                        {saving ? '…' : t('settingspage.yesDelete')}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </section>
+            </div>
+          )}
 
           {/* Version — tout en bas, discrète. Source unique : APP_VERSION dans
               src/lib/constants.ts, la même constante que le chip BÊTA de
-              l'accueil et que l'étiquette flottante. */}
-          <p className="mb-4 mt-8 text-center text-xs text-fg2 opacity-50">
+              l'accueil. */}
+          <p className="pt-6 text-center text-[11px] text-fg2 opacity-50">
             REVS v{APP_VERSION}
           </p>
         </div>
@@ -2072,5 +2335,53 @@ export default function Settings() {
         />
       )}
     </div>
+  )
+}
+
+/**
+ * Les deux raccourcis sous le hero.
+ *
+ * Ils n'ouvrent rien de neuf : ils déplient les éditeurs qui existaient déjà
+ * dans la page. Leur rôle est de donner aux deux actions les plus fréquentes
+ * une cible large, au lieu de deux lignes perdues dans une liste.
+ */
+function ShortcutCard({
+  icon,
+  title,
+  sub,
+  onClick,
+  active,
+}: {
+  icon: ReactNode
+  title: string
+  sub: string
+  onClick: () => void
+  active: boolean
+}) {
+  return (
+    <button
+      onClick={onClick}
+      aria-expanded={active}
+      className="tappable flex min-w-0 flex-col items-start gap-2 rounded-3xl bg-card p-4 text-left transition-transform active:scale-[0.98]"
+      style={{
+        border: `1px solid ${active ? 'rgba(232,32,58,0.42)' : 'var(--color-border)'}`,
+        boxShadow: active ? '0 0 22px rgba(232,32,58,0.12)' : undefined,
+      }}
+    >
+      <span
+        className="flex h-9 w-9 flex-none items-center justify-center rounded-xl"
+        style={{
+          background: 'rgba(232,32,58,0.13)',
+          border: '1px solid rgba(232,32,58,0.3)',
+          color: '#E8203A',
+        }}
+      >
+        {icon}
+      </span>
+      <span className="min-w-0 max-w-full">
+        <span className="block truncate text-[14px] font-bold text-fg">{title}</span>
+        <span className="mt-0.5 block truncate text-[11.5px] text-fg2">{sub}</span>
+      </span>
+    </button>
   )
 }

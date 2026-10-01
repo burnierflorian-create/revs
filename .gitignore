@@ -33,3 +33,6 @@ backups/
 # Modèle de détection de plaques (12 Mo) — téléchargé à la demande,
 # voir scripts/blur-plates-onnx.mjs pour la source et l’empreinte.
 models/
+
+# Images du POC Garage Visual — sorties de mesure, jamais du code
+.garage-poc/
