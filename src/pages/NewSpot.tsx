@@ -421,16 +421,38 @@ const [plateGuard, setPlateGuard] = useState<'pending' | 'ok' | 'failed'>('ok')
     if (authToken) headers.Authorization = `Bearer ${authToken}`
     const doFetch = (path: string) =>
       fetch(path, { method: 'POST', headers, body, signal: ctrl.signal })
-    const fetchJson = (path: string) => doFetch(path).then((r) => r.json())
+    // ── POURQUOI UN LECTEUR DÉDIÉ POUR LES PLAQUES (01/10/2026) ──
+    //
+    // Le lecteur générique précédent faisait `r.json()` sans regarder `r.ok`.
+    // Le serveur, lui, échoue volontairement
+    // en 502 `{error:'detection_failed'}` quand aucune détection n'a abouti.
+    // Ce corps était parsé sans erreur, `plates` valait `undefined`, et le test
+    // `plates === null` plus bas est FAUX pour `undefined` : le garde passait à
+    // « ok » et l'original partait en ligne. Le fail-closed côté serveur était
+    // donc neutralisé côté client depuis sa mise en place.
+    //
+    // Règle appliquée ici : seule une réponse 2xx portant un VRAI tableau vaut
+    // résultat. Tout le reste — statut d'erreur, corps inattendu, `plates`
+    // absent ou non-tableau — devient `null`, c'est-à-dire « on ne sait pas »,
+    // ce que l'appelant traite en retenant la publication.
+    const fetchPlates = (path: string): Promise<{ plates: BBox[] | null }> =>
+      doFetch(path)
+        .then(async (r) => {
+          if (!r.ok) return { plates: null }
+          const j = (await r.json().catch(() => null)) as {
+            plates?: unknown
+          } | null
+          if (!j || !Array.isArray(j.plates)) return { plates: null }
+          return { plates: j.plates as BBox[] }
+        })
+        .catch(() => ({ plates: null }))
     try {
       // Identify the car AND detect license plates in parallel — both
       // are vision calls of similar latency, no reason to serialise.
       // Plate detection failing is non-fatal: we just skip the blur.
       const [carRes, plateJson] = await Promise.all([
         doFetch('/api/identify-car'),
-        (fetchJson('/api/detect-plate') as Promise<{ plates: BBox[] }>).catch(
-          () => ({ plates: null as BBox[] | null }),
-        ),
+        fetchPlates('/api/detect-plate'),
       ])
       clearTimeout(timer)
 

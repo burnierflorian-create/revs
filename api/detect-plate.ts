@@ -1,7 +1,9 @@
 import Anthropic from '@anthropic-ai/sdk'
+import sharp from 'sharp'
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { requireAiAccess, AI_ENDPOINTS } from '../server/ai-gate.js'
 import { checkRequestSize } from '../server/request-size.js'
+import { detectPlates } from '../server/plate-detect.js'
 
 // Vision model — plate localisation is a coarse rectangle estimate, not
 // full reasoning. Keeps latency low (we run this in the upload hot path,
@@ -200,12 +202,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return
   }
 
-  if (!process.env.ANTHROPIC_API_KEY) {
-    // Fail open: empty plates → caller uploads photo as-is rather than
-    // blocking the entire publish flow on a config issue.
-    sendJson(res, { plates: [] })
-    return
-  }
+  // Ici se trouvait un FAIL-OPEN : clé Anthropic absente → `{plates: []}`,
+  // c'est-à-dire « aucune plaque », indiscernable côté client d'une photo
+  // réellement sans plaque. Une variable d'environnement manquante publiait
+  // donc des originaux. Le contrôle a été déplacé APRÈS le détecteur local :
+  // sans clé, si le détecteur local a tourné son verdict suffit ; s'il n'a pas
+  // tourné non plus, on échoue explicitement.
 
   let imageBase64: string | undefined
   let mimeType: string | undefined
@@ -225,6 +227,57 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     !isAllowedMime(mimeType)
   ) {
     sendJson(res, { plates: [] }, 400)
+    return
+  }
+
+  // ── PASSAGE 1 : DÉTECTEUR LOCAL SPÉCIALISÉ (01/10/2026) ──
+  //
+  // Le cas Toyota (spot 358583a3) a montré la limite du modèle de langage :
+  // boîte plausible, décalée, plaque publiée lisible, et AUCUNE couche du
+  // système en mesure de s'en apercevoir. Le détecteur YOLOv8 encadre la même
+  // plaque exactement. Il tourne en local : pas d'appel réseau, pas de quota,
+  // pas de coût par photo — l'identification d'un spot ne paie plus la
+  // détection de plaque.
+  //
+  // Claude n'est PAS supprimé pour autant : il reste le second passage quand
+  // le détecteur local ne trouve rien, car « rien trouvé » est précisément le
+  // cas dangereux. Deux détecteurs indépendants doivent se taire pour qu'une
+  // photo soit déclarée sans plaque.
+  let localFound = false
+  try {
+    const local = await detectPlates(Buffer.from(imageBase64, 'base64'), sharp)
+    if (local && local.plates.length > 0) {
+      const plates = local.plates.map(({ x, y, width, height }) => ({
+        x,
+        y,
+        width,
+        height,
+      }))
+      console.log(`[detect-plate] local : ${plates.length} plaque(s)`)
+      sendJson(res, { plates, source: 'local' })
+      return
+    }
+    // `local === null` = modèle indisponible : on ne sait rien, et on enchaîne
+    // sur Claude. `plates: []` = le détecteur a regardé sans rien trouver ;
+    // on enchaîne quand même, mais on le note pour la décision finale.
+    localFound = local !== null
+  } catch (e) {
+    console.error('[detect-plate] détecteur local en échec :', e)
+  }
+
+  if (!process.env.ANTHROPIC_API_KEY) {
+    // Le détecteur local a tourné et n'a rien vu : c'est un vrai résultat,
+    // on peut répondre « aucune plaque » sans second avis.
+    if (localFound) {
+      sendJson(res, { plates: [], source: 'local' })
+      return
+    }
+    // Sinon AUCUN détecteur n'a fonctionné — on ne déclare pas la photo sûre.
+    res.status(502).json({
+      error: 'detection_failed',
+      message:
+        "Impossible de vérifier les plaques sur cette photo. Réessaie ou reprends la photo.",
+    })
     return
   }
 

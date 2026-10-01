@@ -30,9 +30,19 @@ scripts/.blur-progress.json
 backups/
 .github/workflows/
 
-# Modèle de détection de plaques (12 Mo) — téléchargé à la demande,
-# voir scripts/blur-plates-onnx.mjs pour la source et l’empreinte.
-models/
+# ── MODÈLE DE DÉTECTION DE PLAQUES : VERSIONNÉ DEPUIS LE 01/10/2026 ──
+# Il était ignoré tant qu'il ne servait qu'à un script local. Il est désormais
+# chargé par api/detect-plate.ts : s'il n'est pas dans le dépôt, il n'est pas
+# dans le déploiement, et la fonction perd son détecteur en production — sans
+# que rien ne le signale. 12 Mo, immuable, empreinte vérifiée au chargement.
+!models/
+!models/plate-yolov8.onnx
 
 # Images du POC Garage Visual — sorties de mesure, jamais du code
 .garage-poc/
+
+# Sorties d'audit et de test des plaques — mesures, pas du code
+.plate-audit/
+plate-audit/
+plate-tests/
+preview/

@@ -1,0 +1,21 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>Test navigateur — pixelisation des plaques</title>
+<!--
+  Page de test servie par Vite, utilisée par scripts/plate-browser.mjs.
+
+  Elle existe pour une raison précise : à la publication, ce n'est pas sharp
+  qui protège la photo, c'est `blurRegions` sur un canvas, dans le navigateur
+  de l'utilisateur. Tester une réimplémentation côté serveur ne dirait rien de
+  cette fonction-là — et c'est pourtant elle qui produit le fichier envoyé au
+  Storage. On importe donc le module réel, jamais une copie.
+-->
+<body style="background:#111;color:#eee;font:14px system-ui">
+  <p id="état">chargement…</p>
+  <script type="module">
+    import { blurRegions } from '/src/lib/spots.ts'
+    window.__blurRegions = blurRegions
+    window.__pret = true
+    document.getElementById('état').textContent = 'blurRegions chargée'
+  </script>
+</body>

@@ -4,6 +4,12 @@
     { "source": "/s/:id", "destination": "/api/s?id=:id" },
     { "source": "/(.*)", "destination": "/index.html" }
   ],
+  "functions": {
+    "api/detect-plate.ts": {
+      "includeFiles": "models/**",
+      "maxDuration": 60
+    }
+  },
   "crons": [
     { "path": "/api/fetch-news", "schedule": "0 5 * * *" },
     { "path": "/api/fetch-news", "schedule": "0 6 * * *" },

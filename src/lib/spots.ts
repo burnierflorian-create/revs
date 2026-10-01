@@ -245,27 +245,39 @@ export function escapeHtml(s: string): string {
 // A normalized 0–1 bounding box, as returned by /api/detect-plate.
 export type BBox = { x: number; y: number; width: number; height: number }
 
-// Apply a heavy gaussian blur on the given normalized regions of a JPEG
-// blob, with naturally feathered edges (no harsh rectangle), then
-// re-encode at the original resolution. Used to anonymise license
-// plates at upload time.
+// Anonymise les régions données d'un JPEG en DÉTRUISANT l'information
+// qu'elles contiennent, puis ré-encode à la résolution d'origine.
 //
-// Strategy:
-//  1. Draw the source image on a base canvas (sharp everywhere).
-//  2. Build a full-image blurred copy.
-//  3. Build a white-on-black "mask" canvas with one rectangle per
-//     plate region, then blur the MASK itself so its edges feather.
-//  4. `destination-in` composite the blurred image with the feathered
-//     mask → blur only survives where the mask is opaque, fading out
-//     softly at the edges.
-//  5. Paint the masked blur on top of the base canvas.
+// ── POURQUOI PIXELISER ET NON FLOUTER (01/10/2026) ──
+// Cette fonction appliquait un flou gaussien de rayon FIXE (28 px). Deux
+// défauts, tous deux mesurés :
 //
-// `quality` is the JPEG re-encode quality; `blurPx` is the gaussian
-// radius in image pixels (24 ≈ pixel-perfect plate scrub at 1280 px).
+//  1. Un rayon fixe ne tient pas compte de la taille de la plaque. Sur une
+//     plaque lointaine 28 px l'effacent ; sur un gros plan ils l'adoucissent
+//     à peine et les caractères restent lisibles.
+//  2. Un flou gaussien est une convolution : l'information n'est pas
+//     détruite, elle est étalée. Elle se déconvolue partiellement.
+//
+// On réduit donc la région à ~1/12 de sa taille puis on la ré-agrandit au
+// plus proche voisin. Les pixels intermédiaires n'existent plus : il n'y a
+// rien à reconstruire. C'est le traitement déjà appliqué par
+// `scripts/blur-plates-onnx.mjs`, celui qu'on voit sur la Tesla et que ce
+// chemin aurait dû appliquer depuis le début.
+//
+// Le facteur 1/12 est relatif à la région, donc le résultat est le même sur
+// une plaque de 40 px et sur une de 600 px — c'est précisément ce que le
+// rayon fixe ne savait pas faire.
+//
+// Les bords restent adoucis par un masque flouté, pour que le rectangle ne
+// saute pas aux yeux ; l'adoucissement ne porte QUE sur la transition, jamais
+// sur le contenu, qui est déjà détruit.
+// `blurPx` a disparu de la signature : il n'avait plus de sens une fois le
+// rayon rendu relatif à la plaque, et le garder n'aurait servi qu'à laisser
+// croire qu'on peut régler une force de floutage. Aucun appelant ne le
+// passait.
 export async function blurRegions(
   blob: Blob,
   regions: BBox[],
-  blurPx = 28,
   quality = 0.85,
 ): Promise<{ blob: Blob; base64: string }> {
   if (regions.length === 0) return blobToJpegResult(blob, quality)
@@ -281,20 +293,67 @@ export async function blurRegions(
   if (!mctx) throw new Error('Canvas non supporté')
   mctx.drawImage(img, 0, 0)
 
-  // Pre-blurred full image.
+  // Copie pixelisée : chaque région est réduite puis ré-agrandie au plus
+  // proche voisin, INDIVIDUELLEMENT, pour que le pas de pixelisation soit
+  // proportionnel à la plaque et non à l'image.
   const blurred = document.createElement('canvas')
   blurred.width = W
   blurred.height = H
   const bctx = blurred.getContext('2d')
   if (!bctx) throw new Error('Canvas non supporté')
-  bctx.filter = `blur(${blurPx}px)`
-  bctx.drawImage(img, 0, 0)
-  bctx.filter = 'none'
+  bctx.imageSmoothingEnabled = false
+  for (const r of regions) {
+    const x = clamp(r.x * W, 0, W)
+    const y = clamp(r.y * H, 0, H)
+    const w = clamp(r.width * W, 0, W - x)
+    const h = clamp(r.height * H, 0, H - y)
+    if (w < 1 || h < 1) continue
+    // On déborde de 25 % avant de pixeliser : le masque adouci mord sur ses
+    // propres bords, et sans cette marge un liseré net de la plaque
+    // subsisterait au pourtour de la zone traitée.
+    const px = w * 0.25
+    const py = h * 0.25
+    const sx = Math.max(0, x - px)
+    const sy = Math.max(0, y - py)
+    const sw = Math.min(W - sx, w + 2 * px)
+    const sh = Math.min(H - sy, h + 2 * py)
+    // ~12 pixels sur la plus grande dimension : assez pour que la silhouette
+    // de la voiture reste cohérente, bien trop peu pour qu'un caractère
+    // survive. Plancher à 2 pour les très petites régions.
+    const steps = 12
+    const tw = Math.max(2, Math.round(sw / Math.max(sw, sh) * steps))
+    const th = Math.max(2, Math.round(sh / Math.max(sw, sh) * steps))
+    const tiny = document.createElement('canvas')
+    tiny.width = tw
+    tiny.height = th
+    const tctx = tiny.getContext('2d')
+    if (!tctx) throw new Error('Canvas non supporté')
+    tctx.imageSmoothingEnabled = true // moyenne les pixels sources
+    tctx.drawImage(img, sx, sy, sw, sh, 0, 0, tw, th)
+    // Ré-agrandissement sans interpolation : l'information est détruite.
+    bctx.drawImage(tiny, 0, 0, tw, th, sx, sy, sw, sh)
+  }
 
-  // Feathered mask: white rectangles slightly inflated, then blurred.
-  // The 0.5× factor on the mask blur keeps the soft edge tight enough
-  // that the plate stays fully covered while the transition feels
-  // natural rather than mechanical.
+  // ── MASQUE ADOUCI : RAYON RELATIF À LA PLAQUE, PAS À L'IMAGE ──
+  //
+  // Le rayon valait `blurPx * 0.6`, soit ~17 px fixes. Sur une plaque haute de
+  // 36 px, flouter le masque de 17 px empêche son centre d'atteindre
+  // l'opacité : le `destination-in` ne conservait alors la pixelisation qu'en
+  // semi-transparence, et l'ORIGINAL NET transparaissait dessous.
+  // Vérifié au navigateur : « DM-107-SE » restait lisible en filigrane alors
+  // que la pixelisation avait bien été calculée. Le traitement était bon,
+  // c'est le masque qui le laissait fuir.
+  //
+  // Le rayon est donc dérivé de la plus petite dimension de la plus petite
+  // région, et plafonné. L'inflation du rectangle vaut exactement ce rayon,
+  // ce qui garantit deux choses : le cœur du masque est pleinement opaque
+  // (demi-dimension > rayon), et le masque reste à l'intérieur de la zone
+  // pixelisée, qui déborde elle de 25 %.
+  const minDim = Math.min(
+    ...regions.map((r) => Math.min(r.width * W, r.height * H)).filter((v) => v > 0),
+  )
+  const feather = Math.max(2, Math.min(10, Math.round((minDim || 20) * 0.2)))
+
   const mask = document.createElement('canvas')
   mask.width = W
   mask.height = H
@@ -307,24 +366,20 @@ export async function blurRegions(
     const w = clamp(r.width * W, 0, W - x)
     const h = clamp(r.height * H, 0, H - y)
     if (w <= 0 || h <= 0) continue
-    // Inflate by ~20% so the feathered edge still fully covers the
-    // sharp plate inside (the blur on the mask eats into its bounds).
-    const padX = w * 0.2
-    const padY = h * 0.2
     xctx.fillRect(
-      Math.max(0, x - padX),
-      Math.max(0, y - padY),
-      Math.min(W, w + 2 * padX),
-      Math.min(H, h + 2 * padY),
+      Math.max(0, x - feather),
+      Math.max(0, y - feather),
+      Math.min(W, w + 2 * feather),
+      Math.min(H, h + 2 * feather),
     )
   }
-  // Blur the mask itself → soft alpha gradient at the edges.
+  // On floute le masque lui-même → dégradé d'alpha sur ses seuls bords.
   const featheredMask = document.createElement('canvas')
   featheredMask.width = W
   featheredMask.height = H
   const fctx = featheredMask.getContext('2d')
   if (!fctx) throw new Error('Canvas non supporté')
-  fctx.filter = `blur(${Math.round(blurPx * 0.6)}px)`
+  fctx.filter = `blur(${feather}px)`
   fctx.drawImage(mask, 0, 0)
   fctx.filter = 'none'
 
