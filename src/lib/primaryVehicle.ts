@@ -26,6 +26,8 @@ import { rarityRank } from '../components/CollectorCard'
 export type PrimaryVehicle = {
   /** Le spot retenu, s'il en existe un. */
   spot: Spot | null
+  /** `true` quand l'utilisateur a DÉSIGNÉ cette voiture (et non déduite). */
+  chosen?: boolean
   /** Sa photo — déjà floutée côté plaques, comme toute photo de spot. */
   photo: string | null
   /** « Porsche 911 GT3 », ou la marque déclarée à défaut de photo. */
@@ -53,7 +55,27 @@ const EMPTY: PrimaryVehicle = { spot: null, photo: null, label: null, brand: nul
 export function pickPrimaryVehicle(
   spots: Spot[],
   garageBrand?: string | null,
+  primarySpotId?: string | null,
 ): PrimaryVehicle {
+  // ── LE CHOIX EXPLICITE PASSE AVANT TOUT (01/10/2026) ──
+  // `profiles.primary_spot_id` est LA source de vérité : c'est la voiture que
+  // l'utilisateur a désignée. Tout ce qui suit n'est qu'une déduction pour
+  // ceux qui n'ont rien désigné — et une déduction ne doit jamais écraser une
+  // décision.
+  if (primarySpotId) {
+    const chosen = spots.find((s) => s.id === primarySpotId)
+    if (chosen) {
+      const label = [chosen.brand, chosen.model].filter(Boolean).join(' ').trim()
+      return {
+        spot: chosen,
+        photo: chosen.garage_render_url ?? chosen.photo_url,
+        label: label || null,
+        brand: chosen.brand ?? null,
+        chosen: true,
+      }
+    }
+  }
+
   const withPhoto = spots.filter((s) => s.photo_url)
   const byRarity = (list: Spot[]) =>
     [...list].sort((a, b) => rarityRank(b.rarity) - rarityRank(a.rarity))[0] ?? null

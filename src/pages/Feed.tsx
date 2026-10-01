@@ -12,6 +12,7 @@ import {
 } from '../lib/spots'
 import { categoryBadge } from '../lib/categoryStyle'
 import { rarityBadge } from '../lib/rarityStyle'
+import { displayHandle } from '../lib/social'
 import { SkeletonCard } from '../components/Skeleton'
 import CommentsSheet from '../components/CommentsSheet'
 import { hapticTap } from '../lib/haptic'
@@ -57,6 +58,7 @@ type Prof = {
   avatar: string | null
   title: string | null
   xp: number
+  instagram: string | null
 }
 
 // Burst grouping: consecutive spots of the SAME car (brand+model+color)
@@ -203,7 +205,7 @@ export default function Feed() {
     const [profsRes, xpRes] = await Promise.all([
       supabase
         .from('profiles')
-        .select('user_id, pseudo, ville, avatar, title')
+        .select('user_id, pseudo, ville, avatar, title, instagram')
         .in('user_id', ids),
       supabase
         .from('xp_transactions')
@@ -221,19 +223,21 @@ export default function Feed() {
       ville: string | null
       avatar: string | null
       title: string | null
+      instagram: string | null
     }[]) {
       next[p.user_id] = {
         pseudo: p.pseudo,
         ville: p.ville,
         avatar: p.avatar,
         title: p.title,
+        instagram: p.instagram ?? null,
         xp: xpByUser.get(p.user_id) ?? 0,
       }
     }
     // Mark every requested id as resolved so we don't refetch misses.
     for (const id of ids)
       if (!next[id])
-        next[id] = { pseudo: null, ville: null, avatar: null, title: null, xp: 0 }
+        next[id] = { pseudo: null, ville: null, avatar: null, title: null, instagram: null, xp: 0 }
     profilesRef.current = next
     setProfiles(next)
   }, [])
@@ -712,6 +716,10 @@ const FeedCard = memo(function FeedCard({
   const [myInitial, setMyInitial] = useState('?')
 
   const pseudo = prof?.pseudo || t('feedpage.defaultPseudo')
+  // L'Instagram de l'auteur, dans l'en-tête de SA publication. Emplacement
+  // stable et discret : plus besoin de le recopier dans chaque description.
+  // Rien n'est affiché quand il n'est pas renseigné — le champ est facultatif.
+  const igLabel = displayHandle(prof?.instagram)
   const ville = prof?.ville?.trim() || ''
   const founder = isFounder(spot.user_id)
   const cat = categoryBadge(spot.category)
@@ -922,6 +930,11 @@ const FeedCard = memo(function FeedCard({
                 }}
               >
                 {t('feedpage.founder')}
+              </span>
+            )}
+            {igLabel && (
+              <span className="flex-none truncate text-[11px] font-medium text-white/60">
+                {igLabel}
               </span>
             )}
           </span>

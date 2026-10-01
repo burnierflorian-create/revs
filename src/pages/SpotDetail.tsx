@@ -24,6 +24,7 @@ import {
   MapPin,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { displayHandle, instagramUrl } from '../lib/social'
 import {
   categoryLabel,
   formatPrice,
@@ -82,6 +83,7 @@ export default function SpotDetail() {
     pseudo: string | null
     avatar: string | null
     ville: string | null
+    instagram: string | null
     tier: 'premium' | 'vip' | null
   } | null>(null)
   const [funFact, setFunFact] = useState<string | null>(null)
@@ -365,7 +367,7 @@ export default function SpotDetail() {
           .eq('user_id', s.user_id),
         supabase
           .from('profiles')
-          .select('pseudo, avatar, ville')
+          .select('pseudo, avatar, ville, instagram')
           .eq('user_id', s.user_id)
           .maybeSingle(),
         supabase.rpc('user_tier', { p_user: s.user_id }),
@@ -378,6 +380,7 @@ export default function SpotDetail() {
         pseudo: (prof?.pseudo as string | undefined) ?? null,
         avatar: (prof?.avatar as string | undefined) ?? null,
         ville: (prof?.ville as string | undefined)?.trim() || null,
+        instagram: (prof?.instagram as string | undefined) ?? null,
         tier,
       })
 
@@ -846,6 +849,19 @@ export default function SpotDetail() {
               <span className="truncate">
                 {owner?.pseudo || t('spotdetail.defaultSpotter')}
               </span>
+              {/* Instagram de l'auteur — emplacement stable, discret, et
+                  strictement absent quand le champ n'est pas renseigné. */}
+              {displayHandle(owner?.instagram) && (
+                <a
+                  href={instagramUrl(owner?.instagram) ?? '#'}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  className="tappable flex-none truncate text-[11.5px] font-medium text-fg2"
+                >
+                  {displayHandle(owner?.instagram)}
+                </a>
+              )}
               {owner?.tier && (
                 <span
                   className={`flex-none rounded-full px-1.5 py-0.5 text-[10px] font-extrabold tracking-wider ${

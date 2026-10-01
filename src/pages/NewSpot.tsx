@@ -28,7 +28,6 @@ import { brandSlugFor, getBrand } from '../lib/brands'
 import { searchCars, searchMakes, modelsForMake, findMake } from '../lib/cars'
 import { Skeleton } from '../components/Skeleton'
 import CollectorCard from '../components/CollectorCard'
-import PlateMarker from '../components/PlateMarker'
 import type { Spot } from '../lib/spots'
 
 type Step = 1 | 2 | 3 | 4
@@ -129,9 +128,10 @@ export default function NewSpot() {
   // Résultat de la protection automatique des plaques.
   //   'ok'      la détection a tourné (qu'elle ait trouvé une plaque ou non)
   //   'failed'  elle n'a PAS tourné — appel en échec, ou floutage impossible
-  // 'failed' n'autorise plus la publication silencieuse : voir plateAck.
-  const [plateGuard, setPlateGuard] = useState<'ok' | 'failed'>('ok')
-  const [plateAck, setPlateAck] = useState(false)
+  // 'failed' bloque la publication, sans aucune possibilité de passer outre.
+  // `pending` tant que la détection n'a pas rendu son verdict. L'état initial
+// était 'ok', ce qui voulait dire « protégée » avant même d'avoir regardé.
+const [plateGuard, setPlateGuard] = useState<'pending' | 'ok' | 'failed'>('ok')
   /** Vrai pendant la détection : la publication est retenue le temps du contrôle. */
   const [plateChecking, setPlateChecking] = useState(false)
   /**
@@ -144,7 +144,6 @@ export default function NewSpot() {
    *
    * `null` = pas encore atteinte. `true` = en cours.
    */
-  const [plateStep, setPlateStep] = useState(false)
   const [image, setImage] = useState<{ blob: Blob; base64: string } | null>(
     null,
   )
@@ -272,12 +271,18 @@ export default function NewSpot() {
     try {
       const resized = await resizeImageToJpeg(file)
       setImage(resized)
-      // Nouvelle photo → la protection repart de zéro, et l'écran de masquage
-      // s'impose AVANT tout le reste. C'est la première chose qu'on fait d'une
-      // photo, avant même de demander comment identifier la voiture.
-      setPlateGuard('ok')
-      setPlateAck(false)
-      setPlateStep(true)
+      // Nouvelle photo → la protection repart de zéro.
+      //
+      // ── 01/10/2026 : PLUS D'ÉCRAN DE MARQUAGE MANUEL ──
+      // On ouvrait ici `PlateMarker` : l'utilisateur devait désigner les
+      // plaques lui-même avant toute autre chose. Deux raisons de l'enlever.
+      // La première est qu'une protection qui dépend d'un geste humain n'est
+      // pas une protection : elle est aussi fiable que l'attention de la
+      // personne la plus pressée. La seconde est qu'elle n'était même pas
+      // nécessaire — la détection automatique tourne de toute façon sur les
+      // deux chemins. Le composant reste dans le dépôt, mais il n'est plus
+      // sur le chemin obligatoire.
+      setPlateGuard('pending')
       // AI-only downscale (768px / q0.85). Image tokens scale with pixel
       // area (≈ w×h/750), so 768px is ~2× cheaper than 1200px; the higher
       // JPEG quality keeps badges/logos legible for the vision model.
@@ -457,21 +462,18 @@ export default function NewSpot() {
           setAiQuota((prev) =>
             prev ? { ...prev, used: prev.limit, remaining: 0 } : prev,
           )
-          // Le floutage des plaques n'a PAS tourné : on n'a pas lu la réponse
-          // de detect-plate, et de toute façon le quota vaut pour lui aussi.
-          // Laisser `plateGuard` à 'ok' publierait une photo non anonymisée en
-          // laissant croire qu'elle a été vérifiée. On bascule donc sur le
-          // garde explicite déjà prévu pour les pannes de détection :
-          // l'utilisateur devra confirmer lui-même qu'aucune plaque n'est
-          // lisible. Économiser un appel IA ne doit pas coûter une plaque
-          // d'immatriculation en clair.
-          setPlateGuard('failed')
+          // Le quota d'IDENTIFICATION est épuisé — mais la détection de
+          // plaque n'en dépend pas (server/ai-gate.js lui donne sa propre
+          // limite). On la lance donc pour de vrai au lieu de marquer la photo
+          // « non vérifiée » et de s'en remettre à l'utilisateur : identifier
+          // une voiture est un service, flouter une plaque est une obligation.
           applyResult(EMPTY_RESULT)
           setManualNotice(
             q?.message ||
               t('newspot.aiQuotaExhausted', { limit: aiQuota?.limit ?? 5 }),
           )
           setStep(3)
+          void runPlateGuard()
           return
         }
 
@@ -494,8 +496,13 @@ export default function NewSpot() {
       // trouvée ». La version précédente confondait les deux et publiait
       // silencieusement : une panne de l'API suffisait à mettre en ligne une
       // plaque parfaitement lisible.
+      // Depuis que l'état initial est `pending`, le succès doit être AFFIRMÉ.
+      // Tant que cette ligne n'existait pas, une photo non vérifiée restait
+      // marquée « ok » par défaut — c'est exactement l'hypothèse qu'on veut
+      // rendre impossible.
       const plates = plateJson.plates
       if (plates === null) setPlateGuard('failed')
+      else setPlateGuard('ok')
       if (plates && plates.length > 0) {
         try {
           const blurred = await blurRegions(image.blob, plates)
@@ -507,6 +514,8 @@ export default function NewSpot() {
           // passer en silence — l'utilisateur devra confirmer explicitement
           // qu'aucune plaque n'est lisible avant de publier.
           console.error('[plate blur] failed:', e)
+          // Le floutage a échoué APRÈS une détection réussie : l'image en
+          // mémoire est donc toujours l'originale, plaque comprise.
           setPlateGuard('failed')
         }
       }
@@ -585,33 +594,6 @@ export default function NewSpot() {
    * donc `publish()` téléverse toujours la version anonymisée — l'original ne
    * quitte jamais l'appareil.
    */
-  /**
-   * Applique le floutage sur les zones désignées par l'utilisateur.
-   *
-   * `blurRegions` travaille sur le blob EN MÉMOIRE : quand `publish()` arrive,
-   * `image.blob` porte déjà la version anonymisée. L'original ne quitte jamais
-   * l'appareil — il n'y a pas d'original côté serveur à protéger.
-   */
-  async function applyPlateBoxes(boxes: BBox[]) {
-    if (!image || boxes.length === 0) return
-    setPlateChecking(true)
-    try {
-      const blurred = await blurRegions(image.blob, boxes)
-      setImage(blurred)
-      if (previewUrl) URL.revokeObjectURL(previewUrl)
-      setPreviewUrl(URL.createObjectURL(blurred.blob))
-      setPlateGuard('ok')
-      setPlateStep(false)
-    } catch (e) {
-      // Le floutage lui-même a échoué (canvas indisponible) : on NE passe pas.
-      console.error('[plaques] floutage impossible :', e)
-      setPlateGuard('failed')
-      setPlateStep(false)
-    } finally {
-      setPlateChecking(false)
-    }
-  }
-
   async function runPlateGuard() {
     if (!image) return
     setPlateChecking(true)
@@ -1074,25 +1056,8 @@ export default function NewSpot() {
         </div>
       </div>
 
-      {/* ÉTAPE 1bis — MASQUAGE DES PLAQUES (obligatoire, avant tout le reste) */}
-      {step === 1 && plateStep && image && previewUrl && (
-        <div className="pb-8">
-          <PlateMarker
-            photoUrl={previewUrl}
-            onConfirm={applyPlateBoxes}
-            onNone={() => {
-              // Déclaration explicite : on la consigne comme un contrôle PASSÉ,
-              // pas comme un échec. La différence compte — un échec technique
-              // doit rester distinguable d'une photo réellement sans plaque.
-              setPlateGuard('ok')
-              setPlateStep(false)
-            }}
-          />
-        </div>
-      )}
-
       {/* ÉTAPE 1 — PHOTO */}
-      {step === 1 && !plateStep && (
+      {step === 1 && (
         <div className="space-y-6 pb-8">
           <h1 className="display-xl text-fg">{t('newspot.newSpotTitle')}</h1>
 
@@ -1500,30 +1465,45 @@ export default function NewSpot() {
             {savedToGallery ? t('newspot.savedToGallery') : t('newspot.saveToGallery')}
           </button>
 
-          {/* Protection des plaques : la publication n'est plus silencieuse
-              quand la détection automatique n'a pas tourné. L'utilisateur doit
-              confirmer lui-même qu'aucune plaque n'est lisible.
-              Bloquer purement et simplement aurait puni une panne d'API alors
-              que la plupart des photos n'ont aucune plaque visible ; laisser
-              passer en silence, c'était publier une plaque lisible. */}
+          {/* ── PROTECTION DES PLAQUES — PLUS AUCUNE SORTIE DE SECOURS ──
+              Il y avait ici une case à cocher : « je certifie qu'aucune plaque
+              n'est lisible ». Elle permettait de publier l'original quand la
+              détection avait échoué.
+
+              C'était une faille, pas un compromis. Une case cochée par
+              quelqu'un qui veut publier ne dit rien de la photo ; elle déplace
+              seulement la responsabilité sur l'utilisateur, ce qui ne protège
+              aucune plaque. Le système doit être fail-safe : si on ne sait pas,
+              on ne publie pas.
+
+              Le bouton reprend la détection. Si elle échoue encore, reprendre
+              la photo reste possible — publier sans vérification, non. */}
           {plateGuard === 'failed' && (
-            <label
-              className="flex cursor-pointer items-start gap-2.5 rounded-2xl p-3.5"
+            <div
+              className="rounded-2xl p-3.5"
               style={{
                 background: 'rgb(var(--color-accent) / 0.08)',
                 border: '1px solid rgb(var(--color-accent) / 0.35)',
               }}
+              role="alert"
             >
-              <input
-                type="checkbox"
-                checked={plateAck}
-                onChange={(e) => setPlateAck(e.target.checked)}
-                className="mt-0.5 h-4 w-4 flex-none accent-accent"
-              />
-              <span className="text-[12.5px] leading-snug text-fg">
-                {t('newspot.plateGuardFailed')}
-              </span>
-            </label>
+              <p className="text-[12.5px] font-bold text-accent">
+                {t('newspot.plateGuardBlockedTitle')}
+              </p>
+              <p className="mt-1 text-[12px] leading-snug text-fg2">
+                {t('newspot.plateGuardBlockedBody')}
+              </p>
+              <button
+                onClick={() => void runPlateGuard()}
+                disabled={plateChecking}
+                className="tappable mt-3 w-full rounded-full py-2.5 text-[12px] font-extrabold tracking-wider text-accent disabled:opacity-50"
+                style={{ border: '1px solid rgb(var(--color-accent) / 0.45)' }}
+              >
+                {plateChecking
+                  ? t('newspot.plateChecking')
+                  : t('newspot.plateGuardRetry')}
+              </button>
+            </div>
           )}
 
           <button
@@ -1532,11 +1512,14 @@ export default function NewSpot() {
             // de plaque tourne. Sans ce garde, un utilisateur rapide pouvait
             // publier AVANT que le floutage ne soit appliqué au blob — et
             // téléverser l'original.
+            // Fail-safe : on ne continue QUE si le contrôle de plaque a
+            // réellement abouti. 'pending' comme 'failed' bloquent — le doute
+            // ne doit jamais se résoudre en faveur de la publication.
             disabled={
               !brand.trim() ||
               !model.trim() ||
               plateChecking ||
-              (plateGuard === 'failed' && !plateAck)
+              plateGuard !== 'ok'
             }
             className="tappable w-full rounded-full bg-accent py-4 text-sm font-extrabold tracking-wider text-fg disabled:opacity-50"
             style={{ boxShadow: '0 8px 24px rgba(232,32,58,0.45)' }}

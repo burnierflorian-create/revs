@@ -769,7 +769,10 @@
     "chooseAiSubDefault": "{{limit}} free analyses per day",
     "chooseManual": "Enter manually",
     "chooseManualSub": "Publish your Spot without AI analysis",
-    "chooseExhausted": "You've used your {{limit}} AI analyses today."
+    "chooseExhausted": "You've used your {{limit}} AI analyses today.",
+    "plateGuardBlockedTitle": "Plate not verified",
+    "plateGuardBlockedBody": "Automatic detection didn't complete. Until we can check, publishing stays blocked — we don't put a plate online by default. Run the check again, or retake the photo.",
+    "plateGuardRetry": "Run the check again"
   },
   "racepage": {
     "back": "Back",
@@ -965,7 +968,10 @@
     "advancedShow": "Account, device and security",
     "advancedHide": "Hide",
     "internalDoc": "Internal documentation",
-    "internalDocSub": "Creator account only"
+    "internalDocSub": "Creator account only",
+    "vehiclePickHint": "Pick the car that represents you. It appears on your profile, including for other people.",
+    "vehicleNoSpots": "You haven't published a spot yet. Publish your car to pick it here.",
+    "vehicleSaved": "Main car saved"
   },
   "spotdetail": {
     "notFound": "This spot can't be found.",

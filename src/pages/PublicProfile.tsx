@@ -1,15 +1,27 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Car } from 'lucide-react'
+import { ArrowLeft, AtSign, Car } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { type Spot } from '../lib/spots'
 import { myPseudo, notifyPush } from '../lib/push'
 import { xpLevel } from '../lib/xp'
+import { displayHandle, instagramUrl } from '../lib/social'
 import { allBadges, computeUnlocks } from '../lib/badges'
 import { Skeleton } from '../components/Skeleton'
 
-type Prof = { pseudo: string | null; ville: string | null; avatar: string | null }
+type Prof = {
+  pseudo: string | null
+  ville: string | null
+  avatar: string | null
+  instagram?: string | null
+  primary_brand?: string | null
+  primary_model?: string | null
+  primary_year?: number | null
+  primary_color?: string | null
+  primary_photo_url?: string | null
+  primary_render_url?: string | null
+}
 type Rel = { user_id: string } & Prof
 
 export default function PublicProfile() {
@@ -38,9 +50,16 @@ export default function PublicProfile() {
     } = await supabase.auth.getUser()
     setMeId(user?.id ?? null)
     const [p, xpRows, sp, fr, fg, mine, tierRes] = await Promise.all([
+      // `profile_public` (migration 0094) plutôt que `profiles` : c'est la
+      // MÊME question posée par toutes les surfaces. L'ancienne requête
+      // demandait `pseudo, ville, avatar` — ni le véhicule ni l'Instagram.
+      // C'était là, et nulle part ailleurs, la cause du « véhicule invisible
+      // chez les autres » : la donnée n'était jamais demandée.
       supabase
-        .from('profiles')
-        .select('pseudo, ville, avatar')
+        .from('profile_public')
+        .select(
+          'pseudo, ville, avatar, instagram, primary_brand, primary_model, primary_year, primary_color, primary_photo_url, primary_render_url',
+        )
         .eq('user_id', id)
         .maybeSingle(),
       supabase.from('xp_transactions').select('amount').eq('user_id', id),
@@ -166,6 +185,14 @@ export default function PublicProfile() {
 
   const name = prof?.pseudo || 'Spotter'
   const isMe = meId === id
+  // Dérivés d'affichage. `displayHandle` garantit un seul « @ » quelle que
+  // soit la forme stockée — c'est ce qui produisait « @@flr_brn ».
+  const igUrl = instagramUrl(prof?.instagram)
+  const igLabel = displayHandle(prof?.instagram)
+  const instagram = igUrl && igLabel ? { url: igUrl, label: igLabel } : null
+  const vehicleLabel =
+    [prof?.primary_brand, prof?.primary_model].filter(Boolean).join(' ').trim() || null
+
   const level = xpLevel(xp)
 
   // Stats derived from the full spot set.
@@ -248,6 +275,29 @@ export default function PublicProfile() {
           </h2>
           {prof?.ville && (
             <p className="text-sm text-[#888888]">{prof.ville}</p>
+          )}
+          {instagram && (
+            <a
+              href={instagram.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="tappable mt-1 inline-flex items-center gap-1 text-sm font-semibold text-fg2 hover:text-fg"
+            >
+              <AtSign className="h-3.5 w-3.5" />
+              {instagram.label}
+            </a>
+          )}
+          {vehicleLabel && (
+            <span
+              className="mt-2.5 inline-flex max-w-full items-center gap-1.5 truncate rounded-full px-3 py-1.5 text-[12px] font-bold text-fg/90"
+              style={{
+                background: 'rgba(232,32,58,0.12)',
+                border: '1px solid rgba(232,32,58,0.3)',
+              }}
+            >
+              <Car className="h-3.5 w-3.5 flex-none" style={{ color: '#E8203A' }} />
+              <span className="truncate">{vehicleLabel}</span>
+            </span>
           )}
           <span className="lvl-glow mt-2 inline-flex rounded-full bg-accent/15 px-3 py-1 text-xs font-semibold text-accent">
             {level.name} · {xp} XP

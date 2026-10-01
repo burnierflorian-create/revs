@@ -52,6 +52,9 @@ export default function Profile() {
   const [ville, setVille] = useState('')
   const [title, setTitle] = useState<string | null>(null)
   const [dreamCar, setDreamCar] = useState<string | null>(null)
+  const [instagram, setInstagram] = useState<string | null>(null)
+  const [garageBrand, setGarageBrand] = useState<string | null>(null)
+  const [primarySpotId, setPrimarySpotId] = useState<string | null>(null)
   const [avatar, setAvatar] = useState<string | null>(null)
   const [spots, setSpots] = useState<Spot[]>([])
   const [uniqueBrands, setUniqueBrands] = useState(0)
@@ -133,7 +136,7 @@ export default function Profile() {
             .eq('organizer_id', user.id),
           supabase
             .from('profiles')
-            .select('pseudo, ville, avatar, created_at, title, dream_car')
+            .select('pseudo, ville, avatar, created_at, title, dream_car, instagram, garage_brand, primary_spot_id')
             .eq('user_id', user.id)
             .maybeSingle(),
           supabase
@@ -176,6 +179,15 @@ export default function Profile() {
       setDreamCar(
         (profRes.data as { dream_car?: string | null } | null)?.dream_car?.trim() ||
           null,
+      )
+      setInstagram(
+        (profRes.data as { instagram?: string | null } | null)?.instagram ?? null,
+      )
+      setGarageBrand(
+        (profRes.data as { garage_brand?: string | null } | null)?.garage_brand ?? null,
+      )
+      setPrimarySpotId(
+        (profRes.data as { primary_spot_id?: string | null } | null)?.primary_spot_id ?? null,
       )
       setAvatar(profRes.data?.avatar ?? null)
       setSpots(mySpots)
@@ -404,6 +416,9 @@ export default function Profile() {
         levelTitle={prog?.title ?? null}
         ville={ville}
         dreamCar={dreamCar}
+        instagram={instagram}
+        garageBrand={garageBrand}
+        primarySpotId={primarySpotId}
         verified={!!title || tier === 'vip'}
         spots={spots}
         inviteCode={referral?.invite_code ?? null}

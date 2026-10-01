@@ -6,6 +6,7 @@ import {
   Bell,
   BellRing,
   Camera,
+  Check,
   ChevronRight,
   Cookie,
   Crown,
@@ -37,6 +38,7 @@ import {
 import { supabase } from '../lib/supabase'
 import { APP_VERSION, CONTACT_EMAIL } from '../lib/constants'
 import { pickPrimaryVehicle } from '../lib/primaryVehicle'
+import { canonicalHandle, displayHandle } from '../lib/social'
 import type { Spot } from '../lib/spots'
 import { fetchUnreadCount, onUnreadChanged } from '../lib/notifications'
 import type { OrganizerStatus } from '../lib/organizer'
@@ -229,6 +231,8 @@ export default function Settings() {
   // surfaced as a Settings row, plus optional Instagram / TikTok
   // handles for the public profile card. All three nullable.
   const [garageBrand, setGarageBrand] = useState('')
+  /** LA source de vérité du véhicule principal (migration 0094). */
+  const [primarySpotId, setPrimarySpotId] = useState<string | null>(null)
   const [instagram, setInstagram] = useState('')
   const [tiktok, setTiktok] = useState('')
   const [garageOpen, setGarageOpen] = useState(false)
@@ -312,22 +316,31 @@ export default function Settings() {
   }
 
 
-  async function saveGarage() {
+  /**
+   * Enregistre le véhicule principal.
+   *
+   * L'écriture est IMMÉDIATE et l'état local suit la réponse du serveur, pas
+   * l'inverse : c'est ce qui garantit qu'aucune surface n'affiche une valeur
+   * que la base n'a pas acceptée. Le déclencheur `check_primary_spot_owner`
+   * (0094) refuse un spot qui n'appartient pas à l'appelant.
+   */
+  async function savePrimarySpot(spotId: string | null) {
     if (!userId || garageBusy) return
     setGarageBusy(true)
     setGarageMsg(null)
-    const value = garageBrand.trim().slice(0, 80) || null
+    const previous = primarySpotId
+    setPrimarySpotId(spotId)
     try {
       const { error } = await supabase
         .from('profiles')
-        .update({ garage_brand: value })
+        .update({ primary_spot_id: spotId })
         .eq('user_id', userId)
       if (error) throw error
       hapticSuccess()
-      setGarageMsg(t('settingspage.garageSaved'))
+      setGarageMsg(t('settingspage.vehicleSaved'))
       window.setTimeout(() => setGarageMsg(null), 2000)
-      setGarageOpen(false)
     } catch (e) {
+      setPrimarySpotId(previous)
       setGarageMsg(translateError(e))
     } finally {
       setGarageBusy(false)
@@ -371,13 +384,10 @@ export default function Settings() {
     setSocialBusy(true)
     setSocialMsg(null)
     // Strip leading @ / spaces / URLs — store the raw handle only.
-    const clean = (s: string) =>
-      s
-        .trim()
-        .replace(/^https?:\/\/(www\.)?(instagram|tiktok)\.com\//i, '')
-        .replace(/^@+/, '')
-        .replace(/\/.*$/, '')
-        .slice(0, 60) || null
+    // Une seule règle de normalisation pour toute l'application
+    // (src/lib/social.ts), doublée par le déclencheur SQL de la 0094 : un
+    // nettoyage côté navigateur ne couvre que les chemins qu'on a pensés.
+    const clean = (v: string) => canonicalHandle(v)
     try {
       const { error } = await supabase
         .from('profiles')
@@ -480,7 +490,7 @@ export default function Settings() {
         await Promise.all([
           supabase
             .from('profiles')
-            .select('pseudo, ville, avatar, is_public, role, garage_brand, instagram, tiktok, dream_car, preferred_brands, preferred_universes, ambition')
+            .select('pseudo, ville, avatar, is_public, role, garage_brand, instagram, tiktok, dream_car, preferred_brands, preferred_universes, ambition, primary_spot_id')
             .eq('user_id', user.id)
             .maybeSingle(),
           // `my_organizer_request()` : une seule ligne, servie par l'index
@@ -512,6 +522,9 @@ export default function Settings() {
         setIsPublic(prof.is_public ?? true)
         setRole((prof.role as string | undefined) ?? 'user')
         setGarageBrand((prof as { garage_brand?: string | null }).garage_brand ?? '')
+        setPrimarySpotId(
+          (prof as { primary_spot_id?: string | null }).primary_spot_id ?? null,
+        )
         setInstagram((prof as { instagram?: string | null }).instagram ?? '')
         setTiktok((prof as { tiktok?: string | null }).tiktok ?? '')
         const pp = prof as {
@@ -993,41 +1006,82 @@ export default function Settings() {
 
   // ─────────────────────── Inline garage / social editors ───────────────────────
 
-  const GarageEditor = (
+  /**
+   * « Mon véhicule » — un CHOIX parmi ses propres spots.
+   *
+   * ── POURQUOI PLUS UN CHAMP LIBRE ──
+   * Avant, c'était une zone de texte alimentant `garage_brand` : on y écrivait
+   * « Porsche ». Une marque, pas une voiture — impossible d'y lire « Ferrari
+   * 488 Pista », ce que le produit demande. Et surtout, cette valeur n'était
+   * lue par AUCUNE autre surface : personne d'autre ne la voyait jamais.
+   *
+   * Désigner un spot règle les deux : la marque, le modèle, la couleur, la
+   * photo protégée et le futur Garage Visual viennent avec, sans rien saisir.
+   * `garage_brand` n'est pas effacé pour autant — il reste le repli de ceux
+   * qui n'ont pas encore spotté leur propre voiture.
+   */
+  const VehiclePicker = (
     <div className="px-4 pb-4 pt-2">
-      <label className="block space-y-1.5">
-        <span className="label-up block px-1 text-[10px] text-fg2">
-          {t('settingspage.garageFieldLabel')}
-        </span>
-        <input
-          type="text"
-          autoComplete="off"
-          value={garageBrand}
-          onChange={(e) => setGarageBrand(e.target.value)}
-          placeholder={t('settingspage.garagePlaceholder')}
-          maxLength={80}
-          className="w-full rounded-2xl bg-card px-4 py-3 text-sm text-fg placeholder-fg2/60 outline-none focus:ring-2 focus:ring-accent/45"
-          style={{ border: '1px solid var(--color-border)' }}
-        />
-      </label>
-      <div className="mt-3 flex gap-2">
-        <button
-          type="button"
-          onClick={saveGarage}
-          disabled={garageBusy}
-          className="flex-1 rounded-full bg-accent py-2.5 text-xs font-extrabold tracking-wider text-fg disabled:opacity-50"
-        >
-          {garageBusy ? '…' : t('settingspage.save')}
-        </button>
-        <button
-          type="button"
-          onClick={() => setGarageOpen(false)}
-          className="rounded-full bg-card px-4 py-2.5 text-xs font-semibold text-fg2"
-          style={{ border: '1px solid var(--color-border)' }}
-        >
-          {t('settingspage.cancel')}
-        </button>
-      </div>
+      {spots.length === 0 ? (
+        <p className="rounded-2xl px-3 py-3 text-[12.5px] leading-snug text-fg2"
+           style={{ background: 'var(--color-glass-mid)', border: '1px solid var(--color-border)' }}>
+          {t('settingspage.vehicleNoSpots')}
+        </p>
+      ) : (
+        <>
+          <p className="mb-2.5 px-1 text-[11.5px] leading-snug text-fg2">
+            {t('settingspage.vehiclePickHint')}
+          </p>
+          <div className="grid max-h-[46vh] grid-cols-2 gap-2 overflow-y-auto pr-1">
+            {spots.map((sp) => {
+              const on = primarySpotId === sp.id
+              const label = [sp.brand, sp.model].filter(Boolean).join(' ')
+              return (
+                <button
+                  key={sp.id}
+                  type="button"
+                  aria-pressed={on}
+                  onClick={() => void savePrimarySpot(on ? null : sp.id)}
+                  disabled={garageBusy}
+                  className="tappable relative overflow-hidden rounded-2xl text-left transition-transform active:scale-[0.98] disabled:opacity-60"
+                  style={{
+                    border: `1.5px solid ${on ? 'var(--color-accent)' : 'var(--color-border)'}`,
+                    boxShadow: on ? '0 0 18px rgba(232,32,58,0.18)' : undefined,
+                  }}
+                >
+                  {(sp.garage_render_url || sp.photo_url) && (
+                    <img
+                      src={sp.garage_render_url || sp.photo_url || ''}
+                      alt=""
+                      loading="lazy"
+                      decoding="async"
+                      className="h-20 w-full object-cover"
+                    />
+                  )}
+                  <span className="block px-2.5 py-2">
+                    <span className="block truncate text-[12px] font-bold text-fg">
+                      {label || t('settingspage.myVehicleCardEmpty')}
+                    </span>
+                    {sp.color && (
+                      <span className="mt-0.5 block truncate text-[10.5px] text-fg2">
+                        {sp.color}
+                      </span>
+                    )}
+                  </span>
+                  {on && (
+                    <span
+                      className="absolute right-2 top-2 flex h-5 w-5 items-center justify-center rounded-full"
+                      style={{ background: 'rgb(var(--color-accent))' }}
+                    >
+                      <Check className="h-3 w-3 text-white" />
+                    </span>
+                  )}
+                </button>
+              )
+            })}
+          </div>
+        </>
+      )}
       {garageMsg && (
         <p className="mt-2 rounded-xl bg-emerald-500/10 px-3 py-2 text-[11px] font-semibold text-emerald-400"
           style={{ border: '1px solid rgba(16, 185, 129, 0.25)' }}>
@@ -1422,7 +1476,7 @@ export default function Settings() {
   // (src/lib/primaryVehicle.ts). Les deux écrans ne peuvent pas diverger, et
   // le jour où l'utilisateur choisira lui-même sa voiture, il n'y aura qu'un
   // seul endroit à changer. Cette mission n'implémente PAS ce choix.
-  const vehicle = pickPrimaryVehicle(spots, garageBrand)
+  const vehicle = pickPrimaryVehicle(spots, garageBrand, primarySpotId)
 
   return (
     <div className="min-h-screen bg-bg px-4 pb-32 pt-[calc(max(1rem,env(safe-area-inset-top))+15px)] text-fg">
@@ -1592,7 +1646,7 @@ export default function Settings() {
                 sub={
                   instagram || tiktok
                     ? [
-                        instagram ? `IG @${instagram}` : null,
+                        instagram ? `IG ${displayHandle(instagram)}` : null,
                         tiktok ? `TT @${tiktok}` : null,
                       ]
                         .filter(Boolean)
@@ -1612,7 +1666,7 @@ export default function Settings() {
               className="overflow-hidden rounded-3xl bg-card"
               style={{ border: '1px solid var(--color-border)' }}
             >
-              {GarageEditor}
+              {VehiclePicker}
             </div>
           )}
 

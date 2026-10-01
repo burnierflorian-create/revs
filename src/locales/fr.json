@@ -769,7 +769,10 @@
     "chooseAiSubDefault": "{{limit}} analyses gratuites par jour",
     "chooseManual": "Remplir manuellement",
     "chooseManualSub": "Publie ton Spot sans analyse IA",
-    "chooseExhausted": "Tu as utilisé tes {{limit}} analyses IA aujourd’hui."
+    "chooseExhausted": "Tu as utilisé tes {{limit}} analyses IA aujourd’hui.",
+    "plateGuardBlockedTitle": "Plaque non vérifiée",
+    "plateGuardBlockedBody": "La détection automatique n'a pas abouti. Tant qu'on n'a pas pu vérifier, la publication reste bloquée — on ne met pas une plaque en ligne par défaut. Relance la vérification, ou reprends la photo.",
+    "plateGuardRetry": "Relancer la vérification"
   },
   "racepage": {
     "back": "Retour",
@@ -965,7 +968,10 @@
     "advancedShow": "Compte, appareil et sécurité",
     "advancedHide": "Masquer",
     "internalDoc": "Documentation interne",
-    "internalDocSub": "Réservée au compte créateur"
+    "internalDocSub": "Réservée au compte créateur",
+    "vehiclePickHint": "Choisis la voiture qui te représente. Elle apparaîtra sur ton profil, y compris pour les autres.",
+    "vehicleNoSpots": "Tu n'as pas encore publié de spot. Publie ta voiture pour pouvoir la désigner ici.",
+    "vehicleSaved": "Véhicule principal enregistré"
   },
   "spotdetail": {
     "notFound": "Ce spot est introuvable.",

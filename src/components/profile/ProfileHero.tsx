@@ -15,9 +15,10 @@
 // s'affichent côte à côte, et un Fondateur voit enfin sa progression.
 
 import { useTranslation } from 'react-i18next'
-import { BadgeCheck, Share2 } from 'lucide-react'
+import { BadgeCheck, AtSign, Car, Share2 } from 'lucide-react'
 import type { Spot } from '../../lib/spots'
 import { pickPrimaryVehicle } from '../../lib/primaryVehicle'
+import { displayHandle, instagramUrl } from '../../lib/social'
 
 export default function ProfileHero({
   pseudo,
@@ -26,6 +27,9 @@ export default function ProfileHero({
   levelTitle,
   ville,
   dreamCar,
+  instagram,
+  garageBrand,
+  primarySpotId,
   verified,
   spots,
   inviteCode,
@@ -39,6 +43,10 @@ export default function ProfileHero({
   levelTitle: string | null
   ville: string
   dreamCar: string | null
+  /** Pseudo Instagram, forme canonique (sans « @ »). */
+  instagram: string | null
+  garageBrand: string | null
+  primarySpotId: string | null
   verified: boolean
   spots: Spot[]
   inviteCode: string | null
@@ -46,12 +54,13 @@ export default function ProfileHero({
 }) {
   const { t } = useTranslation()
 
-  // Photo de fond : le véhicule principal, choisi par `pickPrimaryVehicle()`.
-  // La règle est la même qu'avant (le spot le plus rare) mais elle vit
-  // désormais à UN endroit, partagé avec le hero des Paramètres : les deux
-  // écrans ne peuvent plus montrer deux voitures différentes.
-  // Aucun appel réseau — `spots` est déjà chargé par la page.
-  const cover = pickPrimaryVehicle(spots).photo
+  // Le véhicule principal — MÊME source que le profil public et les
+  // Paramètres. `primarySpotId` est le choix de l'utilisateur ; le reste n'est
+  // qu'une déduction pour ceux qui n'ont rien désigné.
+  const vehicle = pickPrimaryVehicle(spots, garageBrand, primarySpotId)
+  const cover = vehicle.photo
+  const igUrl = instagramUrl(instagram)
+  const igLabel = displayHandle(instagram)
 
   const idLine = [accountTitle, levelTitle, ville].filter(Boolean)
 
@@ -168,8 +177,45 @@ export default function ProfileHero({
                 {idLine.join(' · ')}
               </p>
             )}
+            {/* Instagram — facultatif, donc strictement rien quand il manque.
+                `displayHandle` garantit un seul « @ » quelle que soit la forme
+                saisie : c'est ce qui produisait « @@flr_brn ». */}
+            {igUrl && igLabel && (
+              <a
+                href={igUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="tappable mt-1.5 inline-flex items-center gap-1 text-[12px] font-semibold text-white/80"
+              >
+                <AtSign className="h-3.5 w-3.5" aria-hidden />
+                {igLabel}
+              </a>
+            )}
           </div>
         </div>
+
+        {/* MON VÉHICULE — la voiture réellement possédée, distincte de la
+            voiture de rêve juste en dessous. Les confondre était tout le
+            problème : l'une est un fait, l'autre un souhait. */}
+        {vehicle.label && (
+          <div className="mt-3">
+            <span
+              className="inline-flex max-w-full items-center gap-1.5 rounded-full px-3 py-1.5"
+              style={{
+                background: 'rgb(232 32 58 / 0.18)',
+                border: '1px solid rgb(232 32 58 / 0.42)',
+                backdropFilter: 'blur(10px)',
+                WebkitBackdropFilter: 'blur(10px)',
+              }}
+            >
+              <Car className="h-3.5 w-3.5 flex-none text-white" aria-hidden />
+              <span className="truncate text-[12px] font-bold text-white">
+                {vehicle.label}
+              </span>
+            </span>
+          </div>
+        )}
 
         {/* Voiture de rêve — pastille discrète, pas un bloc. */}
         {dreamCar && (
