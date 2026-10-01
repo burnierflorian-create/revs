@@ -622,13 +622,23 @@ async function verifyModel(client, mimeType, imageBase64, result) {
   if (!CONFUSABLE.some((re) => re.test(brand))) return result
 
   try {
+    // ── POURQUOI SONNET ET NON HAIKU POUR VÉRIFIER (01/10/2026) ──
+    // La vérification a d'abord tourné sur Haiku, pour rester bon marché.
+    // Mesuré contre la production sur dix véhicules : elle a bien contesté la
+    // Model Y et la Classe E, mais elle a CONFIRMÉ « Bentley R-Type » sur une
+    // Rolls-Royce Silver Cloud — grille Parthénon et Spirit of Ecstasy en
+    // évidence. Un sceau « vérifié » apposé sur une erreur est pire que pas de
+    // sceau du tout : c'est lui qui déverrouille le Garage Visual.
+    //
+    // On paie donc le modèle capable de répondre. L'appel ne tourne que sur
+    // les marques confusables, soit environ un spot sur quatre.
     const r = await callClaude(
       client,
       mimeType,
       imageBase64,
       VERIFY_SYSTEM,
       300,
-      HAIKU_VISION_MODEL,
+      MODEL,
       `AFFIRMATION À VÉRIFIER : cette photo montre une « ${brand} ${model} ».`,
     )
     if (r.stop_reason === 'refusal') return result
@@ -639,20 +649,66 @@ async function verifyModel(client, mimeType, imageBase64, result) {
 
     const altBrand = String(v.actual_brand || '').trim()
     const altModel = String(v.actual_model || '').trim()
-
-    // ── EN CAS DE DÉSACCORD, ON NE TRANCHE PAS À PILE OU FACE ──
-    // Deux lectures du même moteur se contredisent : rien ne dit laquelle a
-    // raison. On ne remplace donc PAS un modèle par l'autre. On retire le
-    // modèle contesté et on garde ce sur quoi les deux s'accordent — la
-    // marque. L'utilisateur complète lui-même, et sa saisie fera autorité.
-    //
-    // « Tesla » seul et juste vaut mieux que « Tesla Model 3 » faux : le
-    // premier se corrige d'un geste, le second part dans la collection, la
-    // carte et le Garage.
-    const sameBrand = altBrand && brand.toLowerCase().includes(altBrand.toLowerCase().split(' ')[0])
     console.warn(
       `[identify-car] vérification négative : « ${brand} ${model} » contesté → « ${altBrand} ${altModel} » (${v.why ?? ''})`,
     )
+
+    // ── TROISIÈME AVIS AVANT DE RENONCER ──
+    // Deux lectures se contredisent ; rien ne dit encore laquelle a raison.
+    // Plutôt que de trancher à pile ou face ou d'effacer aussitôt, on demande
+    // une identification NEUVE au modèle le plus précis dont on dispose, avec
+    // le prompt complet. Si elle rejoint la contestation, les deux tiers
+    // concordent et on adopte sa réponse. Sinon, le doute est réel et on
+    // s'abstient.
+    let third = null
+    try {
+      const t = await callClaude(client, mimeType, imageBase64, SYSTEM_STRICT, 600, MODEL)
+      if (t.stop_reason !== 'refusal') {
+        const parsed = extractJSON(lastText(t))
+        if (parsed && (parsed.brand || parsed.model)) third = finalize(parsed)
+      }
+    } catch {
+      /* le troisième avis est un bonus, jamais un prérequis */
+    }
+
+    const same = (a, b) => {
+      const n = (s) =>
+        String(s || '')
+          .toLowerCase()
+          .normalize('NFD')
+          .replace(/[̀-ͯ]/g, '')
+          .replace(/[^a-z0-9]+/g, ' ')
+          .trim()
+      const x = n(a)
+      const y = n(b)
+      return Boolean(x && y && (x === y || x.includes(y) || y.includes(x)))
+    }
+
+    if (
+      third &&
+      !isGenericBrand(third.brand) &&
+      same(third.brand, altBrand) &&
+      (!altModel || same(third.model, altModel))
+    ) {
+      // Deux avis sur trois s'accordent contre la première lecture.
+      return {
+        ...result,
+        brand: third.brand,
+        model: third.model,
+        year: third.year ?? result.year,
+        confidence: Math.min(Number(third.confidence) || 60, 75),
+        verified: true,
+        verify_note: `Première lecture corrigée : « ${brand} ${model} » → « ${third.brand} ${third.model} ».`,
+      }
+    }
+
+    // ── AUCUNE MAJORITÉ : ON S'ABSTIENT ──
+    // On retire le modèle contesté et on ne garde que ce sur quoi les lectures
+    // s'accordent — la marque. « Tesla » seul et juste vaut mieux que « Tesla
+    // Model 3 » faux : le premier se corrige d'un geste, le second part dans
+    // la collection, la carte et le Garage.
+    const sameBrand =
+      altBrand && brand.toLowerCase().includes(altBrand.toLowerCase().split(' ')[0])
     return {
       ...result,
       brand: sameBrand || !altBrand ? result.brand : altBrand,
