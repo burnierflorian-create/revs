@@ -588,7 +588,8 @@
       "refresh": "Refresh",
       "noArticles": "No articles for now.",
       "new": "NEW"
-    }
+    },
+    "universeCars": "Automobile"
   },
   "legal": {
     "terms": {
@@ -1058,7 +1059,15 @@
     "spotToStart": "Spot a car to start your collection.",
     "spotNow": "SPOT NOW",
     "spotSuffix_one": "spot",
-    "spotSuffix_other": "spots"
+    "spotSuffix_other": "spots",
+    "generating": "This profile is being prepared. Check back in a moment.",
+    "founded": "Founded",
+    "founder": "Founder",
+    "origin": "Origin",
+    "historyTitle": "The story of {{name}}",
+    "iconicModels": "Iconic models",
+    "factsTitle": "Worth knowing",
+    "innovations": "Innovations"
   },
   "f1gp": {
     "resultsUnavailable": "Results unavailable.",

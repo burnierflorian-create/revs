@@ -16,7 +16,13 @@ type Universe = 'f1' | 'cars'
 
 export default function Discover({ initial }: { initial?: 'events' }) {
   const { t } = useTranslation()
-  // CarSpotting is the primary universe; F1 & Motorsport sits beside it.
+  // AUTOMOBILE est l'univers principal ; F1 & Motorsport vit à côté.
+  //
+  // Renommé le 01/10/2026 : « CarSpotting » désignait la même chose que
+  // l'action de spotter, alors que cette section ne sert pas à photographier
+  // mais à DÉCOUVRIR — actualités, événements, marques. Les deux rôles
+  // portaient le même nom, ce qui en faisait un pour l'utilisateur.
+  // La clé interne reste 'cars' : la renommer orphelinerait les URL.
   const [universe, setUniverse] = useState<Universe>('cars')
   const [f1Sub, setF1Sub] = useState<'actu' | 'calendar' | 'roster'>('actu')
   const [carsSub, setCarsSub] = useState<
@@ -80,13 +86,12 @@ export default function Discover({ initial }: { initial?: 'events' }) {
 
   return (
     <div className="min-h-screen bg-bg pt-[max(1rem,env(safe-area-inset-top))]">
-      {/* Niveau 1 — rigid 50/50 grid: CarSpotting anchored centre-left,
-          F1 anchored centre-right, full screen width. */}
+      {/* Niveau 1 — grille 50/50 rigide : Automobile à gauche, F1 à droite. */}
       <div
         className="grid w-full grid-cols-2 pt-2"
         style={{ borderBottom: '1px solid var(--color-divider)' }}
       >
-        {universeBtn('cars', 'CarSpotting')}
+        {universeBtn('cars', t('discoverpage.universeCars'))}
         {universeBtn('f1', 'F1')}
       </div>
 

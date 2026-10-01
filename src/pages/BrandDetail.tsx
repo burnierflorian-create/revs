@@ -3,6 +3,12 @@ import { useTranslation } from 'react-i18next'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Bell, Check, Loader2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import {
+  fetchBrandContent,
+  hasHistory,
+  hasModels,
+  type BrandContent,
+} from '../lib/brandContent'
 import { brandTagline, getBrand } from '../lib/brands'
 import { timeAgo, type Spot } from '../lib/spots'
 import { Skeleton } from '../components/Skeleton'
@@ -39,7 +45,7 @@ function ilikeOr(column: string, patterns: string[]): string {
 }
 
 export default function BrandDetail() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const { slug } = useParams<{ slug: string }>()
   const navigate = useNavigate()
   const brand = getBrand(slug)
@@ -50,8 +56,11 @@ export default function BrandDetail() {
   const [followBusy, setFollowBusy] = useState(false)
   const [followErr, setFollowErr] = useState<string | null>(null)
 
-  const [description, setDescription] = useState<string | null>(null)
+  const [content, setContent] = useState<BrandContent | null>(null)
   const [descLoading, setDescLoading] = useState(true)
+  /** Une autre session génère déjà : on attend et on relit, on ne relance pas. */
+  const [generating, setGenerating] = useState(false)
+  const description = content?.summary ?? content?.description ?? null
 
   const [spots, setSpots] = useState<Spot[] | null>(null)
   const [totalSpots, setTotalSpots] = useState<number | null>(null)
@@ -182,39 +191,19 @@ export default function BrandDetail() {
     let active = true
     setDescLoading(true)
     ;(async () => {
-      try {
-        const {
-          data: { session },
-        } = await supabase.auth.getSession()
-        const token = session?.access_token
-        if (!token) {
-          if (active) setDescLoading(false)
-          return
-        }
-        const res = await fetch('/api/brand-description', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({ brand: brand.slug }),
-        })
-        const data = (await res.json()) as {
-          description?: string
-          error?: string
-        }
-        if (!active) return
-        if (data.description) setDescription(data.description)
-      } catch {
-        /* keep description null — the card collapses */
-      } finally {
-        if (active) setDescLoading(false)
-      }
+      // `fetchBrandContent` lit le cache EN PREMIER (gratuit, public) et
+      // n'appelle le serveur que s'il n'y a rien. Ouvrir Alpine une
+      // deuxième fois ne coûte donc aucun appel IA.
+      const r = await fetchBrandContent(brand.slug, i18n.resolvedLanguage ?? 'fr')
+      if (!active) return
+      setContent(r.content)
+      setGenerating(r.generating)
+      setDescLoading(false)
     })()
     return () => {
       active = false
     }
-  }, [brand])
+  }, [brand, i18n.resolvedLanguage])
 
   // ---- Follow toggle -------------------------------------------------------
   const toggleFollow = useCallback(async () => {
@@ -415,8 +404,151 @@ export default function BrandDetail() {
               className="rounded-3xl bg-card p-6 text-sm text-fg2"
               style={{ border: '1px solid var(--color-border)' }}
             >
-              {t('brandspage.descriptionUnavailable')}
+              {generating
+                ? t('brandspage.generating')
+                : t('brandspage.descriptionUnavailable')}
             </p>
+          )}
+
+          {/* ── IDENTITÉ — uniquement les champs réellement renseignés.
+              Un champ absent est un champ que le modèle n'a pas su remplir
+              avec certitude : on préfère l'omettre que le deviner. ── */}
+          {content &&
+            (content.founded_year || content.founder || content.origin_country) && (
+              <div className="mt-3 grid grid-cols-3 gap-2">
+                {[
+                  [t('brandspage.founded'), content.founded_year?.toString()],
+                  [t('brandspage.founder'), content.founder],
+                  [t('brandspage.origin'), content.origin_country],
+                ]
+                  .filter(([, v]) => !!v)
+                  .map(([k, v]) => (
+                    <div
+                      key={k as string}
+                      className="rounded-2xl bg-card px-3 py-2.5"
+                      style={{ border: '1px solid var(--color-border)' }}
+                    >
+                      <p className="label-up text-[9px] text-fg2">{k}</p>
+                      <p className="mt-1 truncate text-[13px] font-bold text-fg">{v}</p>
+                    </div>
+                  ))}
+              </div>
+            )}
+
+          {/* ── HISTOIRE ── */}
+          {hasHistory(content) && (
+            <div className="mt-6">
+              <h2 className="label-up px-1 text-[10px] text-fg2">
+                {t('brandspage.historyTitle', { name: brand.name.toUpperCase() })}
+              </h2>
+              {content?.history && (
+                <p className="mt-2.5 font-serif text-[14.5px] leading-relaxed text-fg/85">
+                  {content.history}
+                </p>
+              )}
+              {content!.key_moments.length > 0 && (
+                <ol className="mt-5 space-y-3">
+                  {content!.key_moments.map((m, idx) => (
+                    <li key={idx} className="flex gap-3">
+                      <span
+                        className="w-[58px] flex-none pt-0.5 font-display text-[13px] font-black tabular-nums"
+                        style={{ color: '#E8203A' }}
+                      >
+                        {m.year}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        {m.title && (
+                          <span className="block text-[13.5px] font-bold text-fg">
+                            {m.title}
+                          </span>
+                        )}
+                        {m.text && (
+                          <span className="mt-0.5 block text-[12.5px] leading-snug text-fg2">
+                            {m.text}
+                          </span>
+                        )}
+                      </span>
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </div>
+          )}
+
+          {/* ── MODÈLES EMBLÉMATIQUES ── */}
+          {hasModels(content) && (
+            <div className="mt-6">
+              <h2 className="label-up px-1 text-[10px] text-fg2">
+                {t('brandspage.iconicModels')}
+              </h2>
+              <div className="mt-2.5 space-y-2">
+                {content!.iconic_models.map((m, idx) => (
+                  <div
+                    key={idx}
+                    className="rounded-2xl bg-card p-4"
+                    style={{ border: '1px solid var(--color-border)' }}
+                  >
+                    <div className="flex items-baseline justify-between gap-3">
+                      <span className="truncate font-display text-[15px] font-black tracking-tight text-fg">
+                        {m.name}
+                      </span>
+                      {m.years && (
+                        <span className="flex-none text-[11px] font-semibold tabular-nums text-fg2">
+                          {m.years}
+                        </span>
+                      )}
+                    </div>
+                    {m.text && (
+                      <p className="mt-1.5 text-[12.5px] leading-snug text-fg2">
+                        {m.text}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ── FAITS À RETENIR ── */}
+          {content && content.facts.length > 0 && (
+            <div className="mt-6">
+              <h2 className="label-up px-1 text-[10px] text-fg2">
+                {t('brandspage.factsTitle')}
+              </h2>
+              <ul className="mt-2.5 space-y-2">
+                {content.facts.map((f, idx) => (
+                  <li key={idx} className="flex items-start gap-2.5">
+                    <span
+                      aria-hidden
+                      className="mt-[7px] h-1.5 w-1.5 flex-none rounded-full"
+                      style={{ background: '#E8203A' }}
+                    />
+                    <span className="text-[13px] leading-snug text-fg/85">{f}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* ── INNOVATIONS ── */}
+          {content && content.innovations.length > 0 && (
+            <div className="mt-6">
+              <h2 className="label-up px-1 text-[10px] text-fg2">
+                {t('brandspage.innovations')}
+              </h2>
+              <ul className="mt-2.5 space-y-2">
+                {content.innovations.map((f, idx) => (
+                  <li key={idx} className="flex items-start gap-2.5">
+                    <span
+                      aria-hidden
+                      className="mt-[7px] h-1.5 w-1.5 flex-none rounded-full"
+                      style={{ background: 'rgb(var(--color-fg-2))' }}
+                    />
+                    <span className="text-[13px] leading-snug text-fg/85">{f}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
         </section>
 

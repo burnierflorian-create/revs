@@ -588,7 +588,8 @@
       "refresh": "Rafraîchir",
       "noArticles": "Aucun article pour le moment.",
       "new": "NOUVEAU"
-    }
+    },
+    "universeCars": "Automobile"
   },
   "legal": {
     "terms": {
@@ -1058,7 +1059,15 @@
     "spotToStart": "Spotte une voiture pour commencer ta collection.",
     "spotNow": "SPOTTER MAINTENANT",
     "spotSuffix_one": "spot",
-    "spotSuffix_other": "spots"
+    "spotSuffix_other": "spots",
+    "generating": "La fiche est en cours de préparation. Reviens dans un instant.",
+    "founded": "Création",
+    "founder": "Fondateur",
+    "origin": "Origine",
+    "historyTitle": "L'histoire de {{name}}",
+    "iconicModels": "Modèles emblématiques",
+    "factsTitle": "Faits à retenir",
+    "innovations": "Innovations"
   },
   "f1gp": {
     "resultsUnavailable": "Résultats indisponibles.",
