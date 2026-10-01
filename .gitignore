@@ -31,10 +31,13 @@ backups/
 .github/workflows/
 
 # ── MODÈLE DE DÉTECTION DE PLAQUES : VERSIONNÉ DEPUIS LE 01/10/2026 ──
-# Il était ignoré tant qu'il ne servait qu'à un script local. Il est désormais
-# chargé par api/detect-plate.ts : s'il n'est pas dans le dépôt, il n'est pas
-# dans le déploiement, et la fonction perd son détecteur en production — sans
-# que rien ne le signale. 12 Mo, immuable, empreinte vérifiée au chargement.
+# Il sert aux outils d'audit (scripts/plate-audit.mjs, plate-regression.mjs,
+# blur-plates-onnx.mjs), qui tranchent si une plaque est encore lisible dans
+# le parc. Le versionner rend ces audits reproductibles : sans lui, la seule
+# mesure objective dont on dispose dépend d'un téléchargement manuel.
+# Il n'est PAS déployé — voir api/detect-plate.ts pour pourquoi le détecteur
+# ne tourne pas dans la fonction. 12 Mo, immuable, empreinte vérifiée au
+# chargement.
 !models/
 !models/plate-yolov8.onnx
 
