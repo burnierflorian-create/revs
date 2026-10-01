@@ -18,6 +18,7 @@ import {
   type SpotCategory,
 } from '../lib/spots'
 import { fetchAiQuota, type AiQuota } from '../lib/aiQuota'
+import PlateMarker from '../components/PlateMarker'
 import { takePendingPhoto } from '../lib/pendingPhoto'
 import { useTheme } from '../lib/theme'
 import { emitNewSpot } from '../lib/feedSync'
@@ -135,15 +136,22 @@ const [plateGuard, setPlateGuard] = useState<'pending' | 'ok' | 'failed'>('ok')
   /** Vrai pendant la détection : la publication est retenue le temps du contrôle. */
   const [plateChecking, setPlateChecking] = useState(false)
   /**
-   * Étape de masquage manuel des plaques.
+   * ── MASQUAGE MANUEL : L'ISSUE QUAND LA DÉTECTION NE SAIT PAS (01/10/2026) ──
    *
-   * Elle s'intercale entre la photo et le choix IA/manuel, parce que c'est là
-   * sa place : le floutage est une obligation, l'identification un service. On
-   * ne demande pas à quelqu'un comment il veut identifier sa voiture avant de
-   * s'être assuré qu'aucune plaque ne partira en ligne.
+   * `PlateMarker` existait déjà mais n'était plus ouvert nulle part. Il le
+   * redevient, parce que la mesure impose cette issue : vérifié contre la
+   * production sur quatre photos, le détecteur Claude ne confirme AUCUNE de
+   * ses boîtes sur les trois qui portent une plaque. Depuis que les boîtes
+   * sont vérifiées au lieu d'être crues, ces photos sont donc refusées — ce
+   * qui est la bonne direction d'échec, mais laisserait l'utilisateur sans
+   * aucun moyen de publier.
    *
-   * `null` = pas encore atteinte. `true` = en cours.
+   * L'œil de la personne qui a pris la photo est, lui, fiable : elle sait où
+   * est la plaque. On lui demande de la désigner, et on floute ce qu'elle
+   * désigne. Aucun coût, aucune dépendance, et la garantie la plus forte dont
+   * on dispose aujourd'hui.
    */
+  const [markerOpen, setMarkerOpen] = useState(false)
   const [image, setImage] = useState<{ blob: Blob; base64: string } | null>(
     null,
   )
@@ -1525,6 +1533,17 @@ const [plateGuard, setPlateGuard] = useState<'pending' | 'ok' | 'failed'>('ok')
                   ? t('newspot.plateChecking')
                   : t('newspot.plateGuardRetry')}
               </button>
+              {/* Relancer la détection ne sert à rien si le détecteur ne sait
+                  pas lire CETTE photo — il échouera pareil. L'issue n'est donc
+                  pas une case à cocher, qui ne dit rien de la photo, mais le
+                  geste qui protège réellement : désigner la plaque. */}
+              <button
+                onClick={() => setMarkerOpen(true)}
+                disabled={plateChecking || !previewUrl}
+                className="tappable mt-2 w-full rounded-full bg-accent py-2.5 text-[12px] font-extrabold tracking-wider text-fg disabled:opacity-50"
+              >
+                {t('plate.title')}
+              </button>
             </div>
           )}
 
@@ -1605,6 +1624,45 @@ const [plateGuard, setPlateGuard] = useState<'pending' | 'ok' | 'failed'>('ok')
             </div>
           )}
         </div>
+      )}
+
+      {/* ── MARQUAGE MANUEL, EN SURCOUCHE ──
+          Monté en dernier et en plein écran : désigner une plaque demande de
+          voir la photo en grand, pas une vignette dans un formulaire. */}
+      {markerOpen && previewUrl && image && (
+        <PlateMarker
+          photoUrl={previewUrl}
+          onConfirm={(boxes) => {
+            void (async () => {
+              setMarkerOpen(false)
+              setPlateChecking(true)
+              try {
+                const blurred = await blurRegions(image.blob, boxes)
+                setImage(blurred)
+                if (previewUrl) URL.revokeObjectURL(previewUrl)
+                setPreviewUrl(URL.createObjectURL(blurred.blob))
+                setPlateGuard('ok')
+              } catch (e) {
+                // Le floutage a échoué : l'image en mémoire est toujours
+                // l'originale, plaque comprise. On NE débloque pas.
+                console.error('[plate marker] floutage en échec :', e)
+                setPlateGuard('failed')
+              } finally {
+                setPlateChecking(false)
+              }
+            })()
+          }}
+          onNone={() => {
+            // Déclaration explicite après avoir vu la photo en plein écran et
+            // qu'on lui ait demandé de pointer les plaques. C'est autre chose
+            // qu'une case cochée au bas d'un formulaire : le geste demandé
+            // était de MARQUER, et répondre « il n'y en a pas » suppose
+            // d'avoir regardé. Sans cette issue, une photo réellement sans
+            // plaque deviendrait impubliable dès que le détecteur bute.
+            setMarkerOpen(false)
+            setPlateGuard('ok')
+          }}
+        />
       )}
     </div>
   )
