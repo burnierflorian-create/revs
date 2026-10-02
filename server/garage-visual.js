@@ -24,10 +24,20 @@
 // production. Il fixe le contrat pour que le jour où un moteur passe la
 // validation, seul `providers.<nom>.generate` soit à écrire.
 
-// v2 (01/10/2026) — prompt hybride. Voir buildPrompt : la version entre dans
-// la clé de cache, donc la changer invalide les rendus faits avec l'ancien
-// prompt. C'est voulu : ils ont été produits par une consigne qu'on sait fausse.
-export const GARAGE_VISUAL_VERSION = 2
+// v3 (02/10/2026) — décor unifié. Mesuré sur un banc de 7 véhicules, le
+// prompt v2 produisait des rendus individuellement bons mais visuellement
+// DISPARATES : dégradé nu pour l'un, tubes lumineux verticaux pour l'autre,
+// plafond et embrasure architecturale pour un troisième. Chaque image était
+// défendable ; mises côte à côte elles ne formaient pas un showroom.
+// « Décor premium » laissait au moteur le soin d'inventer un lieu, et il en
+// inventait un différent à chaque fois. La section ENVIRONMENT décrit
+// désormais UN plateau, et interdit nommément ce qui était apparu.
+//
+// v2 (01/10/2026) — prompt hybride : la photo fait autorité sur la fiche.
+//
+// La version entre dans la clé de cache, donc la changer invalide les rendus
+// faits avec l'ancien prompt. C'est voulu.
+export const GARAGE_VISUAL_VERSION = 3
 
 /**
  * Le prompt. Partagé par tous les fournisseurs : si deux moteurs reçoivent
@@ -147,7 +157,12 @@ The attached photo is a REFERENCE FOR IDENTIFYING THE CAR ONLY. Do not edit it, 
 
 SUBJECT
 ${identity}
-Keep the real paint colour and finish. Keep any body kit, spoiler, wrap or wheel option genuinely on this car.
+Keep the real paint colour AND ITS FINISH exactly as photographed — satin, matt, brushed, metallic, pearlescent or gloss are different finishes and must not be swapped. A satin or matt car must not come out glossy.
+Keep any body kit, spoiler, wrap or wheel option genuinely on this car.
+
+LIVERIES AND DECALS — SHAPES YES, LETTERING NEVER
+If the car wears a wrap or racing livery, reproduce its SHAPES, its colours and its layout faithfully: stripes, chevrons, dot gradients, numbers blocks, panel divisions.
+But do NOT attempt to reproduce the WORDING of sponsor decals or any lettering on the bodywork. Rendering engines cannot form real words at this scale and produce corrupted strings instead — measured on a real render: a sponsor decal came out as "Marteon U'6r". Where lettering exists on the source, leave a clean plain-colour block of the same shape and position, with no characters at all. An empty decal reads as a decal; a garbled one reads as a defect.
 
 WHAT BELONGS TO THE SCENE, NOT TO THE CAR — exclude all of it
 The reference photo was taken in the street, often from inside another vehicle. Everything below belongs to that situation and must not appear:
@@ -158,8 +173,12 @@ COMPOSITION
 Three-quarter view, REAR toward the LEFT of the frame and FRONT toward the RIGHT. Camera at headlight height — low, car-level, never a drone or steep top-down angle. 50-85mm equivalent, no wide-angle distortion. Complete vehicle inside the frame, all four wheels visible, nothing cropped, comfortable margin on every side. The car fills most of the frame.
 If this orientation cannot be produced without distorting the car, prefer a faithful car at a slightly different angle over a correct angle on a wrong car.
 
-ENVIRONMENT — the REVS showroom
-Dark seamless studio: black and graphite falling off to deep black at the edges. Polished floor with a soft, believable reflection beneath the car. Elegant vertical studio lights, depth, optional faint haze. No walls, props, furniture, decoration or text.
+ENVIRONMENT — the REVS showroom, IDENTICAL FOR EVERY CAR
+This set never changes from one vehicle to the next. Build exactly this, nothing else:
+- An infinite seamless dark backdrop. Mid-graphite behind the car, falling off evenly to near-black at every edge. No horizon line, no corner, no junction between floor and wall.
+- A polished dark floor with one soft, believable reflection directly under the car, fading out within about one car length.
+- Nothing else in the scene. NO ceiling, NO doorway, NO opening, NO corridor, NO pillars, NO walls, NO window, NO visible light fixtures, NO light tubes or strips as objects in frame, NO architecture of any kind, NO furniture, NO props, NO haze volumes, NO floor markings.
+The light sources illuminate the car from outside the frame and are never themselves visible.
 
 LIGHTING
 Premium automotive studio lighting: long soft strip highlights along the shoulder line and roof, gentle rim light separating the car from the background, clean speculars on wheels and lamps, soft contact shadow so the car sits on the floor instead of floating.

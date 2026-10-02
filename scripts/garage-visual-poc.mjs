@@ -261,7 +261,22 @@ if (!provider) {
 // des rendus réussis de la mauvaise voiture, que rien ne distinguait d'un
 // succès. On refuse désormais de dépenser sur une identité non validée, et on
 // dit pourquoi plutôt que de produire une image trompeuse.
-const gated = spots.map((s) => ({ spot: s, gate: canRender(s) }))
+// ── POURQUOI UN CONTOURNEMENT EXISTE, ET POURQUOI IL EST BRUYANT ──
+// Ce script est un BANC D'ESSAI : son travail est de mesurer ce que le moteur
+// sait faire, y compris sur des véhicules dont l'identité n'a pas encore été
+// scellée. Le verrou, lui, protège la PRODUCTION. Les deux besoins sont réels
+// et contradictoires, d'où ce drapeau — réservé à la mesure, jamais appelé par
+// quoi que ce soit d'automatique, et qui annonce lui-même ce qu'il désactive.
+//
+// Un rendu produit sous ce drapeau ne vaut PAS validation d'identité : il
+// mesure la fidélité du moteur à ce qu'on lui a demandé, pas la justesse de
+// la fiche.
+const FORCE = process.env.REVS_POC_FORCE === '1'
+const gated = spots.map((s) => ({ spot: s, gate: FORCE ? { ok: true } : canRender(s) }))
+if (FORCE) {
+  console.log('⚠️  REVS_POC_FORCE=1 — verrou d’identité DÉSACTIVÉ (banc d’essai).')
+  console.log('    Les rendus produits ne valent pas validation d’identité.\n')
+}
 const blocked = gated.filter((g) => !g.gate.ok)
 if (blocked.length) {
   console.log('identité non validée — AUCUNE génération pour :')

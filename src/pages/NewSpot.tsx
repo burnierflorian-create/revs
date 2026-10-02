@@ -880,6 +880,38 @@ const [plateGuard, setPlateGuard] = useState<'pending' | 'ok' | 'failed'>('ok')
       // moment they switch tabs, no manual refresh.
       if (insertedSpot) emitNewSpot(insertedSpot)
 
+      // ── RENDU GARAGE : LANCÉ, JAMAIS ATTENDU ──
+      //
+      // La publication est DÉJÀ terminée à ce point. Cet appel part et on ne
+      // s'en occupe plus : pas de `await`, pas d'état de chargement, pas de
+      // message d'erreur. S'il échoue, si le réseau coupe, si l'utilisateur
+      // ferme l'application dans la seconde — le spot reste publié et le
+      // Garage affiche simplement sa photo, ce qu'il fait déjà aujourd'hui
+      // pour les 25 spots sans rendu.
+      //
+      // Le serveur refuse de lui-même si l'identité n'est pas validée, si un
+      // rendu compatible existe déjà, ou si quelqu'un génère la même voiture
+      // au même moment. Le client n'a aucune de ces décisions à prendre.
+      if (newSpotId) {
+        void (async () => {
+          try {
+            const { data: s } = await supabase.auth.getSession()
+            const tk = s?.session?.access_token
+            if (!tk) return
+            await fetch('/api/garage-render', {
+              method: 'POST',
+              headers: {
+                'content-type': 'application/json',
+                authorization: `Bearer ${tk}`,
+              },
+              body: JSON.stringify({ spotId: newSpotId }),
+            })
+          } catch {
+            /* le Garage retombe sur photo_url — rien à signaler */
+          }
+        })()
+      }
+
       // After the first successful spot: ask for push permission, then
       // fire two parallel notifications:
       //  (1) nearby subscribers (≤10km, generic "new spot near you")
