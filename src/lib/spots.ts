@@ -311,6 +311,45 @@ export async function blurRegions(
   if (!mctx) throw new Error('Canvas non supporté')
   mctx.drawImage(img, 0, 0)
 
+  // ── LA MARGE DE SÉCURITÉ DOIT ÊTRE RELATIVE, PAS EN PIXELS (02/10/2026) ──
+  //
+  // Le masque n'était gonflé que de `feather`, plafonné à 10 px. La zone
+  // PIXELISÉE débordait bien de 25 %, mais le masque ne la révélait que sur
+  // cette marge fixe — et c'est le masque qui décide de ce qu'on voit.
+  //
+  // La marge effective fondait donc à mesure que la plaque grossissait :
+  //   plaque de  36 px de haut → +7 px, soit 19 %
+  //   plaque de 200 px de haut → +10 px, soit 5 %
+  //
+  // Autrement dit : plus la voiture était proche, moins la plaque était
+  // couverte. Une détection légèrement décalée laissait alors un bord net —
+  // exactement le défaut constaté.
+  //
+  // La marge devient une FRACTION de la boîte, avec un plancher pour les
+  // toutes petites plaques. 18 % absorbe une imprécision de détection
+  // ordinaire sans empiéter visiblement sur la carrosserie.
+  //
+  // Trois rayons emboîtés, et l'ordre compte :
+  //   boîte  <  masque (boîte + marge)  <  zone pixelisée (masque + feather)
+  // Le feather s'évanouit DANS la marge, jamais sur la plaque ; et il reste
+  // toujours des pixels détruits sous le dégradé du masque.
+  const SAFETY = 0.18
+  const FLOOR = 6
+  const geom = regions.map((r) => {
+    const x = clamp(r.x * W, 0, W)
+    const y = clamp(r.y * H, 0, H)
+    const w = clamp(r.width * W, 0, W - x)
+    const h = clamp(r.height * H, 0, H - y)
+    return { x, y, w, h, mx: Math.max(FLOOR, w * SAFETY), my: Math.max(FLOOR, h * SAFETY) }
+  })
+  // Le feather est commun à toutes les régions (un seul flou de canvas) : on
+  // le dimensionne sur la PLUS PETITE marge, sinon il déborderait de la marge
+  // d'une petite plaque et mordrait sur elle.
+  const smallestMargin = Math.min(
+    ...geom.filter((g) => g.w > 0 && g.h > 0).map((g) => Math.min(g.mx, g.my)),
+  )
+  const feather = Math.max(2, Math.min(12, Math.round((smallestMargin || FLOOR) * 0.5)))
+
   // Copie pixelisée : chaque région est réduite puis ré-agrandie au plus
   // proche voisin, INDIVIDUELLEMENT, pour que le pas de pixelisation soit
   // proportionnel à la plaque et non à l'image.
@@ -320,21 +359,17 @@ export async function blurRegions(
   const bctx = blurred.getContext('2d')
   if (!bctx) throw new Error('Canvas non supporté')
   bctx.imageSmoothingEnabled = false
-  for (const r of regions) {
-    const x = clamp(r.x * W, 0, W)
-    const y = clamp(r.y * H, 0, H)
-    const w = clamp(r.width * W, 0, W - x)
-    const h = clamp(r.height * H, 0, H - y)
-    if (w < 1 || h < 1) continue
-    // On déborde de 25 % avant de pixeliser : le masque adouci mord sur ses
-    // propres bords, et sans cette marge un liseré net de la plaque
-    // subsisterait au pourtour de la zone traitée.
-    const px = w * 0.25
-    const py = h * 0.25
-    const sx = Math.max(0, x - px)
-    const sy = Math.max(0, y - py)
-    const sw = Math.min(W - sx, w + 2 * px)
-    const sh = Math.min(H - sy, h + 2 * py)
+  for (const g of geom) {
+    if (g.w < 1 || g.h < 1) continue
+    // La zone pixelisée déborde du MASQUE, pas de la boîte : le dégradé du
+    // masque doit toujours s'éteindre au-dessus de pixels détruits, jamais
+    // au-dessus de l'image nette.
+    const px = g.mx + feather
+    const py = g.my + feather
+    const sx = Math.max(0, g.x - px)
+    const sy = Math.max(0, g.y - py)
+    const sw = Math.min(W - sx, g.w + 2 * px)
+    const sh = Math.min(H - sy, g.h + 2 * py)
     // ~12 pixels sur la plus grande dimension : assez pour que la silhouette
     // de la voiture reste cohérente, bien trop peu pour qu'un caractère
     // survive. Plancher à 2 pour les très petites régions.
@@ -367,28 +402,19 @@ export async function blurRegions(
   // ce qui garantit deux choses : le cœur du masque est pleinement opaque
   // (demi-dimension > rayon), et le masque reste à l'intérieur de la zone
   // pixelisée, qui déborde elle de 25 %.
-  const minDim = Math.min(
-    ...regions.map((r) => Math.min(r.width * W, r.height * H)).filter((v) => v > 0),
-  )
-  const feather = Math.max(2, Math.min(10, Math.round((minDim || 20) * 0.2)))
-
   const mask = document.createElement('canvas')
   mask.width = W
   mask.height = H
   const xctx = mask.getContext('2d')
   if (!xctx) throw new Error('Canvas non supporté')
   xctx.fillStyle = 'white'
-  for (const r of regions) {
-    const x = clamp(r.x * W, 0, W)
-    const y = clamp(r.y * H, 0, H)
-    const w = clamp(r.width * W, 0, W - x)
-    const h = clamp(r.height * H, 0, H - y)
-    if (w <= 0 || h <= 0) continue
+  for (const g of geom) {
+    if (g.w <= 0 || g.h <= 0) continue
     xctx.fillRect(
-      Math.max(0, x - feather),
-      Math.max(0, y - feather),
-      Math.min(W, w + 2 * feather),
-      Math.min(H, h + 2 * feather),
+      Math.max(0, g.x - g.mx),
+      Math.max(0, g.y - g.my),
+      Math.min(W, g.w + 2 * g.mx),
+      Math.min(H, g.h + 2 * g.my),
     )
   }
   // On floute le masque lui-même → dégradé d'alpha sur ses seuls bords.
