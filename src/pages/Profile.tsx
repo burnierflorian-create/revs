@@ -41,6 +41,7 @@ import type { ProfileStat, ProfileTabKey } from '../components/profile/types'
 import BadgeShowcase from '../components/profile/BadgeShowcase'
 import ReferralCard from '../components/profile/ReferralCard'
 import SectionHead from '../components/profile/SectionHead'
+import SpotMiniGrid from '../components/profile/SpotMiniGrid'
 
 
 export default function Profile() {
@@ -94,8 +95,70 @@ export default function Profile() {
   const [profileTab, setProfileTab] = useState<ProfileTabKey>(() => {
     if (typeof window === 'undefined') return 'garage'
     const p = new URLSearchParams(window.location.search).get('tab')
-    return p === 'collection' || p === 'rewards' || p === 'badges' ? p : 'garage'
+    return p === 'collection' ||
+      p === 'rewards' ||
+      p === 'badges' ||
+      p === 'likes' ||
+      p === 'favorites'
+      ? p
+      : 'garage'
   })
+  /** Spots aimés et spots mis de côté.
+   *
+   *  Chargés À L'OUVERTURE de leur onglet et pas avant : un profil qu'on
+   *  ouvre pour regarder son garage n'a aucune raison de payer deux requêtes
+   *  supplémentaires. `null` = jamais demandé, et c'est ce qui distingue
+   *  « pas encore chargé » de « vide ». */
+  const [likedSpots, setLikedSpots] = useState<Spot[] | null>(null)
+  const [savedSpots, setSavedSpots] = useState<Spot[] | null>(null)
+  const [listBusy, setListBusy] = useState(false)
+
+  useEffect(() => {
+    if (profileTab !== 'likes' && profileTab !== 'favorites') return
+    if (profileTab === 'likes' && likedSpots !== null) return
+    if (profileTab === 'favorites' && savedSpots !== null) return
+    let active = true
+    ;(async () => {
+      // `setListBusy` est posé DANS la tâche asynchrone et non avant elle :
+      // appelé en synchrone au corps de l'effet, il déclenche un second rendu
+      // immédiat pour rien — l'effet vient justement de s'exécuter.
+      setListBusy(true)
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (!user) {
+        if (active) setListBusy(false)
+        return
+      }
+      const table = profileTab === 'likes' ? 'spot_likes' : 'spot_bookmarks'
+      // Deux requêtes et non une par spot : on récupère les identifiants,
+      // puis les spots en un seul `in`. Un `select` imbriqué aurait ramené
+      // les colonnes du spot autant de fois qu'il y a de lignes de liaison.
+      const { data: links } = await supabase
+        .from(table)
+        .select('spot_id')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(200)
+      const ids = (links ?? []).map((l) => (l as { spot_id: string }).spot_id)
+      let rows: Spot[] = []
+      if (ids.length) {
+        const { data } = await supabase.from('spots').select('*').in('id', ids)
+        // L'ordre de `in` n'est pas garanti : on réimpose celui des liaisons,
+        // qui est chronologique inverse — le dernier aimé en premier.
+        const bySpot = new Map((data ?? []).map((r) => [(r as Spot).id, r as Spot]))
+        rows = ids.map((i) => bySpot.get(i)).filter(Boolean) as Spot[]
+      }
+      if (!active) return
+      if (profileTab === 'likes') setLikedSpots(rows)
+      else setSavedSpots(rows)
+      setListBusy(false)
+    })()
+    return () => {
+      active = false
+    }
+  }, [profileTab, likedSpots, savedSpots])
+
   // REVS RACE counters drive the race-* badges. Fetched once per
   // mount; absent until the call returns (badges just stay locked).
   const [raceStats, setRaceStats] = useState<{
@@ -616,6 +679,38 @@ export default function Profile() {
 
             {profileTab === 'badges' && (
               <BadgeShowcase badges={badgeCatalogue} unlocks={unlocks} />
+            )}
+
+            {profileTab === 'likes' && (
+              <>
+                <SectionHead
+                  title={t('profilepage.likes.title', { count: likedSpots?.length ?? 0 })}
+                />
+                <SpotMiniGrid
+                  spots={likedSpots}
+                  loading={listBusy}
+                  emptyTitle={t('profilepage.likes.emptyTitle')}
+                  emptyBody={t('profilepage.likes.emptyBody')}
+                  ctaLabel={t('profilepage.likes.cta')}
+                  onCta={() => navigate('/feed')}
+                />
+              </>
+            )}
+
+            {profileTab === 'favorites' && (
+              <>
+                <SectionHead
+                  title={t('profilepage.favorites.title', { count: savedSpots?.length ?? 0 })}
+                />
+                <SpotMiniGrid
+                  spots={savedSpots}
+                  loading={listBusy}
+                  emptyTitle={t('profilepage.favorites.emptyTitle')}
+                  emptyBody={t('profilepage.favorites.emptyBody')}
+                  ctaLabel={t('profilepage.favorites.cta')}
+                  onCta={() => navigate('/feed')}
+                />
+              </>
             )}
 
             {/* Récompenses — locked "coming soon" until Phase 2

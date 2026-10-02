@@ -475,7 +475,9 @@
       "garage": "Garage",
       "rewards": "Récompenses",
       "aria": "Sections du profil",
-      "badges": "Badges"
+      "badges": "Badges",
+      "likes": "Likes",
+      "favorites": "Favoris"
     },
     "collectionLock": {
       "title": "Bientôt disponible",
@@ -576,6 +578,20 @@
       "activeCount_other": "{{count}} filleuls actifs",
       "signedCount_one": "{{count}} inscrit",
       "signedCount_other": "{{count}} inscrits"
+    },
+    "likes": {
+      "emptyTitle": "Pas encore de likes",
+      "emptyBody": "Les voitures que tu aimes dans le fil se retrouvent ici.",
+      "cta": "Découvrir les spots",
+      "title_one": "{{count}} like",
+      "title_other": "{{count}} likes"
+    },
+    "favorites": {
+      "emptyTitle": "Pas encore de favoris",
+      "emptyBody": "Mets une voiture de côté depuis le fil pour la retrouver ici. Ta liste reste privée.",
+      "cta": "Découvrir les spots",
+      "title_one": "{{count}} favori",
+      "title_other": "{{count}} favoris"
     }
   },
   "discoverpage": {

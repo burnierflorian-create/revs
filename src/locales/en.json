@@ -475,7 +475,9 @@
       "garage": "Garage",
       "rewards": "Rewards",
       "aria": "Profile sections",
-      "badges": "Badges"
+      "badges": "Badges",
+      "likes": "Likes",
+      "favorites": "Saved"
     },
     "collectionLock": {
       "title": "Coming soon",
@@ -576,6 +578,20 @@
       "activeCount_other": "{{count}} active referrals",
       "signedCount_one": "{{count}} signed up",
       "signedCount_other": "{{count}} signed up"
+    },
+    "likes": {
+      "emptyTitle": "No likes yet",
+      "emptyBody": "Cars you like in the feed show up here.",
+      "cta": "Discover spots",
+      "title_one": "{{count}} like",
+      "title_other": "{{count}} likes"
+    },
+    "favorites": {
+      "emptyTitle": "Nothing saved yet",
+      "emptyBody": "Save a car from the feed to find it here. Your list stays private.",
+      "cta": "Discover spots",
+      "title_one": "{{count}} saved",
+      "title_other": "{{count}} saved"
     }
   },
   "discoverpage": {

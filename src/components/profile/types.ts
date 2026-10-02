@@ -18,11 +18,19 @@ export type ProfileStat = {
   empty?: boolean
 }
 
-export type ProfileTabKey = 'garage' | 'collection' | 'badges' | 'rewards'
+export type ProfileTabKey =
+  | 'garage'
+  | 'collection'
+  | 'badges'
+  | 'rewards'
+  | 'likes'
+  | 'favorites'
 
 export const PROFILE_TABS: ProfileTabKey[] = [
   'garage',
   'collection',
   'badges',
   'rewards',
+  'likes',
+  'favorites',
 ]
