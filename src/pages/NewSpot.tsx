@@ -840,6 +840,10 @@ const [plateGuard, setPlateGuard] = useState<'pending' | 'ok' | 'failed'>('ok')
           ident_locked:
             brand.trim() !== (result.brand ?? '').trim() ||
             model.trim() !== (result.model ?? '').trim(),
+          // Sceau de la contre-vérification d'identify-car. Sans cette ligne
+          // il ne survivait pas à la publication, et le Garage refusait de
+          // générer même sur une identité que la chaîne avait confirmée.
+          ai_verified: result.verified === true,
         })
         .select('*')
         .single()

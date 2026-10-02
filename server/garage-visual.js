@@ -90,7 +90,11 @@ export function canRender(vehicle) {
     return { ok: false, reason: 'modèle non identifié — le Garage ne devine pas' }
   }
   if (vehicle?.ident_locked === true) return { ok: true }
-  if (vehicle?.verified === true) return { ok: true }
+  // `ai_verified` est la colonne (migration 0102) ; `verified` est la forme
+  // en mémoire que renvoie identify-car juste après l'analyse. On accepte les
+  // deux : la première pour un spot relu depuis la base, la seconde pour un
+  // résultat encore en vol.
+  if (vehicle?.ai_verified === true || vehicle?.verified === true) return { ok: true }
   return {
     ok: false,
     reason:

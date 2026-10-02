@@ -160,6 +160,24 @@ export type IdentifyResult = {
   description?: string
   rarity?: Rarity | null
   production?: number | null
+  /**
+   * Sceau de la contre-vérification d'identify-car.
+   *
+   * `true`  — une seconde lecture a soutenu la marque et le modèle.
+   * `false` — elle les a contestés ; le modèle a été retiré, seule la marque
+   *           subsiste, et la confiance est plafonnée.
+   * absent  — la vérification n'a pas tourné : ce véhicule n'appartient pas à
+   *           une famille sujette à confusion, ou l'appel n'a pas abouti.
+   *
+   * C'est l'un des deux sceaux qu'exige `canRender()` avant de produire un
+   * rendu Garage — l'autre étant une saisie humaine. Persisté dans
+   * `spots.ai_verified` (migration 0102) : sans cela il ne survivait pas à la
+   * publication, et le Garage refusait de générer sur une identité pourtant
+   * confirmée.
+   */
+  verified?: boolean
+  /** Ce qu'a vu la seconde lecture quand elle conteste. Diagnostic seul. */
+  verify_note?: string
 }
 
 export type PhotoMeta = {

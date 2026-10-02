@@ -126,7 +126,7 @@ export default async function handler(req: Request): Promise<Response> {
   const r = await sb(
     SUPABASE_URL,
     SERVICE_ROLE,
-    `spots?id=eq.${encodeURIComponent(spotId)}&select=id,user_id,brand,model,color,photo_url,garage_render_url,ident_locked`,
+    `spots?id=eq.${encodeURIComponent(spotId)}&select=id,user_id,brand,model,color,photo_url,garage_render_url,ident_locked,ai_verified`,
   )
   const rows = (await r.json()) as Array<Record<string, unknown>>
   const spot = rows?.[0]
