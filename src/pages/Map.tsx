@@ -56,6 +56,30 @@ import { xpLevel } from '../lib/xp'
 import { appConfig } from '../config/appConfig'
 
 const PARIS: [number, number] = [2.3522, 48.8566]
+// ── POURQUOI UNE VALIDATION DES COORDONNÉES (02/10/2026) ──
+//
+// Rien ne vérifiait `lat`/`lng` avant de construire un marqueur. Les données
+// actuelles sont saines — 35 spots, colonnes NOT NULL en double precision,
+// aucune valeur hors bornes — mais c'est une propriété de la base d'aujourd'hui,
+// pas une garantie du code.
+//
+// Si une coordonnée devenait un jour nulle, une chaîne ou NaN — changement de
+// type de colonne, ligne écrite par un script, charge Realtime inattendue —
+// Mapbox projetterait NaN et poserait le marqueur dans le COIN HAUT-GAUCHE du
+// conteneur. C'est le symptôme signalé, et cette garde l'empêche quelle qu'en
+// soit l'origine.
+//
+// Le choix est délibérément d'OMETTRE le marqueur plutôt que de le replier sur
+// une position par défaut : un spot absent se remarque et se corrige, un spot
+// affiché au mauvais endroit ment.
+function validLngLat(lng: unknown, lat: unknown): [number, number] | null {
+  const x = typeof lng === 'number' ? lng : Number(lng)
+  const y = typeof lat === 'number' ? lat : Number(lat)
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return null
+  if (x < -180 || x > 180 || y < -90 || y > 90) return null
+  return [x, y]
+}
+
 const DEFAULT_ZOOM = 13
 const USER_ZOOM = 15
 const RECENTER_ZOOM = 17
@@ -1240,9 +1264,23 @@ export default function MapPage() {
           if (distanceMeters(me.lat, me.lng, sp.lat, sp.lng) > distLimitM)
             continue
         }
+        // Dernier filet avant Mapbox : une position invalide est OMISE, jamais
+        // repliée sur un point par défaut. Voir validLngLat() en tête de
+        // fichier pour le raisonnement.
+        const pos = validLngLat(sp.lng, sp.lat)
+        if (!pos) {
+          if (import.meta.env.DEV) {
+            console.warn(
+              `[map] spot ${sp.id} ignoré — position invalide :`,
+              sp.lat,
+              sp.lng,
+            )
+          }
+          continue
+        }
         feats.push({
           type: 'Feature',
-          geometry: { type: 'Point', coordinates: [sp.lng, sp.lat] },
+          geometry: { type: 'Point', coordinates: pos },
           properties: {
             id: sp.id,
             brand: sp.brand ?? '',
@@ -1303,6 +1341,10 @@ export default function MapPage() {
       for (const sp of allSpots.values()) {
         if (!isAlive(sp)) continue
         if (now - new Date(sp.created_at).getTime() > HOT_WINDOW_MS) continue
+        // Une coordonnée invalide contaminerait le centroïde du groupe : la
+        // moyenne glissante deviendrait NaN et le halo entier partirait dans
+        // le coin. On écarte le spot plutôt que le groupe.
+        if (!validLngLat(sp.lng, sp.lat)) continue
         recent.push(sp)
       }
       // 2. Greedy clustering — for each spot, attach to the first
@@ -1697,6 +1739,20 @@ export default function MapPage() {
         (payload) => {
           const sp = payload.new as Spot
           if (!sp?.id) return
+          // On refuse à L'ENTRÉE plutôt que de filtrer à chaque rendu : une
+          // ligne invalide ne doit pas séjourner dans le jeu de données, où
+          // elle serait réévaluée à chaque rafraîchissement et à chaque calcul
+          // de zone chaude.
+          if (!validLngLat(sp.lng, sp.lat)) {
+            if (import.meta.env.DEV) {
+              console.warn('[map] INSERT ignoré — position invalide :', sp.id, sp.lat, sp.lng)
+            }
+            return
+          }
+          // `Map.set` est idempotent sur la clé : un spot déjà présent est
+          // remplacé, jamais dupliqué. C'est ce qui rend inoffensif le fait que
+          // le créateur reçoive SON spot par deux chemins — le pont interne
+          // feedSync et cet événement Realtime.
           allSpots.set(sp.id, sp)
           // Flag it so its marker drops in (vs. just appearing) on the
           // next marker sync. Only realtime inserts get the animation.
@@ -1711,6 +1767,12 @@ export default function MapPage() {
         (payload) => {
           const sp = payload.new as Spot
           if (!sp?.id) return
+          if (!validLngLat(sp.lng, sp.lat)) {
+            if (import.meta.env.DEV) {
+              console.warn('[map] UPDATE ignoré — position invalide :', sp.id, sp.lat, sp.lng)
+            }
+            return
+          }
           allSpots.set(sp.id, sp)
           refreshSource()
           refreshMarker(sp.id)
@@ -1733,7 +1795,32 @@ export default function MapPage() {
           recomputeHotZones()
         },
       )
-      .subscribe()
+      // ── RATTRAPAGE À LA (RE)CONNEXION ──
+      //
+      // `.subscribe()` était appelé sans callback : une coupure du canal
+      // passait totalement inaperçue. Or sur mobile le websocket tombe dès que
+      // l'application passe en arrière-plan, à l'extinction de l'écran ou au
+      // moindre changement de réseau — et rien ne resynchronisait au retour.
+      // L'utilisateur gardait alors une carte figée, sans aucun signe, jusqu'à
+      // ce qu'il déplace la carte ou recharge.
+      //
+      // À chaque fois que le canal s'établit — première connexion comme
+      // reprise après coupure — on relit la zone visible. C'est un rattrapage
+      // ponctuel, déclenché par un événement, et non un sondage périodique :
+      // Realtime reste la source principale.
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') void fetchSpotsInBounds(map.getBounds())
+      })
+
+    // Même raisonnement pour le retour au premier plan : certains navigateurs
+    // gèlent les websockets d'un onglet masqué sans jamais signaler d'erreur,
+    // donc sans repasser par 'SUBSCRIBED'.
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        void fetchSpotsInBounds(map.getBounds())
+      }
+    }
+    document.addEventListener('visibilitychange', onVisible)
 
     // ── Balayage des spots expirés ──
     // `expires_at` est filtré à la construction de la source, mais celle-ci
@@ -1764,6 +1851,12 @@ export default function MapPage() {
     // realtime echo arrives too it's a harmless overwrite.
     const offNewSpot = onNewSpot((sp) => {
       if (!sp?.id) return
+      if (!validLngLat(sp.lng, sp.lat)) {
+        if (import.meta.env.DEV) {
+          console.warn('[map] spot local ignoré — position invalide :', sp.id, sp.lat, sp.lng)
+        }
+        return
+      }
       allSpots.set(sp.id, sp)
       newSpotIds.add(sp.id)
       refreshSource()
@@ -1776,6 +1869,10 @@ export default function MapPage() {
       window.clearInterval(hotZonesInterval)
       clearHotZones()
       offNewSpot()
+      // Sans ce retrait, chaque remontage de la carte empilerait un écouteur
+      // de plus sur `document` — et autant de requêtes à chaque retour au
+      // premier plan.
+      document.removeEventListener('visibilitychange', onVisible)
       supabase.removeChannel(channel)
       for (const k in onScreenRef.current) onScreenRef.current[k].remove()
       onScreenRef.current = {}
