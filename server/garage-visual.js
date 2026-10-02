@@ -24,6 +24,24 @@
 // production. Il fixe le contrat pour que le jour où un moteur passe la
 // validation, seul `providers.<nom>.generate` soit à écrire.
 
+// La préservation de la BICOLORE a été ajoutée après coup : la Rolls-Royce
+// brun sur crème ressortait monochrome champagne, l'éclairage ambiant teinté
+// ayant aplati la séparation des deux teintes. Le prompt parlait de couleur et
+// de finition, jamais de carrosserie bicolore.
+//
+// v4 (02/10/2026) — LE GARAGE DE CHAQUE VOITURE, d'après une référence
+// artistique fournie (carte Ferrari SF90 rouge). Elle dit l'inverse de la v3 :
+//   · 3/4 AVANT, nez vers la droite, caméra basse — pas 3/4 arrière ;
+//   · la voiture occupe ~85 % de la largeur — elle était bien trop petite ;
+//   · un vrai décor architectural avec des bandeaux lumineux VERTICAUX —
+//     que la v3 avait nommément interdits ;
+//   · un environnement coloré par la voiture — la v3 les faisait toutes grises.
+// La v3 avait unifié le showroom EN LE VIDANT. La référence unifie par le
+// langage visuel, pas par l'uniformité : chaque voiture a son garage, et tous
+// appartiennent à la même famille. L'ambiance dérive de la COULEUR de la
+// carrosserie, jamais de la marque — sans quoi une Ferrari noire aurait un
+// garage rouge et une Alpine rouge un garage bleu.
+//
 // v3 (02/10/2026) — décor unifié. Mesuré sur un banc de 7 véhicules, le
 // prompt v2 produisait des rendus individuellement bons mais visuellement
 // DISPARATES : dégradé nu pour l'un, tubes lumineux verticaux pour l'autre,
@@ -37,7 +55,7 @@
 //
 // La version entre dans la clé de cache, donc la changer invalide les rendus
 // faits avec l'ancien prompt. C'est voulu.
-export const GARAGE_VISUAL_VERSION = 3
+export const GARAGE_VISUAL_VERSION = 4
 
 /**
  * Le prompt. Partagé par tous les fournisseurs : si deux moteurs reçoivent
@@ -112,6 +130,9 @@ export function buildPrompt(vehicle) {
   const clean = String(model || '').replace(new RegExp(`^${String(brand || '').trim()}\\s+`, 'i'), '')
   const name = [brand, clean].filter(Boolean).join(' ').trim()
   const known = name.length > 0 && !/inconnu|unknown/i.test(name)
+  // L'ambiance du décor dérive de la COULEUR de la voiture, jamais de sa
+  // marque — voir SHOWROOM_PALETTES.
+  const palette = showroomPalette(color)
   const trusted = Number(confidence ?? 0) >= 85
 
   // ── POURQUOI « INDICE » ET NON « CONSIGNE » ──
@@ -162,6 +183,7 @@ The attached photo is a REFERENCE FOR IDENTIFYING THE CAR ONLY. Do not edit it, 
 SUBJECT
 ${identity}
 Keep the real paint colour AND ITS FINISH exactly as photographed — satin, matt, brushed, metallic, pearlescent or gloss are different finishes and must not be swapped. A satin or matt car must not come out glossy.
+If the car wears TWO-TONE or multi-colour paint — a different colour on the roof, the upper body, a bonnet stripe or a lower panel — reproduce BOTH colours and the line that separates them. Keep that division clearly visible even under coloured ambient light.
 Keep any body kit, spoiler, wrap or wheel option genuinely on this car.
 
 LIVERIES AND DECALS — SHAPES YES, LETTERING NEVER
@@ -173,16 +195,27 @@ The reference photo was taken in the street, often from inside another vehicle. 
 people, arms, hands, faces, reflections of people; the door mirror, window frame, A-pillar, dashboard or bodywork of the car the photo was taken FROM; other vehicles; buildings, shopfronts, signage, lettering; poles, traffic signs, road markings, kerbs, pavements, street furniture; trees, sky, any outdoor background; any object in front of or overlapping the car.
 Only the identified car survives into the new image.
 
-COMPOSITION
-Three-quarter view, REAR toward the LEFT of the frame and FRONT toward the RIGHT. Camera at headlight height — low, car-level, never a drone or steep top-down angle. 50-85mm equivalent, no wide-angle distortion. Complete vehicle inside the frame, all four wheels visible, nothing cropped, comfortable margin on every side. The car fills most of the frame.
-If this orientation cannot be produced without distorting the car, prefer a faithful car at a slightly different angle over a correct angle on a wrong car.
+COMPOSITION — FRONT three-quarter, and the car is BIG
+Camera at the car's FRONT-LEFT corner, low, roughly at headlight height. Never above the roofline, never a drone view.
+The NOSE points toward the RIGHT of the frame and slightly toward the viewer; the body recedes toward the LEFT and into depth. The front end, both headlights, the complete left flank and the front wheel are all clearly visible.
+This is a FRONT three-quarter. A rear three-quarter, a dead-side profile and a straight-on front view are all WRONG for this set.
+THE CAR MUST FILL THE FRAME. This is the single most important compositional rule.
+Frame TIGHT: the car spans from near the left edge to near the right edge, leaving only a thin margin — about one wheel's width — on each side. Its body occupies the majority of the image height too.
+Think of a magazine cover shot, not a wide room photographed from across the hall. If you can see large empty floor on both sides of the car, the framing is WRONG and must be tightened.
+A car sitting small in the middle of a vast room is a FAILED render, however beautiful the room.
+Nothing is cropped all the same — all four wheels and the complete silhouette stay inside the frame, just close to its edges.
+50-85mm equivalent, no wide-angle distortion. The car sits flat on the floor with a believable contact shadow; it never floats.
+If this exact orientation cannot be produced without distorting the car, prefer a FAITHFUL car at a slightly different angle over a correct angle on a wrong car.
 
-ENVIRONMENT — the REVS showroom, IDENTICAL FOR EVERY CAR
-This set never changes from one vehicle to the next. Build exactly this, nothing else:
-- An infinite seamless dark backdrop. Mid-graphite behind the car, falling off evenly to near-black at every edge. No horizon line, no corner, no junction between floor and wall.
-- A polished dark floor with one soft, believable reflection directly under the car, fading out within about one car length.
-- Nothing else in the scene. NO ceiling, NO doorway, NO opening, NO corridor, NO pillars, NO walls, NO window, NO visible light fixtures, NO light tubes or strips as objects in frame, NO architecture of any kind, NO furniture, NO props, NO haze volumes, NO floor markings.
-The light sources illuminate the car from outside the frame and are never themselves visible.
+ENVIRONMENT — this car's OWN private showroom
+A dark architectural room, not an empty seamless backdrop: a back wall with depth, a visible floor-to-wall relationship, and a sense of enclosure. The impression to produce is "this car is displayed in its own private showroom", never "a car was placed in front of a background".
+Built from exactly these elements, nothing more:
+- A back wall carrying several SLIM VERTICAL LIGHT STRIPS, evenly spaced, glowing in ${palette.accent}. They are the architecture of the room and they may be visible in frame — they are what gives the set its identity.
+- A dark, highly polished floor acting almost as a mirror: the car and the light strips reflect into it clearly, fading out within about one car length.
+- Deep shadow in the corners so the room reads as large and the car reads as lit.
+Overall mood: ${palette.mood}.
+The whole room is keyed to the car's own colour — ambient light, wall glow, reflections and speculars all carry ${palette.accent}. The car must still read as its true colour; the room is tinted, the paint is not repainted.
+NO people, NO furniture, NO props, NO plants, NO signage, NO vehicles other than the subject, NO doorway or corridor leading elsewhere, NO visible lamps or fixtures other than the wall strips, NO science-fiction or video-game styling, NO garish saturated colour. It must stay credible as a high-end automotive showroom.
 
 LIGHTING
 Premium automotive studio lighting: long soft strip highlights along the shoulder line and roof, gentle rim light separating the car from the background, clean speculars on wheels and lamps, soft contact shadow so the car sits on the floor instead of floating.
@@ -218,16 +251,58 @@ Output: one photorealistic image, nothing else.`
  * Grain retenu : marque + modèle + famille de couleur. Pas l'année —
  * deux millésimes d'une même génération donnent le même visuel.
  */
+// L'ordre compte : la première expression qui matche gagne. Les teintes
+// composées (« bleu nuit », « gris anthracite ») doivent donc être testées
+// avant leur famille générique quand elles divergent.
 const COLOUR_FAMILIES = [
   [/blanc|white|bianco|pearl|carrara|polaire/i, 'white'],
   [/noir|black|nero|obsidien|jet/i, 'black'],
-  [/gris|grey|gray|grigio|argent|silver|taupe|graphite/i, 'grey'],
-  [/rouge|red|rosso|guards/i, 'red'],
-  [/bleu|blue|blu|miami|ara/i, 'blue'],
-  [/vert|green|verde|brooklyn/i, 'green'],
+  // `taupe` est rangé en bronze et NON en gris : c'est un gris brun, et les
+  // voitures ainsi décrites — la Rolls-Royce Silver Cloud du parc — sont
+  // visuellement brunes. Le classer en gris lui donnerait un garage froid là
+  // où elle appelle un registre champagne.
+  [/bronze|marron|brown|beige|champagne|sable|cuivre|copper|taupe|or\b|gold/i, 'bronze'],
+  [/gris|grey|gray|grigio|argent|silver|graphite/i, 'grey'],
+  [/rouge|red|rosso|guards|corsa/i, 'red'],
+  [/bleu|blue|blu|miami|ara|azur/i, 'blue'],
+  [/vert|green|verde|brooklyn|racing/i, 'green'],
   [/jaune|yellow|giallo/i, 'yellow'],
-  [/orange|papaya|volcano/i, 'orange'],
+  [/orange|papaya|volcano|arancio/i, 'orange'],
+  [/violet|purple|viola|mauve|lilas/i, 'purple'],
+  [/rose|pink|magenta/i, 'pink'],
 ]
+
+// ═══════ L'AMBIANCE DU SHOWROOM VIENT DE LA VOITURE ═══════
+//
+// ── POURQUOI PAS DE LA MARQUE ──
+// Associer le rouge à Ferrari et le vert à Aston reviendrait à donner le même
+// garage à toutes les Ferrari, y compris aux noires — et à refuser le rouge à
+// une Alpine rouge. La teinte de la carrosserie est la seule information qui
+// décrit RÉELLEMENT la voiture qu'on a sous les yeux.
+//
+// ── CE QUE DÉCRIT CHAQUE ENTRÉE ──
+// `accent` : la couleur des bandeaux lumineux et des reflets du décor.
+// `mood`   : le registre, qui oriente l'architecture et le contraste.
+// Les deux restent sombres et crédibles : on éclaire un showroom, on ne fait
+// pas une boîte de nuit.
+const SHOWROOM_PALETTES = {
+  red: { accent: 'deep crimson and warm red', mood: 'performance, exotic, exclusive' },
+  blue: { accent: 'electric blue and deep indigo', mood: 'sporting, modern, precise' },
+  green: { accent: 'deep racing green and emerald', mood: 'heritage sport, understated' },
+  yellow: { accent: 'warm amber and golden yellow', mood: 'vivid, playful, high-energy' },
+  orange: { accent: 'burnt orange and amber', mood: 'bold, modern competition' },
+  purple: { accent: 'deep violet and plum', mood: 'rare, extravagant, collector' },
+  pink: { accent: 'deep magenta with a cool violet edge', mood: 'bold, contemporary' },
+  white: { accent: 'cool white and pale silver', mood: 'technological, minimal, clean' },
+  black: { accent: 'cold white and graphite with faint steel blue', mood: 'luxury, elegant, restrained' },
+  grey: { accent: 'graphite, brushed silver and cold white', mood: 'precise, industrial, premium' },
+  bronze: { accent: 'champagne, bronze and warm amber', mood: 'heritage, collection, refined' },
+  other: { accent: 'neutral cold white and soft silver', mood: 'premium, understated' },
+}
+
+export function showroomPalette(raw) {
+  return SHOWROOM_PALETTES[colourFamily(raw)] ?? SHOWROOM_PALETTES.other
+}
 
 export function colourFamily(raw) {
   const s = String(raw ?? '').toLowerCase()
