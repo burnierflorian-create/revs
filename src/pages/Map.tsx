@@ -131,7 +131,23 @@ function lastKnownCenter(): [number, number] | null {
   return null
 }
 const SPOT_TTL_MS = 60 * 60 * 1000
+/** Cadence de sondage quand Realtime fonctionne : il porte alors les
+ *  nouveautés en moins d'une seconde, le sondage n'est qu'un filet. */
 const POLL_MS = 60 * 1000
+/** Cadence quand Realtime n'est PAS abonné.
+ *
+ *  Mesuré le 02/10 contre la production : un spot publié par un autre
+ *  utilisateur mettait 56 s à apparaître, c'est-à-dire exactement le cycle de
+ *  sondage — le canal Realtime y est refusé par Supabase
+ *  (« HTTP Authentication failed » sur l'ouverture du websocket), alors que
+ *  la même connexion réussit depuis Node et depuis un WebSocket brut ouvert
+ *  dans la même page. La cause est côté service et n'est pas reproductible
+ *  depuis le client.
+ *
+ *  Tant qu'elle n'est pas élucidée, le filet doit être assez serré pour que
+ *  l'attente reste supportable. 12 s, et uniquement dans ce cas : quand le
+ *  canal fonctionne, on ne paie pas ces requêtes. */
+const POLL_MS_DEGRADED = 12 * 1000
 
 const CAR_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><path d="M9 17h6"/><circle cx="17" cy="17" r="2"/></svg>`
 
@@ -1770,7 +1786,7 @@ export default function MapPage() {
       // always scoped to the current viewport.
       pollId = setInterval(() => {
         void fetchSpotsInBounds(map.getBounds())
-      }, POLL_MS)
+      }, POLL_MS_DEGRADED)
     })
 
     const channel = supabase
@@ -1851,7 +1867,16 @@ export default function MapPage() {
       // ponctuel, déclenché par un événement, et non un sondage périodique :
       // Realtime reste la source principale.
       .subscribe((status) => {
-        if (status === 'SUBSCRIBED') void fetchSpotsInBounds(map.getBounds())
+        // Le sondage s'ajuste à l'état RÉEL du canal, au lieu de supposer
+        // qu'il marche. On démarre en cadence dégradée — c'est la supposition
+        // prudente — et on ralentit seulement une fois l'abonnement confirmé.
+        const degraded = status !== 'SUBSCRIBED'
+        if (pollId) clearInterval(pollId)
+        pollId = setInterval(
+          () => void fetchSpotsInBounds(map.getBounds()),
+          degraded ? POLL_MS_DEGRADED : POLL_MS,
+        )
+        if (!degraded) void fetchSpotsInBounds(map.getBounds())
       })
 
     // Même raisonnement pour le retour au premier plan : certains navigateurs
