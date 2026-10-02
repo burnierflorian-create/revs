@@ -394,7 +394,9 @@
     "addComment": "Add a comment",
     "addCommentPlaceholder": "Add a comment…",
     "seeOnMap": "See on the map",
-    "allCategories": "All"
+    "allCategories": "All",
+    "bookmark": "Save",
+    "unbookmark": "Remove from saved"
   },
   "mappage": {
     "spotFallbackTitle": "Spot",

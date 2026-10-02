@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom'
 // `Map` est aliasé : importé tel quel, il masque le Map natif que ce
 // fichier utilise pour indexer les profils, et le build casse sans rapport
 // apparent avec l'icône.
-import { Car, Heart, Layers, Loader2, Map as MapIcon, MapPin, MessageCircle, Search as SearchIcon, SlidersHorizontal, X, Zap } from 'lucide-react'
+import { Bookmark, Car, Heart, Layers, Loader2, Map as MapIcon, MapPin, MessageCircle, Search as SearchIcon, SlidersHorizontal, X, Zap } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { hapticSelection } from '../lib/haptic'
 import { hasGeoPermission } from '../lib/geo'
@@ -780,6 +780,8 @@ const FeedCard = memo(function FeedCard({
       if (raf) cancelAnimationFrame(raf)
     }
   }, [])
+  const [bookmarked, setBookmarked] = useState(false)
+  const bmBusyRef = useRef(false)
   const [liked, setLiked] = useState(false)
   const [likeCount, setLikeCount] = useState(0)
   const [commentCount, setCommentCount] = useState(0)
@@ -838,7 +840,7 @@ const FeedCard = memo(function FeedCard({
             )
           })
       }
-      const [likeC, likedRes, comC] = await Promise.all([
+      const [likeC, likedRes, comC, bmRes] = await Promise.all([
         supabase
           .from('spot_likes')
           .select('*', { count: 'exact', head: true })
@@ -855,11 +857,23 @@ const FeedCard = memo(function FeedCard({
           .from('comments')
           .select('*', { count: 'exact', head: true })
           .eq('spot_id', spot.id),
+        // Les favoris sont privés : RLS ne renverra que les SIENS, donc une
+        // ligne trouvée signifie « je l'ai mis de côté ». Aucune information
+        // sur les favoris des autres ne transite.
+        user
+          ? supabase
+              .from('spot_bookmarks')
+              .select('spot_id')
+              .eq('spot_id', spot.id)
+              .eq('user_id', user.id)
+              .maybeSingle()
+          : Promise.resolve({ data: null }),
       ])
       if (!active) return
       setLikeCount(likeC.count ?? 0)
       setLiked(!!likedRes.data)
       setCommentCount(comC.count ?? 0)
+      setBookmarked(!!bmRes.data)
     })()
     return () => {
       active = false
@@ -898,6 +912,33 @@ const FeedCard = memo(function FeedCard({
       })
     }
     busyRef.current = false
+  }
+
+  /** Mettre de côté, ou retirer.
+   *
+   *  Optimiste puis corrigé en cas d'échec, comme le like : l'icône doit
+   *  répondre au doigt, pas au réseau. La contrainte d'unicité en base rend
+   *  un double ajout impossible — on s'appuie dessus plutôt que de vérifier
+   *  avant d'écrire, une vérification préalable laissant toujours une course
+   *  ouverte entre deux appuis rapprochés. */
+  async function toggleBookmark() {
+    const uid = meRef.current
+    if (!uid || bmBusyRef.current) return
+    bmBusyRef.current = true
+    const next = !bookmarked
+    setBookmarked(next)
+    hapticTap()
+    const { error } = next
+      ? await supabase.from('spot_bookmarks').insert({ spot_id: spot.id, user_id: uid })
+      : await supabase
+          .from('spot_bookmarks')
+          .delete()
+          .eq('spot_id', spot.id)
+          .eq('user_id', uid)
+    // 23505 = la ligne existait déjà : l'état visé est atteint, ce n'est pas
+    // un échec.
+    if (error && error.code !== '23505') setBookmarked(!next)
+    bmBusyRef.current = false
   }
 
   // Single tap → open the spot detail (after a 300 ms wait to rule out a
@@ -1146,6 +1187,19 @@ const FeedCard = memo(function FeedCard({
           >
             <MessageCircle strokeWidth={1.2} className="h-6 w-6 text-white" />
             <span className="text-sm font-medium text-white">{commentCount}</span>
+          </button>
+          {/* Favori — distinct du like : le like applaudit, le favori range.
+              Les deux coexistent donc, comme sur la référence. */}
+          <button
+            onClick={toggleBookmark}
+            aria-label={bookmarked ? t('feedpage.unbookmark') : t('feedpage.bookmark')}
+            aria-pressed={bookmarked}
+            className="tappable flex items-center"
+          >
+            <Bookmark
+              strokeWidth={1.2}
+              className={`h-6 w-6 transition-colors ${bookmarked ? 'fill-accent text-accent' : 'text-white'}`}
+            />
           </button>
           <span className="ml-auto flex items-center gap-1 text-white/50">
             <Zap strokeWidth={1.2} className="h-[18px] w-[18px] text-accent" />
