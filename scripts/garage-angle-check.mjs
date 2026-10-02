@@ -14,6 +14,7 @@ const QUESTION = `You are inspecting a studio photograph of a single car. Answer
 {"view":"front-three-quarter"|"rear-three-quarter"|"side-profile"|"front-straight"|"rear-straight"|"other",
  "nose_points":"left"|"right"|"toward-camera"|"away",
  "body_colour":"<one word>",
+ "car_box":{"x0":<0-1>,"y0":<0-1>,"x1":<0-1>,"y1":<0-1>},
  "front_visible":true|false,
  "both_headlights_visible":true|false,
  "width_pct":<integer 0-100>,
@@ -26,6 +27,7 @@ Definitions you must apply strictly:
 - "rear-three-quarter": you see the REAR of the car AND one of its flanks. Tail lamps face the camera; the headlights are hidden or barely visible at the far end.
 - "width_pct": how much of the image WIDTH the car's bodywork spans, from its leftmost to its rightmost point.
 - "cropped": true if any wheel, mirror, roof or body panel is cut by the image edge.
+- "car_box": the tight bounding box of the CAR ONLY — bodywork, wheels and mirrors included, reflections on the floor and shadows EXCLUDED. Coordinates are fractions of the image: x0 is the leftmost point of the car divided by the image width, y0 the topmost divided by the image height, x1 the rightmost, y1 the bottom of the tyres. Be precise: this box is used to re-crop the image.
 - "body_colour": the dominant colour of the car's PAINT, as one single lowercase English word from this list exactly: white, black, grey, silver, red, blue, green, yellow, orange, purple, pink, brown, bronze, beige. Judge the paint only — not the lighting, not the floor, not the reflections.
 Answer with the JSON object alone, no prose, no code fence.`
 

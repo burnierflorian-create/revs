@@ -28,12 +28,15 @@
 
 import { readFileSync } from 'node:fs'
 import { createClient } from '@supabase/supabase-js'
+import sharp from 'sharp'
 import {
+  GARAGE_ASPECT_RATIO,
   GARAGE_VISUAL_VERSION,
   buildPrompt,
   cacheKey,
   canRender,
 } from '../server/garage-visual.js'
+import { STANDARD, cropToStandard } from './garage-standard.mjs'
 import { checkAngle, conformity } from './garage-angle-check.mjs'
 
 const args = process.argv.slice(2)
@@ -76,6 +79,33 @@ let failed = 0
 let angleOk = 0
 let angleFixed = 0
 let angleKept = 0
+let normalised = 0
+
+/**
+ * Amène un rendu au standard d'échelle SANS repayer une génération.
+ *
+ * Quand le véhicule occupe moins que la bande visée, on resserre la fenêtre
+ * DANS l'image existante — aucun pixel n'est fabriqué, la voiture ne change
+ * pas, l'angle ne change pas. Une régénération, elle, coûte 0,067 $ et rend
+ * une image différente : c'est une loterie là où il ne manquait qu'un cadrage.
+ *
+ * Renvoie l'image inchangée si elle est déjà conforme, ou si le recadrage
+ * couperait le véhicule (cas d'un rendu paysage : aucune fenêtre portrait
+ * n'y contient une voiture plus large qu'elle).
+ */
+async function normaliseScale(bytes, verdict) {
+  const w = verdict?.width_pct
+  if (typeof w !== 'number' || w >= STANDARD.minWidthPct) return { bytes, changed: false }
+  const meta = await sharp(bytes).metadata()
+  const win = cropToStandard({ width: meta.width, height: meta.height, box: verdict.car_box })
+  if (!win) return { bytes, changed: false }
+  const out = await sharp(bytes)
+    .extract({ left: win.left, top: win.top, width: win.width, height: win.height })
+    .resize(STANDARD.width, STANDARD.height, { fit: 'fill' })
+    .png()
+    .toBuffer()
+  return { bytes: out, changed: true, from: w, to: win.reachedPct }
+}
 
 async function generate(spot, { reinforceAngle = false } = {}) {
   const photoRes = await fetch(spot.photo_url)
@@ -100,7 +130,13 @@ async function generate(spot, { reinforceAngle = false } = {}) {
             ],
           },
         ],
-        generationConfig: { responseModalities: ['IMAGE'] },
+        // Même contrainte de format que la publication — voir le commentaire
+        // dans server/garage-visual.js. Les deux chemins doivent produire des
+        // images interchangeables.
+        generationConfig: {
+          responseModalities: ['IMAGE'],
+          imageConfig: { aspectRatio: GARAGE_ASPECT_RATIO },
+        },
       }),
     },
   )
@@ -230,6 +266,18 @@ for (const key of keys) {
       // Une seule reprise, et renforcée : insister trois fois coûte 0,20 $ par
       // véhicule pour un gain qui n'a pas été mesuré.
       let verdict = await checkAngle({ apiKey: GEMINI, bytes })
+      // ── NORMALISATION D'ÉCHELLE, AVANT LE VERDICT ──
+      // Un cadrage trop large se corrige par un recadrage ; inutile de
+      // compter le rendu comme non conforme et d'en repayer un autre.
+      if (verdict.ok) {
+        const n = await normaliseScale(bytes, verdict.verdict)
+        if (n.changed) {
+          bytes = n.bytes
+          normalised += 1
+          console.log(`  ⤡ ${label.padEnd(34)} recadré ${n.from} % → ${n.to} % (sans génération)`)
+          verdict = await checkAngle({ apiKey: GEMINI, bytes })
+        }
+      }
       if (verdict.ok) {
         const c = conformity(verdict.verdict)
         if (c.ok) {
@@ -298,5 +346,6 @@ console.log(`échecs               : ${failed}`)
 console.log(`angle conforme du 1er coup : ${angleOk}`)
 console.log(`angle corrigé à la reprise : ${angleFixed}`)
 console.log(`angle encore non conforme  : ${angleKept}`)
+console.log(`recadrés sans génération   : ${normalised}`)
 console.log(`coût réel            : ${spent.toFixed(3)} $`)
 console.log(`\nAucune photo_url n'a été touchée.`)

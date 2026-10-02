@@ -418,6 +418,13 @@ export function verdictFrom(metrics) {
  * permet au pipeline de choisir sans que l'appelant connaisse les détails,
  * et au rapport de ne jamais prétendre qu'un moteur fonctionne.
  */
+/** Le format de sortie imposé à TOUS les rendus — voir scripts/garage-standard.mjs.
+ *  Il vit ici parce que c'est le fournisseur qui l'applique, et il est repris
+ *  tel quel par le script de backfill : deux formats différents entre la
+ *  publication et le backfill redonneraient exactement l'incohérence qu'on
+ *  cherche à supprimer. */
+export const GARAGE_ASPECT_RATIO = '3:4'
+
 export const providers = {
   gemini: {
     id: 'gemini',
@@ -463,7 +470,19 @@ export const providers = {
                 ],
               },
             ],
-            generationConfig: { responseModalities: ['IMAGE'] },
+            // ── LE FORMAT EST IMPOSÉ, PAS ESPÉRÉ ──
+            // Sans `imageConfig`, le modèle choisit lui-même : mesuré sur les
+            // 21 rendus de production, il a produit du 896×1195 (3:4) seize
+            // fois, mais aussi du 1408×768 (paysage 1,83) six fois et du
+            // 768×1363 une fois. Le cadre du Garage étant portrait, un rendu
+            // paysage n'y occupe que 40 % de la hauteur : la voiture paraît
+            // minuscule — c'est précisément ce que montrait la Rolls-Royce
+            // Ghost à côté d'une Model Y, alors que les deux rendus étaient
+            // bons. Le défaut n'était pas la voiture, c'était le format.
+            generationConfig: {
+              responseModalities: ['IMAGE'],
+              imageConfig: { aspectRatio: GARAGE_ASPECT_RATIO },
+            },
           }),
         },
       )
