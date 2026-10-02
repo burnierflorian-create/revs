@@ -1667,5 +1667,14 @@
     },
     "empty": "Aucun Grand Prix dans cette catégorie.",
     "season": "Saison {{year}}"
+  },
+  "members": {
+    "title": "Membres REVS",
+    "online": "en ligne",
+    "offline": "hors ligne",
+    "nobody": "Personne en ligne pour le moment.",
+    "anonymous": "Spotter",
+    "total": "{{count}} membres REVS au total",
+    "open": "Voir les membres en ligne"
   }
 }

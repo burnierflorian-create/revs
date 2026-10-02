@@ -51,6 +51,7 @@ import { fetchLiveEvents, type LiveEvent } from '../lib/liveEvents'
 import { checkLevelUp } from '../components/LevelUpOverlay'
 import { triggerStreakBreak } from '../components/StreakBreak'
 import { RevsMark } from '../components/Logo'
+import MembersSheet from '../components/MembersSheet'
 import HomeLeaderboard from '../components/HomeLeaderboard'
 
 // Traitement unique des cartes de l'accueil : un verre sombre neutre, une
@@ -484,6 +485,7 @@ function HeaderButton({
 }
 
 function HomeHeader({ online }: { online: number }) {
+  const [membersOpen, setMembersOpen] = useState(false)
   const navigate = useNavigate()
   const { t } = useTranslation()
 
@@ -511,15 +513,23 @@ function HomeHeader({ online }: { online: number }) {
       <RevsMark height={17} title="REVS" />
 
       {/* Groupe « en ligne » : nowrap + min-w-0 pour qu'il se tronque plutôt
-          que de passer à la ligne sur un écran de 320 px. */}
-      <span className="flex min-w-0 items-center gap-1.5 whitespace-nowrap text-[11px] font-semibold text-white/75">
+          que de passer à la ligne sur un écran de 320 px.
+          Il est devenu CLIQUABLE : le nombre seul ne pouvait être ni vérifié
+          ni exploré — on lit « 4 en ligne » sans jamais savoir qui. Le panneau
+          montre la liste que ce nombre compte, et il la tire des mêmes
+          fonctions, donc les deux ne peuvent pas diverger. */}
+      <button
+        onClick={() => setMembersOpen(true)}
+        aria-label={t('members.open')}
+        className="tappable flex min-w-0 items-center gap-1.5 whitespace-nowrap text-[11px] font-semibold text-white/75"
+      >
         <span className="relative flex h-1.5 w-1.5 flex-none" aria-hidden>
           <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-70" />
           <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
         </span>
         <span className="tabular-nums">{online}</span>
         <span className="truncate text-white/45">{t('home.onlineShort')}</span>
-      </span>
+      </button>
 
       <div className="ml-auto flex flex-none items-center gap-2">
         {/* ── LA CLOCHE REVIENT (30/09/2026) ──
@@ -554,6 +564,7 @@ function HomeHeader({ online }: { online: number }) {
           <SettingsIcon className="h-[18px] w-[18px]" strokeWidth={1.9} />
         </HeaderButton>
       </div>
+      <MembersSheet open={membersOpen} onClose={() => setMembersOpen(false)} />
     </header>
   )
 }

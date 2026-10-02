@@ -579,3 +579,21 @@ h4 {
     opacity: 0;
   }
 }
+
+
+/* ── Feuille remontante (panneau Membres) ──
+   Les feuilles de REVS arrivaient jusqu'ici sans transition : elles
+   apparaissaient d'un coup, ce qui se lit comme un saut de page plutôt que
+   comme un panneau qu'on ouvre. 220 ms suffisent à dire « ceci se referme ».
+   Respecte prefers-reduced-motion : qui a désactivé les animations ne doit
+   pas en recevoir une de plus. */
+@keyframes sheetRise {
+  from { transform: translateY(14%); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+.sheet-rise {
+  animation: sheetRise 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .sheet-rise { animation: none; }
+}

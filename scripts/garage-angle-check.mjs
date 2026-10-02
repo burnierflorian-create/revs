@@ -76,11 +76,14 @@ const COLOUR_NEIGHBOURS = {
   black: ['black'],
   grey: ['grey', 'silver', 'white'],
   bronze: ['bronze', 'brown', 'beige', 'gold', 'silver', 'grey'],
-  red: ['red'],
+  // Rouge et orange se touchent sur une carrosserie : « rouge Volcano » et
+  // « orange McLaren » décrivent la même peinture selon qui la nomme. Les
+  // séparer faisait crier au loup sur un rendu fidèle à sa photo.
+  red: ['red', 'orange'],
   blue: ['blue'],
   green: ['green'],
   yellow: ['yellow'],
-  orange: ['orange'],
+  orange: ['orange', 'red'],
   purple: ['purple'],
   pink: ['pink'],
   other: null,

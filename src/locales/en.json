@@ -1667,5 +1667,14 @@
     },
     "empty": "No Grand Prix in this category.",
     "season": "{{year}} season"
+  },
+  "members": {
+    "title": "REVS members",
+    "online": "online",
+    "offline": "offline",
+    "nobody": "Nobody online right now.",
+    "anonymous": "Spotter",
+    "total": "{{count}} REVS members in total",
+    "open": "See members online"
   }
 }
