@@ -1106,7 +1106,10 @@
     "resultsEmpty": "Aucun résultat pour le moment.",
     "winner": "Vainqueur",
     "teamsAndDrivers": "Écuries & Pilotes",
-    "points": "{{pts}} pts"
+    "points": "{{pts}} pts",
+    "seasonTeams": "Écuries {{year}}",
+    "driverStandings": "Classement pilotes {{year}}",
+    "latestResults": "Derniers résultats"
   },
   "f1people": {
     "driverNotFound": "Pilote introuvable.",
@@ -1656,6 +1659,7 @@
       "live": "En cours",
       "done": "Terminés"
     },
-    "empty": "Aucun Grand Prix dans cette catégorie."
+    "empty": "Aucun Grand Prix dans cette catégorie.",
+    "season": "Saison {{year}}"
   }
 }

@@ -17,6 +17,10 @@ import {
 
 type Tab = 'teams' | 'drivers' | 'results'
 
+/** Saison courante, dérivée de l'horloge et non écrite en dur : le titre
+ *  « Écuries 2026 » devra dire 2027 le 1er janvier sans qu'on y repense. */
+const SEASON = new Date().getFullYear()
+
 type ResultRow = {
   round: number
   race_name: string
@@ -220,9 +224,10 @@ function TeamsGrid({
   points: Record<string, string>
   positions: Record<string, number>
 }) {
+  const { t } = useTranslation()
   return (
     <>
-      <SectionTitle>{`Écuries ${new Date().getFullYear()}`}</SectionTitle>
+      <SectionTitle>{t('f1gp.seasonTeams', { year: SEASON })}</SectionTitle>
       <div className="grid grid-cols-3 gap-2.5">
         {teams.map((t) => (
           <TeamCard key={t.slug} team={t} pts={points[t.slug]} pos={positions[t.slug]} />
@@ -319,6 +324,7 @@ function DriversGrid({
   teamName: Record<string, string>
   standings: Record<string, { pts: number; pos: number }>
 }) {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const ordered = [...drivers].sort(
     (a, b) => (standings[a.slug]?.pos ?? 99) - (standings[b.slug]?.pos ?? 99),
@@ -329,9 +335,7 @@ function DriversGrid({
   const leader = Math.max(1, ...ordered.map((d) => standings[d.slug]?.pts ?? 0))
   return (
     <>
-      <SectionTitle>
-        {`Classement pilotes ${new Date().getFullYear()}`}
-      </SectionTitle>
+      <SectionTitle>{t('f1gp.driverStandings', { year: SEASON })}</SectionTitle>
       <div className="flex flex-col gap-2">
         {ordered.map((d, i) => (
           <DriverRow
@@ -457,7 +461,7 @@ function ResultsList({
   }
   return (
     <>
-      <SectionTitle>Derniers résultats</SectionTitle>
+      <SectionTitle>{t('f1gp.latestResults')}</SectionTitle>
       <div className="flex flex-col gap-2">
         {results.map((r) => {
           const color = (r.winner_team_slug && teamColor[r.winner_team_slug]) || '#888888'

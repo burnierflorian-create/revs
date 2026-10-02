@@ -119,7 +119,9 @@ export default function F1Calendar() {
         })}
       </div>
 
-      <SectionTitle>{`Saison ${GP_2026[0]?.date.slice(0, 4) ?? ''}`}</SectionTitle>
+      <SectionTitle>
+        {t('f1cal.season', { year: GP_2026[0]?.date.slice(0, 4) ?? '' })}
+      </SectionTitle>
 
       {shown.length === 0 && (
         <p
