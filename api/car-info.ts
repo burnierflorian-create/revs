@@ -74,153 +74,26 @@ function normalize(raw: unknown): CarInfo {
   }
   return out
 }
-
-// ─────────────────────── Garage image branch ───────────────────────
-// Async-by-design: NewSpot fires this after the row is committed. The
-// worker queries Claude+web_search for a press/brand photo URL, HEAD-
-// validates it, and persists the result. Failure path writes '' so we
-// never retry the same spot.
-
-  apiSecret: string | null,
-  params: { make: string; model?: string; year?: number | null },
-): Promise<string | null> {
-  const qs = new URLSearchParams()
-  qs.set('api_key', apiKey)
-  if (apiSecret) qs.set('api_secret', apiSecret)
-  qs.set('make', params.make)
-  if (params.model) qs.set('model', params.model)
-  if (params.year) qs.set('year', String(params.year))
-  qs.set('format', 'png')
-  qs.set('width', '600')
-  try {
-    const r = await fetch(`https://carimagesapi.com/api/v1/signed-url?${qs}`, {
-      headers: { Accept: 'application/json' },
-    })
-    if (!r.ok) return null
-    const data = (await r.json()) as { url?: string }
-    return typeof data?.url === 'string' && data.url.startsWith('http')
-      ? data.url
-      : null
-  } catch {
-    return null
-  }
-}
-
-  model: string,
-  year: number | null,
-): Promise<string | null> {
-  if (!process.env.ANTHROPIC_API_KEY) return null
-  const yearPart = year ? ` ${year}` : ''
-  try {
-    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-    const r = await anthropic.messages.create({
-      model: MODEL,
-      max_tokens: 200,
-      system: [
-        {
-          type: 'text',
-          text: "Tu reçois le modèle d'une voiture. Utilise web_search pour trouver UNE photo presse officielle (constructeur, presse auto reconnue, banque d'images du fabricant). Réponds UNIQUEMENT par l'URL HTTPS de l'image (extension .jpg, .jpeg, .png ou .webp). Aucun autre texte, aucun markdown.",
-        },
-      ],
-      messages: [{ role: 'user', content: `${brand} ${model}${yearPart}` }],
-      tools: [
-        { type: 'web_search_20250305', name: 'web_search', max_uses: 3 },
-      ] as unknown as Anthropic.Messages.ToolUnion[],
-    })
-    const textBlocks = r.content.filter(
-      (b): b is Anthropic.Messages.TextBlock => b.type === 'text',
-    )
-    const last = textBlocks[textBlocks.length - 1]?.text ?? ''
-    const m = last.match(/https?:\/\/[^\s)"'<>]+\.(?:jpg|jpeg|png|webp)/i)
-    if (!m) return null
-    // HEAD-validate so we never store a 404/redirect/HTML disguised as an image.
-    try {
-      const head = await fetch(m[0], { method: 'HEAD' })
-      const ct = head.headers.get('content-type') ?? ''
-      if (head.ok && ct.toLowerCase().startsWith('image/')) return m[0]
-    } catch {
-      /* fall through to null */
-    }
-    return null
-  } catch {
-    return null
-  }
-}
-
-  res: VercelResponse,
-  // Loose generics — overload of createClient infers a different shape
-  // at call time than ReturnType does at function-type time.
-  admin: SupabaseClient<any, any, any>,
-) {
-  // CARIMAGES_API_KEY is now OPTIONAL — when missing we skip straight
-  // to the Claude press-photo fallback. Avoids hard-blocking the
-  // garage feature on a third-party signup.
-  const apiKey = process.env.CARIMAGES_API_KEY ?? null
-  const apiSecret = process.env.CARIMAGES_API_SECRET ?? null
-
-  const body =
-    typeof req.body === 'string' ? JSON.parse(req.body) : req.body || {}
-  const spotId = (body as { spot_id?: string }).spot_id
-  if (!spotId) {
-    res.status(400).json({ error: 'Spot manquant.' })
-    return
-  }
-
-  const { data: spot } = await admin
-    .from('spots')
-    .select('id, brand, model, year, garage_image_url')
-    .eq('id', spotId)
-    .maybeSingle()
-  if (!spot) {
-    res.status(404).json({ error: 'Spot introuvable.' })
-    return
-  }
-  // Already attempted (either success or marked-failed via empty string).
-  if ((spot as { garage_image_url: string | null }).garage_image_url !== null) {
-    res
-      .status(200)
-      .json({ url: (spot as { garage_image_url: string }).garage_image_url, cached: true })
-    return
-  }
-
-  const brand = (spot as { brand: string }).brand?.trim() ?? ''
-  const model = (spot as { model: string }).model?.trim() ?? ''
-  const year = (spot as { year: number | null }).year
-
-  let chosenUrl = ''
-
-  // Step 1 — CarImages (only when the key is configured). Fallback
-  // ladder: brand+model+year → brand+model → brand alone.
-  if (apiKey) {
-    const tries: { make: string; model?: string; year?: number | null }[] = [
-      { make: brand, model, year },
-      { make: brand, model },
-      { make: brand },
-    ]
-    for (const t of tries) {
-      if (!t.make) continue
-      const url = await carImagesSignedUrl(apiKey, apiSecret, t)
-      if (url) {
-        chosenUrl = url
-        break
-      }
-    }
-  }
-
-  // Step 2 — Claude + web_search fallback for press / manufacturer
-  // photos. Always tried when CarImages couldn't match (regardless of
-  // whether the API key was configured), so the garage stays full even
-  // for obscure cars or when carimagesapi.com signs up.
-  if (!chosenUrl && brand) {
-    const url = await claudePressPhoto(brand, model, year)
-    if (url) chosenUrl = url
-  }
-
-  // Persist either the URL or '' to record "tried; no image" (so we
-  // don't retry on subsequent triggers for the same spot).
-  await admin.from('spots').update({ garage_image_url: chosenUrl }).eq('id', spotId)
-  res.status(200).json({ url: chosenUrl || null })
-}
+// ─────────────────────── Garage image branch — RETIRÉE ───────────────────────
+//
+// Les images de garage ne viennent plus d'Internet : le Garage part de la
+// photo du spot (voir server/garage-visual.js). L'action `garage-image` répond
+// donc 410 Gone, et les trois fonctions qui la servaient — `carImagesSignedUrl`,
+// `claudePressPhoto` et son gestionnaire — étaient devenues inatteignables.
+//
+// Elles avaient été à moitié supprimées : les DÉCLARATIONS étaient parties, les
+// CORPS étaient restés. Le module ne se chargeait plus, et /api/car-info
+// répondait 500 FUNCTION_INVOCATION_FAILED en 0,3 s sur toutes ses actions —
+// y compris sans jeton et sur une action inconnue, preuve que le crash était au
+// chargement et non à l'exécution.
+//
+// Personne ne l'avait vu parce que `api/` n'est type-vérifié par RIEN : le
+// tsconfig racine ne couvre que `src/`, et `npm run build` ne regarde pas ce
+// dossier. Conséquence côté utilisateur : le verso des cartes restait sans
+// caractéristiques et la cote marché ne se calculait plus.
+//
+// Le code est supprimé plutôt que réparé — il ne servait plus. L'historique
+// git le conserve, et la colonne `garage_image_url` reste en base.
 
 // ─────────────────────── Spotting prediction ───────────────────────
 // Generates the daily "Meilleur moment pour spotter" message. Cached

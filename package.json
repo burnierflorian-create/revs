@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "node scripts/build-tutorial.mjs && tsc -b && vite build",
+    "build": "node scripts/check-api-syntax.mjs && node scripts/build-tutorial.mjs && tsc -b && vite build",
     "tutorial": "node scripts/build-tutorial.mjs",
     "lint": "eslint .",
     "preview": "vite preview",
