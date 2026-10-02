@@ -88,9 +88,16 @@ export default async function handler(req: Request): Promise<Response> {
   const SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE_KEY
   const GEMINI = process.env.GEMINI_API_KEY
   if (!SUPABASE_URL || !SERVICE_ROLE) return json({ error: 'service_unavailable' }, 500)
-  // Pas de clé Gemini = pas de rendu. Ce n'est PAS une erreur produit : le
-  // Garage fonctionne sans, sur la photo du spot.
-  if (!GEMINI) return json({ skipped: 'no_image_provider' })
+
+  // ⚠️ LE CONTRÔLE DU FOURNISSEUR D'IMAGES EST PLUS BAS, DÉLIBÉRÉMENT.
+  // Il était ici au départ, avant l'authentification. Conséquence mesurée en
+  // production : l'endpoint répondait 200 « no_image_provider » à un appel
+  // SANS JETON, sur le spot d'autrui, sur un spot inexistant — les cinq
+  // contrôles de robustesse rendaient le même résultat, et aucun ne prouvait
+  // donc quoi que ce soit. Rien ne fuitait, mais un garde qu'on ne peut pas
+  // observer est un garde qu'on ne peut pas vérifier.
+  // L'identité et la propriété se contrôlent d'abord ; l'absence de clé n'est
+  // constatée qu'une fois qu'on sait que l'appel était légitime.
 
   // ── IDENTITÉ DE L'APPELANT ──
   // Jamais le corps de la requête : sans cela n'importe qui pourrait faire
@@ -133,6 +140,11 @@ export default async function handler(req: Request): Promise<Response> {
   // l'audit du 01/10.
   const gate = canRender(spot)
   if (!gate.ok) return json({ skipped: 'identity_not_validated', reason: gate.reason })
+
+  // Pas de clé Gemini = pas de rendu. Ce n'est PAS une erreur produit : le
+  // Garage fonctionne sans, sur la photo du spot. On ne le constate qu'ici,
+  // une fois l'appel reconnu légitime (voir la note plus haut).
+  if (!GEMINI) return json({ skipped: 'no_image_provider' })
 
   const key = `${cacheKey(spot)}|v${GARAGE_VISUAL_VERSION}`
 
