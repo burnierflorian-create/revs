@@ -59,7 +59,53 @@ const PARIS: [number, number] = [2.3522, 48.8566]
 const DEFAULT_ZOOM = 13
 const USER_ZOOM = 15
 const RECENTER_ZOOM = 17
-const GEO_TIMEOUT_MS = 3000
+// 8 s au lieu de 3 : le délai ne fait plus attendre personne, puisque la carte
+// s'ouvre d'abord sur la dernière position connue. Il ne sert plus qu'à décider
+// quand renoncer à un point qui ne viendra pas.
+const GEO_TIMEOUT_MS = 8000
+// Une position d'il y a une minute centre une carte aussi bien qu'une position
+// de l'instant, et elle est déjà disponible — c'est elle qui supprime l'attente.
+const GEO_MAX_AGE_MS = 60_000
+
+// ── DERNIÈRE POSITION CONNUE ──
+// Mémorisée sur l'appareil pour que la carte s'ouvre là où l'utilisateur était,
+// au lieu d'un flash de Paris pendant l'acquisition du point.
+//
+// ARRONDIE À 3 DÉCIMALES (~100 m), délibérément : cela suffit largement à
+// cadrer une carte, et on ne conserve pas une position précise dans un stockage
+// persistant. C'est la même logique de confidentialité que l'arrondi appliqué
+// aux coordonnées des spots en base.
+const LAST_POS_KEY = 'revs_last_center'
+
+function rememberCenter(lng: number, lat: number) {
+  try {
+    const r = (v: number) => Math.round(v * 1000) / 1000
+    localStorage.setItem(LAST_POS_KEY, JSON.stringify([r(lng), r(lat)]))
+  } catch {
+    /* stockage indisponible : on s'en passe, ce n'est qu'un confort */
+  }
+}
+
+function lastKnownCenter(): [number, number] | null {
+  try {
+    const raw = localStorage.getItem(LAST_POS_KEY)
+    if (!raw) return null
+    const v = JSON.parse(raw) as unknown
+    if (
+      Array.isArray(v) &&
+      v.length === 2 &&
+      typeof v[0] === 'number' &&
+      typeof v[1] === 'number' &&
+      Math.abs(v[0]) <= 180 &&
+      Math.abs(v[1]) <= 90
+    ) {
+      return [v[0], v[1]]
+    }
+  } catch {
+    /* valeur illisible : on ouvre sur le repli */
+  }
+  return null
+}
 const SPOT_TTL_MS = 60 * 60 * 1000
 const POLL_MS = 60 * 1000
 
@@ -909,6 +955,10 @@ export default function MapPage() {
         const lng = pos.coords.longitude
         const lat = pos.coords.latitude
         posRef.current = { lat, lng }
+        // Garde la dernière position connue à jour : c'est elle qui permettra
+        // à la prochaine ouverture de carte de s'afficher au bon endroit sans
+        // attendre l'acquisition d'un point.
+        rememberCenter(lng, lat)
         try {
           localStorage.setItem('revs_geo', '1')
         } catch {
@@ -1034,39 +1084,80 @@ export default function MapPage() {
       // centres by tapping the locate-me FAB (user-initiated).
       const granted = await hasGeoPermission()
       if (!granted || !navigator.geolocation) {
-        return { center: PARIS, zoom: DEFAULT_ZOOM }
+        return { center: lastKnownCenter() ?? PARIS, zoom: lastKnownCenter() ? USER_ZOOM : DEFAULT_ZOOM }
       }
+
+      // ── POURQUOI LA CARTE OUVRAIT SUR PARIS MALGRÉ LA PERMISSION ──
+      //
+      // L'intention était bonne — résoudre le GPS AVANT de construire la carte
+      // — mais les options la condamnaient : `enableHighAccuracy: true` avec
+      // `maximumAge: 0` et 3 s de délai. Un premier point haute précision sur
+      // mobile demande couramment 5 à 15 s, et interdire toute position en
+      // cache oblige à repartir de zéro à CHAQUE ouverture. Le repli Paris
+      // était donc le cas NORMAL, pas l'exception.
+      //
+      // Trois corrections, toutes dans le même sens :
+      //   · on accepte un point vieux d'une minute — pour centrer une carte,
+      //     une position d'il y a 60 s est exacte ;
+      //   · on n'exige plus la haute précision ici. Au zoom 15 une position
+      //     réseau à ~100 m est indiscernable d'un point GPS, et elle arrive
+      //     en une fraction du temps. Le marqueur vivant, lui, garde la haute
+      //     précision (voir le watchPosition plus bas) ;
+      //   · le délai passe à 8 s, mais il ne fait plus attendre personne : la
+      //     carte s'ouvre immédiatement sur la dernière position connue et se
+      //     recentre quand le point arrive.
+      const cached = lastKnownCenter()
       return new Promise((resolve) => {
         let settled = false
         const fallback = setTimeout(() => {
           if (settled) return
           settled = true
-          resolve({ center: PARIS, zoom: DEFAULT_ZOOM })
+          resolve(
+            cached
+              ? { center: cached, zoom: USER_ZOOM }
+              : { center: PARIS, zoom: DEFAULT_ZOOM },
+          )
         }, GEO_TIMEOUT_MS)
         navigator.geolocation.getCurrentPosition(
           (pos) => {
-            if (settled) return
-            settled = true
-            clearTimeout(fallback)
             const p = { lat: pos.coords.latitude, lng: pos.coords.longitude }
             posRef.current = p
+            rememberCenter(p.lng, p.lat)
             try {
               localStorage.setItem('revs_geo', '1')
             } catch {
               /* ignore */
             }
-            resolve({
-              center: [pos.coords.longitude, pos.coords.latitude],
-              zoom: USER_ZOOM,
-            })
+            if (settled) {
+              // Le point est arrivé après l'ouverture : on recentre en
+              // douceur plutôt que de laisser l'utilisateur sur une position
+              // périmée.
+              mapRef.current?.flyTo({
+                center: [p.lng, p.lat],
+                zoom: USER_ZOOM,
+                duration: 900,
+              })
+              return
+            }
+            settled = true
+            clearTimeout(fallback)
+            resolve({ center: [p.lng, p.lat], zoom: USER_ZOOM })
           },
           () => {
             if (settled) return
             settled = true
             clearTimeout(fallback)
-            resolve({ center: PARIS, zoom: DEFAULT_ZOOM })
+            resolve(
+              cached
+                ? { center: cached, zoom: USER_ZOOM }
+                : { center: PARIS, zoom: DEFAULT_ZOOM },
+            )
           },
-          { enableHighAccuracy: true, timeout: GEO_TIMEOUT_MS, maximumAge: 0 },
+          {
+            enableHighAccuracy: false,
+            timeout: GEO_TIMEOUT_MS,
+            maximumAge: GEO_MAX_AGE_MS,
+          },
         )
       })
     }
