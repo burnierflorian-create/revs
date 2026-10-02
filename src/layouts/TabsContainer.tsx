@@ -36,11 +36,27 @@ const SPRING = 'cubic-bezier(0.34, 1.56, 0.64, 1)'
 // one-shot transform via the Web Animations API (so children are never
 // remounted): a horizontal spring slide for most tabs, a subtle zoom for
 // the Carte. Honours prefers-reduced-motion.
+// ── POURQUOI UN SIGNAL D'ACTIVATION (02/10/2026) ──
+//
+// Garder les onglets montés rend le retour instantané, mais a un revers
+// mesuré : un écran chargé UNE fois au montage ne revoit jamais ses données.
+// Le Profil en a souffert — l'utilisateur désignait sa voiture dans les
+// Paramètres, la base était bien mise à jour, et le Profil continuait
+// d'afficher l'ancienne tant qu'on ne rechargeait pas l'application. Reproduit
+// au navigateur : trois choix successifs, trois fois la même voiture affichée.
+//
+// `revs:tab-active` est émis quand un onglet redevient visible. Les écrans qui
+// portent des données modifiables ailleurs peuvent s'y abonner et relire ce
+// qu'il faut — sans que la pile d'onglets ait à connaître leurs besoins.
+export const TAB_ACTIVE_EVENT = 'revs:tab-active'
+
 function TabPane({
+  tabKey,
   active,
   anim,
   children,
 }: {
+  tabKey: TabKey
   active: boolean
   anim: PaneAnim
   children: React.ReactNode
@@ -51,6 +67,11 @@ function TabPane({
   useEffect(() => {
     const becameActive = active && !wasActive.current
     wasActive.current = active
+    if (becameActive) {
+      window.dispatchEvent(
+        new CustomEvent(TAB_ACTIVE_EVENT, { detail: { tab: tabKey } }),
+      )
+    }
     if (!becameActive || !ref.current || !anim) return
     if (prefersReducedMotion()) return
     const el = ref.current
@@ -66,7 +87,7 @@ function TabPane({
         { duration: 320, easing: SPRING },
       )
     }
-  }, [active, anim])
+  }, [active, anim, tabKey])
 
   return (
     <div
@@ -131,31 +152,31 @@ export default function TabsContainer({ activeTab, discoverInitial }: Props) {
 
   return (
     <>
-      <TabPane active={activeTab === 'home'} anim={animFor('home')}>
+      <TabPane tabKey="home" active={activeTab === 'home'} anim={animFor('home')}>
         {visited.has('home') && <Home />}
       </TabPane>
-      <TabPane active={activeTab === 'feed'} anim={animFor('feed')}>
+      <TabPane tabKey="feed" active={activeTab === 'feed'} anim={animFor('feed')}>
         {visited.has('feed') && (
           <Suspense fallback={<TabFallback />}>
             <Feed />
           </Suspense>
         )}
       </TabPane>
-      <TabPane active={activeTab === 'map'} anim={animFor('map')}>
+      <TabPane tabKey="map" active={activeTab === 'map'} anim={animFor('map')}>
         {visited.has('map') && (
           <Suspense fallback={<SkeletonMap />}>
             <MapPage />
           </Suspense>
         )}
       </TabPane>
-      <TabPane active={activeTab === 'discover'} anim={animFor('discover')}>
+      <TabPane tabKey="discover" active={activeTab === 'discover'} anim={animFor('discover')}>
         {visited.has('discover') && (
           <Suspense fallback={<TabFallback />}>
             <Discover initial={discoverInitial} />
           </Suspense>
         )}
       </TabPane>
-      <TabPane active={activeTab === 'profile'} anim={animFor('profile')}>
+      <TabPane tabKey="profile" active={activeTab === 'profile'} anim={animFor('profile')}>
         {visited.has('profile') && (
           <Suspense fallback={<TabFallback />}>
             <Profile />

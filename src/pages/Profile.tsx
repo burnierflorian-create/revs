@@ -14,6 +14,7 @@ import Showroom from '../components/Showroom'
 import { fetchRaceStats } from '../lib/race'
 import { fetchProgress, type Progress } from '../lib/xp'
 import { useMyTier } from '../lib/tier'
+import { TAB_ACTIVE_EVENT } from '../layouts/TabsContainer'
 import { appConfig } from '../config/appConfig'
 import { Skeleton } from '../components/Skeleton'
 import MyCollection from '../components/MyCollection'
@@ -241,6 +242,63 @@ export default function Profile() {
     return () => {
       active = false
     }
+  }, [])
+
+  // ── RELECTURE QUAND L'ONGLET REDEVIENT VISIBLE (02/10/2026) ──
+  //
+  // L'effet ci-dessus a `[]` en dépendances : il ne lit la base QU'UNE FOIS,
+  // au montage. Or les onglets restent montés (voir TabsContainer), donc le
+  // Profil ne revoyait jamais ses données après son premier affichage.
+  //
+  // Conséquence mesurée au navigateur : l'utilisateur désigne sa voiture dans
+  // les Paramètres, `profiles.primary_spot_id` est bien écrit — vérifié en
+  // base — et le Profil continue d'afficher celle que l'heuristique de rareté
+  // avait choisie au montage. Trois désignations successives, trois fois la
+  // même voiture affichée. Rien n'était « en cache » au sens d'un cache : la
+  // question n'était simplement jamais reposée.
+  //
+  // On ne relit QUE la ligne `profiles`. C'est elle qui porte tout ce que les
+  // Paramètres peuvent modifier — véhicule principal, pseudo, ville, avatar,
+  // voiture de rêve, Instagram. Les spots, le rang et les statistiques ne
+  // changent pas depuis les Paramètres : les recharger à chaque aller-retour
+  // d'onglet coûterait cinq requêtes pour rien.
+  useEffect(() => {
+    function onTabActive(e: Event) {
+      const tab = (e as CustomEvent<{ tab?: string }>).detail?.tab
+      if (tab !== 'profile') return
+      void (async () => {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser()
+        if (!user) return
+        const { data } = await supabase
+          .from('profiles')
+          .select(
+            'pseudo, ville, avatar, title, dream_car, instagram, garage_brand, primary_spot_id',
+          )
+          .eq('user_id', user.id)
+          .maybeSingle()
+        if (!data) return
+        const p = data as {
+          pseudo?: string | null
+          ville?: string | null
+          avatar?: string | null
+          dream_car?: string | null
+          instagram?: string | null
+          garage_brand?: string | null
+          primary_spot_id?: string | null
+        }
+        setPseudo(p.pseudo ?? '')
+        setVille(p.ville ?? '')
+        setAvatar(p.avatar ?? null)
+        setDreamCar(p.dream_car?.trim() || null)
+        setInstagram(p.instagram ?? null)
+        setGarageBrand(p.garage_brand ?? null)
+        setPrimarySpotId(p.primary_spot_id ?? null)
+      })()
+    }
+    window.addEventListener(TAB_ACTIVE_EVENT, onTabActive)
+    return () => window.removeEventListener(TAB_ACTIVE_EVENT, onTabActive)
   }, [])
 
   useEffect(() => {
