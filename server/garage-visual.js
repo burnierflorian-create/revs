@@ -337,15 +337,41 @@ function romanToInt(r) {
   return n || r
 }
 
-export function cacheKey(vehicle) {
-  const slug = (v) =>
-    String(v ?? '')
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/[̀-ͯ]/g, '')
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, '')
-  const model = slug(vehicle.model)
+/**
+ * Les générations écrites EN TOUTES LETTRES.
+ *
+ * `GEN_TOKENS` ne voit qu'un mot à la fois, donc il ramène bien « Mk3 » et
+ * « III » à `g3`, mais pas « première génération » — deux mots. Or le pipeline
+ * d'identification écrit volontiers « Juke Première génération » là où la base
+ * porte « Juke Mk1 » : même voiture, deux clés de cache, deux factures Gemini.
+ * Ces couples sont donc réduits AVANT le découpage en jetons.
+ */
+const GEN_PHRASES = [
+  [/\b(premiere|first)[\s-]+generation\b/g, 'g1'],
+  [/\b(deuxieme|seconde|second)[\s-]+generation\b/g, 'g2'],
+  [/\b(troisieme|third)[\s-]+generation\b/g, 'g3'],
+  [/\b(quatrieme|fourth)[\s-]+generation\b/g, 'g4'],
+  [/\b(cinquieme|fifth)[\s-]+generation\b/g, 'g5'],
+]
+
+/**
+ * La forme canonique d'un modèle — ce qui, dans deux libellés différents,
+ * désigne la même voiture.
+ *
+ * Exportée parce que la clé de cache n'est pas seule à en avoir besoin : le
+ * backfill compare l'identité stockée à celle que renvoie une nouvelle
+ * analyse, et sans cette normalisation il voyait une contradiction entre
+ * « RAV4 IV » et « RAV4 Mk4 ».
+ */
+export function canonicalModel(model) {
+  let s = String(model ?? '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+  for (const [re, to] of GEN_PHRASES) s = s.replace(re, to)
+  return s
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
     .split('-')
     .map((tok) => {
       for (const [re, fn] of GEN_TOKENS) {
@@ -355,7 +381,17 @@ export function cacheKey(vehicle) {
       return tok
     })
     .join('-')
-  return [slug(vehicle.brand), model, colourFamily(vehicle.color)]
+}
+
+export function cacheKey(vehicle) {
+  const slug = (v) =>
+    String(v ?? '')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[̀-ͯ]/g, '')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '')
+  return [slug(vehicle.brand), canonicalModel(vehicle.model), colourFamily(vehicle.color)]
     .filter(Boolean)
     .join('|')
 }

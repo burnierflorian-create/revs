@@ -21,6 +21,10 @@
 //   node scripts/garage-render-run.mjs --dry-run            # ce qui serait fait
 //   node scripts/garage-render-run.mjs --apply --limit 5    # petit lot
 //   node scripts/garage-render-run.mjs --apply --spot <id>  # un seul
+//   node scripts/garage-render-run.mjs --apply --refresh-outdated
+//        ↑ reprend aussi les spots dont le rendu date d'une version
+//          ANTÉRIEURE du style (un _v3.png, ou un ancien détourage). Sans ce
+//          drapeau, seuls les véhicules sans aucun rendu sont traités.
 
 import { readFileSync } from 'node:fs'
 import { createClient } from '@supabase/supabase-js'
@@ -35,6 +39,14 @@ const args = process.argv.slice(2)
 const APPLY = args.includes('--apply')
 const LIMIT = Number(args[args.indexOf('--limit') + 1]) || null
 const ONE = args.includes('--spot') ? args[args.indexOf('--spot') + 1] : null
+const REFRESH = args.includes('--refresh-outdated')
+
+/** Un rendu est à jour si son nom de fichier porte la version courante du
+ *  style. Les détourages d'avant (sans suffixe `_vN`) et les `_v3.png` sont
+ *  donc périmés : ils montrent un autre showroom que celui qui a été validé. */
+function isCurrent(url) {
+  return new RegExp(`_v${GARAGE_VISUAL_VERSION}\\.png$`, 'i').test(String(url ?? ''))
+}
 
 const MODEL = process.env.REVS_GARAGE_MODEL || 'gemini-3.1-flash-image'
 const USD = 0.067
@@ -95,14 +107,29 @@ async function generate(spot) {
   return Buffer.from(part.inlineData.data, 'base64')
 }
 
-let q = db
-  .from('spots')
-  .select('id, user_id, brand, model, color, photo_url, garage_render_url, ident_locked, ai_verified')
-  .is('garage_render_url', null)
-  .order('created_at', { ascending: false })
-if (ONE) q = db.from('spots').select('id, user_id, brand, model, color, photo_url, garage_render_url, ident_locked, ai_verified').like('id', `${ONE}%`)
-const { data: all, error } = await q
+const COLS =
+  'id, user_id, brand, model, color, photo_url, garage_render_url, ident_locked, ai_verified'
+let q = db.from('spots').select(COLS).order('created_at', { ascending: false })
+// `--spot` vise un véhicule nommément : il ne doit pas être écarté en
+// amont parce qu'il porte déjà un rendu (c'est justement le cas qu'on veut
+// pouvoir retester).
+if (!REFRESH && !ONE) q = q.is('garage_render_url', null)
+// `--spot` accepte un préfixe d'identifiant pour rester tapable à la main.
+// Le filtrage se fait côté client : `like` sur une colonne `uuid` est une
+// erreur Postgres (« operator does not exist: uuid ~~ unknown »), pas un
+// filtre vide — elle faisait tomber tout le script.
+const { data: rows, error } = await q
 if (error) throw error
+const picked = ONE ? (rows ?? []).filter((s) => s.id.startsWith(ONE)) : (rows ?? [])
+if (ONE && !picked.length) {
+  console.error(`aucun spot dont l'identifiant commence par « ${ONE} »`)
+  process.exit(2)
+}
+// En mode rafraîchissement, on écarte quand même ceux qui portent DÉJÀ la
+// version courante : les regénérer serait payer deux fois la même image.
+const all = picked.filter(
+  (s) => ONE || !s.garage_render_url || (REFRESH && !isCurrent(s.garage_render_url)),
+)
 
 // Le verrou d'identité D'ABORD : on ne veut même pas compter comme candidat
 // un véhicule qu'on refusera de rendre.
@@ -116,7 +143,7 @@ for (const s of all ?? []) {
 
 console.log(`\n═══ GARAGE VISUAL — ${APPLY ? 'GÉNÉRATION' : 'ESSAI À BLANC'} ═══`)
 console.log(`modèle : ${MODEL} · ${USD} $/image · prompt v${GARAGE_VISUAL_VERSION}\n`)
-console.log(`spots sans rendu            : ${(all ?? []).length}`)
+console.log(`spots à traiter             : ${all.length}${REFRESH ? '  (rendus absents OU périmés)' : '  (rendus absents)'}`)
 console.log(`  identité validée          : ${eligible.length}`)
 console.log(`  identité NON validée      : ${refused.length}  (aucune dépense)`)
 
@@ -179,14 +206,35 @@ for (const key of keys) {
     continue
   } else {
     try {
-      const bytes = await generate(head)
+      // Un seul nouvel essai : les échecs Gemini observés sont des 503
+      // passagers. Au-delà, insister coûte de l'argent sans rien apprendre.
+      let bytes
+      try {
+        bytes = await generate(head)
+      } catch (first) {
+        console.log(`  … ${label.padEnd(34)} ${String(first?.message ?? first).slice(0, 36)} — 2e essai`)
+        await new Promise((r) => setTimeout(r, 4000))
+        bytes = await generate(head)
+      }
       const path = `${key.replace(/\|/g, '_')}.png`
       const { error: upErr } = await db.storage.from(BUCKET).upload(path, bytes, { upsert: true, contentType: 'image/png' })
       if (upErr) throw upErr
       url = db.storage.from(BUCKET).getPublicUrl(path).data.publicUrl
+
+      // ── L'URL NE SUFFIT PAS ──
+      // `getPublicUrl` fabrique une adresse par concaténation : elle est
+      // renvoyée même si rien n'a été déposé. On va donc réellement la
+      // chercher avant de l'écrire dans les spots — sinon un échec de dépôt
+      // silencieux rattacherait 1 à 10 véhicules à une image absente.
+      const head2 = await fetch(url, { method: 'GET', headers: { range: 'bytes=0-2047' } })
+      const type = head2.headers.get('content-type') ?? ''
+      if (!head2.ok || !/^image\//.test(type)) {
+        throw new Error(`image non servie (HTTP ${head2.status}, ${type || 'type inconnu'})`)
+      }
+
       await db.from('garage_renders').update({ status: 'ready', render_url: url }).eq('cache_key', key)
       misses += 1
-      console.log(`  ✓ ${label.padEnd(34)} généré (${(bytes.length / 1024) | 0} Ko)`)
+      console.log(`  ✓ ${label.padEnd(34)} généré ${(bytes.length / 1024) | 0} Ko · servi ✓`)
     } catch (e) {
       // La réservation est libérée : la clé doit rester réessayable.
       await db.from('garage_renders').delete().eq('cache_key', key)
