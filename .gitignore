@@ -55,3 +55,6 @@ ident-audit/
 
 # Inventaire Storage — mesures, pas du code
 storage-audit/
+
+# Brouillons de nouveautés — le contenu publié vit en base
+updates/
