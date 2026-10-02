@@ -215,7 +215,7 @@ export default function MainLayout() {
           .maybeSingle()
         const existing = (prof?.pseudo as string | undefined)?.trim()
         if (existing) return // already has a pseudo → leave it alone
-        await supabase.from('profiles').upsert(
+        const { error: upErr } = await supabase.from('profiles').upsert(
           {
             user_id: user.id,
             pseudo: metaPseudo,
@@ -229,8 +229,19 @@ export default function MainLayout() {
           },
           { onConflict: 'user_id' },
         )
-      } catch {
-        /* best-effort hydration */
+        // ── POURQUOI CETTE ERREUR EST DÉSORMAIS BRUYANTE ──
+        // Elle était avalée par un `catch` « best-effort ». Résultat : le rôle
+        // `authenticated` n'avait pas le droit UPDATE sur `profiles`, donc
+        // CHAQUE upsert échouait en 42501 — et personne ne l'a su. Six comptes
+        // sur dix-sept se sont retrouvés sans profil, invisibles dans Global,
+        // sans la moindre trace nulle part. Le droit est rétabli (migration
+        // 0105) et le profil naît maintenant avec le compte côté serveur, mais
+        // un échec ici doit se voir : c'est le dernier filet.
+        if (upErr) {
+          console.error('[profil] hydratation échouée:', upErr.code, upErr.message)
+        }
+      } catch (e) {
+        console.error('[profil] hydratation interrompue:', e)
       }
     })()
     return () => {
