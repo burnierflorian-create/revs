@@ -310,6 +310,33 @@ export function colourFamily(raw) {
   return 'other'
 }
 
+// ── NORMALISATION DES MARQUEURS DE GÉNÉRATION ──
+// Mesuré sur le parc : `fabia-iii-berline` et `fabia-mk3-monte-carlo`
+// désignent la MÊME génération, écrite de deux façons, et produisaient deux
+// clés — donc deux générations payantes pour une seule voiture canonique.
+// Même chose pour `juke` et `juke-mk1`.
+//
+// On replie les notations équivalentes sur une seule forme. Volontairement
+// limité aux marqueurs de génération : on ne touche pas aux finitions
+// (`monte-carlo`, `berline`), qui désignent parfois de vraies différences
+// visuelles et dont le repliement demanderait un jugement au cas par cas.
+const GEN_TOKENS = [
+  [/^(mk)?([ivx]+)$/i, (m) => `g${romanToInt(m[2])}`],
+  [/^(mk|mark|gen|generation)[-]?(\d+)$/i, (m) => `g${m[2]}`],
+]
+
+function romanToInt(r) {
+  const V = { i: 1, v: 5, x: 10 }
+  const s = r.toLowerCase()
+  let n = 0
+  for (let i = 0; i < s.length; i += 1) {
+    const cur = V[s[i]] ?? 0
+    const next = V[s[i + 1]] ?? 0
+    n += cur < next ? -cur : cur
+  }
+  return n || r
+}
+
 export function cacheKey(vehicle) {
   const slug = (v) =>
     String(v ?? '')
@@ -318,7 +345,17 @@ export function cacheKey(vehicle) {
       .replace(/[̀-ͯ]/g, '')
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-|-$/g, '')
-  return [slug(vehicle.brand), slug(vehicle.model), colourFamily(vehicle.color)]
+  const model = slug(vehicle.model)
+    .split('-')
+    .map((tok) => {
+      for (const [re, fn] of GEN_TOKENS) {
+        const m = tok.match(re)
+        if (m) return fn(m)
+      }
+      return tok
+    })
+    .join('-')
+  return [slug(vehicle.brand), model, colourFamily(vehicle.color)]
     .filter(Boolean)
     .join('|')
 }

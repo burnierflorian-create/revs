@@ -41,6 +41,14 @@ const norm = (s: string) =>
 
 const specsKey = (s: Spot) => `${norm(s.brand)}|${norm(s.model)}|${s.year ?? ''}`
 
+type GarageImage = { url: string; kind: 'scene' | 'cutout' | 'photo' }
+function imageFor(s: Spot): GarageImage {
+  const r = s.garage_render_url
+  if (r) return { url: r, kind: /_v\d+\.png$/i.test(r) ? 'scene' : 'cutout' }
+  return { url: s.photo_url || '', kind: 'photo' }
+}
+
+
 export default function Showroom({
   spots,
   onOpen,
@@ -139,19 +147,39 @@ export default function Showroom({
    * Aucun repli sur une image inventée : si les deux manquent, la carte reste
    * vide plutôt que de montrer la voiture de quelqu'un d'autre.
    */
-  function imageFor(s: Spot): { url: string; isRender: boolean } {
-    if (s.garage_render_url) return { url: s.garage_render_url, isRender: true }
-    return { url: s.photo_url || '', isRender: false }
-  }
-
+  /**
+   * ── DEUX NATURES DE RENDU, QU'IL NE FAUT PAS CONFONDRE ──
+   *
+   * `garage_render_url` porte aujourd'hui deux choses très différentes :
+   *
+   *   · un DÉTOURAGE (migration 0087, scripts/detour-spot-photos.mjs) : un PNG
+   *     à fond transparent, juste la voiture. Il doit être POSÉ sur le sol
+   *     synthétique du Showroom, avec l'ombre de contact que ce composant
+   *     dessine — c'est pour lui que toute la branche `cutout` a été écrite.
+   *
+   *   · une SCÈNE COMPLÈTE (pipeline Gemini, api/garage-render.ts) : une
+   *     photographie de showroom entière, qui a DÉJÀ son sol, son reflet, son
+   *     éclairage et sa profondeur.
+   *
+   * Les faire passer par le même chemin donne une scène miniature encadrée à
+   * l'intérieur d'une autre scène : la voiture se retrouve minuscule, avec une
+   * fausse ombre de contact posée sous une image qui porte déjà la sienne.
+   * C'est ce que montrent les captures du 02/10.
+   *
+   * On les distingue par la forme de l'URL : le pipeline Gemini nomme ses
+   * fichiers `<clé-de-cache>_v<version>.png`, les détourages sont des `.webp`
+   * nommés par identifiant de spot. C'est un marqueur fragile, assumé comme
+   * tel — il évite une colonne de plus pour une distinction qui disparaîtra le
+   * jour où les détourages seront remplacés.
+   */
   // Resolve every car's image ONCE per (cars, renders) change instead of
   // re-running the token matcher for every card on every render / swipe frame.
   const imageById = useMemo(() => {
-    const m = new Map<string, { url: string; isRender: boolean }>()
+    const m = new Map<string, GarageImage>()
     for (const s of cars) m.set(s.id, imageFor(s))
     return m
-    // `imageFor` ne lit plus que le spot lui-même depuis que la bibliothèque
-    // partagée est sortie du chemin : `cars` suffit comme dépendance.
+    // `imageFor` vit au niveau module et ne lit que son argument : il n'est
+    // donc pas une dépendance de rendu, et `cars` suffit.
   }, [cars])
 
   // ── Specs for the info panel (lazy, cached in car_specs server-side) ──
@@ -422,10 +450,13 @@ export default function Showroom({
           const opacity = isCenter ? 1 : Math.max(0.2, 0.6 - abs * 0.2)
           const brightness = isCenter ? 1 : Math.max(0.3, 0.58 - abs * 0.12)
           const blur = isCenter ? 0 : Math.min(2.4, 0.8 + abs * 0.5)
-          const { url: img, isRender } = imageById.get(s.id) ?? {
+          const { url: img, kind } = imageById.get(s.id) ?? {
             url: '',
-            isRender: false,
+            kind: 'photo' as const,
           }
+          // Une scène complète s'affiche telle quelle ; un détourage se pose
+          // sur le sol du Showroom.
+          const isRender = kind === 'cutout'
           // Accent lumineux de la voiture, tiré de sa rareté réelle.
           const look = rarityFrame(s.rarity)
           return (
@@ -595,6 +626,51 @@ export default function Showroom({
                         />
                       )}
                     </div>
+                  </div>
+                ) : kind === 'scene' ? (
+                  /* ── SCÈNE COMPLÈTE : ON NE L'ENCADRE PAS ──
+                     Ce rendu EST déjà un showroom : il porte son sol, son
+                     reflet, sa lumière et sa profondeur. Le poser dans un
+                     cadre sur le sol synthétique reviendrait à photographier
+                     un showroom accroché au mur d'un autre showroom — c'est
+                     ce que montraient les captures du 02/10, voiture devenue
+                     minuscule et fausse ombre de contact sous une image qui
+                     portait déjà la sienne.
+                     Elle occupe donc toute la carte, sans ombre ajoutée,
+                     sans reflet ajouté, sans cadre. */
+                  <div
+                    style={{
+                      position: 'relative',
+                      width: '100%',
+                      aspectRatio: '4 / 3',
+                      overflow: 'hidden',
+                      borderRadius: 14,
+                    }}
+                  >
+                    {img ? (
+                      <img
+                        src={img}
+                        alt=""
+                        draggable={false}
+                        loading="lazy"
+                        decoding="async"
+                        style={{
+                          display: 'block',
+                          width: '100%',
+                          height: '100%',
+                          // `cover` et non `contain` : la scène est cadrée
+                          // large à la génération, on peut donc remplir la
+                          // carte sans rogner la voiture.
+                          objectFit: 'cover',
+                          // Aucun filtre d'étalonnage : contrairement aux
+                          // photos de spots, toutes les scènes sortent du même
+                          // moteur sous la même lumière. Les harmoniser une
+                          // seconde fois ne ferait que les ternir.
+                        }}
+                      />
+                    ) : (
+                      <div style={{ width: '100%', height: '100%', background: '#141418' }} />
+                    )}
                   </div>
                 ) : (
                   /* Photo réelle — pièce encadrée, posée sur le sol du studio.
