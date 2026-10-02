@@ -156,6 +156,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return
   }
 
+  // ─── BÊTA : AUCUN PAIEMENT NE PART D'ICI (02/10/2026) ───
+  //
+  // L'interface verrouille déjà les boutons (appConfig.SUBSCRIPTIONS_ENABLED),
+  // mais un drapeau de bundle ne protège rien : la route /premium/checkout
+  // reste atteignable au clavier, et cet endpoint répond à toute requête POST
+  // correctement formée. Le verrou produit doit donc exister des DEUX côtés,
+  // sans quoi « non achetable » ne veut dire « non achetable » que pour les
+  // gens qui passent par les boutons.
+  //
+  // Stripe reste entièrement câblé — clés, webhook, portail, tiers, quotas,
+  // tout est opérationnel et testé. Seule la CRÉATION d'une session de
+  // paiement est refusée. Rouvrir la vente, c'est passer cette variable à
+  // true côté serveur et le drapeau à true côté client ; rien d'autre.
+  //
+  // Le portail client (`?action=portal`) est délibérément AU-DESSUS de ce
+  // garde : un abonné existant doit pouvoir résilier ou changer de carte même
+  // quand la vente est fermée. Fermer la sortie serait pire que fermer
+  // l'entrée.
+  if (process.env.SUBSCRIPTIONS_ENABLED !== 'true') {
+    res.status(403).json({
+      error: 'subscriptions_disabled',
+      message:
+        "Les abonnements ne sont pas encore ouverts. Ils le seront prochainement.",
+    })
+    return
+  }
+
   // ─── Identité : jeton vérifié, jamais le corps de la requête ───
   // Avant le 26/09/2026, `userId` venait du body sans aucune vérification :
   // n'importe qui pouvait ouvrir une session de paiement au nom d'un autre

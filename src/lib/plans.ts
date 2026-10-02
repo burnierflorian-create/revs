@@ -121,10 +121,15 @@ export const PREMIUM_PERKS = [
   'Badge Premium ⚡',
 ]
 
+// « Support prioritaire » retiré le 02/10/2026. Vérifié dans Settings.tsx :
+// le support est un simple lien mailto, identique pour tous les paliers, sans
+// file d'attente ni priorisation d'aucune sorte. C'était la dernière promesse
+// de l'offre qui n'existait pas dans le code. On ne fabrique pas un faux
+// système de tickets pour justifier une ligne de marketing : on retire la
+// ligne. À remettre le jour où une priorisation réelle existe.
 export const VIP_PERKS = [
   '300 analyses IA par jour',
   'Tout le Premium inclus',
-  'Support prioritaire',
   'Badge VIP exclusif 👑',
 ]
 
@@ -164,11 +169,10 @@ export const VIP_PERKS_DETAILED: DetailedPerk[] = [
     title: 'Tout le Premium inclus',
     body: 'Le badge Premium et tous les avantages du palier, inclus dans le VIP.',
   },
-  {
-    icon: '💬',
-    title: 'Support prioritaire',
-    body: 'Tes messages passent devant : une réponse en priorité sur toute question ou tout souci technique.',
-  },
+  // Le bloc « Support prioritaire » était ici. Retiré le 02/10/2026 pour la
+  // raison expliquée au-dessus de VIP_PERKS : la promesse n'avait aucune
+  // contrepartie dans le code. Elle était la plus engageante des trois —
+  // « tes messages passent devant » — et la seule entièrement fausse.
   {
     icon: '👑',
     title: 'Badge VIP exclusif',

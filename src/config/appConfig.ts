@@ -25,4 +25,20 @@ export const appConfig = {
   SHOW_F1_MOTORSPORT: true,
   SHOW_SPOT_WARS: true,
   SHOW_VIP_PLAN: true,
+
+  // ── ABONNEMENTS : VISIBLES, PAS ACHETABLES (02/10/2026) ──
+  //
+  // Pendant la bêta, aucun paiement ne doit partir de l'application. Les
+  // offres restent AFFICHÉES — elles disent où va le produit — mais leurs
+  // boutons sont verrouillés et aucun checkout ne s'ouvre.
+  //
+  // Un seul drapeau commande tout : les cartes, les boutons et le garde
+  // serveur de `create-checkout-session`. Le repasser à true rouvrira la
+  // vente sans retoucher Stripe, le webhook, les tiers ni les quotas — qui
+  // restent entièrement opérationnels et testés.
+  //
+  // ⚠️ Ce drapeau ne doit JAMAIS être la seule protection : le garde
+  // équivalent côté serveur est dans api/create-checkout-session.ts. Un
+  // drapeau de bundle ne protège rien contre une requête forgée.
+  SUBSCRIPTIONS_ENABLED: false,
 }

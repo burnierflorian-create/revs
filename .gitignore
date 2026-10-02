@@ -52,3 +52,6 @@ preview/
 
 # Sorties d'audit d'identification — mesures, pas du code
 ident-audit/
+
+# Inventaire Storage — mesures, pas du code
+storage-audit/

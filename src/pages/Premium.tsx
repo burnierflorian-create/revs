@@ -20,6 +20,9 @@ import { appConfig } from '../config/appConfig'
  *  so re-enabling is a one-line flip in appConfig. Existing VIP subscribers
  *  keep their perks regardless; this only hides the new-signup entry point. */
 const SHOW_VIP_TIER = appConfig.SHOW_VIP_PLAN
+// Bêta : les offres s'affichent, rien ne s'achète. Voir appConfig —
+// le garde équivalent côté serveur est dans api/create-checkout-session.ts.
+const SUBSCRIPTIONS_OPEN = appConfig.SUBSCRIPTIONS_ENABLED
 
 type Tier = 'premium' | 'vip'
 
@@ -224,6 +227,7 @@ export default function Premium() {
             hasActive={hasActive}
             portalBusy={portalBusy}
             onPick={() => goCheckout('premium')}
+            locked={!SUBSCRIPTIONS_OPEN}
           />
           {/* VIP stays VISIBLE for hype but locked while SHOW_VIP_PLAN is
               off — SOON badge + disabled CTA. The Premium card above is
@@ -235,7 +239,7 @@ export default function Premium() {
             hasActive={hasActive}
             portalBusy={portalBusy}
             onPick={() => goCheckout('vip')}
-            locked={!SHOW_VIP_TIER}
+            locked={!SHOW_VIP_TIER || !SUBSCRIPTIONS_OPEN}
           />
         </div>
 
@@ -291,6 +295,7 @@ function PremiumCard({
   hasActive,
   portalBusy,
   onPick,
+  locked = false,
 }: {
   price: string
   interval: Interval
@@ -298,6 +303,8 @@ function PremiumCard({
   hasActive: boolean
   portalBusy: boolean
   onPick: () => void
+  /** Bêta : l'offre reste affichée, le bouton ne vend plus. */
+  locked?: boolean
 }) {
   const { t } = useTranslation()
   // Subscribed users (any tier) never see a checkout CTA — the button
@@ -308,7 +315,7 @@ function PremiumCard({
       ? t('premiumpage.opening')
       : t('premiumpage.manageSubscription')
     : t('premiumpage.seePremiumPerks')
-  const disabled = portalBusy
+  const disabled = portalBusy || locked
   return (
     <section
       className="relative overflow-hidden rounded-3xl bg-card p-5"
@@ -351,13 +358,15 @@ function PremiumCard({
         ))}
       </ul>
       <button
-        onClick={onPick}
+        onClick={locked ? undefined : onPick}
         disabled={disabled}
-        className="tappable mt-5 w-full rounded-full bg-accent py-3.5 text-sm font-extrabold tracking-wider text-fg transition-colors disabled:opacity-50"
+        className="tappable mt-5 flex w-full items-center justify-center gap-1.5 rounded-full bg-accent py-3.5 text-sm font-extrabold tracking-wider text-fg transition-colors disabled:opacity-50"
         style={{ boxShadow: '0 8px 24px rgba(232,32,58,0.45)' }}
       >
-        {ctaLabel}
+        {locked && <Lock className="h-3.5 w-3.5" strokeWidth={2.4} />}
+        {locked ? t('premiumpage.comingSoon') : ctaLabel}
       </button>
+      {/* L'essai gratuit ne se promet pas tant qu'on ne vend pas. */}
       {!disabled && (
         <p className="mt-2 text-center text-[11px] text-fg2">
           {t('premiumpage.sevenDaysFree')}
@@ -419,13 +428,28 @@ function VipCard({
             </span>
           )}
         </h3>
+        {/* ── PAS DE PRIX TANT QUE VIP N'EST PAS COMMERCIALISÉ ──
+            Afficher un tarif, c'est l'annoncer. Tant que l'offre n'est pas
+            ouverte, le montant configuré dans le code et dans Stripe ne doit
+            pas être montré : il n'est pas arrêté, et un prix vu une fois
+            devient une promesse. On affiche « Prochainement » à sa place. */}
         <div className="text-right">
-          <div className="font-display text-3xl font-extrabold tracking-tighter text-[#ffd700]">
-            {price}
-          </div>
-          <div className="-mt-0.5 text-[11px] text-fg2">
-            {interval === 'year' ? t('premiumpage.perYear') : t('premiumpage.perMonth')}
-          </div>
+          {locked ? (
+            <div className="text-[12px] font-bold leading-tight text-[#ffd700]">
+              {t('premiumpage.comingSoon')}
+            </div>
+          ) : (
+            <>
+              <div className="font-display text-3xl font-extrabold tracking-tighter text-[#ffd700]">
+                {price}
+              </div>
+              <div className="-mt-0.5 text-[11px] text-fg2">
+                {interval === 'year'
+                  ? t('premiumpage.perYear')
+                  : t('premiumpage.perMonth')}
+              </div>
+            </>
+          )}
         </div>
       </header>
       <ul className="mt-4 space-y-2">

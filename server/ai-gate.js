@@ -68,14 +68,41 @@ const DAILY_LIMITS = {
 // Identifier une voiture est un service, rationnable. Flouter une plaque est
 // une obligation. Les deux ne peuvent pas partager un compteur.
 //
-// Ce plafond-ci n'est donc PAS un quota produit mais un garde anti-abus, hors
-// d'atteinte d'un usage humain (≈ 0,005 $ l'appel) : il n'existe que pour
-// arrêter une boucle défectueuse ou un script.
-const PRIVACY_DAILY_LIMIT = 300
+// Ce plafond-ci n'est donc PAS un quota produit mais un garde anti-abus : il
+// n'existe que pour arrêter une boucle défectueuse ou un script.
+//
+// ── 300 → 30 SUR LE PALIER GRATUIT (02/10/2026) ──
+//
+// Le commentaire ci-dessus datait d'une époque où l'appel coûtait ≈ 0,005 $.
+// Il en coûte aujourd'hui ≈ 0,009 $ : Sonnet pour la détection, plus une
+// vérification de la boîte sur une vignette. Un plafond de 300 laissait donc
+// un SEUL compte gratuit dépenser 2,70 $ par jour, et cent comptes créés
+// automatiquement 270 $ par jour. Ce n'est plus un garde, c'est une porte.
+//
+// Le nouveau plafond gratuit est de 30. Il reste très au-dessus de tout usage
+// humain — le compte le plus actif de REVS totalise une trentaine de spots
+// depuis sa création, soit autant de détections en plusieurs mois — tout en
+// ramenant l'exposition d'un compte abusif à 0,27 $ par jour.
+//
+// Les paliers payants gardent un plafond élevé : leur abonnement couvre le
+// coût, et un plafond bas y deviendrait une gêne au lieu d'une protection.
+//
+// ⚠️ CE QUI N'A PAS CHANGÉ, ET NE DOIT PAS : ce compteur reste SÉPARÉ de
+// `DAILY_LIMITS`. Flouter une plaque reste une obligation, jamais un service
+// rationné — c'est tout le sens du commentaire d'origine, et l'épuisement des
+// analyses ne doit jamais faire publier une plaque lisible.
+const PRIVACY_DAILY_LIMITS = {
+  free: 30,
+  starter: 30,
+  premium: 300,
+  vip: 300,
+}
 
 /** Le plafond applicable à un endpoint, pour un tier donné. */
 function limitFor(endpoint, tier) {
-  if (endpoint === AI_ENDPOINTS.DETECT_PLATE) return PRIVACY_DAILY_LIMIT
+  if (endpoint === AI_ENDPOINTS.DETECT_PLATE) {
+    return PRIVACY_DAILY_LIMITS[tier] ?? PRIVACY_DAILY_LIMITS.free
+  }
   return DAILY_LIMITS[tier] ?? DAILY_LIMITS.free
 }
 
