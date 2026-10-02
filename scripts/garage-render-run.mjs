@@ -34,6 +34,7 @@ import {
   cacheKey,
   canRender,
 } from '../server/garage-visual.js'
+import { checkAngle, conformity } from './garage-angle-check.mjs'
 
 const args = process.argv.slice(2)
 const APPLY = args.includes('--apply')
@@ -71,7 +72,12 @@ let misses = 0
 let skipped = 0
 let failed = 0
 
-async function generate(spot) {
+/** Compteurs du contrôle d'angle, pour que le bilan dise ce qui s'est passé. */
+let angleOk = 0
+let angleFixed = 0
+let angleKept = 0
+
+async function generate(spot, { reinforceAngle = false } = {}) {
   const photoRes = await fetch(spot.photo_url)
   if (!photoRes.ok) throw new Error(`photo inaccessible (HTTP ${photoRes.status})`)
   const photo = Buffer.from(await photoRes.arrayBuffer())
@@ -90,7 +96,7 @@ async function generate(spot) {
                   data: photo.toString('base64'),
                 },
               },
-              { text: buildPrompt(spot) },
+              { text: buildPrompt(spot, { reinforceAngle }) },
             ],
           },
         ],
@@ -206,8 +212,9 @@ for (const key of keys) {
     continue
   } else {
     try {
-      // Un seul nouvel essai : les échecs Gemini observés sont des 503
-      // passagers. Au-delà, insister coûte de l'argent sans rien apprendre.
+      // Un seul nouvel essai sur ÉCHEC TECHNIQUE : les erreurs Gemini
+      // observées sont des 503 passagers. Au-delà, insister coûte de l'argent
+      // sans rien apprendre.
       let bytes
       try {
         bytes = await generate(head)
@@ -215,6 +222,37 @@ for (const key of keys) {
         console.log(`  … ${label.padEnd(34)} ${String(first?.message ?? first).slice(0, 36)} — 2e essai`)
         await new Promise((r) => setTimeout(r, 4000))
         bytes = await generate(head)
+      }
+
+      // ── CONTRÔLE D'ANGLE ──
+      // Un rendu peut montrer la BONNE voiture et la montrer de dos. L'identité
+      // et l'angle sont deux critères distincts, donc deux contrôles distincts.
+      // Une seule reprise, et renforcée : insister trois fois coûte 0,20 $ par
+      // véhicule pour un gain qui n'a pas été mesuré.
+      let verdict = await checkAngle({ apiKey: GEMINI, bytes })
+      if (verdict.ok) {
+        const c = conformity(verdict.verdict)
+        if (c.ok) {
+          angleOk += 1
+        } else {
+          console.log(`  ↻ ${label.padEnd(34)} ${c.problems.join(', ')} — on reprend`)
+          const retry = await generate(head, { reinforceAngle: true })
+          const v2 = await checkAngle({ apiKey: GEMINI, bytes: retry })
+          const c2 = v2.ok ? conformity(v2.verdict) : { ok: false, problems: ['contrôle indisponible'] }
+          if (c2.ok) {
+            bytes = retry
+            angleFixed += 1
+          } else {
+            // On garde la MEILLEURE des deux plutôt que la dernière : une
+            // reprise ratée ne doit pas dégrader un rendu déjà imparfait.
+            const firstWasFrontish = /three-quarter/.test(String(verdict.verdict.view))
+            if (!firstWasFrontish) bytes = retry
+            angleKept += 1
+            console.log(`  ! ${label.padEnd(34)} toujours non conforme : ${c2.problems.join(', ')}`)
+          }
+        }
+      } else {
+        console.log(`  ? ${label.padEnd(34)} contrôle d'angle indisponible : ${String(verdict.error).slice(0, 40)}`)
       }
       const path = `${key.replace(/\|/g, '_')}.png`
       const { error: upErr } = await db.storage.from(BUCKET).upload(path, bytes, { upsert: true, contentType: 'image/png' })
@@ -257,5 +295,8 @@ console.log(`générés (cache miss) : ${misses}`)
 console.log(`réutilisés (cache hit): ${hits}`)
 console.log(`passés (concurrence) : ${skipped}`)
 console.log(`échecs               : ${failed}`)
+console.log(`angle conforme du 1er coup : ${angleOk}`)
+console.log(`angle corrigé à la reprise : ${angleFixed}`)
+console.log(`angle encore non conforme  : ${angleKept}`)
 console.log(`coût réel            : ${spent.toFixed(3)} $`)
 console.log(`\nAucune photo_url n'a été touchée.`)
