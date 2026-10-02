@@ -1,15 +1,29 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { Search, LocateFixed, Plus, ChevronRight } from 'lucide-react'
+import { Search, LocateFixed, Plus, ChevronRight, MapPin } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { formatEventDate, type CarEvent } from '../lib/events'
 import { distanceMeters } from '../lib/spots'
 import { fetchMyOrganizerRequest, type OrganizerStatus } from '../lib/organizer'
 import { Skeleton } from './Skeleton'
+import { DateBlock, SectionTitle } from './discover/kit'
 
 const ORANGE = '#F59E0B'
 const NEAR_RADIUS_M = 50_000
+
+/** Découpe une date ISO en { mois abrégé, quantième } pour la pastille.
+ *  Dans la locale de l'appareil, et non une table de mois en dur : REVS est
+ *  bilingue, et « OCT » se dit « OCT » en anglais mais « DÉC » devient
+ *  « DEC ». */
+function splitDate(iso: string): { month: string; day: string } {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return { month: '—', day: '—' }
+  return {
+    month: d.toLocaleDateString(undefined, { month: 'short' }).replace('.', ''),
+    day: String(d.getDate()).padStart(2, '0'),
+  }
+}
 
 // Liste des rassemblements de la communauté.
 //
@@ -152,26 +166,39 @@ export default function Meets() {
         </button>
       )}
 
-      <div className="mb-3 flex gap-2">
+      {/* Barre de recherche pleine largeur + bouton carré, comme la planche.
+          Celle-ci montre une icône de calendrier à cette place ; le bouton
+          garde ici le filtre « près de moi », qui existe et fonctionne. Lui
+          substituer un filtre de date n'aurait fait que remplacer une
+          fonction réelle par une icône sans comportement. */}
+      <div className="mb-4 flex gap-2">
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-fg/30" />
+          <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-fg2" />
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Rechercher un événement…"
-            className="w-full rounded-full bg-card py-2.5 pl-9 pr-3 text-sm text-fg outline-none placeholder:text-fg/30 focus:ring-1 focus:ring-[#F59E0B]"
+            className="w-full rounded-full bg-card py-3 pl-10 pr-3 text-sm text-fg outline-none placeholder:text-fg2 focus:ring-1 focus:ring-accent"
+            style={{ border: '1px solid var(--color-border)' }}
           />
         </div>
         <button
           onClick={toggleNear}
           disabled={geoBusy}
-          className={`flex flex-none items-center gap-1.5 rounded-full px-4 py-2.5 text-sm font-semibold transition-colors disabled:opacity-50 ${
-            near ? 'text-[#0A0A0A]' : 'bg-card text-fg/60 hover:text-fg'
-          }`}
-          style={near ? { backgroundColor: ORANGE } : undefined}
+          aria-label="Près de moi"
+          aria-pressed={near}
+          className="tappable flex h-[46px] w-[46px] flex-none items-center justify-center rounded-full transition-colors disabled:opacity-50"
+          style={
+            near
+              ? { background: 'var(--revs-red)', color: '#fff' }
+              : {
+                  background: 'rgb(var(--color-card))',
+                  border: '1px solid var(--color-border)',
+                  color: 'rgb(var(--color-fg-2))',
+                }
+          }
         >
-          <LocateFixed className="h-4 w-4" />
-          {geoBusy ? '…' : 'Près de moi'}
+          <LocateFixed className="h-[18px] w-[18px]" />
         </button>
       </div>
       {geoMsg && (
@@ -180,7 +207,11 @@ export default function Meets() {
         </p>
       )}
 
-      <div className="space-y-3">
+      {filtered && filtered.length > 0 && (
+        <SectionTitle>Événements à venir</SectionTitle>
+      )}
+
+      <div className="space-y-2.5">
         {events === null ? (
           Array.from({ length: 3 }).map((_, i) => (
             <div
@@ -218,20 +249,35 @@ export default function Meets() {
             )}
           </div>
         ) : (
+          // Ligne de la planche : pastille de date, titre, lieu, chevron.
+          // L'aplat orange a disparu — il signalait l'univers « organisateur »
+          // et non l'événement, et il mettait une couleur de service sur le
+          // contenu lui-même.
           (filtered ?? []).map((ev) => (
             <article
               key={ev.id}
-              className="rounded-2xl border border-[#F59E0B]/20 bg-[#F59E0B]/5 p-4"
+              className="flex items-center gap-3 rounded-2xl bg-card p-3"
+              style={{ border: '1px solid var(--color-border)' }}
             >
-              <span className="inline-block rounded-full bg-[#F59E0B]/20 px-3 py-1 text-[10px] font-semibold tracking-wide text-[#F59E0B]">
-                {ev.type.toUpperCase()}
-              </span>
-              <h3 className="mt-2 font-semibold text-fg">{ev.title}</h3>
-              <p className="mt-1 text-sm text-[#F59E0B]">
-                {formatEventDate(ev.starts_at)}
-              </p>
-              <p className="mt-1 text-sm text-fg/60">{ev.location}</p>
-              <p className="mt-2 text-xs text-fg/30">Inscriptions à venir</p>
+              <DateBlock {...splitDate(ev.starts_at)} />
+              <div className="min-w-0 flex-1">
+                <h3 className="truncate text-[15px] font-semibold leading-tight text-fg">
+                  {ev.title}
+                </h3>
+                <p className="mt-1 flex items-center gap-1 text-[13px] text-fg2">
+                  <MapPin className="h-3.5 w-3.5 flex-none" />
+                  <span className="truncate">{ev.location}</span>
+                </p>
+                {/* L'heure reste affichée bien que la planche ne la montre
+                    pas : la pastille ne porte que le jour et le mois, et
+                    « samedi » sans heure ne permet pas de s'organiser.
+                    Aucun chevron en revanche — il n'existe pas de page de
+                    détail d'événement, et un chevron qui ne mène nulle part
+                    promet une navigation qui n'existe pas. */}
+                <p className="mt-0.5 text-[12px] text-fg2">
+                  {formatEventDate(ev.starts_at)}
+                </p>
+              </div>
             </article>
           ))
         )}

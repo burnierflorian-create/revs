@@ -1067,7 +1067,12 @@
     "historyTitle": "The story of {{name}}",
     "iconicModels": "Iconic models",
     "factsTitle": "Worth knowing",
-    "innovations": "Innovations"
+    "innovations": "Innovations",
+    "kind": {
+      "all": "All",
+      "brand": "Makers",
+      "tuner": "Tuners"
+    }
   },
   "f1gp": {
     "resultsUnavailable": "Results unavailable.",

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { ChevronRight, Globe } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { timeAgo } from '../lib/spots'
 import { Skeleton } from '../components/Skeleton'
@@ -149,7 +150,7 @@ export default function News({ categories }: { categories: string[] }) {
       )}
       {/* "MIS À JOUR IL Y A X MIN" — discreet italic line under the
           sub-tabs. */}
-      <p className="px-1 pb-3 pt-1 text-[11px] italic text-white/35">
+      <p className="px-1 pb-3 pt-1 text-[11px] italic text-fg2">
         {items && items.length > 0
           ? t('discoverpage.news.updated', {
               time: timeAgo(
@@ -166,8 +167,7 @@ export default function News({ categories }: { categories: string[] }) {
           {Array.from({ length: 4 }).map((_, i) => (
             <div
               key={i}
-              className="flex gap-3 rounded-xl p-[14px]"
-              style={{ background: '#141414' }}
+              className="flex gap-3 rounded-xl bg-card p-[14px]"
             >
               <div className="flex min-w-0 flex-1 flex-col gap-2">
                 <Skeleton className="h-3 w-16 rounded-full" />
@@ -181,54 +181,55 @@ export default function News({ categories }: { categories: string[] }) {
         </div>
       ) : items.length === 0 ? (
         <div
-          className="rounded-2xl p-6 text-center"
-          style={{ background: '#141414' }}
+          className="rounded-2xl bg-card p-6 text-center"
         >
-          <p className="text-sm text-white/55">{t('discoverpage.news.empty')}</p>
+          <p className="text-sm text-fg2">{t('discoverpage.news.empty')}</p>
           <button
             onClick={() => load(false)}
             className="tappable mt-4 rounded-full px-6 py-3 text-sm font-bold text-white"
             style={{
-              background: '#E8203A',
-              boxShadow: '0 8px 24px rgba(232,32,58,0.45)',
+              background: 'var(--revs-red)',
+              boxShadow: '0 8px 24px rgb(var(--color-accent) / 0.45)',
             }}
           >
             {t('discoverpage.news.refresh')}
           </button>
         </div>
       ) : visible && visible.length === 0 ? (
-        <p className="px-1 py-8 text-center text-sm text-white/45">
+        <p className="px-1 py-8 text-center text-sm text-fg2">
           {t('discoverpage.news.noArticles')}
         </p>
       ) : (
-        // Apple News premium layout — a large hero card then medium
-        // horizontal cards, spaced by a 10px gap (no separators).
+        // ── MISE EN PAGE DE LA PLANCHE DU 02/10 ──
+        // Une carte principale puis des lignes compactes. Deux écarts avec la
+        // version précédente, tous deux issus de la référence :
+        //
+        //  · le titre passe SOUS l'image au lieu d'être posé dessus. Un titre
+        //    en surimpression dépend du contenu de la photo : sur un capot
+        //    clair il devenait illisible, et le dégradé qu'il fallait pour le
+        //    sauver mangeait la moitié de l'image ;
+        //  · la vignette des lignes passe à GAUCHE. L'œil descend alors une
+        //    colonne d'images alignées au lieu de zigzaguer.
         <div className="flex flex-col gap-2.5">
           {(visible ?? []).map((n, i) => {
             const b = categoryBadge(n.category) ?? {
               label: n.category.toUpperCase(),
               color: '#6B7280',
             }
-            const meta = [n.source, timeAgo(n.published_at ?? n.created_at)]
-              .filter(Boolean)
-              .join(' · ')
+            const when = timeAgo(n.published_at ?? n.created_at)
             const img = n.image_url || fallbackImg(n.category)
 
             if (i === 0) {
-              // HERO — full-width, 200px image, title over a dark gradient.
               return (
                 <a
                   key={n.id}
                   href={n.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="tappable block overflow-hidden rounded-2xl"
-                  style={{
-                    background: '#141414',
-                    boxShadow: '0 6px 18px rgba(0,0,0,0.45)',
-                  }}
+                  className="tappable block overflow-hidden rounded-2xl bg-card"
+                  style={{ border: '1px solid var(--color-border)' }}
                 >
-                  <div className="relative h-[200px] w-full">
+                  <div className="relative aspect-[16/10] w-full">
                     <img
                       src={img}
                       alt={n.title}
@@ -237,61 +238,78 @@ export default function News({ categories }: { categories: string[] }) {
                       className="h-full w-full object-cover"
                     />
                     <span
-                      className="absolute left-3 top-3 rounded-md px-2 py-1 text-[10px] font-extrabold text-white"
-                      style={{ background: b.color, letterSpacing: '0.06em' }}
+                      className="absolute left-3 top-3 rounded-lg px-2.5 py-1 text-[11px] font-extrabold text-white"
+                      style={{ background: b.color, letterSpacing: '0.04em' }}
                     >
                       {b.label}
                       {isNew(n) && ` · ${t('discoverpage.news.new')}`}
                     </span>
-                    <div
-                      aria-hidden
-                      className="absolute inset-x-0 bottom-0 h-3/4"
-                      style={{
-                        background:
-                          'linear-gradient(to top, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.4) 45%, transparent 100%)',
-                      }}
-                    />
-                    <h2 className="absolute inset-x-0 bottom-0 line-clamp-3 px-4 pb-3 text-[18px] font-bold leading-snug text-white">
+                    {/* L'horodatage est posé sur l'image : il a donc son
+                        propre voile sombre, sinon il disparaît sur un ciel. */}
+                    <span
+                      className="absolute right-3 top-3 rounded-md px-2 py-1 text-[12px] font-medium text-white/85"
+                      style={{ background: 'rgba(0,0,0,0.42)', backdropFilter: 'blur(6px)' }}
+                    >
+                      {when}
+                    </span>
+                  </div>
+                  <div className="px-4 pb-3.5 pt-3.5">
+                    <h2 className="line-clamp-2 text-[19px] font-bold leading-snug text-fg">
                       {n.title}
                     </h2>
+                    {n.summary && (
+                      <p className="mt-1.5 line-clamp-2 text-[14px] leading-snug text-fg2">
+                        {n.summary}
+                      </p>
+                    )}
+                    {/* Pied de carte — source à gauche, chevron à droite.
+                        La planche montre ici un compteur de « j'aime » et de
+                        commentaires. La table `news` n'en porte aucun : les
+                        afficher supposerait de les inventer, donc la place
+                        reste à la source. */}
+                    <div className="mt-3 flex items-center justify-between gap-3">
+                      <span className="flex min-w-0 items-center gap-1.5">
+                        <Globe className="h-3.5 w-3.5 flex-none text-fg2" />
+                        <span className="truncate text-[13px] text-fg2">{n.source}</span>
+                      </span>
+                      <ChevronRight className="h-4 w-4 flex-none text-fg2" />
+                    </div>
                   </div>
-                  <p className="px-4 py-2.5 text-xs text-white/45">{meta}</p>
                 </a>
               )
             }
 
-            // MEDIUM — horizontal card, 90×90 image on the right.
             return (
               <a
                 key={n.id}
                 href={n.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="tappable flex gap-3 rounded-xl p-[14px]"
-                style={{
-                  background: '#141414',
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
-                }}
+                className="tappable flex items-center gap-3 rounded-2xl bg-card p-3"
+                style={{ border: '1px solid var(--color-border)' }}
               >
-                <div className="flex min-w-0 flex-1 flex-col">
-                  <span
-                    className="self-start rounded px-1.5 py-0.5 text-[9px] font-extrabold text-white"
-                    style={{ background: b.color, letterSpacing: '0.06em' }}
-                  >
-                    {b.label}
-                  </span>
-                  <h3 className="mt-1.5 line-clamp-2 text-[15px] font-semibold leading-snug text-white">
-                    {n.title}
-                  </h3>
-                  <p className="mt-auto pt-2 text-xs text-white/45">{meta}</p>
-                </div>
                 <img
                   src={img}
                   alt={n.title}
                   loading="lazy"
                   decoding="async"
-                  className="h-[90px] w-[90px] flex-none rounded-[10px] object-cover"
+                  className="h-[76px] w-[96px] flex-none rounded-xl object-cover"
                 />
+                <div className="flex min-w-0 flex-1 flex-col">
+                  <span className="flex items-center justify-between gap-2">
+                    <span
+                      className="rounded-md px-1.5 py-0.5 text-[9px] font-extrabold text-white"
+                      style={{ background: b.color, letterSpacing: '0.05em' }}
+                    >
+                      {b.label}
+                    </span>
+                    <span className="flex-none text-[11px] text-fg2">{when}</span>
+                  </span>
+                  <h3 className="mt-1.5 line-clamp-2 text-[15px] font-semibold leading-snug text-fg">
+                    {n.title}
+                  </h3>
+                </div>
+                <ChevronRight className="h-4 w-4 flex-none text-fg2" />
               </a>
             )
           })}

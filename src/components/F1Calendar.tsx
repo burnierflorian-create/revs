@@ -3,9 +3,25 @@ import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { X } from 'lucide-react'
-import { GP_2026, fmtGpDate, type GrandPrix } from '../lib/f1'
+import { MapPin } from 'lucide-react'
+import { GP_2026, type GrandPrix } from '../lib/f1'
 import { F1_TEAMS } from '../lib/f1team'
 import { supabase } from '../lib/supabase'
+import { DateBlock, RowChevron, SectionTitle } from './discover/kit'
+
+/** Jour + mois abrégé pour la pastille, dans la locale de l'appareil.
+ *  La planche écrit le quantième au-dessus du mois sur le calendrier F1 et
+ *  l'inverse sur les événements. Les deux écrans partagent ici la même
+ *  pastille — deux ordres pour la même information dans la même application
+ *  obligeraient à relire à chaque fois lequel est lequel. */
+function gpDateParts(iso: string): { month: string; day: string } {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return { month: '—', day: '—' }
+  return {
+    month: d.toLocaleDateString(undefined, { month: 'short' }).replace('.', ''),
+    day: String(d.getDate()).padStart(2, '0'),
+  }
+}
 
 type Podium = { driver: string; team: string; position?: number }
 type RaceData = { podium?: Podium[]; summary?: string }
@@ -21,7 +37,7 @@ function teamColor(name: string): string {
   return t?.color ?? '#888'
 }
 
-// Rich GP calendar: a #141414 card per Grand Prix. Finished races open a
+// Rich GP calendar: one card per Grand Prix, on the themed card surface.
 // podium + AI-summary modal; the next race is highlighted (red border,
 // animated "PROCHAIN" badge, live countdown); future races stay muted.
 export default function F1Calendar() {
@@ -89,12 +105,12 @@ export default function F1Calendar() {
               key={f}
               onClick={() => setFilter(f)}
               aria-pressed={on}
-              className="tappable flex-none rounded-full px-3.5 py-1.5 text-[12px] font-bold transition-colors"
+              className="tappable flex-none rounded-full px-4 py-2 text-[13px] font-bold transition-colors"
               style={{
-                background: on ? 'rgba(232,32,58,0.14)' : 'var(--color-card)',
-                border: `1px solid ${on ? '#E8203A' : 'var(--color-border)'}`,
+                background: on ? 'var(--revs-red)' : 'rgb(var(--color-card))',
+                border: `1px solid ${on ? 'transparent' : 'var(--color-border)'}`,
                 color: on ? '#fff' : 'rgb(var(--color-fg-2))',
-                boxShadow: on ? '0 0 14px rgba(232,32,58,0.18)' : undefined,
+                boxShadow: on ? '0 2px 14px rgb(var(--color-accent) / 0.4)' : undefined,
               }}
             >
               {t(`f1cal.filter.${f}`)}
@@ -102,6 +118,8 @@ export default function F1Calendar() {
           )
         })}
       </div>
+
+      <SectionTitle>{`Saison ${GP_2026[0]?.date.slice(0, 4) ?? ''}`}</SectionTitle>
 
       {shown.length === 0 && (
         <p
@@ -155,61 +173,77 @@ export default function F1Calendar() {
 // ─────────────────────────── cards ───────────────────────────
 
 const CARD: CSSProperties = {
-  background: '#141414',
-  border: '1px solid rgba(255,255,255,0.06)',
+  background: 'rgb(var(--color-card))',
+  border: '1px solid var(--color-border)',
 }
 
 function Flag({ flag }: { flag: string }) {
   return (
     <span
-      className="flex h-10 w-10 flex-none items-center justify-center overflow-hidden rounded-lg text-xl leading-none"
-      style={{ background: 'rgba(255,255,255,0.05)' }}
+      className="flex h-9 w-12 flex-none items-center justify-center overflow-hidden rounded-md text-xl leading-none"
+      style={{ background: 'rgb(var(--color-fg) / 0.06)' }}
     >
       {flag}
     </span>
   )
 }
 
-function PastGpCard({ gp, onTap }: { gp: GrandPrix; onTap: () => void }) {
-  return (
-    <button
-      onClick={onTap}
-      className="tappable flex w-full items-center gap-3 rounded-2xl p-3 text-left transition-transform active:scale-[0.99]"
-      style={CARD}
-    >
+/** Ligne commune aux Grands Prix passés et à venir.
+ *  La pastille de date vit HORS de la carte, à gauche, comme sur la planche :
+ *  les quantièmes s'alignent alors en colonne et la saison se parcourt du
+ *  regard sans lire les noms. */
+function GpRow({
+  gp,
+  dim,
+  onTap,
+}: {
+  gp: GrandPrix
+  dim?: boolean
+  onTap?: () => void
+}) {
+  const inner = (
+    <>
       <Flag flag={gp.flag} />
       <div className="min-w-0 flex-1">
-        <p className="truncate text-[15px] font-bold text-white">{gp.name}</p>
-        <p className="truncate text-[12px] text-white/45">{gp.circuit}</p>
+        <p className="truncate text-[15px] font-bold text-fg">{gp.name}</p>
+        <p className="mt-0.5 flex items-center gap-1 text-[12.5px] text-fg2">
+          <MapPin className="h-3.5 w-3.5 flex-none" />
+          <span className="truncate">{gp.circuit}</span>
+        </p>
       </div>
-      <span
-        className="flex-none rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider"
-        style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.5)' }}
-      >
-        Terminé
-      </span>
-    </button>
+      {onTap && <RowChevron />}
+    </>
+  )
+  return (
+    <div className="flex items-stretch gap-2.5" style={dim ? { opacity: 0.55 } : undefined}>
+      <DateBlock {...gpDateParts(gp.date)} />
+      {onTap ? (
+        <button
+          onClick={onTap}
+          className="tappable flex min-w-0 flex-1 items-center gap-3 rounded-2xl p-3 text-left transition-transform active:scale-[0.99]"
+          style={CARD}
+        >
+          {inner}
+        </button>
+      ) : (
+        <div className="flex min-w-0 flex-1 items-center gap-3 rounded-2xl p-3" style={CARD}>
+          {inner}
+        </div>
+      )}
+    </div>
   )
 }
 
+/* Un Grand Prix couru ouvre son podium : c'est la seule des trois lignes qui
+   a quelque chose à montrer. La pastille « TERMINÉ » a disparu — la pastille
+   de date porte déjà une date passée, et le chevron ne s'affiche que là où il
+   y a réellement une destination. */
+function PastGpCard({ gp, onTap }: { gp: GrandPrix; onTap: () => void }) {
+  return <GpRow gp={gp} onTap={onTap} />
+}
+
 function FutureGpCard({ gp }: { gp: GrandPrix }) {
-  return (
-    <div
-      className="flex w-full items-center gap-3 rounded-2xl p-3"
-      style={{ background: '#0d0d0d', border: '1px solid rgba(255,255,255,0.04)' }}
-    >
-      <Flag flag={gp.flag} />
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-[15px] font-semibold text-white/80">
-          {gp.name}
-        </p>
-        <p className="truncate text-[12px] text-white/35">{gp.circuit}</p>
-      </div>
-      <span className="flex-none text-[12px] tabular-nums text-white/40">
-        {fmtGpDate(gp.date)}
-      </span>
-    </div>
-  )
+  return <GpRow gp={gp} dim />
 }
 
 function NextGpCard({
@@ -228,35 +262,36 @@ function NextGpCard({
       onClick={onTap}
       className="tappable relative block w-full overflow-hidden rounded-2xl p-4 text-left transition-transform active:scale-[0.99]"
       style={{
-        background: '#141414',
-        border: '2px solid #E8203A',
-        boxShadow: '0 8px 26px rgba(232,32,58,0.20)',
+        background: 'rgb(var(--color-card))',
+        border: '2px solid var(--revs-red)',
+        boxShadow: '0 8px 26px rgb(var(--color-accent) / 0.2)',
       }}
     >
       <div className="flex items-center gap-3">
         <Flag flag={gp.flag} />
         <div className="min-w-0 flex-1">
-          <p className="truncate text-[16px] font-extrabold text-white">
+          <p className="truncate text-[16px] font-extrabold text-fg">
             {gp.name}
           </p>
-          <p className="truncate text-[12px] italic" style={{ color: '#FF6B7A' }}>
-            {gp.circuit}
+          <p className="mt-0.5 flex items-center gap-1 text-[12.5px] text-fg2">
+            <MapPin className="h-3.5 w-3.5 flex-none" />
+            <span className="truncate">{gp.circuit}</span>
           </p>
         </div>
         <span
           className="flex-none rounded-full px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wider text-white"
-          style={{ background: '#E8203A', animation: 'pulse 1.8s ease-in-out infinite' }}
+          style={{ background: 'var(--revs-red)', animation: 'pulse 1.8s ease-in-out infinite' }}
         >
           Prochain
         </span>
       </div>
-      <p className="mt-3 font-display font-extrabold tabular-nums text-white">
+      <p className="mt-3 font-display font-extrabold tabular-nums text-fg">
         {diff > 0 ? (
           <>
             <span style={{ fontSize: '22px' }}>Dans {d}j {h}h</span>
           </>
         ) : (
-          <span style={{ fontSize: '20px', color: '#E8203A' }}>En cours !</span>
+          <span style={{ fontSize: '20px', color: 'var(--revs-red)' }}>En cours !</span>
         )}
       </p>
     </button>

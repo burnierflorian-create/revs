@@ -1067,7 +1067,12 @@
     "historyTitle": "L'histoire de {{name}}",
     "iconicModels": "Modèles emblématiques",
     "factsTitle": "Faits à retenir",
-    "innovations": "Innovations"
+    "innovations": "Innovations",
+    "kind": {
+      "all": "Toutes",
+      "brand": "Constructeurs",
+      "tuner": "Préparateurs"
+    }
   },
   "f1gp": {
     "resultsUnavailable": "Résultats indisponibles.",
