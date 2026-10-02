@@ -1677,6 +1677,15 @@
     "nobody": "Nobody online right now.",
     "anonymous": "Spotter",
     "total": "{{count}} REVS members in total",
-    "open": "See members online"
+    "open": "See members online",
+    "search": "Search a member…",
+    "noMatch": "No member matches.",
+    "nobodyOffline": "Everyone is online.",
+    "onlineNow": "Online",
+    "never": "Never seen",
+    "agoMin": "{{n}} min ago",
+    "agoHour": "{{n}} h ago",
+    "agoDay": "{{n}} d ago",
+    "openProfile": "View {{pseudo}}’s profile"
   }
 }

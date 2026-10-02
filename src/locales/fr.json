@@ -1677,6 +1677,15 @@
     "nobody": "Personne en ligne pour le moment.",
     "anonymous": "Spotter",
     "total": "{{count}} membres REVS au total",
-    "open": "Voir les membres en ligne"
+    "open": "Voir les membres en ligne",
+    "search": "Rechercher un membre…",
+    "noMatch": "Aucun membre ne correspond.",
+    "nobodyOffline": "Tout le monde est en ligne.",
+    "onlineNow": "En ligne",
+    "never": "Jamais venu",
+    "agoMin": "il y a {{n}} min",
+    "agoHour": "il y a {{n}} h",
+    "agoDay": "il y a {{n}} j",
+    "openProfile": "Voir le profil de {{pseudo}}"
   }
 }
