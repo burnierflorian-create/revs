@@ -182,6 +182,15 @@ export default function Showroom({
     // donc pas une dépendance de rendu, et `cars` suffit.
   }, [cars])
 
+  /** La voiture au centre porte-t-elle une scène complète ?
+   *  Le décor du Showroom (sol, vignettage, projecteur) est dessiné pour
+   *  porter des DÉTOURAGES. Une scène apporte déjà son sol et sa lumière :
+   *  garder le décor derrière elle montre un showroom dans un showroom —
+   *  exactement ce que la vérification du 03/10 a trouvé en production. */
+  const centreIsScene =
+    (imageById.get(cars[aw]?.id ?? '')?.kind ?? 'photo') === 'scene'
+
+
   // ── Specs for the info panel (lazy, cached in car_specs server-side) ──
   // specsMap: loaded results (CardSpecs or null=failed). requestedRef: keys
   // already in flight, so we never double-fetch. A key absent from specsMap
@@ -379,7 +388,8 @@ export default function Showroom({
           height: '100%',
           objectFit: 'cover',
           transform: 'scale(1.12)',
-          transition: 'transform 0.25s ease-out',
+          opacity: centreIsScene ? 0 : 1,
+          transition: 'transform 0.25s ease-out, opacity 0.4s ease',
           willChange: 'transform',
           pointerEvents: 'none',
         }}
@@ -392,6 +402,8 @@ export default function Showroom({
           inset: 0,
           background:
             'radial-gradient(120% 80% at 50% 34%, transparent 42%, rgba(0,0,0,0.55) 100%)',
+          opacity: centreIsScene ? 0 : 1,
+          transition: 'opacity 0.4s ease',
           pointerEvents: 'none',
         }}
       />
@@ -410,6 +422,8 @@ export default function Showroom({
             'radial-gradient(48% 46% at 50% 30%, rgba(255,255,255,0.28), rgba(255,255,255,0.05) 46%, transparent 68%)',
           mixBlendMode: 'screen',
           animation: 'showroom-flicker 4.2s ease-in-out infinite',
+          opacity: centreIsScene ? 0 : 1,
+          transition: 'opacity 0.4s ease',
           pointerEvents: 'none',
         }}
       />
@@ -465,11 +479,20 @@ export default function Showroom({
               style={{
                 position: 'absolute',
                 left: '50%',
-                bottom: FLOOR_FROM_BOTTOM, // the div's BOTTOM sits on the floor line
-                width: CAR_WIDTH,
-                maxWidth: CAR_MAX_WIDTH,
-                transform: `translateX(-50%) translateX(${d * spacing}px) scale(${scale})`,
-                transformOrigin: 'center bottom', // scaling keeps wheels on the floor
+                // Un détourage ou une photo se POSE sur la ligne de sol
+                // dessinée. Une scène n'a pas de roues à poser : elle porte
+                // son propre sol, donc elle se centre dans la carte. L'ancrer
+                // au sol synthétique laissait 36 % de décor visible sous
+                // elle — c'est ce vide qui donnait le showroom dans le
+                // showroom.
+                ...(kind === 'scene'
+                  ? { top: '50%', width: '100%', maxWidth: CAR_MAX_WIDTH }
+                  : { bottom: FLOOR_FROM_BOTTOM, width: CAR_WIDTH, maxWidth: CAR_MAX_WIDTH }),
+                transform:
+                  kind === 'scene'
+                    ? `translateX(-50%) translateX(${d * spacing}px) translateY(-50%) scale(${scale})`
+                    : `translateX(-50%) translateX(${d * spacing}px) scale(${scale})`,
+                transformOrigin: kind === 'scene' ? 'center center' : 'center bottom',
                 // Only transform + opacity are transitioned (GPU). `filter`
                 // (brightness/blur) is left OUT of the transition — animating
                 // blur every frame during a swipe is a heavy repaint; snapping
@@ -642,7 +665,11 @@ export default function Showroom({
                     style={{
                       position: 'relative',
                       width: '100%',
-                      aspectRatio: '4 / 3',
+                      // 3/4 et non 4/3 : sur les 18 rendus de production, 16
+                      // sortent en portrait (896×1195) et 2 en paysage. Un
+                      // cadre paysage rognait donc la quasi-totalité d'entre
+                      // eux en haut et en bas.
+                      aspectRatio: '3 / 4',
                       overflow: 'hidden',
                       borderRadius: 14,
                     }}
@@ -661,7 +688,14 @@ export default function Showroom({
                           // `cover` et non `contain` : la scène est cadrée
                           // large à la génération, on peut donc remplir la
                           // carte sans rogner la voiture.
-                          objectFit: 'cover',
+                          // `contain` et non `cover` : deux des dix-huit
+                          // rendus sortent en paysage, et les recadrer dans
+                          // un cadre portrait coupait la Rolls-Royce en deux.
+                          // Le décor étant masqué derrière une scène, les
+                          // bandes laissées par `contain` tombent sur du noir
+                          // et ne se voient pas — là où `cover` perdait
+                          // réellement un tiers de la voiture.
+                          objectFit: 'contain',
                           // Aucun filtre d'étalonnage : contrairement aux
                           // photos de spots, toutes les scènes sortent du même
                           // moteur sous la même lumière. Les harmoniser une
