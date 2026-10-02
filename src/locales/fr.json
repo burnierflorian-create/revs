@@ -392,7 +392,9 @@
     "like": "Liker",
     "comments": "Commentaires",
     "addComment": "Ajouter un commentaire",
-    "addCommentPlaceholder": "Ajouter un commentaire…"
+    "addCommentPlaceholder": "Ajouter un commentaire…",
+    "seeOnMap": "Voir sur la carte",
+    "allCategories": "Tous"
   },
   "mappage": {
     "spotFallbackTitle": "Spot",
@@ -423,7 +425,9 @@
     "analyzing": "Analyse en cours…",
     "addCityPrompt": "Ajoute ta ville dans Réglages pour recevoir un conseil personnalisé chaque jour (météo + tendance de spotting).",
     "dailyUpdateNote": "Mise à jour une fois par jour. Le conseil tient compte de ta ville, des marques que tu spottes le plus et de la météo locale.",
-    "aiBadge": "IA 🎯"
+    "aiBadge": "IA 🎯",
+    "previewBy": "Par {{who}} · {{when}}",
+    "someone": "quelqu’un"
   },
   "profilepage": {
     "header": {
@@ -1400,7 +1404,9 @@
     "mySpots": "Mes spots",
     "photo": "Photo",
     "emptyCollection": "Poste ton premier spot pour obtenir ta première carte !",
-    "emptyCta": "Spotter"
+    "emptyCta": "Spotter",
+    "carouselTitle": "Carte {{n}} sur {{total}}",
+    "openLarge": "Voir en grand"
   },
   "garage": {
     "power": "PUISSANCE",

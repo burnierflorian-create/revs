@@ -392,7 +392,9 @@
     "like": "Like",
     "comments": "Comments",
     "addComment": "Add a comment",
-    "addCommentPlaceholder": "Add a comment…"
+    "addCommentPlaceholder": "Add a comment…",
+    "seeOnMap": "See on the map",
+    "allCategories": "All"
   },
   "mappage": {
     "spotFallbackTitle": "Spot",
@@ -423,7 +425,9 @@
     "analyzing": "Analyzing…",
     "addCityPrompt": "Add your city in Settings to receive a personalized tip every day (weather + spotting trend).",
     "dailyUpdateNote": "Updated once a day. The tip takes into account your city, the brands you spot the most and the local weather.",
-    "aiBadge": "AI 🎯"
+    "aiBadge": "AI 🎯",
+    "previewBy": "By {{who}} · {{when}}",
+    "someone": "someone"
   },
   "profilepage": {
     "header": {
@@ -1400,7 +1404,9 @@
     "mySpots": "My spots",
     "photo": "Photo",
     "emptyCollection": "Post your first spot to earn your first card!",
-    "emptyCta": "Spot a car"
+    "emptyCta": "Spot a car",
+    "carouselTitle": "Card {{n}} of {{total}}",
+    "openLarge": "View large"
   },
   "garage": {
     "power": "POWER",

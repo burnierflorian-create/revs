@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
-import type { TFunction } from 'i18next'
 import { useLocation, useNavigate } from 'react-router-dom'
 import mapboxgl from 'mapbox-gl'
 import type { DataDrivenPropertyValueSpecification } from 'mapbox-gl'
 import 'mapbox-gl/dist/mapbox-gl.css'
 import {
   Camera,
+  Car,
+  ChevronRight,
   LocateFixed,
   Loader2,
   Search as SearchIcon,
@@ -25,7 +26,6 @@ import { setPendingPhoto } from '../lib/pendingPhoto'
 import { SkeletonMap } from '../components/Skeleton'
 import {
   distanceMeters,
-  escapeHtml,
   timeAgo,
   type Rarity,
   type Spot,
@@ -263,8 +263,27 @@ function spotMarkerEl(p: SpotProps, remainingMs: number): HTMLDivElement {
     photo.innerHTML = CAR_SVG
   }
 
+  // ── POINTE DE GOUTTE ──
+  // Un disque posé sur la carte ne dit pas QUEL point il désigne : son
+  // centre peut tomber à cheval sur deux rues. La référence lui donne une
+  // pointe vers le bas, et c'est elle qui touche la coordonnée. Elle reprend
+  // la couleur de rareté pour que le code visuel reste le même.
+  const tail = document.createElement('div')
+  tail.style.position = 'absolute'
+  tail.style.left = '50%'
+  tail.style.top = `${size - 6}px`
+  tail.style.marginLeft = '-7px'
+  tail.style.width = '0'
+  tail.style.height = '0'
+  tail.style.borderLeft = '7px solid transparent'
+  tail.style.borderRight = '7px solid transparent'
+  tail.style.borderTop = `11px solid ${tint.stroke}`
+  tail.style.filter = 'drop-shadow(0 3px 5px rgba(0,0,0,0.55))'
+  tail.style.pointerEvents = 'none'
+
   wrap.appendChild(svg)
   wrap.appendChild(photo)
+  wrap.appendChild(tail)
   outer.appendChild(wrap)
 
   // Kick the depletion: on the next frame, run the ring down to empty
@@ -329,23 +348,6 @@ function clusterMarkerEl(count: number, maxRarity: number): HTMLDivElement {
   return outer
 }
 
-function popupInner(p: SpotProps, t: TFunction): string {
-  const title = (p.model || p.brand || t('mappage.spotFallbackTitle')).trim()
-  const sub = [p.brand, p.year ?? undefined].filter(Boolean).join(' · ')
-  const photo = p.photo_url
-    ? `<img src="${escapeHtml(p.photo_url)}" alt="" loading="lazy" decoding="async" style="width:72px;height:72px;border-radius:12px;object-fit:cover;flex:none" />`
-    : ''
-  return `
-    <div style="display:flex;gap:12px;align-items:center;max-width:240px;color:#111111">
-      ${photo}
-      <div style="min-width:0">
-        <div style="font-weight:800;font-size:15px;color:#111111">${escapeHtml(title)}</div>
-        <div style="font-size:12px;color:#555555;margin-top:3px">${escapeHtml(sub || p.spotter)}</div>
-        <div style="font-size:11px;color:#777777;margin-top:3px">${escapeHtml(timeAgo(p.created_at))}</div>
-        <div style="font-size:11px;color:#E8203A;font-weight:700;margin-top:6px">${escapeHtml(t('mappage.popupSeeDetail'))}</div>
-      </div>
-    </div>`
-}
 
 type RawLayer = {
   id: string
@@ -854,6 +856,54 @@ export default function MapPage() {
   const [mapReady, setMapReady] = useState(false)
   // Spots of a tapped same-place cluster, shown in a bottom sheet.
   const [clusterSheet, setClusterSheet] = useState<ClusterLeaf[] | null>(null)
+  /** Le spot sélectionné, affiché en aperçu au bas de l'écran. */
+  const [preview, setPreview] = useState<SpotProps | null>(null)
+
+  /**
+   * ── ARRIVÉE DEPUIS LE FEED : /map?spot=<id> ──
+   *
+   * Le bouton « Voir sur la carte » doit faire trois choses, pas une :
+   * ouvrir la Map, s'y RENDRE, et dire LEQUEL. Ouvrir la carte générale
+   * repose exactement la question à laquelle le bouton prétend répondre.
+   *
+   * On attend que le spot soit présent dans le jeu chargé — il arrive par
+   * la même requête que tous les autres, donc rien n'est dupliqué — puis on
+   * centre la caméra et on ouvre l'aperçu. Le paramètre est consommé une
+   * seule fois : sans cela, chaque re-rendu re-centrerait la carte et
+   * l'utilisateur ne pourrait plus la déplacer.
+   */
+  const deepLinkDoneRef = useRef<string | null>(null)
+  useEffect(() => {
+    const wanted = new URLSearchParams(location.search).get('spot')
+    if (!wanted || deepLinkDoneRef.current === wanted) return
+    let tries = 0
+    const tick = window.setInterval(() => {
+      tries += 1
+      const map = mapRef.current
+      const sp = allSpotsRef.current.get(wanted)
+      if (map && sp && validLngLat(sp.lng, sp.lat)) {
+        window.clearInterval(tick)
+        deepLinkDoneRef.current = wanted
+        map.flyTo({ center: [sp.lng, sp.lat], zoom: Math.max(map.getZoom(), 16), duration: 900 })
+        setPreview({
+          id: sp.id,
+          brand: sp.brand,
+          model: sp.model,
+          year: sp.year,
+          photo_url: sp.photo_url,
+          spotter: namesRef.current.get(sp.user_id) ?? t('mappage.someone'),
+          created_at: sp.created_at,
+          rarity: (sp.rarity ?? 'standard') as Rarity,
+        })
+      } else if (tries > 40) {
+        // ~8 s sans trouver le spot : il est expiré, filtré ou hors du jeu
+        // chargé. On renonce silencieusement plutôt que de tourner sans fin.
+        window.clearInterval(tick)
+        deepLinkDoneRef.current = wanted
+      }
+    }, 200)
+    return () => window.clearInterval(tick)
+  }, [location.search, t])
 
   // ── Time-lapse replay: reveals every spot chronologically. Self-
   // contained (its own DOM markers + a container CSS class that hides the
@@ -1587,21 +1637,13 @@ export default function MapPage() {
             el.addEventListener('click', (ev) => {
               ev.stopPropagation()
               if (photoEl) photoEl.style.transform = 'scale(1.2)'
-              const popup = new mapboxgl.Popup({
-                offset: 26,
-                closeButton: true,
-              })
-              const node = document.createElement('div')
-              node.style.cursor = 'pointer'
-              node.innerHTML = popupInner(sp, t)
-              node.addEventListener('click', () => {
-                popup.remove()
-                navRef.current(`/spot/${sp.id}`)
-              })
-              popup.setLngLat(coords).setDOMContent(node).addTo(map)
-              popup.on('close', () => {
-                if (photoEl) photoEl.style.transform = 'scale(1)'
-              })
+              // ── APERÇU EN BAS D'ÉCRAN, ET NON BULLE ANCRÉE ──
+              // La bulle Mapbox s'ouvrait AU-DESSUS du marqueur : près du
+              // haut de l'écran elle sortait du cadre, et elle masquait
+              // justement la zone que l'on venait de regarder. La référence
+              // la place en bas, à une position fixe, où elle ne recouvre
+              // jamais le point sélectionné.
+              setPreview(sp)
               // A view keeps the spot alive 1h more; reflect it locally
               // so the ring visibly refills.
               supabase
@@ -2455,7 +2497,16 @@ export default function MapPage() {
           overflow: 'hidden',
           background: '#E8203A',
           boxShadow: '0 4px 16px rgba(232, 32, 58, 0.4)',
-          transition: 'transform 150ms cubic-bezier(0.34, 1.56, 0.64, 1)',
+          transition:
+            'transform 150ms cubic-bezier(0.34, 1.56, 0.64, 1), opacity 180ms ease',
+          // Le bouton de capture et l'aperçu du spot occupent la MÊME bande,
+          // juste au-dessus de la barre d'onglets : mesuré à l'écran, le
+          // bouton recouvrait le chevron et une partie du nom du véhicule.
+          // Il s'efface tant qu'un spot est sélectionné — sélectionner un
+          // marqueur et photographier une voiture ne sont pas deux gestes
+          // qu'on fait en même temps.
+          opacity: preview ? 0 : 1,
+          pointerEvents: preview ? 'none' : undefined,
         }}
       >
         <Camera className="h-[26px] w-[26px] text-white" strokeWidth={2.2} />
@@ -2483,6 +2534,75 @@ export default function MapPage() {
           saveMapFilters(next)
         }}
       />
+
+      {/* ── APERÇU DU SPOT SÉLECTIONNÉ ──
+          Position fixe au-dessus de la barre de navigation, comme la
+          référence. Un appui ouvre le détail ; un appui sur la croix ferme. */}
+      {preview && (
+        <div
+          className="pointer-events-none fixed inset-x-0 z-30 px-3"
+          style={{ bottom: 'calc(env(safe-area-inset-bottom) + 76px)' }}
+        >
+          <div
+            className="pointer-events-auto flex items-center gap-3 rounded-2xl p-2.5"
+            style={{
+              background: 'rgba(16,16,18,0.92)',
+              border: '1px solid rgba(255,255,255,0.10)',
+              backdropFilter: 'saturate(160%) blur(20px)',
+              WebkitBackdropFilter: 'saturate(160%) blur(20px)',
+              boxShadow: '0 12px 34px rgba(0,0,0,0.55)',
+            }}
+          >
+            <button
+              onClick={() => navigate(`/spot/${preview.id}`)}
+              className="tappable flex min-w-0 flex-1 items-center gap-3 text-left"
+            >
+              {preview.photo_url ? (
+                <img
+                  src={preview.photo_url}
+                  alt=""
+                  loading="lazy"
+                  decoding="async"
+                  className="h-[72px] w-[92px] flex-none rounded-xl object-cover"
+                />
+              ) : (
+                <span className="flex h-[72px] w-[92px] flex-none items-center justify-center rounded-xl bg-white/5">
+                  <Car className="h-6 w-6 text-white/40" />
+                </span>
+              )}
+              <span className="min-w-0 flex-1">
+                {preview.brand && (
+                  <span className="block truncate text-[11px] font-semibold uppercase tracking-[0.12em] text-white/60">
+                    {preview.brand}
+                  </span>
+                )}
+                <span className="block truncate text-[16px] font-bold leading-tight text-white">
+                  {preview.model || preview.brand}
+                </span>
+                <span className="mt-0.5 block truncate text-[12.5px] text-white/60">
+                  {[preview.year ?? null, rarityBadge(preview.rarity)?.label ?? null]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </span>
+                <span className="mt-0.5 block truncate text-[12px] text-white/45">
+                  {t('mappage.previewBy', {
+                    who: preview.spotter,
+                    when: timeAgo(preview.created_at),
+                  })}
+                </span>
+              </span>
+              <ChevronRight className="h-5 w-5 flex-none text-white/50" />
+            </button>
+            <button
+              onClick={() => setPreview(null)}
+              aria-label={t('common.close')}
+              className="tappable flex h-7 w-7 flex-none items-center justify-center self-start rounded-full bg-white/10 text-white/70"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {clusterSheet && (
         <ClusterSheet

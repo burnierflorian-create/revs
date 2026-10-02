@@ -1,8 +1,12 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
-import { Car, Heart, Layers, Loader2, MessageCircle, Search as SearchIcon, SlidersHorizontal, X, Zap } from 'lucide-react'
+// `Map` est aliasé : importé tel quel, il masque le Map natif que ce
+// fichier utilise pour indexer les profils, et le build casse sans rapport
+// apparent avec l'icône.
+import { Car, Heart, Layers, Loader2, Map as MapIcon, MapPin, MessageCircle, Search as SearchIcon, SlidersHorizontal, X, Zap } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { hapticSelection } from '../lib/haptic'
 import { hasGeoPermission } from '../lib/geo'
 import {
   distanceMeters,
@@ -30,7 +34,7 @@ import {
   matchesBrandFilter,
   matchesCategoryFilter,
 } from '../lib/filterCatalog'
-import { matchesRarityBucket } from '../components/FilterSections'
+import { matchesRarityBucket, SHEET_CATEGORIES } from '../components/FilterSections'
 import { isFounder } from '../lib/founders'
 import { prefersReducedMotion } from '../lib/motion'
 
@@ -161,6 +165,8 @@ export default function Feed() {
   // the community post list. Filters persisted under their own key
   // (revs_feed_filters, distinct from the map's), restored on mount, so
   // nothing here ever touches the Carte.
+  /** Catégories réellement représentées dans le vivier courant. */
+  const [poolCats, setPoolCats] = useState<Set<string>>(() => new Set())
   const [feedFilters, setFeedFilters] = useState<FeedFilters>(() =>
     loadFeedFilters(),
   )
@@ -354,6 +360,9 @@ export default function Feed() {
       if (!active) return
       const pool = (poolData ?? []) as Spot[]
       poolRef.current = pool
+      setPoolCats(
+        new Set(SHEET_CATEGORIES.filter((c) => c !== 'Tout' && pool.some((s) => matchesCategoryFilter(s, c)))),
+      )
 
       // 2. Sort-specific side fetches in parallel.
       const sideFetches: Promise<unknown>[] = []
@@ -440,6 +449,24 @@ export default function Feed() {
     return () => obs.disconnect()
   }, [spots !== null])
 
+  /** Les catégories à proposer, et elles seules.
+   *
+   *  La référence montre une rangée fixe. Ici elle est calculée sur le vivier
+   *  réellement chargé : une pastille « Hypercars » qui ne renvoie jamais
+   *  rien n'est pas un filtre, c'est une impasse. « Tout » reste toujours
+   *  présent, et la catégorie active aussi — sans quoi la pastille sur
+   *  laquelle on vient d'appuyer disparaîtrait sous le doigt.
+   *
+   *  Le calcul se fait sur le VIVIER (`poolCats`, posé au chargement) et non
+   *  sur les spots affichés : ces derniers sont déjà filtrés, donc une fois
+   *  « Supercars » choisi toutes les autres pastilles disparaîtraient. */
+  const categoryChips = useMemo(() => {
+    const present = SHEET_CATEGORIES.filter(
+      (c) => c !== 'Tout' && (c === feedFilters.category || poolCats.has(c)),
+    )
+    return ['Tout', ...present]
+  }, [poolCats, feedFilters.category])
+
   if (spots === null) {
     return (
       <div className="min-h-screen bg-bg px-4 pt-[max(1rem,env(safe-area-inset-top))]">
@@ -460,6 +487,7 @@ export default function Feed() {
   // The filter icon dot lights up whenever ANY filter is non-default —
   // everything (catégorie / marque / rareté) now lives in the sheet.
   const advancedActive = filtersActive(feedFilters)
+
 
   return (
     <div
@@ -533,6 +561,51 @@ export default function Feed() {
           )}
         </button>
       </div>
+
+      {/* Catégories — contrôle segmenté défilant, sous la recherche.
+          Elles existaient déjà, mais uniquement au fond de la feuille de
+          filtres : il fallait ouvrir une modale pour changer de catégorie,
+          alors que c'est le filtre le plus utilisé. Elles pilotent le MÊME
+          `feedFilters.category` que la feuille — une seule source de vérité,
+          pas deux états à synchroniser. */}
+      {categoryChips.length > 1 && (
+        <div
+          className="mb-3 flex gap-2 overflow-x-auto px-4 pb-1"
+          style={{ scrollbarWidth: 'none' }}
+          data-swipe-x=""
+        >
+          {categoryChips.map((c) => {
+            const on = feedFilters.category === c
+            return (
+              <button
+                key={c}
+                onClick={() => {
+                  hapticSelection()
+                  setFeedFilters((f) => ({ ...f, category: c }))
+                }}
+                aria-pressed={on}
+                className="tappable flex-none rounded-full px-4 py-2 text-[13px] transition-colors"
+                style={
+                  on
+                    ? {
+                        background: 'var(--revs-red)',
+                        color: '#fff',
+                        fontWeight: 700,
+                        boxShadow: '0 2px 14px rgb(var(--color-accent) / 0.4)',
+                      }
+                    : {
+                        background: 'rgb(var(--color-fg) / 0.05)',
+                        color: 'rgb(var(--color-fg-2))',
+                        fontWeight: 500,
+                      }
+                }
+              >
+                {c === 'Tout' ? t('feedpage.allCategories') : c}
+              </button>
+            )
+          })}
+        </div>
+      )}
 
       <FeedFiltersModal
         open={filtersOpen}
@@ -726,6 +799,22 @@ const FeedCard = memo(function FeedCard({
   const rb = rarityBadge(spot.rarity)
   const title = [spot.brand, spot.model].filter(Boolean).join(' ') || t('feedpage.defaultCar')
 
+  /** La ligne « 2017 · 1.0 TSI · 95 ch » de la référence.
+   *
+   *  Tout vient de `spot.car_info`, déjà porté par le spot — aucune requête
+   *  supplémentaire : une par carte sur un fil qui défile coûterait bien plus
+   *  cher que la ligne ne vaut. Chaque élément n'apparaît que s'il existe
+   *  réellement ; une voiture sans fiche moteur affiche son année seule, et
+   *  une voiture sans rien n'affiche pas de ligne du tout. */
+  const specLine = [
+    spot.year ? String(spot.year) : null,
+    spot.car_info?.engine?.trim() || null,
+    spot.car_info?.horsepower?.trim() || null,
+    cat?.label ?? null,
+  ]
+    .filter(Boolean)
+    .join(' · ')
+
   useEffect(() => {
     let active = true
     ;(async () => {
@@ -841,13 +930,78 @@ const FeedCard = memo(function FeedCard({
     // 8px gap between posts on the #0a0a0a page; each post's interactions
     // live on a clean #141414 block so they never bleed into the next one.
     <article className="feed-card" style={{ marginBottom: '8px' }}>
+      {/* EN-TÊTE — AU-DESSUS de la photo, pas posé dessus.
+          Il flottait sur l'image, ce qui obligeait à un fond translucide et
+          le rendait plus ou moins lisible selon la photo. La référence le
+          sort de l'image : l'auteur et le lieu appartiennent à la
+          publication, la photo appartient à la voiture. */}
+      <div className="flex items-center gap-2.5 px-4 pb-2.5 pt-3">
+        <button
+          onClick={() => navigate(`/u/${spot.user_id}`)}
+          aria-label={t('feedpage.profileOf', { pseudo })}
+          className="tappable flex h-11 w-11 flex-none items-center justify-center overflow-hidden rounded-full bg-fg/10 text-[15px] font-extrabold text-fg"
+          style={{ border: '2px solid var(--revs-red)' }}
+        >
+          {prof?.avatar ? (
+            <img
+              src={prof.avatar}
+              alt=""
+              loading="lazy"
+              decoding="async"
+              className="h-full w-full rounded-full object-cover"
+              style={{ objectPosition: 'top' }}
+            />
+          ) : (
+            pseudo.charAt(0).toUpperCase()
+          )}
+        </button>
+        <div className="min-w-0 flex-1">
+          <div className="flex min-w-0 items-center gap-1.5">
+            <button
+              onClick={() => navigate(`/u/${spot.user_id}`)}
+              className="tappable truncate text-[15px] font-bold leading-tight text-fg"
+            >
+              {pseudo}
+            </button>
+            {founder && (
+              <span
+                className="flex-none rounded px-1.5 py-[2px] text-[9px] font-extrabold uppercase tracking-wider text-white"
+                style={{ background: 'var(--revs-red)' }}
+              >
+                {t('feedpage.founder')}
+              </span>
+            )}
+            {igLabel && (
+              <span className="truncate text-[13px] font-medium text-fg2">
+                {igLabel}
+              </span>
+            )}
+          </div>
+          <p className="mt-0.5 flex items-center gap-1 text-[12.5px] text-fg2">
+            {ville && (
+              <>
+                <MapPin className="h-3 w-3 flex-none" />
+                <span className="truncate">{ville}</span>
+                <span aria-hidden>·</span>
+              </>
+            )}
+            <span className="flex-none">{timeAgo(spot.created_at)}</span>
+          </p>
+        </div>
+      </div>
+
       {/* PHOTO 4:5 — full-bleed. Rarity badge top-right, 44px floating
           header, and the car identity over a bottom gradient that keeps
           the text legible on any photo. Double-tap likes; never navigates. */}
       <div
         ref={photoRef}
         onClick={onPhotoTap}
-        className="relative aspect-[4/5] cursor-pointer select-none overflow-hidden"
+        // 1/1 et non 4/5 : mesuré sur la référence, la photo y est carrée, et
+        // c'est ce qui fait tenir la carte ENTIÈRE sur un écran — en-tête,
+        // identité du véhicule, actions et bouton carte. En 4/5 le bouton
+        // « Voir sur la carte » tombait systématiquement sous la ligne de
+        // flottaison, donc personne ne le voyait.
+        className="relative aspect-square cursor-pointer select-none overflow-hidden"
       >
         {spot.photo_url ? (
           <img
@@ -881,65 +1035,6 @@ const FeedCard = memo(function FeedCard({
           {rb.label}
         </span>
 
-        {/* Floating header — 44px avatar + pseudo on a semi-transparent
-            pill so it reads on any photo. */}
-        <button
-          onClick={(e) => {
-            e.stopPropagation()
-            navigate(`/u/${spot.user_id}`)
-          }}
-          className="absolute inset-x-0 top-0 z-20 flex min-w-0 items-center gap-2.5 px-3 pt-3 text-left"
-          aria-label={t('feedpage.profileOf', { pseudo })}
-        >
-          <div
-            className="flex h-11 w-11 flex-none items-center justify-center overflow-hidden rounded-full bg-black/35 text-[15px] font-extrabold text-white"
-            style={{ border: '2px solid #E8203A' }}
-          >
-            {prof?.avatar ? (
-              <img
-                src={prof.avatar}
-                alt=""
-                loading="lazy"
-                decoding="async"
-                className="h-full w-full rounded-full object-cover"
-                style={{ objectPosition: 'top' }}
-              />
-            ) : (
-              pseudo.charAt(0).toUpperCase()
-            )}
-          </div>
-          <span
-            className="inline-flex min-w-0 items-center gap-1.5 rounded-full px-2.5 py-1"
-            style={{
-              background: 'rgba(0,0,0,0.38)',
-              backdropFilter: 'blur(4px)',
-              WebkitBackdropFilter: 'blur(4px)',
-            }}
-          >
-            <span className="truncate text-[13px] font-semibold tracking-tight text-white">
-              {pseudo}
-            </span>
-            {founder && (
-              <span
-                className="flex-none rounded uppercase tracking-wider text-white"
-                style={{
-                  background: 'rgba(239,68,68,0.6)',
-                  padding: '1px 4px',
-                  fontSize: '7px',
-                  letterSpacing: '0.12em',
-                }}
-              >
-                {t('feedpage.founder')}
-              </span>
-            )}
-            {igLabel && (
-              <span className="flex-none truncate text-[11px] font-medium text-white/60">
-                {igLabel}
-              </span>
-            )}
-          </span>
-        </button>
-
         {/* Bottom legibility gradient — transparent → #0a0a0a over 120px. */}
         <div
           aria-hidden
@@ -951,8 +1046,13 @@ const FeedCard = memo(function FeedCard({
           }}
         />
 
-        {/* Car identity — name + year · category · ville · time. Tapping
-            this block opens the detail (the photo itself never navigates). */}
+        {/* Identité du véhicule, posée au bas de la photo.
+            La référence sépare trois niveaux : la MARQUE en petit au-dessus,
+            le MODÈLE en gros, puis une ligne de caractéristiques. L'ancienne
+            version écrivait « marque modèle » sur une seule ligne et mêlait
+            à la suite la catégorie, la ville et l'heure — c'est-à-dire des
+            informations sur la PUBLICATION, qui vivent maintenant dans
+            l'en-tête, au-dessus de la photo. */}
         <button
           onClick={(e) => {
             e.stopPropagation()
@@ -961,25 +1061,24 @@ const FeedCard = memo(function FeedCard({
           className="absolute inset-x-0 bottom-0 z-10 px-4 pb-3 text-left"
           aria-label={t('feedpage.view', { title })}
         >
-          <p className="truncate text-[16px] font-bold text-white">{title}</p>
+          {spot.brand && (
+            <p className="truncate text-[12px] font-semibold uppercase tracking-[0.12em] text-white/70">
+              {spot.brand}
+            </p>
+          )}
+          <p className="truncate text-[21px] font-bold leading-tight text-white">
+            {spot.model || title}
+          </p>
+          {specLine && (
+            <p className="mt-1 truncate text-[13px] font-medium text-white/75">
+              {specLine}
+            </p>
+          )}
           {spot.description?.trim() ? (
-            <p className="clamp-2 mt-0.5 text-[13px] leading-snug text-white/85">
+            <p className="clamp-2 mt-1 text-[13px] leading-snug text-white/70">
               {spot.description.trim()}
             </p>
           ) : null}
-          <p className="mt-0.5 truncate text-[13px] text-white/70">
-            {spot.year ? <>{spot.year} · </> : null}
-            {cat ? (
-              <>
-                <span className="font-semibold" style={{ color: cat.color }}>
-                  {cat.label}
-                </span>
-                {' · '}
-              </>
-            ) : null}
-            {ville ? <>{ville} · </> : null}
-            {timeAgo(spot.created_at)}
-          </p>
         </button>
 
         {heartPop && (
@@ -1005,20 +1104,21 @@ const FeedCard = memo(function FeedCard({
           </div>
         )}
 
+        {/* Compteur de photos — en haut à GAUCHE, face au badge de rareté.
+            Il était sous le badge, à droite, où les deux se chevauchaient
+            visuellement. */}
         {burstCount > 1 && (
           <span
-            className="absolute z-20 flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-bold text-white"
+            className="absolute left-3 top-3 z-20 flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold tabular-nums text-white"
             style={{
-              right: 12,
-              top: 52,
-              background: 'rgba(0, 0, 0, 0.45)',
-              border: '1px solid rgba(255, 255, 255, 0.12)',
+              background: 'rgba(0, 0, 0, 0.5)',
+              border: '1px solid rgba(255, 255, 255, 0.14)',
               backdropFilter: 'saturate(160%) blur(12px)',
               WebkitBackdropFilter: 'saturate(160%) blur(12px)',
             }}
           >
             <Layers className="h-3 w-3" />
-            {burstCount}
+            1/{burstCount}
           </span>
         )}
       </div>
@@ -1054,6 +1154,27 @@ const FeedCard = memo(function FeedCard({
             </span>
           </span>
         </div>
+
+        {/* « Voir sur la carte » — demandé par la référence.
+            Il n'ouvre pas la Map générale : il transmet l'identifiant du spot
+            dans l'URL, et la Map s'y recentre, sélectionne le marqueur et
+            ouvre son aperçu. Sans cela le bouton reposerait la question qu'il
+            prétend résoudre : « où était cette voiture ? ».
+            Masqué quand le spot n'a pas de coordonnées exploitables — un
+            bouton qui mène à une carte vide est pire que pas de bouton. */}
+        {Number.isFinite(spot.lat) && Number.isFinite(spot.lng) && (
+          <button
+            onClick={() => navigate(`/map?spot=${spot.id}`)}
+            className="tappable mx-4 mt-3 flex w-[calc(100%-2rem)] items-center justify-center gap-2 rounded-xl py-3 text-[14px] font-semibold text-fg"
+            style={{
+              background: 'rgb(var(--color-fg) / 0.06)',
+              border: '1px solid var(--color-border)',
+            }}
+          >
+            <MapIcon className="h-[18px] w-[18px]" />
+            {t('feedpage.seeOnMap')}
+          </button>
+        )}
 
         {/* Comment bar — directly under the actions, inside the same block. */}
         <button

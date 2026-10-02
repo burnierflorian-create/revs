@@ -91,7 +91,14 @@ export default function CollectorCard({
 
   return (
     <CollectorCardV2
-      photo={spot.photo_url}
+      /* ── LE VÉHICULE DE LA CARTE ──
+         Le rendu Garage d'abord, la photo de rue ensuite. Une carte de
+         collection montre l'objet, pas la scène : le rendu est un studio
+         cadré en 3/4 avant, sans passants, sans poteau, sans plaque — ce que
+         la photo de spot ne garantit jamais.
+         La chaîne ne casse JAMAIS la carte : sans rendu on retombe sur la
+         photo, et sans photo CollectorCardV2 affiche déjà sa silhouette. */
+      photo={spot.garage_render_url ?? spot.photo_url}
       brand={spot.brand}
       model={spot.model}
       year={spot.year}

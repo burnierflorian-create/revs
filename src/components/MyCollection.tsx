@@ -11,6 +11,7 @@ import {
   type CardProgress,
 } from '../lib/cardLevels'
 import CollectorCard, { rarityRank } from './CollectorCard'
+import CardCarousel, { type CarouselCard } from './CardCarousel'
 import CardSpotsSheet from './CardSpotsSheet'
 
 /** One evolving card per unique (brand, model, base colour). Repeat spots of
@@ -29,6 +30,8 @@ type Card = {
 
 export default function MyCollection({ spots }: { spots: Spot[] }) {
   const { t } = useTranslation()
+  /** La carte ouverte en grand, par son index dans `sorted`. */
+  const [zoomIndex, setZoomIndex] = useState<number | null>(null)
   const navigate = useNavigate()
   const [meta, setMeta] = useState<Map<string, CardMeta>>(new Map())
   const [progress, setProgress] = useState<Map<string, CardProgress>>(new Map())
@@ -188,6 +191,22 @@ export default function MyCollection({ spots }: { spots: Spot[] }) {
     })
   }
 
+  const carouselCards: CarouselCard[] = sorted.map((c) => ({
+    key: c.key,
+    spot: c.rep,
+    cardNumber: cardNumberFor(c.key),
+    spotsCount: c.count,
+    isFirstOnRevs: meta.get(c.rep.id)?.is_first_on_revs ?? false,
+    evolution: {
+      level: c.level,
+      count: c.count,
+      firstSpotAt: c.cp?.first_spot_at ?? c.firstAt,
+      lastSpotAt: c.cp?.last_spot_at ?? c.spots[c.spots.length - 1].created_at,
+      cumulativeXp: c.cp?.cumulative_xp ?? 0,
+    },
+    onViewSpots: () => setSheetKey(c.key),
+  }))
+
   return (
     <>
     {/* 2-col grid at 100% width with an 8px gutter — each card is exactly
@@ -221,10 +240,29 @@ export default function MyCollection({ spots }: { spots: Spot[] }) {
               reveal={revealKeys.has(c.key)}
               showShare
             />
+            {/* Entrée vers la vue « une carte ».
+                Elle est posée SOUS la vignette et non dessus : la carte est
+                elle-même entièrement interactive — on la retourne, on la
+                partage — et lui superposer une zone d'ouverture volerait ces
+                gestes. */}
+            <button
+              onClick={() => setZoomIndex(i)}
+              className="tappable mt-1 w-full rounded-lg py-1.5 text-[11px] font-semibold text-fg2"
+              style={{ background: 'rgb(var(--color-fg) / 0.05)' }}
+            >
+              {t('card.openLarge')}
+            </button>
           </div>
         )
       })}
     </div>
+    {zoomIndex != null && (
+      <CardCarousel
+        cards={carouselCards}
+        startIndex={zoomIndex}
+        onClose={() => setZoomIndex(null)}
+      />
+    )}
     {sheetCard && (
       <CardSpotsSheet
         open
