@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import i18n from '../i18n'
-import { ArrowLeft, Camera, MapPin } from 'lucide-react'
+import { ArrowLeft, Camera, ImagePlus, MapPin } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import {
   blurRegions,
@@ -124,6 +124,7 @@ export default function NewSpot() {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const cameraRef = useRef<HTMLInputElement>(null)
+  const galleryRef = useRef<HTMLInputElement>(null)
 
   const [step, setStep] = useState<Step>(1)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
@@ -177,6 +178,11 @@ const [plateGuard, setPlateGuard] = useState<'pending' | 'ok' | 'failed'>('ok')
    *  choisir « saisie manuelle » suffirait à contourner la règle. */
   const [validationId, setValidationId] = useState<string | null>(null)
   const [gateChecking, setGateChecking] = useState(false)
+  /** D'où vient la photo. Ce n'est pas deviné à partir des EXIF — une photo
+   *  prise sur le moment peut n'en avoir aucune, et une photo de galerie peut
+   *  en avoir de parfaites. C'est l'utilisateur qui le dit, en choisissant
+   *  l'un des deux boutons, et c'est la seule information fiable. */
+  const [source, setSource] = useState<'camera' | 'gallery'>('camera')
   const [pubError, setPubError] = useState<string | null>(null)
   const [limitReached, setLimitReached] = useState(false)
   const [pubStatus, setPubStatus] = useState('')
@@ -760,18 +766,28 @@ const [plateGuard, setPlateGuard] = useState<'pending' | 'ok' | 'failed'>('ok')
     setLimitReached(false)
     setManualNotice(null)
     try {
-      setPubStatus(t('newspot.statusLocating'))
-      const pos = await getPosition()
+      // ── LE GPS N'EST DEMANDÉ QUE POUR UNE PHOTO PRISE SUR LE MOMENT ──
+      // Une publication galerie n'a pas de position : lui demander l'accès à
+      // la localisation serait réclamer une permission pour une donnée qu'on
+      // s'engage à ne pas utiliser. Et les contrôles anti-fraude qui suivent
+      // — photo trop ancienne, EXIF incohérent — n'ont aucun sens sur une
+      // photo qu'on assume avoir prise un autre jour, ailleurs.
+      const isGallery = source === 'gallery'
+      let pos: GeolocationPosition | null = null
+      if (!isGallery) {
+        setPubStatus(t('newspot.statusLocating'))
+        pos = await getPosition()
+      }
 
       // Anti-fraude : photo prise sur le moment et au bon endroit.
-      const takenAt = photoMeta?.takenAt ?? null
+      const takenAt = isGallery ? null : (photoMeta?.takenAt ?? null)
       if (takenAt && Date.now() - takenAt.getTime() > MAX_PHOTO_AGE_MS) {
         rejectAndRestart(t('newspot.rejectPhotoTooOld'))
         return
       }
-      const photoLat = photoMeta?.lat ?? null
-      const photoLng = photoMeta?.lng ?? null
-      if (photoLat != null && photoLng != null) {
+      const photoLat = isGallery ? null : (photoMeta?.lat ?? null)
+      const photoLng = isGallery ? null : (photoMeta?.lng ?? null)
+      if (photoLat != null && photoLng != null && pos) {
         // Contrôle anti-fraude : on compare l'EXIF de la photo à la position
         // réelle, en PRÉCISION PLEINE. Arrondir ici ajouterait jusqu'à ~78 m
         // de dérive artificielle sur un seuil de 300 m, donc des rejets
@@ -823,6 +839,7 @@ const [plateGuard, setPlateGuard] = useState<'pending' | 'ok' | 'failed'>('ok')
       // Best-effort lookup; failures fall through silently.
       let liveEventId: string | null = null
       try {
+        if (!pos) throw new Error('no_position')
         const { data: live } = await supabase
           .rpc('nearby_live_event', {
             p_lat: roundCoord(pos.coords.latitude),
@@ -840,6 +857,7 @@ const [plateGuard, setPlateGuard] = useState<'pending' | 'ok' | 'failed'>('ok')
         .insert({
           user_id: user.id,
           validation_id: validationId,
+          source,
           brand: brand.trim(),
           model: model.trim(),
           year: Number.isFinite(yearNum) ? yearNum : null,
@@ -851,8 +869,12 @@ const [plateGuard, setPlateGuard] = useState<'pending' | 'ok' | 'failed'>('ok')
           estimated_price: result.estimated_price ?? null,
           rarity: result.rarity ?? 'standard',
           production: result.production ?? null,
-          lat: roundCoord(pos.coords.latitude),
-          lng: roundCoord(pos.coords.longitude),
+          // Nulles pour une publication galerie. Le déclencheur
+          // `strip_gallery_location` (migration 0123) les efface de toute
+          // façon : on ne compte pas sur le client pour tenir une règle de
+          // confidentialité.
+          lat: pos ? roundCoord(pos.coords.latitude) : null,
+          lng: pos ? roundCoord(pos.coords.longitude) : null,
           event_id: liveEventId,
           // ── QUI FAIT AUTORITÉ SUR L'IDENTITÉ ──
           // Si l'utilisateur a modifié la marque ou le modèle proposés, c'est
@@ -946,7 +968,15 @@ const [plateGuard, setPlateGuard] = useState<'pending' | 'ok' | 'failed'>('ok')
       //  (1) nearby subscribers (≤10km, generic "new spot near you")
       //  (2) brand followers within ≤50km (only if the spot brand maps
       //      to one of the catalogued brands in src/lib/brands.ts)
+      // ── « À PROXIMITÉ » SUPPOSE UNE PROXIMITÉ ──
+      // Ces deux notifications ciblent les gens autour du spot. Une
+      // publication galerie n'a pas de position : il n'y a personne « autour »
+      // d'elle, et prévenir un rayon de 10 km à partir d'un point inexistant
+      // n'aurait aucun sens. Elle est annoncée autrement — aux abonnés de son
+      // auteur, par le fil.
+      const posForPush = pos
       void (async () => {
+        if (!posForPush) return
         await maybePromptPush()
         const who = await myPseudo()
         const brandTrim = brand.trim()
@@ -961,8 +991,8 @@ const [plateGuard, setPlateGuard] = useState<'pending' | 'ok' | 'failed'>('ok')
           url: '/map',
           type: 'nearby',
           nearby: {
-            lat: roundCoord(pos.coords.latitude),
-            lng: roundCoord(pos.coords.longitude),
+            lat: roundCoord(posForPush.coords.latitude),
+            lng: roundCoord(posForPush.coords.longitude),
             radiusKm: 10,
             excludeUserId: user.id,
           },
@@ -983,8 +1013,8 @@ const [plateGuard, setPlateGuard] = useState<'pending' | 'ok' | 'failed'>('ok')
             type: 'nearby',
             brand_nearby: {
               brand: slug,
-              lat: roundCoord(pos.coords.latitude),
-              lng: roundCoord(pos.coords.longitude),
+              lat: roundCoord(posForPush.coords.latitude),
+              lng: roundCoord(posForPush.coords.longitude),
               radiusKm: 50,
               excludeUserId: user.id,
             },
@@ -1048,7 +1078,19 @@ const [plateGuard, setPlateGuard] = useState<'pending' | 'ok' | 'failed'>('ok')
       } catch (fxErr) {
         console.warn('[spot] celebration skipped:', fxErr)
       }
-      navigate('/map', { state: { toast: t('newspot.toastPublished') } })
+      // ── POURQUOI « LE POINT EST DANS UN COIN » ──
+      // On arrivait sur /map SANS dire quel spot venait d'être publié. La
+      // carte s'ouvrait donc sur son dernier centre mémorisé — parfois un
+      // autre quartier, parfois une autre session — et le spot tout neuf se
+      // retrouvait au bord de l'écran, voire hors champ. Ses coordonnées
+      // étaient justes ; c'est la caméra qui regardait ailleurs.
+      //
+      // Avec `?spot=`, la carte vole jusqu'à lui et ouvre son aperçu. Une
+      // publication galerie n'a pas de position : on n'y envoie pas la carte.
+      navigate(
+        source === 'gallery' || !newSpotId ? '/feed' : `/map?spot=${newSpotId}`,
+        { state: { toast: t('newspot.toastPublished') } },
+      )
     } catch (err) {
       console.error('[spot] publish aborted:', err)
       const msg =
@@ -1181,6 +1223,13 @@ const [plateGuard, setPlateGuard] = useState<'pending' | 'ok' | 'failed'>('ok')
             onChange={onPick}
             className="hidden"
           />
+          <input
+            ref={galleryRef}
+            type="file"
+            accept="image/*"
+            onChange={onPick}
+            className="hidden"
+          />
 
           {/* Le contrôle automobile tourne pendant que l'aperçu s'affiche :
               on le dit plutôt que de laisser un bouton inerte sans raison. */}
@@ -1215,7 +1264,9 @@ const [plateGuard, setPlateGuard] = useState<'pending' | 'ok' | 'failed'>('ok')
               />
               <div className="flex gap-3">
                 <button
-                  onClick={() => cameraRef.current?.click()}
+                  onClick={() =>
+                    (source === 'gallery' ? galleryRef : cameraRef).current?.click()
+                  }
                   className="tappable flex-1 rounded-full py-3 text-sm font-bold tracking-wide text-fg2 hover:text-fg"
                   style={{ border: '1px solid var(--color-border)' }}
                 >
@@ -1313,13 +1364,39 @@ const [plateGuard, setPlateGuard] = useState<'pending' | 'ok' | 'failed'>('ok')
           ) : (
             <div className="space-y-4">
               <button
-                onClick={() => cameraRef.current?.click()}
+                onClick={() => {
+                  setSource('camera')
+                  cameraRef.current?.click()
+                }}
                 className="tappable flex w-full items-center justify-center gap-3 rounded-3xl bg-accent py-6 text-base font-extrabold tracking-wider text-fg"
                 style={{ boxShadow: '0 12px 36px rgba(232,32,58,0.45)' }}
               >
                 <Camera className="h-6 w-6" />
                 {t('newspot.takePhoto')}
               </button>
+
+              {/* ── LA GALERIE, EXPLICITEMENT ──
+                  Deux boutons plutôt qu'un seul, parce que `capture` est une
+                  SUGGESTION : les navigateurs de bureau et plusieurs
+                  navigateurs Android l'ignorent et ouvrent la galerie quand
+                  même. Tant qu'il n'y avait qu'une entrée, REVS croyait
+                  toutes ses photos prises sur le moment.
+                  Une publication galerie reste une publication — elle n'a
+                  simplement pas de position, et la base le garantit. */}
+              <button
+                onClick={() => {
+                  setSource('gallery')
+                  galleryRef.current?.click()
+                }}
+                className="tappable flex w-full items-center justify-center gap-3 rounded-3xl py-4 text-sm font-bold tracking-wide text-fg2"
+                style={{ border: '1px solid var(--color-border)' }}
+              >
+                <ImagePlus className="h-5 w-5" />
+                {t('newspot.pickFromGallery')}
+              </button>
+              <p className="text-center text-xs leading-relaxed text-fg2">
+                {t('newspot.gallerySub')}
+              </p>
               {pubError && (
                 <p className="text-sm text-accent">{pubError}</p>
               )}

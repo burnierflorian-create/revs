@@ -443,7 +443,8 @@
     "dailyUpdateNote": "Updated once a day. The tip takes into account your city, the brands you spot the most and the local weather.",
     "aiBadge": "AI 🎯",
     "previewBy": "By {{who}} · {{when}}",
-    "someone": "someone"
+    "someone": "someone",
+    "carouselHint": "{{index}} of {{total}} in this area"
   },
   "profilepage": {
     "header": {
@@ -809,7 +810,9 @@
     "plateGuardBlockedTitle": "Plate not verified",
     "plateGuardBlockedBody": "Automatic detection didn't complete. Until we can check, publishing stays blocked — we don't put a plate online by default. Run the check again, or retake the photo.",
     "plateGuardRetry": "Run the check again",
-    "aiDisclaimer": "AI identification can contain errors. Please check the information before publishing."
+    "aiDisclaimer": "AI identification can contain errors. Please check the information before publishing.",
+    "pickFromGallery": "Pick from gallery",
+    "gallerySub": "A gallery photo is published to the feed, but does not appear on the map."
   },
   "racepage": {
     "back": "Back",

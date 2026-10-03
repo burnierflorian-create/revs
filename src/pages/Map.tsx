@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate } from 'react-router-dom'
@@ -8,7 +8,6 @@ import 'mapbox-gl/dist/mapbox-gl.css'
 import {
   Camera,
   Car,
-  ChevronRight,
   LocateFixed,
   Loader2,
   Search as SearchIcon,
@@ -163,6 +162,11 @@ type SpotProps = {
    *  ring + ambient halo so the user can read the rarity layer at a
    *  glance without opening the popup. Maps to MAP_RARITY_COLOR. */
   rarity: Rarity
+  /** Coordonnées déjà anonymisées, telles qu'elles sont en base. Le carrousel
+   *  s'en sert pour recentrer la carte sur la carte qu'on fait défiler — on
+   *  ne recalcule jamais une position côté client. */
+  lng: number
+  lat: number
 }
 
 /** Per-rarity pin tint. Mirrors the CollectorCard frame palette so a
@@ -869,11 +873,57 @@ export default function MapPage() {
   const [toast, setToast] = useState<string | null>(null)
   const [geoError, setGeoError] = useState<string | null>(null)
   const [visibleCount, setVisibleCount] = useState(0)
+  /** Les spots réellement présents dans la zone affichée, dans l'ordre où le
+   *  carrousel les montre. Reconstruite à chaque rafraîchissement de la
+   *  source : le panneau ne doit jamais rester sur un état précédent. */
+  const [inView, setInView] = useState<SpotProps[]>([])
   const [mapReady, setMapReady] = useState(false)
   // Spots of a tapped same-place cluster, shown in a bottom sheet.
   const [clusterSheet, setClusterSheet] = useState<ClusterLeaf[] | null>(null)
   /** Le spot sélectionné, affiché en aperçu au bas de l'écran. */
   const [preview, setPreview] = useState<SpotProps | null>(null)
+
+  const carouselRef = useRef<HTMLDivElement | null>(null)
+  /** Vrai pendant qu'on fait défiler le carrousel par programme (après avoir
+   *  touché un marqueur). Sans ce drapeau, le défilement provoqué déclenche
+   *  `onScroll`, qui recentre la carte, qui re-déclenche… et les deux se
+   *  poursuivent sans fin. */
+  const programmaticScrollRef = useRef(false)
+
+  /** Faire défiler jusqu'à un spot, sans que cela recentre la carte. */
+  const scrollCarouselTo = useCallback((id: string) => {
+    const box = carouselRef.current
+    if (!box) return
+    const card = box.querySelector(`[data-spot="${id}"]`) as HTMLElement | null
+    if (!card) return
+    programmaticScrollRef.current = true
+    box.scrollTo({ left: card.offsetLeft - box.offsetLeft, behavior: 'smooth' })
+    window.setTimeout(() => {
+      programmaticScrollRef.current = false
+    }, 600)
+  }, [])
+
+  /** Au défilement manuel : la carte suit la carte affichée au centre. */
+  const onCarouselScroll = useCallback(() => {
+    if (programmaticScrollRef.current) return
+    const box = carouselRef.current
+    if (!box) return
+    const centre = box.scrollLeft + box.clientWidth / 2
+    let best: { id: string; d: number } | null = null
+    for (const el of Array.from(box.children) as HTMLElement[]) {
+      const id = el.dataset.spot
+      if (!id) continue
+      const d = Math.abs(el.offsetLeft - box.offsetLeft + el.offsetWidth / 2 - centre)
+      if (!best || d < best.d) best = { id, d }
+    }
+    if (!best) return
+    const sp = inView.find((x) => x.id === best.id)
+    if (!sp || sp.id === preview?.id) return
+    setPreview(sp)
+    const map = mapRef.current
+    const pos = validLngLat(sp.lng, sp.lat)
+    if (map && pos) map.easeTo({ center: pos, duration: 420 })
+  }, [inView, preview])
 
   /**
    * ── ARRIVÉE DEPUIS LE FEED : /map?spot=<id> ──
@@ -910,6 +960,8 @@ export default function MapPage() {
           spotter: namesRef.current.get(sp.user_id) ?? t('mappage.someone'),
           created_at: sp.created_at,
           rarity: (sp.rarity ?? 'standard') as Rarity,
+          lng: sp.lng,
+          lat: sp.lat,
         })
       } else if (tries > 40) {
         // ~8 s sans trouver le spot : il est expiré, filtré ou hors du jeu
@@ -1138,15 +1190,30 @@ export default function MapPage() {
       .catch(() => locate())
   }
 
+  // ── POURQUOI « Spot publié ! 🔥 » RESTAIT INDÉFINIMENT ──
+  // Cet effet dépendait de `location`. Il posait le message, lançait un
+  // minuteur de 3 s, puis appelait `navigate(..., state: null)` — qui CHANGE
+  // `location`. React exécutait donc aussitôt le nettoyage de l'effet, et ce
+  // nettoyage annulait le minuteur. Le message s'affichait et plus rien ne
+  // le retirait jamais.
+  //
+  // La correction sépare les deux : la lecture de l'état de navigation d'un
+  // côté, le minuteur de l'autre, celui-ci ne dépendant que du message. Vider
+  // l'état de navigation ne peut donc plus tuer sa propre disparition.
+  const toastSeenRef = useRef(false)
   useEffect(() => {
     const s = location.state as { toast?: string } | null
-    if (s?.toast) {
-      setToast(s.toast)
-      navigate(location.pathname, { replace: true, state: null })
-      const t = setTimeout(() => setToast(null), 3000)
-      return () => clearTimeout(t)
-    }
+    if (!s?.toast || toastSeenRef.current) return
+    toastSeenRef.current = true
+    setToast(s.toast)
+    navigate(location.pathname + location.search, { replace: true, state: null })
   }, [location, navigate])
+
+  useEffect(() => {
+    if (!toast) return
+    const t = setTimeout(() => setToast(null), 3000)
+    return () => clearTimeout(t)
+  }, [toast])
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return
@@ -1364,6 +1431,28 @@ export default function MapPage() {
         })
       }
       setVisibleCount(feats.length)
+      // Le carrousel lit la MÊME liste que les marqueurs, construite au même
+      // instant à partir des mêmes coordonnées. Deux sources séparées
+      // finiraient par se désaccorder — c'est exactement ce qui faisait que
+      // le panneau restait sur un seul véhicule.
+      setInView(
+        feats.slice(0, 40).map((f) => {
+          const p = f.properties as Record<string, unknown>
+          const c = (f.geometry as GeoJSON.Point).coordinates as [number, number]
+          return {
+            id: String(p.id ?? ''),
+            brand: String(p.brand ?? ''),
+            model: String(p.model ?? ''),
+            year: typeof p.year === 'number' ? p.year : null,
+            photo_url: typeof p.photo_url === 'string' ? p.photo_url : null,
+            spotter: String(p.spotter ?? ''),
+            created_at: String(p.created_at ?? ''),
+            rarity: (typeof p.rarity === 'string' ? p.rarity : 'standard') as Rarity,
+            lng: c[0],
+            lat: c[1],
+          }
+        }),
+      )
       return { type: 'FeatureCollection', features: feats }
     }
 
@@ -1618,6 +1707,8 @@ export default function MapPage() {
               (props.rarity as string) in MAP_RARITY_COLOR
               ? (props.rarity as Rarity)
               : 'standard'),
+            lng: coords[0],
+            lat: coords[1],
           }
           key = `s${sp.id}`
           marker = markers[key]
@@ -1660,6 +1751,10 @@ export default function MapPage() {
               // la place en bas, à une position fixe, où elle ne recouvre
               // jamais le point sélectionné.
               setPreview(sp)
+              // Le carrousel suit le marqueur : sans cela, toucher un point
+              // de la carte changerait la carte affichée sans bouger la
+              // bande, et les deux montreraient deux spots différents.
+              window.setTimeout(() => scrollCarouselTo(sp.id), 60)
               // A view keeps the spot alive 1h more; reflect it locally
               // so the ring visibly refills.
               supabase
@@ -2563,69 +2658,101 @@ export default function MapPage() {
       {/* ── APERÇU DU SPOT SÉLECTIONNÉ ──
           Position fixe au-dessus de la barre de navigation, comme la
           référence. Un appui ouvre le détail ; un appui sur la croix ferme. */}
-      {preview && (
+      {/* ══ CARROUSEL DES SPOTS DE LA ZONE ══
+          C'était une carte unique, celle du dernier marqueur touché : rien
+          ne permettait de passer au spot suivant sans retourner piquer un
+          autre point sur la carte. D'où l'impression d'être « bloqué sur un
+          seul véhicule ».
+
+          Marqueur et carrousel partagent maintenant une seule liste, celle
+          que la couche de marqueurs vient de dessiner — deux sources
+          séparées finiraient par se désaccorder. Toucher un marqueur fait
+          défiler jusqu'à sa carte ; faire défiler recentre la carte. */}
+      {preview && inView.length > 0 && (
         <div
-          className="pointer-events-none fixed inset-x-0 z-30 px-3"
+          className="pointer-events-none fixed inset-x-0 z-30"
           style={{ bottom: 'calc(env(safe-area-inset-bottom) + 76px)' }}
         >
           <div
-            className="pointer-events-auto flex items-center gap-3 rounded-2xl p-2.5"
-            style={{
-              background: 'rgba(16,16,18,0.92)',
-              border: '1px solid rgba(255,255,255,0.10)',
-              backdropFilter: 'saturate(160%) blur(20px)',
-              WebkitBackdropFilter: 'saturate(160%) blur(20px)',
-              boxShadow: '0 12px 34px rgba(0,0,0,0.55)',
-            }}
+            ref={carouselRef}
+            onScroll={onCarouselScroll}
+            className="pointer-events-auto flex snap-x snap-mandatory gap-2 overflow-x-auto px-3 pb-1"
+            style={{ scrollbarWidth: 'none', scrollBehavior: 'smooth' }}
+            data-swipe-x=""
           >
-            <button
-              onClick={() => navigate(`/spot/${preview.id}`)}
-              className="tappable flex min-w-0 flex-1 items-center gap-3 text-left"
-            >
-              {preview.photo_url ? (
-                <img
-                  src={preview.photo_url}
-                  alt=""
-                  loading="lazy"
-                  decoding="async"
-                  className="h-[72px] w-[92px] flex-none rounded-xl object-cover"
-                />
-              ) : (
-                <span className="flex h-[72px] w-[92px] flex-none items-center justify-center rounded-xl bg-white/5">
-                  <Car className="h-6 w-6 text-white/40" />
-                </span>
-              )}
-              <span className="min-w-0 flex-1">
-                {preview.brand && (
-                  <span className="block truncate text-[11px] font-semibold uppercase tracking-[0.12em] text-white/60">
-                    {preview.brand}
+            {inView.map((sp) => (
+              <div
+                key={sp.id}
+                data-spot={sp.id}
+                className="flex w-[calc(100vw-1.5rem)] flex-none snap-center items-center gap-3 rounded-2xl p-2.5"
+                style={{
+                  background: 'rgba(16,16,18,0.92)',
+                  border:
+                    sp.id === preview.id
+                      ? '1px solid rgba(232,32,58,0.55)'
+                      : '1px solid rgba(255,255,255,0.10)',
+                  backdropFilter: 'saturate(160%) blur(20px)',
+                  WebkitBackdropFilter: 'saturate(160%) blur(20px)',
+                  boxShadow: '0 12px 34px rgba(0,0,0,0.55)',
+                }}
+              >
+                <button
+                  onClick={() => navigate(`/spot/${sp.id}`)}
+                  className="tappable flex min-w-0 flex-1 items-center gap-3 text-left"
+                >
+                  {sp.photo_url ? (
+                    <img
+                      src={sp.photo_url}
+                      alt=""
+                      loading="lazy"
+                      decoding="async"
+                      className="h-[72px] w-[92px] flex-none rounded-xl object-cover"
+                    />
+                  ) : (
+                    <span className="flex h-[72px] w-[92px] flex-none items-center justify-center rounded-xl bg-white/5">
+                      <Car className="h-6 w-6 text-white/40" />
+                    </span>
+                  )}
+                  <span className="min-w-0 flex-1">
+                    {sp.brand && (
+                      <span className="block truncate text-[11px] font-semibold uppercase tracking-[0.12em] text-white/60">
+                        {sp.brand}
+                      </span>
+                    )}
+                    <span className="block truncate text-[15px] font-bold text-white">
+                      {sp.model || sp.brand}
+                    </span>
+                    <span className="block truncate text-[12px] text-white/50">
+                      {[sp.year ?? null, rarityBadge(sp.rarity)?.label ?? null]
+                        .filter(Boolean)
+                        .join(' · ')}
+                    </span>
+                    <span className="block truncate text-[11.5px] text-white/40">
+                      {t('mappage.previewBy', {
+                        who: sp.spotter,
+                        when: timeAgo(sp.created_at),
+                      })}
+                    </span>
                   </span>
-                )}
-                <span className="block truncate text-[16px] font-bold leading-tight text-white">
-                  {preview.model || preview.brand}
-                </span>
-                <span className="mt-0.5 block truncate text-[12.5px] text-white/60">
-                  {[preview.year ?? null, rarityBadge(preview.rarity)?.label ?? null]
-                    .filter(Boolean)
-                    .join(' · ')}
-                </span>
-                <span className="mt-0.5 block truncate text-[12px] text-white/45">
-                  {t('mappage.previewBy', {
-                    who: preview.spotter,
-                    when: timeAgo(preview.created_at),
-                  })}
-                </span>
-              </span>
-              <ChevronRight className="h-5 w-5 flex-none text-white/50" />
-            </button>
-            <button
-              onClick={() => setPreview(null)}
-              aria-label={t('common.close')}
-              className="tappable flex h-7 w-7 flex-none items-center justify-center self-start rounded-full bg-white/10 text-white/70"
-            >
-              <X className="h-4 w-4" />
-            </button>
+                </button>
+                <button
+                  onClick={() => setPreview(null)}
+                  aria-label={t('common.close')}
+                  className="tappable flex h-7 w-7 flex-none items-center justify-center self-start rounded-full bg-white/10 text-white/70"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            ))}
           </div>
+          {inView.length > 1 && (
+            <p className="pointer-events-none pt-1.5 text-center text-[11px] font-medium text-white/45">
+              {t('mappage.carouselHint', {
+                index: Math.max(1, inView.findIndex((x) => x.id === preview.id) + 1),
+                total: inView.length,
+              })}
+            </p>
+          )}
         </div>
       )}
 

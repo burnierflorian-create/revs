@@ -443,7 +443,8 @@
     "dailyUpdateNote": "Mise à jour une fois par jour. Le conseil tient compte de ta ville, des marques que tu spottes le plus et de la météo locale.",
     "aiBadge": "IA 🎯",
     "previewBy": "Par {{who}} · {{when}}",
-    "someone": "quelqu’un"
+    "someone": "quelqu’un",
+    "carouselHint": "{{index}} sur {{total}} dans cette zone"
   },
   "profilepage": {
     "header": {
@@ -809,7 +810,9 @@
     "plateGuardBlockedTitle": "Plaque non vérifiée",
     "plateGuardBlockedBody": "La détection automatique n'a pas abouti. Tant qu'on n'a pas pu vérifier, la publication reste bloquée — on ne met pas une plaque en ligne par défaut. Relance la vérification, ou reprends la photo.",
     "plateGuardRetry": "Relancer la vérification",
-    "aiDisclaimer": "L’identification est réalisée par IA et peut comporter des erreurs. Vérifiez les informations avant de publier."
+    "aiDisclaimer": "L’identification est réalisée par IA et peut comporter des erreurs. Vérifiez les informations avant de publier.",
+    "pickFromGallery": "Choisir dans la galerie",
+    "gallerySub": "Une photo de la galerie est publiée dans le fil, mais n'apparaît pas sur la carte."
   },
   "racepage": {
     "back": "Retour",
