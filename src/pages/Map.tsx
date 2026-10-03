@@ -904,6 +904,18 @@ export default function MapPage() {
   }, [])
 
   /** Au défilement manuel : la carte suit la carte affichée au centre. */
+  // Quand la sélection vient d'ailleurs que du carrousel — lien `?spot=`,
+  // marqueur touché — la bande doit s'y porter. Sans cela elle s'ouvre sur
+  // une autre carte que celle que la carte vient de survoler.
+  const alignedForRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!preview || inView.length === 0) return
+    if (alignedForRef.current === preview.id) return
+    if (!inView.some((x) => x.id === preview.id)) return
+    alignedForRef.current = preview.id
+    scrollCarouselTo(preview.id)
+  }, [preview, inView, scrollCarouselTo])
+
   const onCarouselScroll = useCallback(() => {
     if (programmaticScrollRef.current) return
     const box = carouselRef.current
