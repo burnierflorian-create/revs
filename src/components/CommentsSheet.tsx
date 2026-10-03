@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Send, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { timeAgo } from '../lib/spots'
@@ -114,7 +115,14 @@ export default function CommentsSheet({
 
   if (!open) return null
 
-  return (
+  // ── RENDU EN PORTAIL ──
+  // Posée dans l'arbre du Fil, la feuille restait prisonnière du contexte
+  // d'empilement de l'onglet (transformations de la zone défilante). Son
+  // z-index 60 ne pouvait donc pas passer devant la barre de navigation, qui
+  // vit à la racine avec un z-index de 40 : le champ « Ajouter un
+  // commentaire » se retrouvait DERRIÈRE la barre, inatteignable au doigt.
+  // Montée sur document.body, elle n'a plus de parent qui puisse la couvrir.
+  return createPortal(
     <div className="fixed inset-0 z-[60] flex flex-col justify-end">
       {/* Dim, blurred backdrop */}
       <button
@@ -232,6 +240,7 @@ export default function CommentsSheet({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
