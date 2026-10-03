@@ -36,6 +36,7 @@ import {
   Shield,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { onOnlineCount } from '../lib/presenceSync'
 import { setPendingPhoto } from '../lib/pendingPhoto'
 import { GP_2026 } from '../lib/f1'
 import { fetchProgress, openPrestige, romanPrestige, type Progress } from '../lib/xp'
@@ -171,6 +172,17 @@ export default function Home() {
       document.removeEventListener('visibilitychange', onVis)
     }
   }, [])
+
+  // Un décompte plus frais venu d'ailleurs — typiquement le panneau Membres,
+  // qui rebat la présence en s'ouvrant. Sans cela l'accueil annonçait « 2 en
+  // ligne » sous un panneau qui en listait 3, sur le même écran.
+  useEffect(
+    () =>
+      onOnlineCount((n) =>
+        setCommunity((c) => (c && c.online_now !== n ? { ...c, online_now: n } : c)),
+      ),
+    [],
+  )
 
   // Compteur « en ligne », rafraîchi toutes les 60 s tant qu'on est sur
   // l'accueil.

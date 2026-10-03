@@ -31,6 +31,7 @@ import { useNavigate } from 'react-router-dom'
 import { MapPin, Search, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { sinceLabel } from '../lib/presence'
+import { publishOnlineCount } from '../lib/presenceSync'
 
 type Member = {
   user_id: string
@@ -70,7 +71,12 @@ export default function MembersSheet({
       ])
       if (!active) return
       setMembers((l.data ?? []) as Member[])
-      setCounts((c.data as Counts) ?? null)
+      const cnt = (c.data as Counts) ?? null
+      setCounts(cnt)
+      // Ce panneau vient de rebattre la présence de celui qui l'ouvre : son
+      // chiffre est le plus frais de l'application. On le pousse aux autres
+      // compteurs plutôt que de les laisser traîner une minute derrière.
+      if (cnt) publishOnlineCount(cnt.online_now)
     }
     void load()
     // Même rythme que le battement de présence : plus souvent ne montrerait
