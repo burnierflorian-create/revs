@@ -196,9 +196,22 @@ function spotMarkerEl(p: SpotProps, remainingMs: number): HTMLDivElement {
 
   const outer = document.createElement('div')
   outer.style.cursor = 'pointer'
-  outer.className = 'map-marker-pop'
-
+  // ── L'ANIMATION NE VA JAMAIS SUR L'ÉLÉMENT QUE MAPBOX POSITIONNE ──
+  // `markerPop` anime `transform: scale(...)`. Mapbox positionne CE même
+  // élément par un `transform: translate(...)` en ligne — et une animation
+  // CSS l'emporte sur le style en ligne. Pendant les 320 ms de l'animation,
+  // le marqueur perdait donc son translate et se collait à l'origine du
+  // conteneur : le fameux point « en haut à gauche ». Avec
+  // `animation-fill-mode: both`, il y restait même avant que l'animation ne
+  // démarre, et définitivement si elle ne jouait jamais.
+  //
+  // Mesuré en production : trois marqueurs sur cinq rendaient à left:0,
+  // top:0 alors que leur transform Mapbox était correct.
+  //
+  // La règle était déjà écrite pour `map-marker-drop` quelques lignes plus
+  // bas ; elle avait simplement été oubliée ici.
   const wrap = document.createElement('div')
+  wrap.className = 'map-marker-pop'
   wrap.style.position = 'relative'
   wrap.style.width = `${size}px`
   wrap.style.height = `${size}px`
@@ -339,7 +352,8 @@ const RARITY_BY_SCORE: Rarity[] = [
 function clusterMarkerEl(count: number, maxRarity: number): HTMLDivElement {
   const outer = document.createElement('div')
   outer.style.cursor = 'pointer'
-  outer.className = 'map-marker-pop'
+  // Même raison que pour le marqueur de spot : l'animation va sur l'enfant,
+  // jamais sur l'élément que Mapbox positionne.
   // Spec radii 20/25/30 → diameters 40/50/60 at 2-4 / 5-9 / 10+ spots.
   const size = count < 5 ? 40 : count < 10 ? 50 : 60
   const tint =
@@ -349,6 +363,7 @@ function clusterMarkerEl(count: number, maxRarity: number): HTMLDivElement {
   // A rarity-coloured halo ring only when the cluster holds a supercar+.
   const rareRing = maxRarity >= 5 ? `0 0 0 2px ${tint.stroke}, ` : ''
   const inner = document.createElement('div')
+  inner.className = 'map-marker-pop'
   inner.style.width = `${size}px`
   inner.style.height = `${size}px`
   inner.style.borderRadius = '9999px'
@@ -1754,9 +1769,12 @@ export default function MapPage() {
             if (newSpotIds.has(sp.id)) {
               newSpotIds.delete(sp.id)
               if (!prefersReducedMotion()) {
-                el.classList.remove('map-marker-pop')
                 const inner = el.firstElementChild as HTMLElement | null
                 if (inner) {
+                  // La classe vit sur l'enfant depuis la correction du
+                  // marqueur « en haut à gauche » : c'est donc là qu'on la
+                  // retire avant de jouer l'animation de chute.
+                  inner.classList.remove('map-marker-pop')
                   inner.classList.add('map-marker-drop')
                   const ripple = document.createElement('div')
                   ripple.className = 'map-marker-ripple'
