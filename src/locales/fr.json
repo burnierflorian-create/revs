@@ -1291,7 +1291,18 @@
     "badgesCount": "Badges · {{n}}",
     "nobodyYet": "Personne pour le moment.",
     "latestSpots": "Derniers spots",
-    "noSpot": "Aucun spot."
+    "noSpot": "Aucun spot.",
+    "contentTabs": "Contenu du profil",
+    "tab": {
+      "spots": "Spots",
+      "likes": "Likes",
+      "bookmarks": "Favoris"
+    },
+    "noSpotBody": "Les voitures repérées par ce spotter apparaîtront ici.",
+    "noLikes": "Aucun like pour le moment.",
+    "noLikesBody": "Les spots aimés apparaîtront ici.",
+    "noBookmarks": "Aucun favori pour le moment.",
+    "noBookmarksBody": "Les spots mis de côté n'apparaissent que sur votre profil. Personne d'autre ne les voit."
   },
   "gamif": {
     "back": "Retour",

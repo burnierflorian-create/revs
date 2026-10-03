@@ -1291,7 +1291,18 @@
     "badgesCount": "Badges · {{n}}",
     "nobodyYet": "Nobody yet.",
     "latestSpots": "Latest spots",
-    "noSpot": "No spot."
+    "noSpot": "No spot.",
+    "contentTabs": "Profile content",
+    "tab": {
+      "spots": "Spots",
+      "likes": "Likes",
+      "bookmarks": "Saved"
+    },
+    "noSpotBody": "Cars spotted by this spotter will show up here.",
+    "noLikes": "No likes yet.",
+    "noLikesBody": "Liked spots will show up here.",
+    "noBookmarks": "Nothing saved yet.",
+    "noBookmarksBody": "Saved spots only appear on your own profile. Nobody else can see them."
   },
   "gamif": {
     "back": "Back",

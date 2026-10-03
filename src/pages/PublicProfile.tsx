@@ -10,6 +10,7 @@ import { displayHandle, instagramUrl } from '../lib/social'
 import { allBadges, computeUnlocks } from '../lib/badges'
 import { sinceLabel } from '../lib/presence'
 import { Skeleton } from '../components/Skeleton'
+import SpotMiniGrid from '../components/profile/SpotMiniGrid'
 
 type Prof = {
   pseudo: string | null
@@ -48,6 +49,12 @@ export default function PublicProfile() {
   const [busy, setBusy] = useState(false)
   const [tab, setTab] = useState<null | 'followers' | 'following'>(null)
   const [list, setList] = useState<Rel[]>([])
+  const [contentTab, setContentTab] = useState<'spots' | 'likes' | 'bookmarks'>('spots')
+  /** Les spots de l'onglet Likes ou Favoris. Chargés À LA DEMANDE : la
+   *  plupart des visites s'arrêtent aux Spots, et deux listes de plus à
+   *  l'ouverture coûteraient à tout le monde pour servir quelques-uns. */
+  const [sideSpots, setSideSpots] = useState<Spot[] | null>(null)
+  const [sideLoading, setSideLoading] = useState(false)
 
   const load = useCallback(async () => {
     if (!id) return
@@ -125,6 +132,47 @@ export default function PublicProfile() {
   useEffect(() => {
     load()
   }, [load])
+
+  // Likes ou Favoris, à l'ouverture de l'onglet.
+  //
+  // Les favoris ne sont demandés QUE sur son propre profil, et la policy
+  // « read own bookmarks » les refuserait de toute façon ailleurs : la
+  // confidentialité ne repose pas sur cette condition, elle la double.
+  useEffect(() => {
+    if (!id || contentTab === 'spots') return
+    let active = true
+    void (async () => {
+      // setState DANS le corps asynchrone, pas en synchrone au montage de
+      // l'effet : React signale la seconde forme, qui déclenche un rendu de
+      // plus avant même que la requête soit partie.
+      setSideLoading(true)
+      const table = contentTab === 'likes' ? 'spot_likes' : 'spot_bookmarks'
+      const { data: links } = await supabase
+        .from(table)
+        .select('spot_id')
+        .eq('user_id', id)
+        .order('created_at', { ascending: false })
+        .limit(60)
+      const ids = ((links ?? []) as { spot_id: string }[]).map((r) => r.spot_id)
+      if (!active) return
+      if (ids.length === 0) {
+        setSideSpots([])
+        setSideLoading(false)
+        return
+      }
+      const { data } = await supabase.from('spots').select('*').in('id', ids)
+      if (!active) return
+      // L'ordre de `in()` n'est pas celui des identifiants : on remet la
+      // liste dans l'ordre où la personne a aimé ou rangé, le plus récent
+      // d'abord — sinon « mes derniers favoris » n'a plus de sens.
+      const byId = new Map(((data ?? []) as Spot[]).map((sp) => [sp.id, sp]))
+      setSideSpots(ids.map((i) => byId.get(i)).filter((sp): sp is Spot => !!sp))
+      setSideLoading(false)
+    })()
+    return () => {
+      active = false
+    }
+  }, [id, contentTab])
 
   async function toggleFollow() {
     if (!meId || !id || meId === id || busy) return
@@ -440,30 +488,68 @@ export default function PublicProfile() {
         </div>
       )}
 
-      <h3 className="mb-3 mt-7 font-display text-lg font-bold">
-        {t('community.latestSpots')}
-      </h3>
-      {spots.length === 0 ? (
-        <p className="pb-10 text-sm text-fg/40">{t('community.noSpot')}</p>
-      ) : (
-        <div className="grid grid-cols-3 gap-2 pb-10">
-          {spots.slice(0, 12).map((s) => (
+      {/* ── SPOTS · LIKES · FAVORIS ──
+          « Favoris » n'apparaît que sur SON PROPRE profil. Ce n'est pas une
+          précaution d'affichage : la policy « read own bookmarks » ferait de
+          toute façon revenir une liste vide chez les autres. L'onglet est
+          masqué pour ne pas annoncer un contenu que personne ne verra, et
+          pour ne pas laisser croire que la personne n'a rien mis de côté.
+
+          Les Likes, eux, sont publics — c'est un geste social, pas un
+          rangement personnel. */}
+      <div
+        role="tablist"
+        aria-label={t('community.contentTabs')}
+        className="mt-7 flex gap-2"
+      >
+        {(['spots', 'likes', ...(isMe ? (['bookmarks'] as const) : [])] as const).map((k) => {
+          const on = contentTab === k
+          return (
             <button
-              key={s.id}
-              onClick={() => navigate(`/spot/${s.id}`)}
-              className="relative aspect-square overflow-hidden rounded-xl bg-card"
+              key={k}
+              role="tab"
+              aria-selected={on}
+              onClick={() => setContentTab(k)}
+              className="tappable flex-1 rounded-full px-3 py-2.5 text-[13px] transition-colors"
+              style={
+                on
+                  ? { background: 'var(--revs-red)', color: '#fff', fontWeight: 700 }
+                  : {
+                      background: 'rgb(var(--color-fg) / 0.05)',
+                      color: 'rgb(var(--color-fg-2))',
+                      fontWeight: 500,
+                    }
+              }
             >
-              {s.photo_url ? (
-                <img src={s.photo_url} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" />
-              ) : (
-                <div className="flex h-full w-full items-center justify-center">
-                  <Car className="h-6 w-6 text-fg/20" />
-                </div>
-              )}
+              {t(`community.tab.${k}`)}
             </button>
-          ))}
-        </div>
-      )}
+          )
+        })}
+      </div>
+
+      <div className="mt-4 pb-10">
+        {contentTab === 'spots' ? (
+          <SpotMiniGrid
+            spots={spots}
+            loading={false}
+            emptyTitle={t('community.noSpot')}
+            emptyBody={t('community.noSpotBody')}
+          />
+        ) : (
+          <SpotMiniGrid
+            spots={sideSpots}
+            loading={sideLoading}
+            emptyTitle={
+              contentTab === 'likes' ? t('community.noLikes') : t('community.noBookmarks')
+            }
+            emptyBody={
+              contentTab === 'likes'
+                ? t('community.noLikesBody')
+                : t('community.noBookmarksBody')
+            }
+          />
+        )}
+      </div>
       </div>
     </div>
   )
