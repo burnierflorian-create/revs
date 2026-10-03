@@ -49,7 +49,10 @@ const spots = await readAll(
   'spots',
   'id, user_id, brand, model, color, garage_render_url, ai_verified, ident_locked, confidence, ai_confidence',
 )
-const renders = await readAll('garage_renders', 'cache_key, status, render_url, version')
+const renders = await readAll(
+  'garage_renders',
+  'cache_key, status, render_url, version, review_reason, attempts',
+)
 const byKey = new Map(renders.map((r) => [r.cache_key, r]))
 
 // ── LA CLÉ CANONIQUE ──
@@ -96,7 +99,13 @@ for (const e of canon.values()) {
   const cached = byKey.get(e.key)
   if (cached?.status === 'ready' && cached.render_url) CATS.VALIDE.push(e)
   else if (e.rendered > 0 && !cached) CATS.ORPHELIN.push(e)
-  else if (cached && cached.status !== 'ready') CATS.EN_ERREUR.push({ ...e, status: cached.status })
+  else if (cached && cached.status !== 'ready')
+    CATS.EN_ERREUR.push({
+      ...e,
+      status: cached.status,
+      reason: cached.review_reason,
+      attempts: cached.attempts,
+    })
   else if (e.eligible.ok) CATS.A_GENERER.push(e)
   else CATS.A_CONTROLER.push(e)
 }
@@ -154,7 +163,11 @@ if (AS_JSON) {
       console.log(
         `  ${`${e.brand} ${e.model}`.slice(0, 40).padEnd(42)} ${e.spots} spot(s) · ${e.users.size} util.` +
           (e.eligible.reason ? `\n      raison : ${e.eligible.reason}` : '') +
-          (e.status ? `\n      statut de cache : ${e.status}` : ''),
+          (e.status
+            ? `\n      statut de cache : ${e.status}` +
+              (e.reason ? ` — ${e.reason}` : '') +
+              (e.attempts ? ` (${e.attempts} tentative(s))` : '')
+            : ''),
       )
     }
   }
@@ -168,5 +181,21 @@ if (AS_JSON) {
       `${coherent ? '✓' : '✗ UN MODÈLE A DISPARU'}`,
   )
   console.log(`version du moteur Garage : v${GARAGE_VISUAL_VERSION}`)
+  // Les rendus signalés par le contrôle qualité, toutes clés confondues —
+  // y compris ceux dont le modèle n'apparaît plus dans aucun spot.
+  const signales = renders.filter((r) => r.status === 'needs_review' || r.status === 'failed')
+  console.log(
+    `rendus signalés par le contrôle : ${signales.length}` +
+      (signales.length
+        ? '\n' +
+          signales
+            .map(
+              (r) =>
+                `  ${r.cache_key.padEnd(44)} ${r.status} — ${r.review_reason ?? 'sans motif'} ` +
+                `(${r.attempts} tentative(s))`,
+            )
+            .join('\n')
+        : ''),
+  )
   if (!coherent) process.exit(1)
 }

@@ -1764,7 +1764,8 @@
     "delete": "Supprimer cette story",
     "previous": "Story précédente",
     "next": "Story suivante",
-    "empty": "Aucune story disponible"
+    "empty": "Aucune story disponible",
+    "takePhoto": "Prendre une photo"
   },
   "spotmenu": {
     "open": "Options de la publication",

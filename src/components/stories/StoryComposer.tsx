@@ -13,7 +13,7 @@
 import { useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
-import { ImagePlus, Loader2, X } from 'lucide-react'
+import { Camera, ImagePlus, Loader2, X } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { resizeImageToJpeg } from '../../lib/spots'
 import { checkAutomotive, gateMessageKey } from '../../lib/imageGate'
@@ -31,6 +31,7 @@ export default function StoryComposer({
 }) {
   const { t } = useTranslation()
   const inputRef = useRef<HTMLInputElement>(null)
+  const cameraRef = useRef<HTMLInputElement>(null)
   const [preview, setPreview] = useState<string | null>(null)
   const [blob, setBlob] = useState<Blob | null>(null)
   const [caption, setCaption] = useState('')
@@ -182,18 +183,37 @@ export default function StoryComposer({
               </button>
             </div>
           ) : (
-            <button
-              onClick={() => inputRef.current?.click()}
-              className="tappable flex w-full flex-col items-center justify-center gap-3 rounded-2xl py-14"
-              style={{
-                background: 'rgb(var(--color-fg) / 0.04)',
-                border: '1px dashed var(--color-border)',
-              }}
-            >
-              <ImagePlus className="h-8 w-8 text-fg2" />
-              <span className="text-[14px] font-semibold text-fg">{t('stories.choosePhoto')}</span>
-              <span className="text-[12.5px] text-fg2">{t('stories.lifetime')}</span>
-            </button>
+            <div className="space-y-2.5">
+              <button
+                onClick={() => cameraRef.current?.click()}
+                className="tappable flex w-full flex-col items-center justify-center gap-2.5 rounded-2xl py-10"
+                style={{
+                  background: 'rgb(var(--color-accent) / 0.1)',
+                  border: '1px solid rgb(var(--color-accent) / 0.35)',
+                }}
+              >
+                <Camera className="h-7 w-7" style={{ color: 'var(--revs-red)' }} />
+                <span className="text-[14px] font-semibold text-fg">
+                  {t('stories.takePhoto')}
+                </span>
+              </button>
+              <button
+                onClick={() => inputRef.current?.click()}
+                className="tappable flex w-full flex-col items-center justify-center gap-2.5 rounded-2xl py-10"
+                style={{
+                  background: 'rgb(var(--color-fg) / 0.04)',
+                  border: '1px dashed var(--color-border)',
+                }}
+              >
+                <ImagePlus className="h-7 w-7 text-fg2" />
+                <span className="text-[14px] font-semibold text-fg">
+                  {t('stories.choosePhoto')}
+                </span>
+              </button>
+              <p className="pt-1 text-center text-[12.5px] text-fg2">
+                {t('stories.lifetime')}
+              </p>
+            </div>
           )}
 
           {preview && (
@@ -240,10 +260,25 @@ export default function StoryComposer({
           )}
         </div>
 
+        {/* Deux entrées distinctes, comme pour un spot. `capture` ouvre
+            directement l'appareil photo arrière quand le navigateur le
+            respecte ; sans lui, c'est le sélecteur de la galerie. Une seule
+            entrée laissait le système choisir, et l'on ne savait jamais
+            laquelle on allait obtenir.
+            Une story n'apparaît sur aucune carte, quelle que soit la source :
+            la distinction est ici un confort, pas une règle. */}
         <input
           ref={inputRef}
           type="file"
           accept="image/*"
+          onChange={pick}
+          className="hidden"
+        />
+        <input
+          ref={cameraRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
           onChange={pick}
           className="hidden"
         />

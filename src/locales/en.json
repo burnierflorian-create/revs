@@ -1764,7 +1764,8 @@
     "delete": "Delete this story",
     "previous": "Previous story",
     "next": "Next story",
-    "empty": "No stories available"
+    "empty": "No stories available",
+    "takePhoto": "Take a photo"
   },
   "spotmenu": {
     "open": "Post options",
