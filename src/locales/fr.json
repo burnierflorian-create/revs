@@ -1703,5 +1703,23 @@
     "agoHour": "il y a {{n}} h",
     "agoDay": "il y a {{n}} j",
     "openProfile": "Voir le profil de {{pseudo}}"
+  },
+  "stories": {
+    "add": "Ajouter",
+    "yours": "Votre story",
+    "openOf": "Voir la story de {{pseudo}}",
+    "composerTitle": "Nouvelle story",
+    "choosePhoto": "Choisir une photo",
+    "changePhoto": "Changer",
+    "lifetime": "Visible 24 heures",
+    "captionPlaceholder": "Une légende ? (facultatif)",
+    "publish": "Publier",
+    "publishing": "Publication…",
+    "publishError": "La publication a échoué. Réessaie.",
+    "readError": "Image illisible. Choisis-en une autre.",
+    "delete": "Supprimer cette story",
+    "previous": "Story précédente",
+    "next": "Story suivante",
+    "empty": "Aucune story disponible"
   }
 }

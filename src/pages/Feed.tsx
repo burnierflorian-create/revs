@@ -7,6 +7,7 @@ import { useNavigate } from 'react-router-dom'
 import { Bookmark, Car, Heart, Layers, Loader2, Map as MapIcon, MapPin, MessageCircle, Search as SearchIcon, SlidersHorizontal, X, Zap } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { hapticSelection } from '../lib/haptic'
+import StoriesRow from '../components/stories/StoriesRow'
 import { hasGeoPermission } from '../lib/geo'
 import {
   distanceMeters,
@@ -606,6 +607,11 @@ export default function Feed() {
           })}
         </div>
       )}
+
+      {/* Stories — SOUS les filtres et AU-DESSUS des publications, comme le
+          demande la référence : une story est une actualité de quelques
+          heures, elle se consulte avant de descendre dans le fil. */}
+      <StoriesRow />
 
       <FeedFiltersModal
         open={filtersOpen}

@@ -1703,5 +1703,23 @@
     "agoHour": "{{n}} h ago",
     "agoDay": "{{n}} d ago",
     "openProfile": "View {{pseudo}}’s profile"
+  },
+  "stories": {
+    "add": "Add",
+    "yours": "Your story",
+    "openOf": "View {{pseudo}}’s story",
+    "composerTitle": "New story",
+    "choosePhoto": "Choose a photo",
+    "changePhoto": "Change",
+    "lifetime": "Visible for 24 hours",
+    "captionPlaceholder": "Add a caption? (optional)",
+    "publish": "Publish",
+    "publishing": "Publishing…",
+    "publishError": "Publishing failed. Try again.",
+    "readError": "Unreadable image. Pick another one.",
+    "delete": "Delete this story",
+    "previous": "Previous story",
+    "next": "Next story",
+    "empty": "No stories available"
   }
 }
