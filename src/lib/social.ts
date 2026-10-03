@@ -17,7 +17,11 @@ export function canonicalHandle(raw: string | null | undefined): string | null {
     .trim()
     .toLowerCase()
     .replace(/^https?:\/\//, '')
-    .replace(/^www\./, '')
+    // N'importe quel sous-domaine, pas seulement `www.` : Instagram sert
+    // aussi `m.instagram.com` et des liens de redirection `l.instagram.com`.
+    // Sans cela, coller une URL mobile donnait `m.instagram.com` comme
+    // pseudo — le lien menait alors nulle part.
+    .replace(/^[a-z0-9-]+\.(?=(instagram|tiktok)\.com\/)/, '')
     .replace(/^(instagram|tiktok)\.com\//, '')
     .replace(/^@+/, '')
     .replace(/[/?#].*$/, '')
@@ -31,10 +35,21 @@ export function displayHandle(raw: string | null | undefined): string | null {
   return h ? `@${h}` : null
 }
 
-/** Lien réel. `null` plutôt qu'un lien mort quand le pseudo est vide. */
+/**
+ * Lien réel vers le profil. `null` plutôt qu'un lien mort quand le pseudo est
+ * vide — un `href="#"` remonte la page et passe pour un bouton cassé.
+ *
+ * ── POURQUOI `www.` ET LE SLASH FINAL ──
+ * C'est la forme canonique d'Instagram. `instagram.com/x` fonctionne, mais
+ * par une REDIRECTION — et c'est ce détour qui casse l'ouverture de
+ * l'application sur iOS : les Universal Links sont déclarés pour
+ * `www.instagram.com`, pas pour le domaine nu. Un lien redirigé atterrit donc
+ * dans Safari au lieu du profil dans l'application. D'un pseudo à l'autre le
+ * comportement paraissait aléatoire ; il ne l'était pas.
+ */
 export function instagramUrl(raw: string | null | undefined): string | null {
   const h = canonicalHandle(raw)
-  return h ? `https://instagram.com/${h}` : null
+  return h ? `https://www.instagram.com/${h}/` : null
 }
 
 /**

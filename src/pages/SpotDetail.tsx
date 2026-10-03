@@ -890,7 +890,7 @@ export default function SpotDetail() {
                   strictement absent quand le champ n'est pas renseigné. */}
               {displayHandle(owner?.instagram) && (
                 <a
-                  href={instagramUrl(owner?.instagram) ?? '#'}
+                  href={instagramUrl(owner?.instagram) ?? undefined}
                   target="_blank"
                   rel="noopener noreferrer"
                   onClick={(e) => e.stopPropagation()}

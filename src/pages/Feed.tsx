@@ -28,7 +28,7 @@ import {
 } from '../lib/spots'
 import { categoryBadge } from '../lib/categoryStyle'
 import { rarityBadge } from '../lib/rarityStyle'
-import { displayHandle } from '../lib/social'
+import { displayHandle, instagramUrl } from '../lib/social'
 import { SkeletonCard } from '../components/Skeleton'
 import CommentsSheet from '../components/CommentsSheet'
 import { hapticTap } from '../lib/haptic'
@@ -1062,6 +1062,7 @@ const FeedCard = memo(function FeedCard({
   // stable et discret : plus besoin de le recopier dans chaque description.
   // Rien n'est affiché quand il n'est pas renseigné — le champ est facultatif.
   const igLabel = displayHandle(prof?.instagram)
+  const igUrl = instagramUrl(prof?.instagram)
   const ville = prof?.ville?.trim() || ''
   const founder = isFounder(spot.user_id)
   const cat = categoryBadge(spot.category)
@@ -1310,10 +1311,19 @@ const FeedCard = memo(function FeedCard({
                 {t('feedpage.founder')}
               </span>
             )}
-            {igLabel && (
-              <span className="truncate text-[13px] font-medium text-fg2">
+            {/* Le pseudo Instagram était un simple texte ici, et un lien
+                ailleurs : dans le Fil, le toucher ne faisait rien. Même
+                source, même mécanisme que le profil et le détail du spot. */}
+            {igLabel && igUrl && (
+              <a
+                href={igUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="tappable truncate text-[13px] font-medium text-fg2"
+              >
                 {igLabel}
-              </span>
+              </a>
             )}
           </div>
           <p className="mt-0.5 flex items-center gap-1 text-[12.5px] text-fg2">
