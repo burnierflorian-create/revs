@@ -1447,8 +1447,23 @@ export default function MapPage() {
       // instant à partir des mêmes coordonnées. Deux sources séparées
       // finiraient par se désaccorder — c'est exactement ce qui faisait que
       // le panneau restait sur un seul véhicule.
+      // ── L'ORDRE DU CARROUSEL ──
+      // Il n'en avait aucun : la bande suivait l'ordre d'arrivée des spots
+      // dans le vivier, c'est-à-dire rien de lisible. Conséquence visible :
+      // ouvrir un spot par lien direct le plaçait parfois en dernière carte,
+      // « 5 sur 5 », et l'on ne pouvait plus défiler que vers l'arrière.
+      //
+      // Le plus récent d'abord. C'est l'ordre d'une couche vivante, et il met
+      // le spot qu'on vient de publier en première carte.
       setInView(
-        feats.slice(0, 40).map((f) => {
+        [...feats]
+          .sort(
+            (a, b) =>
+              new Date(String(b.properties?.created_at ?? 0)).getTime() -
+              new Date(String(a.properties?.created_at ?? 0)).getTime(),
+          )
+          .slice(0, 40)
+          .map((f) => {
           const p = f.properties as Record<string, unknown>
           const c = (f.geometry as GeoJSON.Point).coordinates as [number, number]
           return {
