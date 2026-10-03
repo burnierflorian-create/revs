@@ -13,6 +13,7 @@
 // arbitrage entre personnes.
 
 import { useCallback, useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { AlertTriangle, ArrowLeft, Bot, Scale, ShieldAlert, Users } from 'lucide-react'
@@ -523,7 +524,13 @@ function CaseDetail({
     at: string
   }[]
 
-  return (
+  // Portail — quatrième fois que ce piège se présente dans REVS (panneau
+  // Membres, commentaires, recadrage de photo, et maintenant cette fiche).
+  // Les routes de ce groupe vivent sous un conteneur transformé : un
+  // `position: fixed` s'y mesure sur l'ancêtre et non sur la fenêtre, et son
+  // z-index reste enfermé sous celui de la barre de navigation. Monté sur
+  // document.body, le problème ne se pose plus.
+  return createPortal(
     <div
       className="fixed inset-0 z-[150] flex items-end"
       style={{ background: 'rgba(0,0,0,0.7)' }}
@@ -666,7 +673,8 @@ function CaseDetail({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 
