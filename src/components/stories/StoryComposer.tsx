@@ -69,8 +69,15 @@ export default function StoryComposer({
       const gate = await checkAutomotive(resized.blob)
       setChecking(false)
       if (!gate.ok) {
+        // On retire aussi l'aperçu : laisser l'image refusée à l'écran sous
+        // un bouton inerte laisse croire qu'elle va partir quand même. Le
+        // sélecteur se rouvre, c'est le geste attendu.
         setError(t(gateMessageKey(gate)))
         setBlob(null)
+        setPreview((cur) => {
+          if (cur) URL.revokeObjectURL(cur)
+          return null
+        })
         return
       }
       setValidationId(gate.validationId)
@@ -216,8 +223,8 @@ export default function StoryComposer({
           {preview && (
             <button
               onClick={publish}
-              disabled={busy}
-              className="tappable mt-4 flex w-full items-center justify-center gap-2 rounded-full py-3.5 text-[15px] font-bold text-white disabled:opacity-60"
+              disabled={busy || checking || !blob}
+              className="tappable mt-4 flex w-full items-center justify-center gap-2 rounded-full py-3.5 text-[15px] font-bold text-white disabled:opacity-40"
               style={{
                 background: 'var(--revs-red)',
                 boxShadow: '0 8px 24px rgb(var(--color-accent) / 0.4)',
