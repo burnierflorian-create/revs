@@ -396,7 +396,19 @@
     "seeOnMap": "Voir sur la carte",
     "allCategories": "Tous",
     "bookmark": "Mettre de côté",
-    "unbookmark": "Retirer des favoris"
+    "unbookmark": "Retirer des favoris",
+    "react": "Réagir",
+    "tabsLabel": "Entrées du fil",
+    "tab": {
+      "foryou": "Pour toi",
+      "following": "Abonnements",
+      "nearby": "À proximité",
+      "popular": "Populaires"
+    },
+    "emptyFollowing": "Vous ne suivez encore personne.",
+    "emptyFollowingBody": "Suivez des spotters pour retrouver leurs voitures ici.",
+    "emptyNearby": "Aucun spot géolocalisé autour de vous.",
+    "emptyPopular": "Pas encore de spot populaire."
   },
   "mappage": {
     "spotFallbackTitle": "Spot",
@@ -1728,5 +1740,16 @@
     "previous": "Story précédente",
     "next": "Story suivante",
     "empty": "Aucune story disponible"
+  },
+  "spotmenu": {
+    "open": "Options de la publication",
+    "copyLink": "Copier le lien",
+    "copied": "Lien copié",
+    "share": "Partager",
+    "report": "Signaler",
+    "reported": "Signalement envoyé. Merci.",
+    "reportFailed": "Le signalement n'a pas pu être envoyé.",
+    "delete": "Supprimer ma publication",
+    "deleted": "Publication supprimée."
   }
 }

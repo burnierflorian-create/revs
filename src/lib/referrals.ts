@@ -39,7 +39,10 @@ export async function fetchMyReferralStats(): Promise<ReferralStats | null> {
 // et MainLayout le réclame automatiquement. Le parrainage se fait donc sans
 // que personne ait à recopier un code à la main.
 
-const APP_ORIGIN = 'https://revs-ten.vercel.app'
+/** L'origine de production. Exportée parce que le lien d'une publication se
+ *  compose au même endroit que celui d'une invitation : deux constantes
+ *  finiraient par désigner deux domaines. */
+export const APP_ORIGIN = 'https://revs-ten.vercel.app'
 
 /** Lien d'invitation, code inclus quand il est connu. */
 export function inviteLink(code: string | null): string {

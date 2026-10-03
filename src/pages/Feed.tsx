@@ -4,8 +4,17 @@ import { useNavigate } from 'react-router-dom'
 // `Map` est aliasé : importé tel quel, il masque le Map natif que ce
 // fichier utilise pour indexer les profils, et le build casse sans rapport
 // apparent avec l'icône.
-import { Bookmark, Car, Heart, Layers, Loader2, Map as MapIcon, MapPin, MessageCircle, Search as SearchIcon, SlidersHorizontal, X, Zap } from 'lucide-react'
+import { Bookmark, Car, Heart, Layers, Loader2, Map as MapIcon, MapPin, MessageCircle, MoreHorizontal, Search as SearchIcon, SlidersHorizontal, SmilePlus, X, Zap } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import SpotMenu, { type SpotMenuAction } from '../components/SpotMenu'
+import {
+  EMPTY_SOCIAL,
+  REACTIONS,
+  loadSpotSocial,
+  setReaction,
+  type Reaction,
+  type SpotSocial,
+} from '../lib/spotSocial'
 import { hapticSelection } from '../lib/haptic'
 import StoriesRow from '../components/stories/StoriesRow'
 import { hasGeoPermission } from '../lib/geo'
@@ -24,6 +33,7 @@ import { hapticTap } from '../lib/haptic'
 import { myPseudo, notifyPush } from '../lib/push'
 import { onNewSpot } from '../lib/feedSync'
 import FeedFiltersModal, {
+  type FeedSort,
   filtersActive,
   loadFeedFilters,
   saveFeedFilters,
@@ -38,6 +48,27 @@ import {
 import { matchesRarityBucket, SHEET_CATEGORIES } from '../components/FilterSections'
 import { isFounder } from '../lib/founders'
 import { prefersReducedMotion } from '../lib/motion'
+
+/** Les quatre entrées du Fil.
+ *
+ *  Un onglet n'est pas un filtre de plus : c'est le PÉRIMÈTRE dans lequel les
+ *  filtres (catégorie, marque, rareté, ville) s'appliquent ensuite. D'où un
+ *  état séparé — mélanger les deux obligerait à deviner, en lisant un
+ *  réglage sauvegardé, lequel des deux l'utilisateur voulait vraiment. */
+const FEED_TABS = ['foryou', 'following', 'nearby', 'popular'] as const
+type FeedTab = (typeof FEED_TABS)[number]
+
+/** L'ordre que chaque onglet impose au fil. « Pour toi » et « Abonnements »
+ *  restent chronologiques : dans les deux cas on vient voir ce qui est
+ *  nouveau, pas ce qui est le mieux classé. */
+const TAB_SORT: Record<FeedTab, FeedSort> = {
+  foryou: 'recent',
+  following: 'recent',
+  nearby: 'nearby',
+  popular: 'liked',
+}
+
+const TAB_KEY = 'revs_feed_tab'
 
 const PAGE = 10
 const POOL_SIZE = 200
@@ -115,7 +146,10 @@ function EmptyCarousel({ onSpot }: { onSpot: () => void }) {
     return () => clearInterval(t)
   }, [])
   return (
-    <div className="flex min-h-screen flex-col bg-bg px-4 pb-10 pt-[max(1rem,env(safe-area-inset-top))]">
+    // pb : la barre de navigation basse recouvrait le bouton « Sois le
+    // premier à spotter ». Une marge en rem ne suffit pas — il faut la
+    // hauteur de la barre PLUS la zone sûre de l'appareil.
+    <div className="flex min-h-screen flex-col bg-bg px-4 pb-[calc(5.5rem+env(safe-area-inset-bottom))] pt-[max(1rem,env(safe-area-inset-top))]">
       <div className="relative flex-1 overflow-hidden rounded-3xl">
         {SLIDES.map((s, idx) => (
           <div
@@ -160,6 +194,10 @@ export default function Feed() {
   const navigate = useNavigate()
   const [spots, setSpots] = useState<Spot[] | null>(null)
   const [profiles, setProfiles] = useState<Record<string, Prof>>({})
+  // L'état social de toutes les cartes chargées, en une seule structure. La
+  // carte le reçoit en propriété : elle n'interroge plus la base pour
+  // s'afficher, seulement pour agir.
+  const [social, setSocial] = useState<Record<string, SpotSocial>>({})
   // Dedupe/group once per spots change — not on every keystroke/re-render.
   const grouped = useMemo(() => groupSpots(spots ?? []), [spots])
   // Feed-only state — search + filters live entirely here and sort ONLY
@@ -168,12 +206,24 @@ export default function Feed() {
   // nothing here ever touches the Carte.
   /** Catégories réellement représentées dans le vivier courant. */
   const [poolCats, setPoolCats] = useState<Set<string>>(() => new Set())
+  const [tab, setTab] = useState<FeedTab>(() => {
+    const saved = typeof localStorage !== 'undefined' ? localStorage.getItem(TAB_KEY) : null
+    return (FEED_TABS as readonly string[]).includes(saved ?? '') ? (saved as FeedTab) : 'foryou'
+  })
+  // Les comptes que je suis — une requête, au montage. L'onglet
+  // « Abonnements » filtre ensuite en mémoire : interroger la base à chaque
+  // changement d'onglet pour une liste de sept identifiants serait absurde.
+  const followingRef = useRef<Set<string> | null>(null)
+  const [followingReady, setFollowingReady] = useState(false)
   const [feedFilters, setFeedFilters] = useState<FeedFilters>(() =>
     loadFeedFilters(),
   )
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [feedSearchQuery, setFeedSearchQuery] = useState('')
   const [loadingMore, setLoadingMore] = useState(false)
+  /** Un rechargement en cours alors qu'une liste est déjà affichée. Distinct
+   *  de `spots === null`, qui signifie « rien n'a jamais été chargé ». */
+  const [reloading, setReloading] = useState(false)
   const [hasMore, setHasMore] = useState(true)
   const [geoMsg, setGeoMsg] = useState<string | null>(null)
   // Bumping this key re-runs the load effect — used by pull-to-refresh.
@@ -198,6 +248,33 @@ export default function Feed() {
   // Per-card interaction (like, double-tap, comments) now lives inside
   // <FeedCard /> — the feed no longer tracks a shared heart/nav timer.
 
+
+  useEffect(() => {
+    let active = true
+    void (async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (!active) return
+      if (!user) {
+        followingRef.current = new Set()
+        setFollowingReady(true)
+        return
+      }
+      const { data } = await supabase
+        .from('followers')
+        .select('following_id')
+        .eq('follower_id', user.id)
+      if (!active) return
+      followingRef.current = new Set(
+        ((data ?? []) as { following_id: string }[]).map((r) => r.following_id),
+      )
+      setFollowingReady(true)
+    })()
+    return () => {
+      active = false
+    }
+  }, [])
 
   const mergeProfiles = useCallback(async (list: Spot[]) => {
     const ids = [
@@ -249,6 +326,28 @@ export default function Feed() {
     setProfiles(next)
   }, [])
 
+  // Un appel par lot affiché, jamais un par carte. Les identifiants déjà
+  // connus sont réinterrogés : un like posé ailleurs depuis le dernier
+  // chargement doit se voir, et le coût est le même pour dix lignes.
+  const socialRef = useRef<Record<string, SpotSocial>>({})
+  const mergeSocial = useCallback(async (list: Spot[]) => {
+    const ids = list.map((s) => s.id)
+    if (ids.length === 0) return
+    const got = await loadSpotSocial(ids)
+    socialRef.current = { ...socialRef.current, ...got }
+    setSocial(socialRef.current)
+  }, [])
+
+  /** Mise à jour optimiste d'une carte : l'interface répond au doigt, la
+   *  base suit. Le prochain chargement du lot écrase de toute façon. */
+  const patchSocial = useCallback((id: string, patch: Partial<SpotSocial>) => {
+    socialRef.current = {
+      ...socialRef.current,
+      [id]: { ...(socialRef.current[id] ?? EMPTY_SOCIAL), ...patch },
+    }
+    setSocial(socialRef.current)
+  }, [])
+
   // Instant re-render — when a spot is published (NewSpot emits it the
   // moment the insert is confirmed), unshift it to the very top of the
   // feed so it's already there when the user switches back to the Fil.
@@ -286,9 +385,36 @@ export default function Feed() {
   // The pool itself is always "the last 200 spots ordered by created_at
   // desc" — every filter operation works on top of that snapshot to
   // avoid round-trips when toggling feedFilters.
+  /** Les filtres tels qu'ils s'appliquent réellement : ceux de la feuille,
+   *  dont le tri est imposé par l'onglet actif. L'onglet décide COMMENT on
+   *  ordonne ; la feuille décide CE QU'on garde. */
+  const effectiveFilters = useMemo<FeedFilters>(
+    () => ({ ...feedFilters, sort: TAB_SORT[tab] }),
+    [feedFilters, tab],
+  )
+
+  // L'onglet est lu via une ref dans `applyFilters` : le passer en
+  // dépendance recréerait le filtre — et donc rechargerait tout le pool — à
+  // chaque bascule, alors que le pool est le même pour les quatre.
+  const tabRef = useRef<FeedTab>(tab)
+  // Écrit dans un effet, pas en plein rendu : React interdit de muter une
+  // ref pendant le rendu, et l'effet s'exécute avant l'effet de chargement
+  // qui la lit — l'ordre est garanti par leur ordre de déclaration.
+  useEffect(() => {
+    tabRef.current = tab
+  }, [tab])
+
   const applyFilters = useCallback(
     (pool: Spot[], f: FeedFilters): Spot[] => {
       let out = pool
+      // ── PÉRIMÈTRE DE L'ONGLET ──
+      // « Abonnements » n'affiche que les comptes suivis. Tant que la liste
+      // n'est pas revenue on ne filtre pas : montrer une page vide pendant
+      // l'aller-retour ferait croire qu'on ne suit personne.
+      if (f.sort !== undefined && tabRef.current === 'following' && followingRef.current) {
+        const follows = followingRef.current
+        out = out.filter((s) => follows.has(s.user_id))
+      }
       // Category filter — shared matcher (spot.category enum + body-type
       // silhouette mapping + name keywords) so every bucket works.
       if (f.category && f.category !== 'Tout') {
@@ -347,7 +473,13 @@ export default function Feed() {
   // aggregate count of likes per spot — both fetched lazily here.
   useEffect(() => {
     let active = true
-    setSpots(null)
+    // On NE vide PAS la liste ici. `spots = null` déclenche l'écran de
+    // squelettes, qui remplace la page ENTIÈRE — barre d'onglets comprise.
+    // Changer d'onglet faisait donc disparaître les onglets pendant deux
+    // secondes : impossible d'en viser un autre, et l'impression que
+    // l'application a planté. L'ancienne liste reste à l'écran, atténuée, le
+    // temps que la nouvelle arrive.
+    setReloading(true)
     setHasMore(true)
     setGeoMsg(null)
     pageRef.current = 0
@@ -367,7 +499,7 @@ export default function Feed() {
 
       // 2. Sort-specific side fetches in parallel.
       const sideFetches: Promise<unknown>[] = []
-      if (feedFilters.sort === 'liked') {
+      if (effectiveFilters.sort === 'liked') {
         sideFetches.push(
           (async () => {
             const ids = pool.map((s) => s.id)
@@ -384,7 +516,7 @@ export default function Feed() {
           })(),
         )
       }
-      if (feedFilters.sort === 'nearby') {
+      if (effectiveFilters.sort === 'nearby') {
         sideFetches.push(
           (async () => {
             // Never auto-prompt on load — only use GPS if already granted
@@ -401,39 +533,52 @@ export default function Feed() {
       }
       // City filter needs profiles to resolve villes — resolve them eagerly
       // so the initial filter pass doesn't miss matches.
-      if (feedFilters.city.trim()) {
+      if (effectiveFilters.city.trim()) {
         sideFetches.push(mergeProfiles(pool))
       }
       if (sideFetches.length) await Promise.all(sideFetches)
       if (!active) return
 
-      const filtered = applyFilters(pool, feedFilters)
+      const filtered = applyFilters(pool, effectiveFilters)
       const slice = filtered.slice(0, PAGE)
-      await mergeProfiles(slice)
+      await Promise.all([mergeProfiles(slice), mergeSocial(slice)])
       if (!active) return
       pageRef.current = 1
       setHasMore(filtered.length > PAGE)
       setSpots(slice)
+      setReloading(false)
     })()
     return () => {
       active = false
     }
-  }, [feedFilters, refreshKey, applyFilters, getPosition, mergeProfiles, t])
+    // `followingReady` : tant que la liste des abonnements n'est pas
+    // revenue, l'onglet « Abonnements » ne filtre rien. Ce drapeau déclenche
+    // le seul rechargement nécessaire, une fois, à son arrivée.
+  }, [
+    effectiveFilters,
+    refreshKey,
+    followingReady,
+    applyFilters,
+    getPosition,
+    mergeProfiles,
+    mergeSocial,
+    t,
+  ])
 
   const loadMore = useCallback(async () => {
     if (loadingMore || !hasMore || spots === null) return
     setLoadingMore(true)
     try {
-      const filtered = applyFilters(poolRef.current, feedFilters)
+      const filtered = applyFilters(poolRef.current, effectiveFilters)
       const shown = spots.length
       const next = filtered.slice(shown, shown + PAGE)
-      await mergeProfiles(next)
+      await Promise.all([mergeProfiles(next), mergeSocial(next)])
       setSpots((cur) => [...(cur ?? []), ...next])
       setHasMore(shown + next.length < filtered.length)
     } finally {
       setLoadingMore(false)
     }
-  }, [loadingMore, hasMore, spots, feedFilters, applyFilters, mergeProfiles])
+  }, [loadingMore, hasMore, spots, effectiveFilters, applyFilters, mergeProfiles, mergeSocial])
 
   const loadMoreRef = useRef(loadMore)
   loadMoreRef.current = loadMore
@@ -481,7 +626,11 @@ export default function Feed() {
   }
 
   const allDefaults = !filtersActive(feedFilters)
-  if (spots.length === 0 && allDefaults) {
+  // Le carrousel d'accueil dit « REVS est vide, sois le premier ». Il ne vaut
+  // que sur « Pour toi » sans filtre : affiché sur « Abonnements », il
+  // remplaçait la page entière — barre d'onglets comprise — pour annoncer
+  // que REVS est désert, alors qu'il manquait seulement quelqu'un à suivre.
+  if (spots.length === 0 && allDefaults && tab === 'foryou') {
     return <EmptyCarousel onSpot={() => navigate('/new-spot')} />
   }
 
@@ -563,6 +712,59 @@ export default function Feed() {
         </button>
       </div>
 
+      {/* ── LES QUATRE ENTRÉES DU FIL ──
+          Pour toi · Abonnements · À proximité · Populaires.
+          Au-dessus des catégories, parce qu'elles sont au-dessus dans la
+          hiérarchie : l'onglet choisit DE QUI on regarde les spots, la
+          catégorie choisit LESQUELS. L'actif porte le rouge REVS ; les autres
+          restent neutres pour qu'un seul élément attire l'œil. */}
+      <div
+        role="tablist"
+        aria-label={t('feedpage.tabsLabel')}
+        className="mb-3 flex gap-2 overflow-x-auto px-4"
+        style={{ scrollbarWidth: 'none' }}
+        data-swipe-x=""
+      >
+        {FEED_TABS.map((k) => {
+          const on = tab === k
+          return (
+            <button
+              key={k}
+              role="tab"
+              aria-selected={on}
+              onClick={() => {
+                if (on) return
+                hapticSelection()
+                setTab(k)
+                try {
+                  localStorage.setItem(TAB_KEY, k)
+                } catch {
+                  // Mode privé : l'onglet ne survivra pas à la fermeture, et
+                  // c'est tout ce que l'on perd.
+                }
+              }}
+              className="tappable flex-none rounded-full px-4 py-2 text-[13.5px] transition-colors"
+              style={
+                on
+                  ? {
+                      background: 'var(--revs-red)',
+                      color: '#fff',
+                      fontWeight: 700,
+                      boxShadow: '0 2px 14px rgb(var(--color-accent) / 0.4)',
+                    }
+                  : {
+                      background: 'rgb(var(--color-fg) / 0.05)',
+                      color: 'rgb(var(--color-fg-2))',
+                      fontWeight: 500,
+                    }
+              }
+            >
+              {t(`feedpage.tab.${k}`)}
+            </button>
+          )
+        })}
+      </div>
+
       {/* Catégories — contrôle segmenté défilant, sous la recherche.
           Elles existaient déjà, mais uniquement au fond de la feuille de
           filtres : il fallait ouvrir une modale pour changer de catégorie,
@@ -642,19 +844,36 @@ export default function Feed() {
           >
             <Car className="h-8 w-8 text-accent" />
           </div>
+          {/* Le vide d'un onglet ne dit pas la même chose que le vide du
+              Fil. « Aucun spot » sur « Abonnements » laisse croire que REVS
+              est désert, alors qu'il manque seulement quelqu'un à suivre. */}
           <p className="mt-4 font-display text-lg font-extrabold tracking-tighter text-fg">
-            {allDefaults
-              ? t('feedpage.empty.noSpotsTitle')
-              : t('feedpage.empty.noMatchTitle')}
+            {tab === 'following'
+              ? t('feedpage.emptyFollowing')
+              : tab === 'nearby'
+                ? t('feedpage.emptyNearby')
+                : tab === 'popular'
+                  ? t('feedpage.emptyPopular')
+                  : allDefaults
+                    ? t('feedpage.empty.noSpotsTitle')
+                    : t('feedpage.empty.noMatchTitle')}
           </p>
           <p className="mt-1 text-sm text-fg2">
-            {allDefaults
-              ? t('feedpage.empty.noSpotsBody')
-              : t('feedpage.empty.noMatchBody')}
+            {tab === 'following'
+              ? t('feedpage.emptyFollowingBody')
+              : allDefaults
+                ? t('feedpage.empty.noSpotsBody')
+                : t('feedpage.empty.noMatchBody')}
           </p>
         </div>
       ) : (
-        <div>
+        <div
+          style={{
+            opacity: reloading ? 0.45 : 1,
+            transition: 'opacity 160ms linear',
+            pointerEvents: reloading ? 'none' : undefined,
+          }}
+        >
           {(() => {
             const needle = feedSearchQuery.trim().toLowerCase()
             const filtered = needle
@@ -686,6 +905,8 @@ export default function Feed() {
                 spot={spot}
                 prof={profiles[spot.user_id]}
                 burstCount={count}
+                social={social[spot.id] ?? EMPTY_SOCIAL}
+                onPatch={patchSocial}
               />
             ))
           })()}
@@ -732,10 +953,16 @@ const FeedCard = memo(function FeedCard({
   spot,
   prof,
   burstCount,
+  social,
+  onPatch,
 }: {
   spot: Spot
   prof?: Prof
   burstCount: number
+  /** Likes, commentaires, réactions et mon état, chargés par lot. La carte
+   *  ne les redemande jamais : elle les reçoit. */
+  social: SpotSocial
+  onPatch: (id: string, patch: Partial<SpotSocial>) => void
 }) {
   const { t } = useTranslation()
   const navigate = useNavigate()
@@ -786,12 +1013,24 @@ const FeedCard = memo(function FeedCard({
       if (raf) cancelAnimationFrame(raf)
     }
   }, [])
-  const [bookmarked, setBookmarked] = useState(false)
   const bmBusyRef = useRef(false)
-  const [liked, setLiked] = useState(false)
-  const [likeCount, setLikeCount] = useState(0)
-  const [commentCount, setCommentCount] = useState(0)
+  // Tout l'état social vient du Fil. Le lire ici plutôt que de le recopier
+  // dans un useState garantit qu'une carte ne peut pas afficher un compteur
+  // que la page a déjà corrigé ailleurs.
+  const { liked, likeCount, commentCount, bookmarked } = {
+    liked: social.liked,
+    likeCount: social.like_count,
+    commentCount: social.comment_count,
+    bookmarked: social.bookmarked,
+  }
   const [heartPop, setHeartPop] = useState(false)
+  const [reactOpen, setReactOpen] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [notice, setNotice] = useState<string | null>(null)
+  // En état et non en ref : le rendu s'en sert pour décider si « Supprimer »
+  // apparaît, et une ref lue pendant le rendu ne provoquerait pas le second
+  // rendu qui fait apparaître l'entrée.
+  const [meId, setMeId] = useState<string | null>(null)
   const [sheetOpen, setSheetOpen] = useState(false)
   const [myAvatar, setMyAvatar] = useState<string | null>(null)
   const [myInitial, setMyInitial] = useState('?')
@@ -823,75 +1062,40 @@ const FeedCard = memo(function FeedCard({
     .filter(Boolean)
     .join(' · ')
 
+  // Identité de l'utilisateur courant — pour l'avatar du champ commentaire
+  // et pour savoir au nom de qui écrire. L'état social, lui, n'est PLUS
+  // chargé ici : il descend du Fil, qui l'obtient pour toute la page en un
+  // appel (`spot_social`, migration 0116). Quatre requêtes par carte sur dix
+  // cartes faisaient quarante allers-retours au premier rendu.
   useEffect(() => {
     let active = true
     ;(async () => {
       const {
         data: { user },
       } = await supabase.auth.getUser()
+      if (!active || !user) return
+      meRef.current = user.id
+      setMeId(user.id)
+      const { data } = await supabase
+        .from('profiles')
+        .select('avatar, pseudo')
+        .eq('user_id', user.id)
+        .maybeSingle()
       if (!active) return
-      meRef.current = user?.id ?? null
-      if (user) {
-        supabase
-          .from('profiles')
-          .select('avatar, pseudo')
-          .eq('user_id', user.id)
-          .maybeSingle()
-          .then(({ data }) => {
-            if (!active) return
-            const m = data as { avatar: string | null; pseudo: string | null } | null
-            setMyAvatar(m?.avatar ?? null)
-            setMyInitial(
-              (m?.pseudo ?? user.email ?? '?').charAt(0).toUpperCase(),
-            )
-          })
-      }
-      const [likeC, likedRes, comC, bmRes] = await Promise.all([
-        supabase
-          .from('spot_likes')
-          .select('*', { count: 'exact', head: true })
-          .eq('spot_id', spot.id),
-        user
-          ? supabase
-              .from('spot_likes')
-              .select('spot_id')
-              .eq('spot_id', spot.id)
-              .eq('user_id', user.id)
-              .maybeSingle()
-          : Promise.resolve({ data: null }),
-        supabase
-          .from('comments')
-          .select('*', { count: 'exact', head: true })
-          .eq('spot_id', spot.id),
-        // Les favoris sont privés : RLS ne renverra que les SIENS, donc une
-        // ligne trouvée signifie « je l'ai mis de côté ». Aucune information
-        // sur les favoris des autres ne transite.
-        user
-          ? supabase
-              .from('spot_bookmarks')
-              .select('spot_id')
-              .eq('spot_id', spot.id)
-              .eq('user_id', user.id)
-              .maybeSingle()
-          : Promise.resolve({ data: null }),
-      ])
-      if (!active) return
-      setLikeCount(likeC.count ?? 0)
-      setLiked(!!likedRes.data)
-      setCommentCount(comC.count ?? 0)
-      setBookmarked(!!bmRes.data)
+      const m = data as { avatar: string | null; pseudo: string | null } | null
+      setMyAvatar(m?.avatar ?? null)
+      setMyInitial((m?.pseudo ?? user.email ?? '?').charAt(0).toUpperCase())
     })()
     return () => {
       active = false
     }
-  }, [spot.id])
+  }, [])
 
   async function setLikeState(next: boolean) {
     const uid = meRef.current
     if (!uid || busyRef.current || next === liked) return
     busyRef.current = true
-    setLiked(next)
-    setLikeCount((n) => Math.max(0, n + (next ? 1 : -1)))
+    onPatch(spot.id, { liked: next, like_count: Math.max(0, likeCount + (next ? 1 : -1)) })
     const op = next
       ? supabase.from('spot_likes').insert({ spot_id: spot.id, user_id: uid })
       : supabase
@@ -901,8 +1105,7 @@ const FeedCard = memo(function FeedCard({
           .eq('user_id', uid)
     const { error } = await op
     if (error) {
-      setLiked(!next)
-      setLikeCount((n) => Math.max(0, n + (next ? -1 : 1)))
+      onPatch(spot.id, { liked: !next, like_count: likeCount })
     } else if (next && spot.user_id !== uid) {
       const who = await myPseudo()
       void notifyPush({
@@ -932,7 +1135,7 @@ const FeedCard = memo(function FeedCard({
     if (!uid || bmBusyRef.current) return
     bmBusyRef.current = true
     const next = !bookmarked
-    setBookmarked(next)
+    onPatch(spot.id, { bookmarked: next })
     hapticTap()
     const { error } = next
       ? await supabase.from('spot_bookmarks').insert({ spot_id: spot.id, user_id: uid })
@@ -943,8 +1146,62 @@ const FeedCard = memo(function FeedCard({
           .eq('user_id', uid)
     // 23505 = la ligne existait déjà : l'état visé est atteint, ce n'est pas
     // un échec.
-    if (error && error.code !== '23505') setBookmarked(!next)
+    if (error && error.code !== '23505') onPatch(spot.id, { bookmarked: !next })
     bmBusyRef.current = false
+  }
+
+  /** Pose, change ou retire sa réaction.
+   *
+   *  Le compteur bouge de +1, 0 ou -1 selon qu'on en posait déjà une : poser
+   *  après avoir déjà réagi remplace, cela n'ajoute pas une voix. La base
+   *  l'impose de toute façon par sa clé primaire — on ne fait ici que ne pas
+   *  la contredire à l'écran le temps de l'aller-retour. */
+  async function react(emoji: Reaction) {
+    const uid = meRef.current
+    if (!uid) return
+    const prev = social.my_reaction
+    const next = prev === emoji ? null : emoji
+    const counts = { ...social.reactions }
+    if (prev) counts[prev] = Math.max(0, (counts[prev] ?? 1) - 1)
+    if (next) counts[next] = (counts[next] ?? 0) + 1
+    onPatch(spot.id, {
+      my_reaction: next,
+      reactions: counts,
+      reaction_count: Math.max(0, social.reaction_count + (next ? 1 : 0) - (prev ? 1 : 0)),
+    })
+    setReactOpen(false)
+    hapticTap()
+    const applied = await setReaction(spot.id, uid, emoji, prev)
+    if (applied !== next) onPatch(spot.id, { my_reaction: applied })
+  }
+
+  /** Signaler, ou supprimer la sienne.
+   *
+   *  Le signalement écrit vraiment une ligne (`spot_reports`, migration
+   *  0117) : un bouton qui remercie sans rien enregistrer n'est pas une
+   *  fonctionnalité. La raison par défaut est « contenu inapproprié » —
+   *  demander laquelle avant d'avoir une interface de modération ajouterait
+   *  un écran pour une donnée que personne ne lit encore. */
+  async function onMenuAction(a: SpotMenuAction) {
+    const uid = meRef.current
+    if (!uid) return
+    if (a === 'report') {
+      const { error } = await supabase
+        .from('spot_reports')
+        .insert({ spot_id: spot.id, reporter_id: uid, reason: 'inappropriate' })
+      // 23505 = déjà signalé par cette personne : le but est atteint.
+      setNotice(
+        !error || error.code === '23505' ? t('spotmenu.reported') : t('spotmenu.reportFailed'),
+      )
+      setTimeout(() => setNotice(null), 2600)
+      return
+    }
+    if (a === 'delete') {
+      if (spot.user_id !== uid) return
+      const { error } = await supabase.from('spots').delete().eq('id', spot.id)
+      if (!error) setNotice(t('spotmenu.deleted'))
+      setTimeout(() => setNotice(null), 2600)
+    }
   }
 
   // Single tap → open the spot detail (after a 300 ms wait to rule out a
@@ -1035,7 +1292,38 @@ const FeedCard = memo(function FeedCard({
             <span className="flex-none">{timeAgo(spot.created_at)}</span>
           </p>
         </div>
+        {/* « … » — copier le lien, partager, signaler, et supprimer si c'est
+            la sienne. Posé à droite de l'en-tête comme sur la référence. */}
+        <button
+          onClick={() => setMenuOpen(true)}
+          aria-label={t('spotmenu.open')}
+          className="tappable -mr-1 flex h-9 w-9 flex-none items-center justify-center rounded-full text-fg2"
+        >
+          <MoreHorizontal className="h-5 w-5" />
+        </button>
       </div>
+
+      {/* Confirmation du signalement ou de la suppression. Un bandeau dans
+          la carte plutôt qu'une alerte : une alerte bloque la page entière
+          pour dire « merci ». */}
+      {notice && (
+        <p
+          role="status"
+          className="mx-4 mb-1 rounded-xl px-3 py-2 text-center text-[12.5px] font-semibold text-fg"
+          style={{ background: 'rgb(var(--color-accent) / 0.16)' }}
+        >
+          {notice}
+        </p>
+      )}
+
+      <SpotMenu
+        spotId={spot.id}
+        label={title}
+        isMine={meId === spot.user_id}
+        open={menuOpen}
+        onClose={() => setMenuOpen(false)}
+        onAction={(a) => void onMenuAction(a)}
+      />
 
       {/* PHOTO 4:5 — full-bleed. Rarity badge top-right, 44px floating
           header, and the car identity over a bottom gradient that keeps
@@ -1207,6 +1495,68 @@ const FeedCard = memo(function FeedCard({
               className={`h-6 w-6 transition-colors ${bookmarked ? 'fill-accent text-accent' : 'text-white'}`}
             />
           </button>
+          {/* ── RÉACTIONS ──
+              Le déclencheur reste discret : soit le visage neutre, soit la
+              réaction qu'on a posée. Le panneau ne s'ouvre qu'au doigt, et se
+              referme au choix — une réaction est un geste d'une seconde, pas
+              un formulaire. Le cœur n'est pas dans la liste : il EST le
+              bouton Like, deux centimètres à gauche. */}
+          <div className="relative flex items-center">
+            <button
+              onClick={() => setReactOpen((v) => !v)}
+              aria-label={t('feedpage.react')}
+              aria-expanded={reactOpen}
+              className="tappable flex items-center gap-1.5"
+            >
+              {social.my_reaction ? (
+                <span className="text-[20px] leading-none">{social.my_reaction}</span>
+              ) : (
+                <SmilePlus strokeWidth={1.2} className="h-6 w-6 text-white" />
+              )}
+              {social.reaction_count > 0 && (
+                <span className="text-sm font-medium text-white">{social.reaction_count}</span>
+              )}
+            </button>
+            {reactOpen && (
+              <>
+                {/* Voile transparent : un appui n'importe où ailleurs referme,
+                    sans qu'il faille viser à nouveau le petit bouton. */}
+                <button
+                  aria-hidden
+                  tabIndex={-1}
+                  onClick={() => setReactOpen(false)}
+                  className="fixed inset-0 z-[60] cursor-default"
+                />
+                <div
+                  role="group"
+                  aria-label={t('feedpage.react')}
+                  className="absolute bottom-full left-1/2 z-[61] mb-2 flex -translate-x-1/2 gap-1 rounded-full px-2 py-1.5"
+                  style={{
+                    background: 'rgba(20,20,20,0.96)',
+                    border: '1px solid rgba(255,255,255,0.12)',
+                    boxShadow: '0 10px 30px rgba(0,0,0,0.55)',
+                    backdropFilter: 'blur(10px)',
+                  }}
+                >
+                  {REACTIONS.map((e) => (
+                    <button
+                      key={e}
+                      onClick={() => void react(e)}
+                      aria-label={e}
+                      aria-pressed={social.my_reaction === e}
+                      className="tappable flex h-9 w-9 items-center justify-center rounded-full text-[20px] leading-none transition-transform active:scale-90"
+                      style={{
+                        background:
+                          social.my_reaction === e ? 'rgba(232,32,58,0.22)' : 'transparent',
+                      }}
+                    >
+                      {e}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
           <span className="ml-auto flex items-center gap-1 text-white/50">
             <Zap strokeWidth={1.2} className="h-[18px] w-[18px] text-accent" />
             <span className="text-xs font-medium tabular-nums">
@@ -1259,7 +1609,7 @@ const FeedCard = memo(function FeedCard({
         spotLabel={`${spot.brand} ${spot.model}`}
         open={sheetOpen}
         onClose={() => setSheetOpen(false)}
-        onCountChange={setCommentCount}
+        onCountChange={(n) => onPatch(spot.id, { comment_count: n })}
       />
     </article>
   )

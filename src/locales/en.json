@@ -396,7 +396,19 @@
     "seeOnMap": "See on the map",
     "allCategories": "All",
     "bookmark": "Save",
-    "unbookmark": "Remove from saved"
+    "unbookmark": "Remove from saved",
+    "react": "React",
+    "tabsLabel": "Feed tabs",
+    "tab": {
+      "foryou": "For you",
+      "following": "Following",
+      "nearby": "Nearby",
+      "popular": "Popular"
+    },
+    "emptyFollowing": "You don't follow anyone yet.",
+    "emptyFollowingBody": "Follow spotters to find their cars here.",
+    "emptyNearby": "No geolocated spot around you.",
+    "emptyPopular": "No popular spot yet."
   },
   "mappage": {
     "spotFallbackTitle": "Spot",
@@ -1728,5 +1740,16 @@
     "previous": "Previous story",
     "next": "Next story",
     "empty": "No stories available"
+  },
+  "spotmenu": {
+    "open": "Post options",
+    "copyLink": "Copy link",
+    "copied": "Link copied",
+    "share": "Share",
+    "report": "Report",
+    "reported": "Report sent. Thank you.",
+    "reportFailed": "The report could not be sent.",
+    "delete": "Delete my post",
+    "deleted": "Post deleted."
   }
 }
