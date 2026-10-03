@@ -1113,9 +1113,25 @@ const FeedCard = memo(function FeedCard({
     }
   }, [])
 
+  /** Liker, ou retirer son like.
+   *
+   *  ── POURQUOI ON NE PEUT PAS LIKER SON PROPRE SPOT ──
+   *  `block_self_like()` (déclencheur en base) lève une exception : un like
+   *  rapporte de l'XP à l'auteur, et s'auto-liker reviendrait à s'en servir.
+   *  La règle est juste et reste en place.
+   *
+   *  Ce qui ne l'était pas, c'est l'interface : elle remplissait le cœur,
+   *  recevait l'erreur, et le vidait sans un mot. Mesuré au navigateur, le
+   *  cœur restait allumé 120 ms — « le like apparaît puis disparaît ». On
+   *  n'essaie donc plus : on explique. */
   async function setLikeState(next: boolean) {
     const uid = meRef.current
     if (!uid || busyRef.current || next === liked) return
+    if (spot.user_id === uid) {
+      setNotice(t('feedpage.selfLike'))
+      setTimeout(() => setNotice(null), 2600)
+      return
+    }
     busyRef.current = true
     onPatch(spot.id, { liked: next, like_count: Math.max(0, likeCount + (next ? 1 : -1)) })
     const op = next
@@ -1127,7 +1143,11 @@ const FeedCard = memo(function FeedCard({
           .eq('user_id', uid)
     const { error } = await op
     if (error) {
+      // Un retour en arrière muet se lit comme un bug. Quelle que soit la
+      // cause, on le dit.
       onPatch(spot.id, { liked: !next, like_count: likeCount })
+      setNotice(t('feedpage.likeFailed'))
+      setTimeout(() => setNotice(null), 2600)
     } else if (next && spot.user_id !== uid) {
       const who = await myPseudo()
       void notifyPush({
@@ -1232,6 +1252,8 @@ const FeedCard = memo(function FeedCard({
       hapticTap()
       // 650ms so the 600ms mini-heart burst finishes before unmount.
       window.setTimeout(() => setHeartPop(false), 650)
+      // Sur son propre spot, le double-tap ne tente rien : il afficherait la
+      // même rétractation, animation de cœur comprise.
       void setLikeState(true) // double-tap always likes, never unlikes
     } else {
       lastTapRef.current = now
@@ -1485,8 +1507,12 @@ const FeedCard = memo(function FeedCard({
         <div className="flex items-center gap-5 px-4 pt-3">
           <button
             onClick={() => setLikeState(!liked)}
+            aria-disabled={meId === spot.user_id}
             aria-label={liked ? t('feedpage.unlike') : t('feedpage.like')}
             aria-pressed={liked}
+            // Atténué sur son propre spot : le bouton reste là — il porte le
+            // compteur — mais il n'a plus l'air d'attendre un appui.
+            style={meId === spot.user_id ? { opacity: 0.55 } : undefined}
             className="tappable flex items-center gap-1.5"
           >
             <Heart

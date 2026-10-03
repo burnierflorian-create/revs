@@ -408,7 +408,9 @@
     "emptyFollowing": "You don't follow anyone yet.",
     "emptyFollowingBody": "Follow spotters to find their cars here.",
     "emptyNearby": "No geolocated spot around you.",
-    "emptyPopular": "No popular spot yet."
+    "emptyPopular": "No popular spot yet.",
+    "selfLike": "You can't like your own spot.",
+    "likeFailed": "The like could not be saved."
   },
   "mappage": {
     "spotFallbackTitle": "Spot",

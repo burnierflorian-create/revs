@@ -652,7 +652,7 @@ export default function SpotDetail() {
             <h1 className="display-xl text-fg">
               {spot.brand} {spot.model}
             </h1>
-            <LikeButton spotId={spot.id} realtime />
+            <LikeButton spotId={spot.id} ownerId={spot.user_id} realtime />
           </div>
           {spot.description?.trim() ? (
             <p className="mt-2 whitespace-pre-line text-[14px] leading-snug text-fg2">

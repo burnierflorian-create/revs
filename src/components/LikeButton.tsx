@@ -1,10 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Heart } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { myPseudo, notifyPush } from '../lib/push'
 
 type Props = {
   spotId: string
+  /** L'auteur du spot. On ne peut pas liker le sien — `block_self_like()`
+   *  lève une exception en base, parce qu'un like rapporte de l'XP à
+   *  l'auteur. Sans cette information, le bouton remplissait le cœur puis le
+   *  vidait sans un mot, ce qui se lit comme un bug. */
+  ownerId?: string | null
   // Detail page subscribes for a live counter; the feed stays optimistic
   // (one realtime channel per card would not scale).
   realtime?: boolean
@@ -13,10 +19,14 @@ type Props = {
 
 export default function LikeButton({
   spotId,
+  ownerId = null,
   realtime = false,
   className = '',
 }: Props) {
+  const { t } = useTranslation()
   const userIdRef = useRef<string | null>(null)
+  const [me, setMe] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
   const [count, setCount] = useState(0)
   const [liked, setLiked] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -50,6 +60,7 @@ export default function LikeButton({
       } = await supabase.auth.getUser()
       if (!active) return
       userIdRef.current = user?.id ?? null
+      setMe(user?.id ?? null)
       await refresh()
     })()
 
@@ -83,6 +94,11 @@ export default function LikeButton({
   async function toggle() {
     const uid = userIdRef.current
     if (!uid || busy) return
+    if (ownerId && ownerId === uid) {
+      setNotice(t('feedpage.selfLike'))
+      setTimeout(() => setNotice(null), 2600)
+      return
+    }
     setBusy(true)
     setBump(true)
     setTimeout(() => setBump(false), 220)
@@ -102,9 +118,12 @@ export default function LikeButton({
 
     const { error } = await op
     if (error) {
-      // Revert on failure.
+      // Revert on failure — en le DISANT. Un cœur qui s'allume puis s'éteint
+      // sans explication est indiscernable d'une panne.
       setLiked(wasLiked)
       setCount((n) => Math.max(0, n + (wasLiked ? 1 : -1)))
+      setNotice(t('feedpage.likeFailed'))
+      setTimeout(() => setNotice(null), 2600)
     } else if (!wasLiked) {
       const { data: sp } = await supabase
         .from('spots')
@@ -128,7 +147,23 @@ export default function LikeButton({
     setBusy(false)
   }
 
+  const isMine = !!ownerId && ownerId === me
+
   return (
+    <span className="relative inline-flex items-center">
+      {notice && (
+        <span
+          role="status"
+          className="absolute bottom-full left-0 z-10 mb-1.5 whitespace-nowrap rounded-lg px-2.5 py-1.5 text-[11.5px] font-semibold text-fg"
+          style={{
+            background: 'rgb(var(--color-card))',
+            border: '1px solid var(--color-border)',
+            boxShadow: '0 6px 18px rgba(0,0,0,0.35)',
+          }}
+        >
+          {notice}
+        </span>
+      )}
     <button
       onClick={(e) => {
         e.preventDefault()
@@ -137,7 +172,9 @@ export default function LikeButton({
       }}
       aria-label={liked ? 'Retirer le like' : 'Liker'}
       aria-pressed={liked}
+      aria-disabled={isMine}
       className={`tappable flex items-center gap-1.5 text-sm ${className}`}
+      style={isMine ? { opacity: 0.55 } : undefined}
     >
       <span className="relative inline-flex h-7 w-7 items-center justify-center">
         {bump && liked && (
@@ -155,5 +192,6 @@ export default function LikeButton({
       </span>
       <span className={liked ? 'text-accent' : 'text-fg2'}>{count}</span>
     </button>
+    </span>
   )
 }
