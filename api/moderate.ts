@@ -1,21 +1,26 @@
 // ═══════ LE BOT DE MODÉRATION — TRIER, PAS JUGER ═══════
 //
-// Appelé après un signalement. Son travail : classer un dossier et le
-// remettre à un humain, sauf dans un cas étroit et réversible.
+// Appelé après un signalement. Son travail : classer un dossier, lui donner
+// une priorité, et le remettre à un humain. Rien d'autre.
 //
 // ── CE QU'IL NE FAIT JAMAIS ──
-// Suspendre, bannir, supprimer un compte. La règle n'est pas écrite ici mais
-// dans `bot_verdict()` (migration 0120), qui n'accepte que la suppression
-// d'un CONTENU : une règle appliquée côté base ne peut pas être contournée
-// par une erreur de ce fichier.
+// AUCUNE sanction. Ni suspension, ni bannissement, ni suppression de compte,
+// ni même suppression d'un contenu — quelle que soit sa confiance, fût-elle
+// de 0,99.
+//
+// La règle n'est pas tenue par ce fichier mais par la base (migration 0121) :
+// `bot_verdict()` n'a plus aucune branche qui supprime ou sanctionne, et un
+// déclencheur sur `user_sanctions` refuse toute ligne d'origine `auto`. Une
+// erreur dans ce fichier ne peut donc pas produire de sanction automatique —
+// c'est tout l'intérêt de l'écrire là-bas plutôt qu'ici.
 //
 // ── POURQUOI LES RÈGLES D'ABORD ──
 // Appeler un modèle sur chaque signalement serait du gâchis. La plupart des
 // dossiers se tranchent sans lire le texte :
 //
 //   · contenu déjà analysé            → on ne repaie pas la même réponse
-//   · un seul signalement, pas de mot  → risque faible, revue humaine
-//     problématique                      différée, zéro appel
+//   · un seul signalement, pas de mot  → risque faible, revue humaine,
+//     problématique                      zéro appel
 //   · beaucoup de signalements         → revue humaine, inutile de demander
 //     indépendants                       son avis à une machine
 //   · motif « faux compte »,           → humain d'office : ce sont des

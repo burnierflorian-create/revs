@@ -37,6 +37,7 @@ type CaseRow = {
   reasons: string[] | null
   preview: string | null
   updated_at: string
+  priority: string
 }
 
 type Appeal = {
@@ -101,6 +102,13 @@ export default function Moderation() {
   const [reason, setReason] = useState('')
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
+  const [counts, setCounts] = useState<Record<string, number> | null>(null)
+  const [suspects, setSuspects] = useState<
+    { user_id: string; pseudo: string | null; total: number; dismissed: number; reason: string }[]
+  >([])
+  /** Ne montrer que les dossiers urgents. Un filtre, pas un onglet de plus :
+   *  l'urgence traverse la même file. */
+  const [urgentOnly, setUrgentOnly] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -125,16 +133,28 @@ export default function Moderation() {
   }, [])
 
   const load = useCallback(async () => {
-    const [c, a, s, h] = await Promise.all([
+    const [c, a, s, h, n, sr] = await Promise.all([
       supabase.rpc('moderation_queue', { p_status: 'all' }),
       supabase.rpc('moderation_appeals_queue'),
       supabase.rpc('moderation_sanctioned'),
       supabase.rpc('moderation_history'),
+      supabase.rpc('moderation_counts'),
+      supabase.rpc('suspicious_reporters'),
     ])
     setCases((c.data ?? []) as CaseRow[])
     setAppeals((a.data ?? []) as Appeal[])
     setSanctioned((s.data ?? []) as Sanctioned[])
     setHistory((h.data ?? []) as HistoryRow[])
+    setCounts((n.data as Record<string, number>) ?? null)
+    setSuspects(
+      (sr.data ?? []) as {
+        user_id: string
+        pseudo: string | null
+        total: number
+        dismissed: number
+        reason: string
+      }[],
+    )
   }, [])
 
   useEffect(() => {
@@ -172,6 +192,23 @@ export default function Moderation() {
     })
     setBusy(false)
     setNotice(error ? error.message : t('moderation.done'))
+    if (!error) {
+      setOpenCase(null)
+      void load()
+    }
+    setTimeout(() => setNotice(null), 3000)
+  }
+
+  async function askExplanation(caseId: string) {
+    const q = window.prompt(t('moderation.askPrompt'))
+    if (!q || !q.trim()) return
+    setBusy(true)
+    const { error } = await supabase.rpc('moderation_ask', {
+      p_case: caseId,
+      p_question: q.trim(),
+    })
+    setBusy(false)
+    setNotice(error ? error.message : t('moderation.asked'))
     if (!error) {
       setOpenCase(null)
       void load()
@@ -227,13 +264,15 @@ export default function Moderation() {
     )
   }
 
-  const pending = (cases ?? []).filter(
+  const pendingAll = (cases ?? []).filter(
     (c) => c.status === 'open' || c.status === 'needs_review',
   )
+  const pending = urgentOnly ? pendingAll.filter((c) => c.priority === 'urgent') : pendingAll
+  const urgentCount = pendingAll.filter((c) => c.priority === 'urgent').length
   const pendingAppeals = (appeals ?? []).filter((a) => a.status === 'pending')
 
   const TABS: { key: Tab; n: number; icon: React.ReactNode }[] = [
-    { key: 'cases', n: pending.length, icon: <AlertTriangle className="h-4 w-4" /> },
+    { key: 'cases', n: pendingAll.length, icon: <AlertTriangle className="h-4 w-4" /> },
     { key: 'appeals', n: pendingAppeals.length, icon: <Scale className="h-4 w-4" /> },
     { key: 'sanctioned', n: (sanctioned ?? []).length, icon: <Users className="h-4 w-4" /> },
     { key: 'history', n: (history ?? []).length, icon: <Bot className="h-4 w-4" /> },
@@ -306,6 +345,61 @@ export default function Moderation() {
 
       {tab === 'cases' && (
         <div className="space-y-2">
+          {/* La ligne que l'administration lit en arrivant. Les signalements
+              sont des ALERTES : ce compteur dit ce qu'il reste à regarder,
+              jamais ce qui est fautif. */}
+          {counts && (
+            <div
+              className="mb-1 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-2xl px-4 py-3"
+              style={{ background: 'rgb(var(--color-fg) / 0.05)' }}
+            >
+              <Stat n={counts.to_review ?? 0} label={t('moderation.statToReview')} />
+              <Stat n={counts.urgent ?? 0} label={t('moderation.statUrgent')} accent />
+              <Stat n={counts.appeals ?? 0} label={t('moderation.statAppeals')} />
+              <Stat n={counts.dismissed ?? 0} label={t('moderation.statDismissed')} />
+              <Stat n={counts.sanctions_active ?? 0} label={t('moderation.statSanctions')} />
+            </div>
+          )}
+
+          {urgentCount > 0 && (
+            <button
+              onClick={() => setUrgentOnly((v) => !v)}
+              aria-pressed={urgentOnly}
+              className="tappable mb-1 w-full rounded-xl py-2.5 text-[13px] font-bold"
+              style={
+                urgentOnly
+                  ? { background: 'var(--revs-red)', color: '#fff' }
+                  : { background: 'rgba(232,32,58,0.12)', color: 'var(--revs-red)' }
+              }
+            >
+              {urgentOnly
+                ? t('moderation.showAll')
+                : t('moderation.showUrgent', { count: urgentCount })}
+            </button>
+          )}
+
+          {suspects.length > 0 && (
+            <div
+              className="mb-1 rounded-2xl px-4 py-3"
+              style={{ background: 'rgb(var(--color-fg) / 0.05)' }}
+            >
+              <p className="text-[11px] font-extrabold uppercase tracking-wider text-fg2">
+                {t('moderation.suspiciousReporters')}
+              </p>
+              {suspects.map((s) => (
+                <p key={s.user_id} className="mt-1 text-[12.5px] text-fg">
+                  {s.pseudo ?? '—'} —{' '}
+                  <span className="text-fg2">
+                    {s.reason} ({s.dismissed}/{s.total} {t('moderation.dismissedShort')})
+                  </span>
+                </p>
+              ))}
+              <p className="mt-1.5 text-[11.5px] italic text-fg2">
+                {t('moderation.suspiciousHint')}
+              </p>
+            </div>
+          )}
+
           {pending.length === 0 && (
             <p className="py-10 text-center text-[13px] text-fg2">{t('moderation.noCases')}</p>
           )}
@@ -329,10 +423,25 @@ export default function Moderation() {
                 >
                   {t(`moderation.type.${c.target_type}`)}
                 </span>
+                {c.priority !== 'normal' && (
+                  <span
+                    className="rounded-md px-1.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider"
+                    style={
+                      c.priority === 'urgent'
+                        ? { background: 'rgba(232,32,58,0.2)', color: 'var(--revs-red)' }
+                        : { background: 'rgba(245,158,11,0.18)', color: '#F59E0B' }
+                    }
+                  >
+                    {t(`moderation.priority.${c.priority}`)}
+                  </span>
+                )}
                 {c.status === 'needs_review' && (
                   <span
                     className="rounded-md px-1.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider"
-                    style={{ background: 'rgba(232,32,58,0.18)', color: 'var(--revs-red)' }}
+                    style={{
+                      background: 'rgb(var(--color-fg) / 0.1)',
+                      color: 'rgb(var(--color-fg-2))',
+                    }}
                   >
                     {t('moderation.needsReview')}
                   </span>
@@ -483,6 +592,7 @@ export default function Moderation() {
         busy={busy}
         isAdmin={role === 'admin'}
         onAct={act}
+        onAsk={askExplanation}
         onClose={() => setOpenCase(null)}
       />}
     </div>
@@ -496,6 +606,7 @@ function CaseDetail({
   busy,
   isAdmin,
   onAct,
+  onAsk,
   onClose,
 }: {
   data: Record<string, unknown>
@@ -504,6 +615,7 @@ function CaseDetail({
   busy: boolean
   isAdmin: boolean
   onAct: (caseId: string, action: string, confirm: boolean) => void
+  onAsk: (caseId: string) => void
   onClose: () => void
 }) {
   const { t } = useTranslation()
@@ -665,6 +777,16 @@ function CaseDetail({
               ),
             )}
           </div>
+          {/* Demander le contexte AVANT de trancher. Un cas ambigu se règle
+              plus souvent par une question que par une sanction. */}
+          <button
+            onClick={() => onAsk(c.id as string)}
+            disabled={busy}
+            className="tappable mt-2 w-full rounded-xl py-3 text-[13px] font-bold text-fg disabled:opacity-50"
+            style={{ background: 'rgb(var(--color-fg) / 0.07)' }}
+          >
+            {t('moderation.action.ask')}
+          </button>
           <button
             onClick={onClose}
             className="tappable mt-3 w-full rounded-full py-3 text-[14px] font-semibold text-fg2"
@@ -675,6 +797,21 @@ function CaseDetail({
       </div>
     </div>,
     document.body,
+  )
+}
+
+/** Un chiffre et son libellé. Un indicateur, pas un tableau de bord. */
+function Stat({ n, label, accent }: { n: number; label: string; accent?: boolean }) {
+  return (
+    <span className="flex items-baseline gap-1.5">
+      <span
+        className="text-[15px] font-extrabold tabular-nums"
+        style={{ color: accent && n > 0 ? 'var(--revs-red)' : undefined }}
+      >
+        {n}
+      </span>
+      <span className="text-[11.5px] text-fg2">{label}</span>
+    </span>
   )
 }
 

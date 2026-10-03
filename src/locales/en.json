@@ -1848,7 +1848,8 @@
       "escalate": "Escalate",
       "lift_sanction": "Sanction lifted",
       "appeal_accepted": "Appeal accepted",
-      "appeal_rejected": "Appeal rejected"
+      "appeal_rejected": "Appeal rejected",
+      "ask": "Ask for an explanation"
     },
     "confirm": {
       "delete_content": "Permanently delete this content?",
@@ -1875,7 +1876,26 @@
     "liftNote": "Reason for lifting",
     "lift": "Lift",
     "auto": "automatic",
-    "human": "human"
+    "human": "human",
+    "statToReview": "to review",
+    "statUrgent": "urgent",
+    "statAppeals": "appeals",
+    "statDismissed": "dismissed",
+    "statSanctions": "active sanctions",
+    "showUrgent": "Show only the {{count}} urgent",
+    "showAll": "Show all cases",
+    "priority": {
+      "urgent": "Urgent",
+      "high": "Priority",
+      "normal": "Normal"
+    },
+    "suspiciousReporters": "Reporters to review",
+    "dismissedShort": "dismissed",
+    "suspiciousHint": "No measure is taken against them automatically — your call.",
+    "askPrompt": "What would you like to ask this person?",
+    "asked": "Question sent.",
+    "badge": "{{count}} to review",
+    "badgeUrgent": "{{urgent}} urgent · {{count}}"
   },
   "appeal": {
     "open": "Appeal this decision",
@@ -1886,6 +1906,9 @@
     "already": "You already appealed this decision.",
     "reason": "Reason",
     "until": "until {{date}}",
-    "yours": "Your appeal"
+    "yours": "Your appeal",
+    "questionTitle": "Moderation is asking you for context",
+    "answerPlaceholder": "Your answer…",
+    "answerSend": "Reply"
   }
 }

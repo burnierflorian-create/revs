@@ -11,8 +11,14 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { AlertTriangle, Scale } from 'lucide-react'
+import { AlertTriangle, MessageSquare, Scale } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+
+type Question = {
+  id: string
+  question: string
+  answer: string | null
+}
 
 type Sanction = {
   id: string
@@ -26,28 +32,51 @@ type Sanction = {
 export default function SanctionBanner() {
   const { t } = useTranslation()
   const [list, setList] = useState<Sanction[]>([])
+  /** Une question de la modération. Elle arrive AVANT toute sanction, et
+   *  c'est le but : un cas ambigu se règle plus souvent par une explication
+   *  que par une mesure. */
+  const [questions, setQuestions] = useState<Question[]>([])
+  const [reply, setReply] = useState<Record<string, string>>({})
   const [openFor, setOpenFor] = useState<string | null>(null)
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
-    const { data } = await supabase.rpc('my_moderation_status')
-    const s = (data as { sanctions?: Sanction[] } | null)?.sanctions ?? []
-    setList(s)
+    const [{ data }, q] = await Promise.all([
+      supabase.rpc('my_moderation_status'),
+      // La policy « read own questions » fait que cette requête ne peut
+      // renvoyer que les siennes.
+      supabase
+        .from('moderation_questions')
+        .select('id, question, answer')
+        .is('answer', null)
+        .order('asked_at', { ascending: false }),
+    ])
+    setList((data as { sanctions?: Sanction[] } | null)?.sanctions ?? [])
+    setQuestions((q.data ?? []) as Question[])
   }, [])
 
   useEffect(() => {
     let active = true
     void (async () => {
-      const { data } = await supabase.rpc('my_moderation_status')
-      if (!active) return
-      setList(((data as { sanctions?: Sanction[] } | null)?.sanctions ?? []) as Sanction[])
+      if (active) await load()
     })()
     return () => {
       active = false
     }
-  }, [])
+  }, [load])
+
+  async function answer(id: string) {
+    const text = (reply[id] ?? '').trim()
+    if (text.length < 2) return
+    await supabase
+      .from('moderation_questions')
+      .update({ answer: text, answered_at: new Date().toISOString() })
+      .eq('id', id)
+    setReply((r) => ({ ...r, [id]: '' }))
+    void load()
+  }
 
   async function sendAppeal(sanctionId: string) {
     const text = message.trim()
@@ -81,10 +110,47 @@ export default function SanctionBanner() {
     void load()
   }
 
-  if (list.length === 0) return null
+  if (list.length === 0 && questions.length === 0) return null
 
   return (
     <div className="space-y-2 px-4 pb-2">
+      {questions.map((q) => (
+        <div
+          key={q.id}
+          className="rounded-2xl px-4 py-3"
+          style={{
+            background: 'rgb(var(--color-fg) / 0.06)',
+            border: '1px solid var(--color-border)',
+          }}
+        >
+          <p className="flex items-center gap-2 text-[14px] font-bold text-fg">
+            <MessageSquare className="h-4 w-4 flex-none text-fg2" />
+            {t('appeal.questionTitle')}
+          </p>
+          <p className="mt-1 text-[13px] leading-relaxed text-fg2">{q.question}</p>
+          <textarea
+            value={reply[q.id] ?? ''}
+            onChange={(e) => setReply((r) => ({ ...r, [q.id]: e.target.value.slice(0, 2000) }))}
+            placeholder={t('appeal.answerPlaceholder')}
+            aria-label={t('appeal.answerPlaceholder')}
+            rows={2}
+            className="mt-2 w-full resize-none rounded-xl px-3.5 py-2.5 text-fg outline-none placeholder:text-fg2"
+            style={{
+              fontSize: '16px',
+              background: 'rgb(var(--color-fg) / 0.06)',
+              border: '1px solid var(--color-border)',
+            }}
+          />
+          <button
+            onClick={() => void answer(q.id)}
+            disabled={(reply[q.id] ?? '').trim().length < 2}
+            className="tappable mt-2 w-full rounded-full py-2.5 text-[13px] font-bold text-white disabled:opacity-40"
+            style={{ background: 'var(--revs-red)' }}
+          >
+            {t('appeal.answerSend')}
+          </button>
+        </div>
+      ))}
       {list.map((s) => (
         <div
           key={s.id}

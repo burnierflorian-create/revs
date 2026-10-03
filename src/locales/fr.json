@@ -1848,7 +1848,8 @@
       "escalate": "Escalader",
       "lift_sanction": "Sanction levée",
       "appeal_accepted": "Contestation acceptée",
-      "appeal_rejected": "Contestation refusée"
+      "appeal_rejected": "Contestation refusée",
+      "ask": "Demander des explications"
     },
     "confirm": {
       "delete_content": "Supprimer définitivement ce contenu ?",
@@ -1875,7 +1876,26 @@
     "liftNote": "Motif de la levée",
     "lift": "Lever",
     "auto": "automatique",
-    "human": "humain"
+    "human": "humain",
+    "statToReview": "à examiner",
+    "statUrgent": "urgents",
+    "statAppeals": "contestations",
+    "statDismissed": "classés",
+    "statSanctions": "sanctions actives",
+    "showUrgent": "Ne voir que les {{count}} urgents",
+    "showAll": "Voir tous les dossiers",
+    "priority": {
+      "urgent": "Urgent",
+      "high": "Prioritaire",
+      "normal": "Normal"
+    },
+    "suspiciousReporters": "Signaleurs à examiner",
+    "dismissedShort": "classés sans suite",
+    "suspiciousHint": "Aucune mesure n'est prise automatiquement contre eux — à vous de juger.",
+    "askPrompt": "Quelle explication demander à cette personne ?",
+    "asked": "Question envoyée.",
+    "badge": "{{count}} à examiner",
+    "badgeUrgent": "{{urgent}} urgent · {{count}}"
   },
   "appeal": {
     "open": "Contester cette décision",
@@ -1886,6 +1906,9 @@
     "already": "Vous avez déjà contesté cette décision.",
     "reason": "Motif",
     "until": "jusqu'au {{date}}",
-    "yours": "Votre contestation"
+    "yours": "Votre contestation",
+    "questionTitle": "La modération vous demande une précision",
+    "answerPlaceholder": "Votre réponse…",
+    "answerSend": "Répondre"
   }
 }

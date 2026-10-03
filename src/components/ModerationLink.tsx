@@ -12,6 +12,10 @@ export default function ModerationLink() {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const [allowed, setAllowed] = useState(false)
+  /** Ce qu'il reste à examiner. C'est la notification : pas d'e-mail par
+   *  signalement, la source de vérité est l'espace Modération. */
+  const [pending, setPending] = useState(0)
+  const [urgent, setUrgent] = useState(0)
 
   useEffect(() => {
     let active = true
@@ -25,7 +29,15 @@ export default function ModerationLink() {
         .select('role')
         .eq('user_id', user.id)
         .maybeSingle()
-      if (active) setAllowed(data?.role === 'moderator' || data?.role === 'admin')
+      const may = data?.role === 'moderator' || data?.role === 'admin'
+      if (!active) return
+      setAllowed(may)
+      if (!may) return
+      const { data: n } = await supabase.rpc('moderation_counts')
+      if (!active) return
+      const c = (n as Record<string, number> | null) ?? {}
+      setPending(c.to_review ?? 0)
+      setUrgent(c.urgent ?? 0)
     })()
     return () => {
       active = false
@@ -44,7 +56,17 @@ export default function ModerationLink() {
       }}
     >
       <ShieldCheck className="h-[18px] w-[18px] flex-none" style={{ color: 'var(--revs-red)' }} />
-      <span className="text-[14px] font-bold text-fg">{t('moderation.title')}</span>
+      <span className="flex-1 text-[14px] font-bold text-fg">{t('moderation.title')}</span>
+      {pending > 0 && (
+        <span
+          className="flex-none rounded-full px-2.5 py-1 text-[11.5px] font-extrabold tabular-nums text-white"
+          style={{ background: urgent > 0 ? 'var(--revs-red)' : 'rgb(var(--color-fg) / 0.35)' }}
+        >
+          {urgent > 0
+            ? t('moderation.badgeUrgent', { count: pending, urgent })
+            : t('moderation.badge', { count: pending })}
+        </span>
+      )}
     </button>
   )
 }
