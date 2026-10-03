@@ -34,6 +34,8 @@ import {
   type ReferralStats,
 } from '../lib/referrals'
 import ProfileHero from '../components/profile/ProfileHero'
+import SanctionBanner from '../components/SanctionBanner'
+import ModerationLink from '../components/ModerationLink'
 import ProfileStats from '../components/profile/ProfileStats'
 import ProfileProgress from '../components/profile/ProfileProgress'
 import ProfileTabs from '../components/profile/ProfileTabs'
@@ -567,9 +569,15 @@ export default function Profile() {
           </div>
         )}
 
+        {/* Une sanction en cours se lit AVANT tout le reste : c'est ce qui
+            explique pourquoi le compte ne se comporte plus normalement. */}
+        <SanctionBanner />
+
         <ProfileStats stats={profileStats} />
 
         <ProfileProgress prog={prog} animPct={animPct} />
+
+        <ModerationLink />
 
         <ProfileTabs active={profileTab} onChange={setProfileTab} />
       </div>

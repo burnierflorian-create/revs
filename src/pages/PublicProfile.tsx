@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, AtSign, Car } from 'lucide-react'
+import { ArrowLeft, AtSign, Car, MoreHorizontal, UserMinus } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { type Spot } from '../lib/spots'
 import { myPseudo, notifyPush } from '../lib/push'
@@ -11,6 +11,7 @@ import { allBadges, computeUnlocks } from '../lib/badges'
 import { sinceLabel } from '../lib/presence'
 import { Skeleton } from '../components/Skeleton'
 import SpotMiniGrid from '../components/profile/SpotMiniGrid'
+import ProfileActionsSheet from '../components/ProfileActionsSheet'
 
 type Prof = {
   pseudo: string | null
@@ -50,6 +51,8 @@ export default function PublicProfile() {
   const [tab, setTab] = useState<null | 'followers' | 'following'>(null)
   const [list, setList] = useState<Rel[]>([])
   const [contentTab, setContentTab] = useState<'spots' | 'likes' | 'bookmarks'>('spots')
+  const [blocked, setBlocked] = useState(false)
+  const [actionsOpen, setActionsOpen] = useState(false)
   /** Les spots de l'onglet Likes ou Favoris. Chargés À LA DEMANDE : la
    *  plupart des visites s'arrêtent aux Spots, et deux listes de plus à
    *  l'ouverture coûteraient à tout le monde pour servir quelques-uns. */
@@ -62,7 +65,7 @@ export default function PublicProfile() {
       data: { user },
     } = await supabase.auth.getUser()
     setMeId(user?.id ?? null)
-    const [p, xpRows, sp, fr, fg, mine, tierRes] = await Promise.all([
+    const [p, xpRows, sp, fr, fg, mine, tierRes, blk] = await Promise.all([
       // `profile_public` (migration 0094) plutôt que `profiles` : c'est la
       // MÊME question posée par toutes les surfaces. L'ancienne requête
       // demandait `pseudo, ville, avatar` — ni le véhicule ni l'Instagram.
@@ -98,6 +101,16 @@ export default function PublicProfile() {
             .maybeSingle()
         : Promise.resolve({ data: null }),
       supabase.rpc('user_tier', { p_user: id }),
+      // Ai-je bloqué cette personne ? La policy « read own blocks » fait que
+      // cette requête ne peut renvoyer que MES blocages.
+      user
+        ? supabase
+            .from('user_blocks')
+            .select('blocked_id')
+            .eq('blocker_id', user.id)
+            .eq('blocked_id', id)
+            .maybeSingle()
+        : Promise.resolve({ data: null }),
     ])
     setProf((p.data as Prof) ?? { pseudo: null, ville: null, avatar: null })
     setXp(
@@ -111,6 +124,7 @@ export default function PublicProfile() {
     setFollowers(fr.count ?? 0)
     setFollowing(fg.count ?? 0)
     setIsFollowing(!!mine.data)
+    setBlocked(!!blk.data)
     const tierRaw = tierRes.data
     setTier(
       tierRaw === 'premium' || tierRaw === 'vip' ? tierRaw : null,
@@ -286,6 +300,17 @@ export default function PublicProfile() {
         >
           <ArrowLeft className="h-5 w-5" />
         </button>
+        {/* « … » — bloquer, débloquer, signaler. Absent sur son propre
+            profil : on ne se bloque ni ne se signale soi-même. */}
+        {!isMe && id && (
+          <button
+            onClick={() => setActionsOpen(true)}
+            aria-label={t('block.menuAria')}
+            className="absolute right-4 top-[max(1rem,env(safe-area-inset-top))] flex h-9 w-9 items-center justify-center rounded-full bg-black/40 text-white backdrop-blur"
+          >
+            <MoreHorizontal className="h-5 w-5" />
+          </button>
+        )}
         <div
           className="absolute left-1/2 z-10 flex -translate-x-1/2 items-center justify-center overflow-hidden rounded-full bg-card text-4xl font-bold"
           style={{
@@ -486,6 +511,46 @@ export default function PublicProfile() {
             ))
           )}
         </div>
+      )}
+
+      {/* Bandeau de blocage — l'état doit être lisible sans ouvrir un menu,
+          sinon on ne comprend pas pourquoi le profil paraît vide. */}
+      {blocked && (
+        <div
+          className="mt-5 flex items-center gap-3 rounded-2xl px-4 py-3"
+          style={{ background: 'rgb(var(--color-fg) / 0.06)', border: '1px solid var(--color-border)' }}
+        >
+          <UserMinus className="h-[18px] w-[18px] flex-none text-fg2" />
+          <span className="min-w-0 flex-1">
+            <span className="block text-[13.5px] font-semibold text-fg">
+              {t('block.blockedBanner')}
+            </span>
+            <span className="block text-[12px] text-fg2">{t('block.blockedHint')}</span>
+          </span>
+          <button
+            onClick={() => setActionsOpen(true)}
+            className="tappable flex-none rounded-full px-3.5 py-2 text-[12.5px] font-bold text-fg"
+            style={{ background: 'rgb(var(--color-fg) / 0.1)' }}
+          >
+            {t('block.unblock')}
+          </button>
+        </div>
+      )}
+
+      {id && (
+        <ProfileActionsSheet
+          open={actionsOpen}
+          userId={id}
+          pseudo={name}
+          blocked={blocked}
+          onClose={() => setActionsOpen(false)}
+          onBlockedChange={(next) => {
+            setBlocked(next)
+            // Les publications apparaissent ou disparaissent par policy : il
+            // faut relire, pas seulement repeindre.
+            void load()
+          }}
+        />
       )}
 
       {/* ── SPOTS · LIKES · FAVORIS ──

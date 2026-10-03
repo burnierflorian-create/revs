@@ -1765,5 +1765,125 @@
     "reportFailed": "Le signalement n'a pas pu être envoyé.",
     "delete": "Supprimer ma publication",
     "deleted": "Publication supprimée."
+  },
+  "report": {
+    "title": "Signaler",
+    "thanks": "Merci.",
+    "thanksBody": "Votre signalement a été transmis. Il sera examiné.",
+    "send": "Envoyer le signalement",
+    "sending": "Envoi…",
+    "failed": "Le signalement n'a pas pu être envoyé.",
+    "notePlaceholder": "Précisions (facultatif)",
+    "disclaimer": "Un signalement ouvre un dossier examiné par la modération. Il ne déclenche aucune sanction automatique.",
+    "reason": {
+      "spam": "Spam",
+      "harassment": "Harcèlement ou insultes",
+      "inappropriate": "Contenu inapproprié",
+      "violent": "Contenu violent",
+      "scam": "Arnaque ou fraude",
+      "fake_account": "Faux compte ou usurpation",
+      "misleading_car": "Information automobile trompeuse",
+      "other": "Autre"
+    }
+  },
+  "block": {
+    "block": "Bloquer ce membre",
+    "unblock": "Débloquer",
+    "reportProfile": "Signaler ce profil",
+    "explain": "Vous ne verrez plus ses publications ni ses commentaires, et il ne verra plus les vôtres. Vous pouvez annuler à tout moment depuis son profil.",
+    "blockedBanner": "Vous avez bloqué ce membre.",
+    "blockedHint": "Ses publications vous sont masquées.",
+    "menuAria": "Options du profil"
+  },
+  "moderation": {
+    "title": "Modération",
+    "back": "Retour",
+    "forbidden": "Cet espace est réservé à la modération.",
+    "backHome": "Retour à l'accueil",
+    "tab": {
+      "cases": "Signalements",
+      "appeals": "Contestations",
+      "sanctioned": "Sanctionnés",
+      "history": "Historique"
+    },
+    "noCases": "Aucun dossier en attente.",
+    "noAppeals": "Aucune contestation.",
+    "noSanctions": "Aucun compte sanctionné.",
+    "noHistory": "Aucune action enregistrée.",
+    "needsReview": "À examiner",
+    "by": "par {{pseudo}}",
+    "reportCount": "{{count}} signalement(s)",
+    "type": {
+      "spot": "Spot",
+      "comment": "Commentaire",
+      "story": "Story",
+      "profile": "Profil"
+    },
+    "caseTitle": "Dossier de modération",
+    "content": "Contenu signalé",
+    "contentGone": "Le contenu n'existe plus.",
+    "author": "Auteur",
+    "reportsTitle": "Motifs ({{count}})",
+    "botTitle": "Analyse automatique",
+    "botAi": "Analyse par modèle",
+    "botRules": "Décision par règles",
+    "botUnsure": "Décision automatique non suffisamment certaine.",
+    "priorSanctions": "Sanctions précédentes",
+    "priorActions": "Actions précédentes",
+    "lifted": "levée",
+    "reasonPlaceholder": "Motif de la décision (obligatoire)",
+    "reasonRequired": "Un motif est obligatoire.",
+    "done": "Enregistré.",
+    "action": {
+      "dismiss": "Classer sans suite",
+      "hide_content": "Masquer",
+      "delete_content": "Supprimer le contenu",
+      "warn": "Avertir",
+      "restrict": "Restreindre",
+      "suspend": "Suspendre 7 jours",
+      "ban": "Bannir",
+      "delete_account": "Supprimer le compte",
+      "escalate": "Escalader",
+      "lift_sanction": "Sanction levée",
+      "appeal_accepted": "Contestation acceptée",
+      "appeal_rejected": "Contestation refusée"
+    },
+    "confirm": {
+      "delete_content": "Supprimer définitivement ce contenu ?",
+      "restrict": "Restreindre ce compte ?",
+      "suspend": "Suspendre ce compte 7 jours ?",
+      "ban": "Bannir ce compte ? Cette décision bloque tout accès."
+    },
+    "sanction": {
+      "warning": "Avertissement",
+      "content_removed": "Contenu supprimé",
+      "restricted": "Restreint",
+      "suspended": "Suspendu",
+      "banned": "Banni"
+    },
+    "appealStatus": {
+      "pending": "En attente",
+      "reviewing": "En cours d'examen",
+      "accepted": "Acceptée",
+      "rejected": "Refusée"
+    },
+    "acceptAppeal": "Accepter",
+    "rejectAppeal": "Refuser",
+    "appealNote": "Note de décision (visible par la modération)",
+    "liftNote": "Motif de la levée",
+    "lift": "Lever",
+    "auto": "automatique",
+    "human": "humain"
+  },
+  "appeal": {
+    "open": "Contester cette décision",
+    "send": "Envoyer la contestation",
+    "sending": "Envoi…",
+    "placeholder": "Expliquez pourquoi vous pensez que cette décision est incorrecte.",
+    "tooShort": "Expliquez un peu plus — au moins dix caractères.",
+    "already": "Vous avez déjà contesté cette décision.",
+    "reason": "Motif",
+    "until": "jusqu'au {{date}}",
+    "yours": "Votre contestation"
   }
 }

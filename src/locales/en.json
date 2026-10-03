@@ -1765,5 +1765,125 @@
     "reportFailed": "The report could not be sent.",
     "delete": "Delete my post",
     "deleted": "Post deleted."
+  },
+  "report": {
+    "title": "Report",
+    "thanks": "Thank you.",
+    "thanksBody": "Your report has been sent. It will be reviewed.",
+    "send": "Send report",
+    "sending": "Sending…",
+    "failed": "The report could not be sent.",
+    "notePlaceholder": "More details (optional)",
+    "disclaimer": "A report opens a case reviewed by moderation. It triggers no automatic sanction.",
+    "reason": {
+      "spam": "Spam",
+      "harassment": "Harassment or abuse",
+      "inappropriate": "Inappropriate content",
+      "violent": "Violent content",
+      "scam": "Scam or fraud",
+      "fake_account": "Fake account or impersonation",
+      "misleading_car": "Misleading car information",
+      "other": "Other"
+    }
+  },
+  "block": {
+    "block": "Block this member",
+    "unblock": "Unblock",
+    "reportProfile": "Report this profile",
+    "explain": "You will no longer see their posts or comments, and they will no longer see yours. You can undo this any time from their profile.",
+    "blockedBanner": "You blocked this member.",
+    "blockedHint": "Their posts are hidden from you.",
+    "menuAria": "Profile options"
+  },
+  "moderation": {
+    "title": "Moderation",
+    "back": "Back",
+    "forbidden": "This area is restricted to moderation.",
+    "backHome": "Back home",
+    "tab": {
+      "cases": "Reports",
+      "appeals": "Appeals",
+      "sanctioned": "Sanctioned",
+      "history": "History"
+    },
+    "noCases": "No pending case.",
+    "noAppeals": "No appeal.",
+    "noSanctions": "No sanctioned account.",
+    "noHistory": "No action recorded.",
+    "needsReview": "Needs review",
+    "by": "by {{pseudo}}",
+    "reportCount": "{{count}} report(s)",
+    "type": {
+      "spot": "Spot",
+      "comment": "Comment",
+      "story": "Story",
+      "profile": "Profile"
+    },
+    "caseTitle": "Moderation case",
+    "content": "Reported content",
+    "contentGone": "The content no longer exists.",
+    "author": "Author",
+    "reportsTitle": "Reasons ({{count}})",
+    "botTitle": "Automatic analysis",
+    "botAi": "Model analysis",
+    "botRules": "Rule-based decision",
+    "botUnsure": "Automatic decision not confident enough.",
+    "priorSanctions": "Previous sanctions",
+    "priorActions": "Previous actions",
+    "lifted": "lifted",
+    "reasonPlaceholder": "Reason for the decision (required)",
+    "reasonRequired": "A reason is required.",
+    "done": "Saved.",
+    "action": {
+      "dismiss": "Dismiss",
+      "hide_content": "Hide",
+      "delete_content": "Delete content",
+      "warn": "Warn",
+      "restrict": "Restrict",
+      "suspend": "Suspend 7 days",
+      "ban": "Ban",
+      "delete_account": "Delete account",
+      "escalate": "Escalate",
+      "lift_sanction": "Sanction lifted",
+      "appeal_accepted": "Appeal accepted",
+      "appeal_rejected": "Appeal rejected"
+    },
+    "confirm": {
+      "delete_content": "Permanently delete this content?",
+      "restrict": "Restrict this account?",
+      "suspend": "Suspend this account for 7 days?",
+      "ban": "Ban this account? This blocks all access."
+    },
+    "sanction": {
+      "warning": "Warning",
+      "content_removed": "Content removed",
+      "restricted": "Restricted",
+      "suspended": "Suspended",
+      "banned": "Banned"
+    },
+    "appealStatus": {
+      "pending": "Pending",
+      "reviewing": "Reviewing",
+      "accepted": "Accepted",
+      "rejected": "Rejected"
+    },
+    "acceptAppeal": "Accept",
+    "rejectAppeal": "Reject",
+    "appealNote": "Decision note (visible to moderation)",
+    "liftNote": "Reason for lifting",
+    "lift": "Lift",
+    "auto": "automatic",
+    "human": "human"
+  },
+  "appeal": {
+    "open": "Appeal this decision",
+    "send": "Send appeal",
+    "sending": "Sending…",
+    "placeholder": "Explain why you believe this decision is wrong.",
+    "tooShort": "Please explain a bit more — at least ten characters.",
+    "already": "You already appealed this decision.",
+    "reason": "Reason",
+    "until": "until {{date}}",
+    "yours": "Your appeal"
   }
 }

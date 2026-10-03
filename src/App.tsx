@@ -14,6 +14,7 @@ const NewEvent = lazy(() => import('./pages/NewEvent'))
 const Premium = lazy(() => import('./pages/Premium'))
 const PremiumCheckout = lazy(() => import('./pages/PremiumCheckout'))
 const Settings = lazy(() => import('./pages/Settings'))
+const Moderation = lazy(() => import('./pages/Moderation'))
 const BecomeOrganizer = lazy(() => import('./pages/BecomeOrganizer'))
 const LegalMentions = lazy(() => import('./pages/LegalMentions'))
 const LegalPrivacy = lazy(() => import('./pages/LegalPrivacy'))
@@ -195,6 +196,11 @@ export default function App() {
           <Route path="/ma-galerie" element={lazyRoute(<MyGallery />)} />
           <Route path="/u/:id" element={lazyRoute(<PublicProfile />)} />
           <Route path="/settings" element={lazyRoute(<Settings />)} />
+          {/* La route est ouverte à tous : c'est la BASE qui refuse, pas le
+              routeur. Un garde côté client ne protège rien — il cache un
+              écran, il ne protège pas une donnée. La page affiche un refus
+              poli, et les fonctions SQL ne répondent qu'aux rôles habilités. */}
+          <Route path="/moderation" element={lazyRoute(<Moderation />)} />
           <Route
             path="/become-organizer"
             element={lazyRoute(<BecomeOrganizer />)}

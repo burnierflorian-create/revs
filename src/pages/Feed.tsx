@@ -7,6 +7,7 @@ import { useNavigate } from 'react-router-dom'
 import { Bookmark, Car, Heart, Layers, Loader2, Map as MapIcon, MapPin, MessageCircle, MoreHorizontal, Search as SearchIcon, SlidersHorizontal, SmilePlus, X, Zap } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import SpotMenu, { type SpotMenuAction } from '../components/SpotMenu'
+import ReportSheet from '../components/ReportSheet'
 import { onAvatarChange } from '../lib/avatar'
 import {
   EMPTY_SOCIAL,
@@ -1047,6 +1048,7 @@ const FeedCard = memo(function FeedCard({
   const [reactOpen, setReactOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
+  const [reportOpen, setReportOpen] = useState(false)
   // En état et non en ref : le rendu s'en sert pour décider si « Supprimer »
   // apparaît, et une ref lue pendant le rendu ne provoquerait pas le second
   // rendu qui fait apparaître l'entrée.
@@ -1197,23 +1199,14 @@ const FeedCard = memo(function FeedCard({
 
   /** Signaler, ou supprimer la sienne.
    *
-   *  Le signalement écrit vraiment une ligne (`spot_reports`, migration
-   *  0117) : un bouton qui remercie sans rien enregistrer n'est pas une
-   *  fonctionnalité. La raison par défaut est « contenu inapproprié » —
-   *  demander laquelle avant d'avoir une interface de modération ajouterait
-   *  un écran pour une donnée que personne ne lit encore. */
+   *  Le signalement ouvre la feuille des motifs : le motif oriente ce qu'un
+   *  modérateur regarde en premier, et le choisir à la place de l'utilisateur
+   *  reviendrait à classer tous les dossiers pareil. */
   async function onMenuAction(a: SpotMenuAction) {
     const uid = meRef.current
     if (!uid) return
     if (a === 'report') {
-      const { error } = await supabase
-        .from('spot_reports')
-        .insert({ spot_id: spot.id, reporter_id: uid, reason: 'inappropriate' })
-      // 23505 = déjà signalé par cette personne : le but est atteint.
-      setNotice(
-        !error || error.code === '23505' ? t('spotmenu.reported') : t('spotmenu.reportFailed'),
-      )
-      setTimeout(() => setNotice(null), 2600)
+      setReportOpen(true)
       return
     }
     if (a === 'delete') {
@@ -1335,6 +1328,14 @@ const FeedCard = memo(function FeedCard({
           {notice}
         </p>
       )}
+
+      <ReportSheet
+        open={reportOpen}
+        targetType="spot"
+        targetId={spot.id}
+        label={title}
+        onClose={() => setReportOpen(false)}
+      />
 
       <SpotMenu
         spotId={spot.id}
