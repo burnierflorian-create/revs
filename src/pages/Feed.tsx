@@ -7,6 +7,7 @@ import { useNavigate } from 'react-router-dom'
 import { Bookmark, Car, Heart, Layers, Loader2, Map as MapIcon, MapPin, MessageCircle, MoreHorizontal, Search as SearchIcon, SlidersHorizontal, SmilePlus, X, Zap } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import SpotMenu, { type SpotMenuAction } from '../components/SpotMenu'
+import { onAvatarChange } from '../lib/avatar'
 import {
   EMPTY_SOCIAL,
   REACTIONS,
@@ -276,12 +277,12 @@ export default function Feed() {
     }
   }, [])
 
-  const mergeProfiles = useCallback(async (list: Spot[]) => {
+  const mergeProfiles = useCallback(async (list: Spot[], force = false) => {
     const ids = [
       ...new Set(
         list
           .map((s) => s.user_id)
-          .filter((id) => !(id in profilesRef.current)),
+          .filter((id) => force || !(id in profilesRef.current)),
       ),
     ]
     if (ids.length === 0) return
@@ -347,6 +348,22 @@ export default function Feed() {
     }
     setSocial(socialRef.current)
   }, [])
+
+  // Changement de photo de profil — le Fil garde les profils résolus en
+  // mémoire et ne les redemande jamais. Sans cette annonce, changer sa photo
+  // puis revenir au Fil montrait encore l'ancienne, pour soi comme pour les
+  // autres cartes du même auteur. Aucune requête : l'URL arrive avec
+  // l'annonce.
+  useEffect(
+    () =>
+      onAvatarChange((userId, avatar) => {
+        const cur = profilesRef.current[userId]
+        if (!cur) return
+        profilesRef.current = { ...profilesRef.current, [userId]: { ...cur, avatar } }
+        setProfiles(profilesRef.current)
+      }),
+    [],
+  )
 
   // Instant re-render — when a spot is published (NewSpot emits it the
   // moment the insert is confirmed), unshift it to the very top of the
@@ -541,7 +558,10 @@ export default function Feed() {
 
       const filtered = applyFilters(pool, effectiveFilters)
       const slice = filtered.slice(0, PAGE)
-      await Promise.all([mergeProfiles(slice), mergeSocial(slice)])
+      // `force` : un rechargement du Fil doit relire les profils, sinon un
+      // avatar changé dans un autre onglet reste l'ancien tant que l'onglet
+      // Fil n'a pas été démonté. Une requête pour toute la page.
+      await Promise.all([mergeProfiles(slice, true), mergeSocial(slice)])
       if (!active) return
       pageRef.current = 1
       setHasMore(filtered.length > PAGE)

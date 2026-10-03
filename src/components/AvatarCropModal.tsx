@@ -1,5 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
+import { ImageOff } from 'lucide-react'
 
 // From-scratch circular avatar cropper — NO external library (react-easy-crop
 // rendered a black screen under React 19). Pure canvas + pointer/touch math.
@@ -10,6 +12,51 @@ import { useTranslation } from 'react-i18next'
 // circle back to source-image pixels and drawImage into a 512×512 canvas.
 
 const OUT = 512
+
+/** Plafond de pixels de la source avant recadrage.
+ *
+ *  Un iPhone récent produit du 48 Mpx (8064 × 6048). Au-delà d'environ
+ *  16,7 Mpx, Safari iOS décode l'image mais `drawImage` la rend TRANSPARENTE
+ *  sans lever d'erreur — et un canvas transparent exporté en JPEG donne un
+ *  carré NOIR. C'est l'une des deux façons dont cet écran devenait noir.
+ *
+ *  On redescend donc la source sous ce plafond AVANT de recadrer. 12 Mpx
+ *  laisse une marge confortable et reste très au-dessus des 512² de sortie :
+ *  la réduction est invisible sur l'avatar final. */
+const MAX_SOURCE_PX = 12_000_000
+
+/** Ramène une image sous le plafond de pixels, en conservant ses
+ *  proportions. Renvoie la source telle quelle si elle est déjà assez
+ *  petite — on ne réencode pas pour rien. */
+function downscaleIfHuge(img: HTMLImageElement): CanvasImageSource {
+  const px = img.naturalWidth * img.naturalHeight
+  if (px <= MAX_SOURCE_PX) return img
+  const k = Math.sqrt(MAX_SOURCE_PX / px)
+  const c = document.createElement('canvas')
+  c.width = Math.max(1, Math.round(img.naturalWidth * k))
+  c.height = Math.max(1, Math.round(img.naturalHeight * k))
+  const cx = c.getContext('2d')
+  if (!cx) return img
+  cx.imageSmoothingQuality = 'high'
+  cx.drawImage(img, 0, 0, c.width, c.height)
+  return c
+}
+
+/** Un canvas entièrement transparent ou noir signale un décodage raté — le
+ *  mode d'échec silencieux décrit ci-dessus. On préfère le dire que
+ *  d'enregistrer un avatar noir. */
+function looksBlank(ctx: CanvasRenderingContext2D, size: number): boolean {
+  // 64 points suffisent : une photo réelle ne peut pas être uniformément
+  // transparente ni d'un noir parfait sur une grille régulière.
+  const step = Math.max(1, Math.floor(size / 8))
+  for (let y = step >> 1; y < size; y += step) {
+    for (let x = step >> 1; x < size; x += step) {
+      const [r, g, b, a] = ctx.getImageData(x, y, 1, 1).data
+      if (a > 8 && (r > 10 || g > 10 || b > 10)) return false
+    }
+  }
+  return true
+}
 
 function clamp(v: number, min: number, max: number) {
   return Math.max(min, Math.min(max, v))
@@ -33,6 +80,11 @@ export default function AvatarCropModal({
   const [zoom, setZoom] = useState(1)
   const [offset, setOffset] = useState({ x: 0, y: 0 }) // image-center vs area-center
   const [busy, setBusy] = useState(false)
+  /** La source qui a échoué au décodage — et non un simple booléen : on
+   *  dérive l'état d'échec en comparant à la source courante, ce qui évite de
+   *  remettre un drapeau à zéro en plein effet à chaque changement d'image. */
+  const [failedSrc, setFailedSrc] = useState<string | null>(null)
+  const failed = failedSrc === imageSrc
 
   // Gesture bookkeeping.
   const pan = useRef<{ x: number; y: number; ox: number; oy: number } | null>(null)
@@ -53,16 +105,37 @@ export default function AvatarCropModal({
     }
   }, [])
 
-  // Load the picked image to get its natural size.
+  // Chargement de l'image choisie.
+  //
+  // `onerror` n'était pas traité. Un fichier que le navigateur ne sait pas
+  // décoder — HEIC sur un navigateur sans support, fichier abîmé, extension
+  // mensongère — laissait `nat` à null : la surface de recadrage ne rendait
+  // RIEN sur un fond #0a0a0a, et « Valider » restait désactivé. Un écran
+  // noir, sans explication, sans action possible autre que deviner qu'il
+  // faut annuler. C'était le bug.
   useEffect(() => {
+    let active = true
     const img = new Image()
     img.onload = () => {
+      if (!active) return
+      // Une image de 0 × 0 se charge « avec succès » dans certains
+      // navigateurs quand le décodage échoue à moitié.
+      if (!img.naturalWidth || !img.naturalHeight) {
+        setFailedSrc(imageSrc)
+        return
+      }
       imgRef.current = img
       setNat({ w: img.naturalWidth, h: img.naturalHeight })
       setZoom(1)
       setOffset({ x: 0, y: 0 })
     }
+    img.onerror = () => {
+      if (active) setFailedSrc(imageSrc)
+    }
     img.src = imageSrc
+    return () => {
+      active = false
+    }
   }, [imageSrc])
 
   // Derived geometry.
@@ -170,21 +243,54 @@ export default function AvatarCropModal({
         return
       }
       ctx.imageSmoothingQuality = 'high'
-      ctx.drawImage(img, sx, sy, sSize, sSize, 0, 0, OUT, OUT)
+      // La source est ramenée sous le plafond de pixels si besoin, et les
+      // coordonnées de découpe suivent le même facteur d'échelle.
+      const src = downscaleIfHuge(img)
+      const k =
+        src === img
+          ? 1
+          : (src as HTMLCanvasElement).width / img.naturalWidth
+      ctx.drawImage(src, sx * k, sy * k, sSize * k, sSize * k, 0, 0, OUT, OUT)
+      if (looksBlank(ctx, OUT)) {
+        setBusy(false)
+        setFailedSrc(imageSrc)
+        return
+      }
       canvas.toBlob(
         (b) => {
           if (b) onConfirm(b)
-          else setBusy(false)
+          else {
+            setBusy(false)
+            setFailedSrc(imageSrc)
+          }
         },
         'image/jpeg',
         0.85,
       )
     } catch {
       setBusy(false)
+      setFailedSrc(imageSrc)
     }
   }
 
-  return (
+  // ── RENDU EN PORTAIL — C'EST ICI QUE NAISSAIT L'ÉCRAN NOIR ──
+  //
+  // Les Réglages vivent dans un `.tab-pane`, qui porte une transformation
+  // pour l'animation d'onglet. Or un élément `position: fixed` placé sous un
+  // ancêtre transformé ne se positionne PAS sur la fenêtre : il se
+  // positionne sur cet ancêtre. `inset-0` donnait donc au recadrage la
+  // hauteur de la page des Réglages — mesuré : 2785 px pour un écran de
+  // 844 px.
+  //
+  // Conséquence exacte de ce que décrivait le signalement : la zone de
+  // recadrage occupait les 2785 px, l'image était dessinée très au-dessous du
+  // bord visible, et les boutons « Retour » et « Valider » se retrouvaient
+  // hors de l'écran. Il ne restait à l'utilisateur qu'un rectangle noir
+  // surmonté de « Recadre ta photo », sans aucun moyen d'en sortir.
+  //
+  // Monté sur document.body, le recadrage n'a plus d'ancêtre transformé :
+  // `fixed inset-0` redevient la fenêtre.
+  return createPortal(
     <div
       className="fixed inset-0 z-[140] flex flex-col"
       style={{ background: '#0a0a0a', color: '#fff' }}
@@ -212,7 +318,24 @@ export default function AvatarCropModal({
         onMouseLeave={endMouse}
         onWheel={onWheel}
       >
-        {ready && (
+        {/* Échec de décodage — on le DIT, au lieu de laisser un rectangle
+            noir. Le bouton de gauche devient le seul chemin, et son libellé
+            change pour le dire. */}
+        {failed && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-8 text-center">
+            <span
+              className="flex h-14 w-14 items-center justify-center rounded-full"
+              style={{ background: 'rgba(232,32,58,0.15)', border: '1px solid rgba(232,32,58,0.4)' }}
+            >
+              <ImageOff className="h-7 w-7" style={{ color: '#E8203A' }} />
+            </span>
+            <p className="text-[15px] font-bold">{t('settingspage.crop.failedTitle')}</p>
+            <p className="max-w-[18rem] text-[13px] leading-relaxed text-white/60">
+              {t('settingspage.crop.failedBody')}
+            </p>
+          </div>
+        )}
+        {ready && !failed && (
           <img
             src={imageSrc}
             alt=""
@@ -227,7 +350,7 @@ export default function AvatarCropModal({
           />
         )}
         {/* Circular cut-out: white ring + darkened outside via huge shadow. */}
-        {ready && (
+        {ready && !failed && (
           <div
             aria-hidden
             className="pointer-events-none absolute rounded-full"
@@ -256,7 +379,8 @@ export default function AvatarCropModal({
           value={zoom}
           onChange={(e) => setZoomClamped(Number(e.target.value))}
           aria-label={t('settingspage.crop.zoom')}
-          className="mb-5 w-full accent-[#E8203A]"
+          disabled={!ready || failed}
+          className="mb-5 w-full accent-[#E8203A] disabled:opacity-30"
         />
         <div className="flex gap-3">
           <button
@@ -270,11 +394,11 @@ export default function AvatarCropModal({
               WebkitBackdropFilter: 'blur(12px)',
             }}
           >
-            {t('settingspage.crop.cancel')}
+            {failed ? t('settingspage.crop.back') : t('settingspage.crop.cancel')}
           </button>
           <button
             onClick={confirm}
-            disabled={busy || !ready}
+            disabled={busy || !ready || failed}
             className="tappable flex-1 rounded-full py-3.5 text-sm font-extrabold text-white transition-opacity disabled:opacity-50"
             style={{
               background: '#E8203A',
@@ -285,6 +409,7 @@ export default function AvatarCropModal({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }

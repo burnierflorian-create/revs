@@ -977,7 +977,10 @@
       "title": "Crop your photo",
       "cancel": "Cancel",
       "confirm": "Confirm",
-      "zoom": "Zoom"
+      "zoom": "Zoom",
+      "failedTitle": "Unreadable image",
+      "failedBody": "This file could not be opened. Pick another photo — JPEG, PNG or WebP.",
+      "back": "Back"
     },
     "sectionExperience": "Experience",
     "sectionRevsCommunity": "REVS & community",

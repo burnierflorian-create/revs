@@ -46,6 +46,7 @@ import { hasTutorialAccess } from '../lib/tutorial'
 import { useTheme } from '../lib/theme'
 import { hapticSuccess } from '../lib/haptic'
 import AvatarCropModal from '../components/AvatarCropModal'
+import { uploadAvatar } from '../lib/avatar'
 import { enablePush, pushSupported } from '../lib/push'
 import { translateError } from '../lib/errors'
 import { CAR_MAKES } from '../lib/cars'
@@ -631,17 +632,7 @@ export default function Settings() {
     setSaving(true)
     setErr(null)
     try {
-      const path = `${userId}/avatar.jpg`
-      const up = await supabase.storage
-        .from('avatars')
-        .upload(path, blob, { upsert: true, contentType: 'image/jpeg' })
-      if (up.error) throw up.error
-      const { data: pub } = supabase.storage.from('avatars').getPublicUrl(path)
-      const url = `${pub.publicUrl}?v=${Date.now()}`
-      const { error } = await supabase
-        .from('profiles')
-        .upsert({ user_id: userId, avatar: url }, { onConflict: 'user_id' })
-      if (error) throw error
+      const url = await uploadAvatar(userId, blob)
       setAvatarUrl(url)
       setAvatarFile(null)
       hapticSuccess()
@@ -667,30 +658,20 @@ export default function Settings() {
     setSaving(true)
     try {
       let avatar = avatarUrl
-      if (avatarFile) {
-        const path = `${userId}/avatar.jpg`
-        const up = await supabase.storage
-          .from('avatars')
-          .upload(path, avatarFile, {
-            upsert: true,
-            contentType: 'image/jpeg',
-          })
-        if (up.error) throw up.error
-        const { data: pub } = supabase.storage
-          .from('avatars')
-          .getPublicUrl(path)
-        avatar = `${pub.publicUrl}?v=${Date.now()}`
-      }
-      const { error } = await supabase.from('profiles').upsert(
-        {
-          user_id: userId,
+      if (avatarFile) avatar = await uploadAvatar(userId, avatarFile)
+      // UPDATE et non UPSERT : la ligne existe depuis l'inscription, et un
+      // UPSERT ferait lever le garde-fou d'âge sur la ligne proposée
+      // (migration 0118). C'est ce qui empêchait TOUT enregistrement de
+      // profil — photo, pseudo, ville, voiture de rêve.
+      const { error } = await supabase
+        .from('profiles')
+        .update({
           pseudo: pseudo.trim(),
           ville: ville.trim(),
           dream_car: dreamCar.trim() || null,
           avatar,
-        },
-        { onConflict: 'user_id' },
-      )
+        })
+        .eq('user_id', userId)
       if (error) {
         console.error('profile save failed:', error)
         setErr(translateError(error))
@@ -888,9 +869,12 @@ export default function Settings() {
     if (!userId) return
     const next = !isPublic
     setIsPublic(next)
+    // UPDATE : un UPSERT ferait lever le garde-fou d'âge sur la ligne
+    // proposée, où `age_confirmed` prend sa valeur par défaut (voir 0118).
     const { error } = await supabase
       .from('profiles')
-      .upsert({ user_id: userId, is_public: next }, { onConflict: 'user_id' })
+      .update({ is_public: next })
+      .eq('user_id', userId)
     if (error) {
       setIsPublic(!next)
       setErr(translateError(error))

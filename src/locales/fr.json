@@ -977,7 +977,10 @@
       "title": "Recadre ta photo",
       "cancel": "Annuler",
       "confirm": "Valider",
-      "zoom": "Zoom"
+      "zoom": "Zoom",
+      "failedTitle": "Image illisible",
+      "failedBody": "Ce fichier n'a pas pu être ouvert. Choisissez une autre photo — JPEG, PNG ou WebP.",
+      "back": "Retour"
     },
     "sectionExperience": "Expérience",
     "sectionRevsCommunity": "REVS & communauté",
