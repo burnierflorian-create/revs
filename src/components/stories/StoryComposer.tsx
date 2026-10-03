@@ -16,6 +16,7 @@ import { useTranslation } from 'react-i18next'
 import { ImagePlus, Loader2, X } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { resizeImageToJpeg } from '../../lib/spots'
+import { checkAutomotive, gateMessageKey } from '../../lib/imageGate'
 
 const MAX_CAPTION = 120
 
@@ -34,7 +35,11 @@ export default function StoryComposer({
   const [blob, setBlob] = useState<Blob | null>(null)
   const [caption, setCaption] = useState('')
   const [busy, setBusy] = useState(false)
+  const [checking, setChecking] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  /** Le jeton délivré par le contrôle automobile. Sans lui, la base refuse
+   *  l'insertion (migration 0122) : l'interface ne fait que relayer. */
+  const [validationId, setValidationId] = useState<string | null>(null)
 
   function reset() {
     if (preview) URL.revokeObjectURL(preview)
@@ -43,6 +48,8 @@ export default function StoryComposer({
     setCaption('')
     setError(null)
     setBusy(false)
+    setChecking(false)
+    setValidationId(null)
   }
 
   async function pick(e: React.ChangeEvent<HTMLInputElement>) {
@@ -52,10 +59,24 @@ export default function StoryComposer({
     setError(null)
     try {
       const resized = await resizeImageToJpeg(file)
-      setBlob(resized.blob)
+      // L'aperçu s'affiche TOUT DE SUITE, le contrôle tourne derrière : on ne
+      // fait pas attendre devant un écran vide pour une vérification d'une
+      // seconde.
       if (preview) URL.revokeObjectURL(preview)
       setPreview(URL.createObjectURL(resized.blob))
+      setValidationId(null)
+      setChecking(true)
+      const gate = await checkAutomotive(resized.blob)
+      setChecking(false)
+      if (!gate.ok) {
+        setError(t(gateMessageKey(gate)))
+        setBlob(null)
+        return
+      }
+      setValidationId(gate.validationId)
+      setBlob(resized.blob)
     } catch {
+      setChecking(false)
       setError(t('stories.readError'))
     }
   }
@@ -81,6 +102,7 @@ export default function StoryComposer({
         user_id: user.id,
         media_url: url,
         caption: caption.trim() || null,
+        validation_id: validationId,
       })
       if (insErr) {
         // La ligne n'existe pas : le fichier déposé ne serait référencé par
@@ -201,8 +223,12 @@ export default function StoryComposer({
                 boxShadow: '0 8px 24px rgb(var(--color-accent) / 0.4)',
               }}
             >
-              {busy && <Loader2 className="h-4 w-4 animate-spin" />}
-              {busy ? t('stories.publishing') : t('stories.publish')}
+              {(busy || checking) && <Loader2 className="h-4 w-4 animate-spin" />}
+              {checking
+                ? t('gate.checking')
+                : busy
+                  ? t('stories.publishing')
+                  : t('stories.publish')}
             </button>
           )}
         </div>

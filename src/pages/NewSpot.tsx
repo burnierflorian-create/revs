@@ -30,6 +30,7 @@ import { searchCars, searchMakes, modelsForMake, findMake } from '../lib/cars'
 import { Skeleton } from '../components/Skeleton'
 import CollectorCard from '../components/CollectorCard'
 import type { Spot } from '../lib/spots'
+import { checkAutomotive, gateMessageKey } from '../lib/imageGate'
 
 type Step = 1 | 2 | 3 | 4
 
@@ -171,6 +172,11 @@ const [plateGuard, setPlateGuard] = useState<'pending' | 'ok' | 'failed'>('ok')
 
   const [photoMeta, setPhotoMeta] = useState<PhotoMeta | null>(null)
   const [rejection, setRejection] = useState<string | null>(null)
+  /** Jeton du contrôle automobile. La base l'exige à l'insertion d'un spot
+   *  (migration 0122) : le chemin manuel comme le chemin IA y passent, sinon
+   *  choisir « saisie manuelle » suffirait à contourner la règle. */
+  const [validationId, setValidationId] = useState<string | null>(null)
+  const [gateChecking, setGateChecking] = useState(false)
   const [pubError, setPubError] = useState<string | null>(null)
   const [limitReached, setLimitReached] = useState(false)
   const [pubStatus, setPubStatus] = useState('')
@@ -270,6 +276,7 @@ const [plateGuard, setPlateGuard] = useState<'pending' | 'ok' | 'failed'>('ok')
     if (previewUrl) URL.revokeObjectURL(previewUrl)
     setRejection(null)
     setPubError(null)
+    setValidationId(null)
     setPreviewUrl(URL.createObjectURL(file))
     setImage(null)
     setAiBase64(null)
@@ -278,6 +285,23 @@ const [plateGuard, setPlateGuard] = useState<'pending' | 'ok' | 'failed'>('ok')
     setPhotoMeta(await readPhotoMeta(file))
     try {
       const resized = await resizeImageToJpeg(file)
+      // ── CONTRÔLE AUTOMOBILE ──
+      // Il tourne avant tout le reste, sur les DEUX chemins : l'analyse IA
+      // rejette déjà les non-voitures, mais le chemin manuel — de rang égal
+      // depuis le 30/09 — ne rejetait rien du tout. Et `identify-car` refuse
+      // les motos, que REVS accepte désormais.
+      setGateChecking(true)
+      const gate = await checkAutomotive(resized.blob)
+      setGateChecking(false)
+      if (!gate.ok) {
+        setImage(null)
+        setPreviewUrl(null)
+        URL.revokeObjectURL(URL.createObjectURL(file))
+        setRejection(t(gateMessageKey(gate)))
+        hapticError()
+        return
+      }
+      setValidationId(gate.validationId)
       setImage(resized)
       // Nouvelle photo → la protection repart de zéro.
       //
@@ -815,6 +839,7 @@ const [plateGuard, setPlateGuard] = useState<'pending' | 'ok' | 'failed'>('ok')
         .from('spots')
         .insert({
           user_id: user.id,
+          validation_id: validationId,
           brand: brand.trim(),
           model: model.trim(),
           year: Number.isFinite(yearNum) ? yearNum : null,
@@ -1156,6 +1181,12 @@ const [plateGuard, setPlateGuard] = useState<'pending' | 'ok' | 'failed'>('ok')
             onChange={onPick}
             className="hidden"
           />
+
+          {/* Le contrôle automobile tourne pendant que l'aperçu s'affiche :
+              on le dit plutôt que de laisser un bouton inerte sans raison. */}
+          {gateChecking && (
+            <p className="text-center text-sm text-fg2">{t('gate.checking')}</p>
+          )}
 
           {rejection && (
             <div

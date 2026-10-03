@@ -1910,5 +1910,10 @@
     "questionTitle": "Moderation is asking you for context",
     "answerPlaceholder": "Your answer…",
     "answerSend": "Reply"
+  },
+  "gate": {
+    "notAVehicle": "This image doesn't appear to show a vehicle. REVS is dedicated to cars, motorcycles and motorsport.",
+    "unavailable": "The check could not complete. Please try again in a moment.",
+    "checking": "Checking the photo…"
   }
 }

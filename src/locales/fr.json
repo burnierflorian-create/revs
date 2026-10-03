@@ -1910,5 +1910,10 @@
     "questionTitle": "La modération vous demande une précision",
     "answerPlaceholder": "Votre réponse…",
     "answerSend": "Répondre"
+  },
+  "gate": {
+    "notAVehicle": "Cette image ne semble pas représenter un véhicule. REVS est dédié aux voitures, motos et sports automobiles.",
+    "unavailable": "La vérification n'a pas pu aboutir. Réessayez dans un instant.",
+    "checking": "Vérification de la photo…"
   }
 }
