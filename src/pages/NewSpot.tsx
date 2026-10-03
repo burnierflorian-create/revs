@@ -974,6 +974,26 @@ const [plateGuard, setPlateGuard] = useState<'pending' | 'ok' | 'failed'>('ok')
       // d'elle, et prévenir un rayon de 10 km à partir d'un point inexistant
       // n'aurait aucun sens. Elle est annoncée autrement — aux abonnés de son
       // auteur, par le fil.
+      // ── LES ABONNÉS, QUELLE QUE SOIT LA SOURCE ──
+      // Celle-ci part toujours : elle ne dépend d'aucune position, donc une
+      // publication galerie la déclenche aussi. Elle est filtrée par la
+      // préférence `following_spots` côté serveur.
+      void (async () => {
+        await maybePromptPush()
+        const who = await myPseudo()
+        void notifyPush({
+          title: t('newspot.pushFollowingTitle'),
+          body: t('newspot.pushFollowingBody', {
+            who,
+            brand: brand.trim(),
+            model: model.trim(),
+          }),
+          url: newSpotId ? `/spot/${newSpotId}` : '/feed',
+          type: 'following_spots',
+          followers_of: user.id,
+        })
+      })()
+
       const posForPush = pos
       void (async () => {
         if (!posForPush) return

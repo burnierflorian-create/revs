@@ -812,7 +812,9 @@
     "plateGuardRetry": "Relancer la vérification",
     "aiDisclaimer": "L’identification est réalisée par IA et peut comporter des erreurs. Vérifiez les informations avant de publier.",
     "pickFromGallery": "Choisir dans la galerie",
-    "gallerySub": "Une photo de la galerie est publiée dans le fil, mais n'apparaît pas sur la carte."
+    "gallerySub": "Une photo de la galerie est publiée dans le fil, mais n'apparaît pas sur la carte.",
+    "pushFollowingTitle": "Nouveau spot",
+    "pushFollowingBody": "{{who}} vient de publier une {{brand}} {{model}}"
   },
   "racepage": {
     "back": "Retour",
@@ -1014,7 +1016,11 @@
     "internalDocSub": "Réservée au compte créateur",
     "vehiclePickHint": "Choisis la voiture qui te représente. Elle apparaîtra sur ton profil, y compris pour les autres.",
     "vehicleNoSpots": "Tu n'as pas encore publié de spot. Publie ta voiture pour pouvoir la désigner ici.",
-    "vehicleSaved": "Véhicule principal enregistré"
+    "vehicleSaved": "Véhicule principal enregistré",
+    "reactionsOnSpots": "Réactions sur mes spots",
+    "followingSpots": "Nouveaux spots des comptes que je suis",
+    "eventNotifs": "Événements",
+    "revsNews": "Nouveautés REVS"
   },
   "spotdetail": {
     "notFound": "Ce spot est introuvable.",

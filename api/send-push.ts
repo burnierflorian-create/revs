@@ -60,6 +60,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     type,
     nearby,
     brand_nearby,
+    followers_of,
     radar,
   } = body as {
     user_id?: string
@@ -80,6 +81,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       radiusKm?: number
       excludeUserId?: string
     }
+    /** Prévenir les comptes qui SUIVENT cette personne. Rien à voir avec la
+     *  proximité : une publication galerie n'a pas de position, mais ses
+     *  abonnés ont le droit de la voir passer. */
+    followers_of?: string
     radar?: {
       spot_id: string
     }
@@ -216,6 +221,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       )
         targets.push(uid)
     }
+  } else if (followers_of) {
+    // Qui suit cet auteur. On ne filtre pas par distance : ce n'est pas une
+    // notification de proximité, c'est une notification d'abonnement.
+    const { data: follows } = await admin
+      .from('followers')
+      .select('follower_id')
+      .eq('following_id', followers_of)
+    targets = [
+      ...new Set(
+        ((follows ?? []) as { follower_id: string }[]).map((f) => f.follower_id),
+      ),
+    ].filter((u) => u !== followers_of)
   } else if (brand_nearby) {
     // Targets = users following this brand AND within radiusKm of the
     // new spot. "Within" uses each follower's most recent spot location

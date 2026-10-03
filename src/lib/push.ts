@@ -114,7 +114,16 @@ export async function notifyPush(p: {
   title: string
   body?: string
   url?: string
-  type?: 'likes' | 'comments' | 'followers' | 'nearby' | 'streak'
+  type?:
+    | 'likes'
+    | 'comments'
+    | 'reactions'
+    | 'followers'
+    | 'following_spots'
+    | 'nearby'
+    | 'events'
+    | 'revs_news'
+    | 'streak'
   nearby?: {
     lat: number
     lng: number
@@ -128,6 +137,10 @@ export async function notifyPush(p: {
     radiusKm?: number
     excludeUserId?: string
   }
+  /** Prévenir les abonnés de ce compte. Indépendant de toute position : une
+   *  publication galerie n'apparaît pas sur la carte, mais ses abonnés ont le
+   *  droit de la voir passer. */
+  followers_of?: string
 }): Promise<void> {
   try {
     const {

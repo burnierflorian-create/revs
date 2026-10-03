@@ -3,37 +3,41 @@ import { useNavigate } from 'react-router-dom'
 import {
   ArrowLeft,
   AtSign,
+  BadgeCheck,
   Bell,
   BellRing,
+  BookOpen,
+  CalendarDays,
   Camera,
+  Car,
   Check,
   ChevronRight,
   Cookie,
   Crown,
   Eye,
   Flame,
+  Globe,
   Heart,
+  HelpCircle,
+  Info,
   KeyRound,
   LogOut,
   MapPin,
   Megaphone,
   MessageCircle,
+  Palette,
   Radar as RadarIcon,
+  Radio,
   RotateCcw,
   Scale,
   Search,
-  Info,
   Shield,
-  Car,
   Smartphone,
+  SmilePlus,
+  Sparkles,
   Trash2,
   UserPlus,
   Users,
-  Globe,
-  BookOpen,
-  BadgeCheck,
-  HelpCircle,
-  Palette,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { APP_VERSION, CONTACT_EMAIL } from '../lib/constants'
@@ -469,11 +473,19 @@ export default function Settings() {
   const [orgStatus, setOrgStatus] = useState<OrganizerStatus | null>(null)
   const [pushBusy, setPushBusy] = useState(false)
   const [pushMsg, setPushMsg] = useState<string | null>(null)
+  // ── LES CATÉGORIES DE NOTIFICATION ──
+  // Sécurité, compte et modération n'ont volontairement PAS d'interrupteur :
+  // pouvoir les couper reviendrait à pouvoir ignorer une sanction sans jamais
+  // l'avoir lue. Tout le reste se règle ici.
   const [npref, setNpref] = useState({
     likes: true,
     comments: true,
+    reactions: true,
     followers: true,
+    following_spots: true,
     nearby: true,
+    events: true,
+    revs_news: true,
     streak: true,
   })
 
@@ -500,7 +512,9 @@ export default function Settings() {
           supabase.rpc('my_organizer_request'),
           supabase
             .from('notification_prefs')
-            .select('likes, comments, followers, nearby, streak')
+            .select(
+              'likes, comments, reactions, followers, following_spots, nearby, events, revs_news, streak',
+            )
             .eq('user_id', user.id)
             .maybeSingle(),
           // Pour le hero seulement. On ne remonte que les colonnes dont
@@ -545,8 +559,12 @@ export default function Settings() {
         setNpref({
           likes: np.likes ?? true,
           comments: np.comments ?? true,
+          reactions: np.reactions ?? true,
           followers: np.followers ?? true,
+          following_spots: np.following_spots ?? true,
           nearby: np.nearby ?? true,
+          events: np.events ?? true,
+          revs_news: np.revs_news ?? true,
           streak: np.streak ?? true,
         })
       {
@@ -1791,12 +1809,56 @@ export default function Settings() {
                   noChevron
                 />
                 <Row
+                  icon={<SmilePlus className="h-4 w-4" />}
+                  label={t('settingspage.reactionsOnSpots')}
+                  right={
+                    <Toggle
+                      checked={npref.reactions}
+                      onChange={() => toggleNpref('reactions')}
+                    />
+                  }
+                  noChevron
+                />
+                <Row
                   icon={<UserPlus className="h-4 w-4" />}
                   label={t('settingspage.newFollowers')}
                   right={
                     <Toggle
                       checked={npref.followers}
                       onChange={() => toggleNpref('followers')}
+                    />
+                  }
+                  noChevron
+                />
+                <Row
+                  icon={<Radio className="h-4 w-4" />}
+                  label={t('settingspage.followingSpots')}
+                  right={
+                    <Toggle
+                      checked={npref.following_spots}
+                      onChange={() => toggleNpref('following_spots')}
+                    />
+                  }
+                  noChevron
+                />
+                <Row
+                  icon={<CalendarDays className="h-4 w-4" />}
+                  label={t('settingspage.eventNotifs')}
+                  right={
+                    <Toggle
+                      checked={npref.events}
+                      onChange={() => toggleNpref('events')}
+                    />
+                  }
+                  noChevron
+                />
+                <Row
+                  icon={<Sparkles className="h-4 w-4" />}
+                  label={t('settingspage.revsNews')}
+                  right={
+                    <Toggle
+                      checked={npref.revs_news}
+                      onChange={() => toggleNpref('revs_news')}
                     />
                   }
                   noChevron

@@ -812,7 +812,9 @@
     "plateGuardRetry": "Run the check again",
     "aiDisclaimer": "AI identification can contain errors. Please check the information before publishing.",
     "pickFromGallery": "Pick from gallery",
-    "gallerySub": "A gallery photo is published to the feed, but does not appear on the map."
+    "gallerySub": "A gallery photo is published to the feed, but does not appear on the map.",
+    "pushFollowingTitle": "New spot",
+    "pushFollowingBody": "{{who}} just posted a {{brand}} {{model}}"
   },
   "racepage": {
     "back": "Back",
@@ -1014,7 +1016,11 @@
     "internalDocSub": "Creator account only",
     "vehiclePickHint": "Pick the car that represents you. It appears on your profile, including for other people.",
     "vehicleNoSpots": "You haven't published a spot yet. Publish your car to pick it here.",
-    "vehicleSaved": "Main car saved"
+    "vehicleSaved": "Main car saved",
+    "reactionsOnSpots": "Reactions on my spots",
+    "followingSpots": "New spots from accounts I follow",
+    "eventNotifs": "Events",
+    "revsNews": "REVS news"
   },
   "spotdetail": {
     "notFound": "This spot can't be found.",
