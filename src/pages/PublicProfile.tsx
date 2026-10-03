@@ -8,6 +8,7 @@ import { myPseudo, notifyPush } from '../lib/push'
 import { xpLevel } from '../lib/xp'
 import { displayHandle, instagramUrl } from '../lib/social'
 import { allBadges, computeUnlocks } from '../lib/badges'
+import { sinceLabel } from '../lib/presence'
 import { Skeleton } from '../components/Skeleton'
 
 type Prof = {
@@ -21,6 +22,11 @@ type Prof = {
   primary_color?: string | null
   primary_photo_url?: string | null
   primary_render_url?: string | null
+  // Présence — calculée par la vue `profile_public` (migration 0113), avec le
+  // même seuil que le panneau Membres. Deux surfaces, un seul calcul : un
+  // membre vu « en ligne » dans la liste l'est aussi sur son profil.
+  online?: boolean | null
+  minutes_ago?: number | null
 }
 type Rel = { user_id: string } & Prof
 
@@ -58,7 +64,7 @@ export default function PublicProfile() {
       supabase
         .from('profile_public')
         .select(
-          'pseudo, ville, avatar, instagram, primary_brand, primary_model, primary_year, primary_color, primary_photo_url, primary_render_url',
+          'pseudo, ville, avatar, instagram, primary_brand, primary_model, primary_year, primary_color, primary_photo_url, primary_render_url, online, minutes_ago',
         )
         .eq('user_id', id)
         .maybeSingle(),
@@ -275,6 +281,30 @@ export default function PublicProfile() {
           </h2>
           {prof?.ville && (
             <p className="text-sm text-[#888888]">{prof.ville}</p>
+          )}
+          {/* Présence — la même que dans le panneau Membres, parce que c'est
+              le même calcul : la vue `profile_public` et `member_directory`
+              lisent toutes deux `presence_window()`. Le point vert et le
+              « Actif il y a 2 h » ne peuvent donc pas se contredire d'une
+              surface à l'autre. */}
+          {prof && (prof.online || prof.minutes_ago != null) && (
+            <p className="mt-1 flex items-center justify-center gap-1.5 text-[12.5px] text-fg2">
+              <span
+                aria-hidden
+                className="h-2 w-2 flex-none rounded-full"
+                style={{
+                  background: prof.online ? '#22C55E' : 'rgb(var(--color-fg) / 0.3)',
+                }}
+              />
+              {prof.online
+                ? t('members.activeNow')
+                : (() => {
+                    const k = sinceLabel(prof.minutes_ago)
+                    return t('members.lastActive', {
+                      when: t(k.key, { n: k.n, count: k.count }),
+                    })
+                  })()}
+            </p>
           )}
           {instagram && (
             <a

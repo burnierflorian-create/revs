@@ -1702,7 +1702,14 @@
     "agoMin": "il y a {{n}} min",
     "agoHour": "il y a {{n}} h",
     "agoDay": "il y a {{n}} j",
-    "openProfile": "Voir le profil de {{pseudo}}"
+    "openProfile": "Voir le profil de {{pseudo}}",
+    "agoNow": "à l'instant",
+    "agoWeek": "il y a {{n}} sem.",
+    "agoMonth": "il y a {{n}} mois",
+    "lastActive": "Actif {{when}}",
+    "activeNow": "En ligne",
+    "agoYear_one": "il y a {{count}} an",
+    "agoYear_other": "il y a {{count}} ans"
   },
   "stories": {
     "add": "Ajouter",

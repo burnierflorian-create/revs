@@ -41,15 +41,23 @@ const cli = createClient(URL_, ANON, {
 })
 
 const { data: au } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 })
-const { data: profs } = await admin.from('profiles').select('user_id, onboarding_completed, last_seen')
+const { data: profs } = await admin
+  .from('profiles')
+  .select('user_id, onboarding_completed, is_public, last_seen')
 const [{ data: counts }, { data: online }, { data: top }, { data: home }] = await Promise.all([
   cli.rpc('members_counts').maybeSingle(),
   cli.rpc('members_online'),
   cli.rpc('top_spotters', { limit_count: 1000 }),
   cli.rpc('home_community_stats').maybeSingle(),
 ])
+const { data: list } = await cli.rpc('members_list')
+const { data: pays } = await cli.rpc('countries_leaderboard')
 
-const members = profs.filter((p) => p.onboarding_completed)
+// LA définition, celle de la vue `member_directory` (migration 0113) :
+// inscription terminée ET profil public. Ce script la réécrit ici en JS
+// exprès — si la base changeait d'avis sans qu'on le sache, la comparaison
+// ci-dessous le dirait.
+const members = profs.filter((p) => p.onboarding_completed && p.is_public)
 const FIVE_MIN = 5 * 60 * 1000
 const actifs = members.filter(
   (p) => p.last_seen && Date.now() - new Date(p.last_seen).getTime() < FIVE_MIN,
@@ -65,6 +73,8 @@ const rows = [
   ['membres (onboarding terminé)', members.length, 'référence'],
   ['Global — members_counts.total', counts.total, 'référence'],
   ['classement — top_spotters', top.length, 'référence'],
+  ['liste — members_list', list.length, 'référence'],
+  ['pays — countries_leaderboard', (pays ?? []).reduce((a, r) => a + r.spotters, 0), 'référence'],
   ['en ligne — members_online', online.length, 'présence'],
   ['en ligne — members_counts', counts.online_now, 'présence'],
   ['en ligne — accueil', home?.online_now ?? -1, 'présence'],
@@ -85,5 +95,17 @@ console.log(`\npopulation identique partout : ${okRef ? '✓' : '✗ ' + ref.joi
 console.log(`présence identique partout   : ${okPres ? '✓' : '✗ ' + pres.join(' ≠ ')}`)
 console.log(`en ligne + hors ligne = total: ${pres[0] + offline === ref[0] ? '✓' : '✗'}`)
 
+// ── CONTRÔLE STRUCTUREL ──
+// Les chiffres peuvent coïncider par hasard : aujourd'hui personne n'a mis
+// `is_public` à false, donc une fonction qui aurait oublié ce critère
+// donnerait quand même le bon total. Ce qu'on vérifie ici, c'est qu'aucune
+// fonction ne redéclare le périmètre pour son compte — la seule garantie qui
+// tienne quand la population change.
+const { data: strays } = await admin.rpc('functions_declaring_member_scope')
+const okScope = !strays || strays.length === 0
+console.log(
+  `périmètre déclaré une seule fois : ${okScope ? '✓' : '✗ ' + strays.map((r) => r.proname).join(', ')}`,
+)
+
 await admin.auth.admin.deleteUser(c.user.id)
-process.exit(okRef && okPres ? 0 : 1)
+process.exit(okRef && okPres && okScope ? 0 : 1)

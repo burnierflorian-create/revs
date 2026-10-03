@@ -30,6 +30,7 @@ import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { MapPin, Search, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { sinceLabel } from '../lib/presence'
 
 type Member = {
   user_id: string
@@ -41,17 +42,6 @@ type Member = {
   minutes_ago: number | null
 }
 type Counts = { online_now: number; total: number }
-
-/** « il y a 2 h » à partir de minutes, sans jamais manipuler de date.
- *  Renvoie la clé et ses variables plutôt qu'un texte : typer `t` en
- *  paramètre oblige à réécrire la signature de i18next, qui change entre
- *  versions. La traduction se fait au point d'affichage. */
-function sinceKey(min: number | null): { key: string; n?: number } {
-  if (min == null) return { key: 'members.never' }
-  if (min < 60) return { key: 'members.agoMin', n: Math.max(1, Math.round(min)) }
-  if (min < 60 * 24) return { key: 'members.agoHour', n: Math.round(min / 60) }
-  return { key: 'members.agoDay', n: Math.round(min / 1440) }
-}
 
 export default function MembersSheet({
   open,
@@ -259,8 +249,8 @@ export default function MembersSheet({
                       {m.online
                         ? t('members.onlineNow')
                         : (() => {
-                            const k = sinceKey(m.minutes_ago)
-                            return t(k.key, { n: k.n })
+                            const k = sinceLabel(m.minutes_ago)
+                            return t(k.key, { n: k.n, count: k.count })
                           })()}
                     </span>
                   </span>
