@@ -123,15 +123,27 @@ if (counts.total !== base.total + 6) {
 }
 
 // ── FALSIFICATION ──
+// Depuis la migration 0119, `last_seen` n'est plus dans les colonnes que
+// `authenticated` a le droit de modifier : l'écriture est REFUSÉE, et non
+// plus seulement bornée. Le déclencheur de bornage (0113) reste en place
+// comme seconde ligne, pour les écritures passant par une fonction
+// SECURITY DEFINER.
 const futur = await cli
   .from('profiles')
   .update({ last_seen: new Date(Date.now() + 864e5 * 365).toISOString() })
   .eq('user_id', ids.A)
   .select('last_seen')
-const clamped = futur.data?.[0]?.last_seen
-const borne = clamped && new Date(clamped) <= new Date(Date.now() + 60_000)
-console.log(`\nA se place dans le futur → ${borne ? '✓ ramené au présent' : '✗ ' + clamped}`)
-if (!borne) ok = false
+const refuseFutur = !!futur.error || (futur.data?.length ?? 0) === 0
+console.log(
+  `\nA se place dans le futur → ${refuseFutur ? '✓ écriture refusée' : '✗ acceptée : ' + futur.data?.[0]?.last_seen}`,
+)
+if (!refuseFutur) ok = false
+
+// Le battement légitime, lui, doit continuer de passer — c'est une fonction
+// SECURITY DEFINER, pas une écriture directe.
+const bump = await cli.rpc('bump_last_seen')
+console.log(`battement légitime (RPC) → ${bump.error ? '✗ ' + bump.error.message : '✓ accepté'}`)
+if (bump.error) ok = false
 
 const autre = await cli
   .from('profiles')
