@@ -159,7 +159,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     try {
       const { error } = await admin.rpc('refresh_global_stats')
       if (error) throw new Error(error.message)
-      res.status(200).json({ refreshed: true })
+      // Expired stories are already invisible — the RLS policy filters on
+      // expires_at. This only reclaims the rows, and it rides on an existing
+      // cron rather than a new function: the Node budget is full at 12.
+      // A failure here must not fail the stats refresh, which is the job.
+      const purged = await admin.rpc('purge_expired_stories')
+      if (purged.error) console.error('[cron-notify:stories]', purged.error.message)
+      res.status(200).json({ refreshed: true, stories_purged: purged.data ?? null })
     } catch (e) {
       console.error('[cron-notify:stats]', e)
       res.status(500).json({ error: 'stats refresh failed' })
